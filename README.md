@@ -1,8 +1,8 @@
-# Tropo-OS
+# Tropo
 
 **The operating system for human-AI teams.**
 
-Tropo-OS turns a shared folder into a governed multi-agent system. No code. No server. No database. Describe how you work — the system captures it, and your expertise runs without you.
+Tropo turns a shared folder into a governed multi-agent system. No code. No server. No database. Describe how you work — the system captures it, and your expertise runs without you.
 
 ## Getting Started
 

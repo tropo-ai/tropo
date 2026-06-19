@@ -132,9 +132,9 @@ Skills are **inline behavior bundles** — there is no CLI to run. To execute a 
 
 ## export-to-word
 
-**Domain.** Export a markdown document to a branded MindBridge Word (.docx) file using the correct template
+**Domain.** Export a markdown document to a branded Word (.docx) file using one of your registered templates
 
-**When to reach for it.** Reach for this when a user wants a markdown vault file or any markdown content exported as a Word document. The tool handles MindBridge branding automatically — logo, header, fonts, and footer — from the selected template. Two templates exist: internal (footer reads INTERNAL — CONFIDENTIAL) and external (footer reads MindBridge). Always present the template choice to the user before exporting.
+**When to reach for it.** Reach for this when a user wants a markdown vault file or any markdown content exported as a Word document. The tool applies your organization's branding automatically — logo, header, fonts, and footer — from the selected template. You register your own templates (for example, an internal one whose footer reads "INTERNAL — CONFIDENTIAL" and an external one for public-facing documents). Always present the template choice to the user before exporting.
 
 **Implementation.** [vault/skills/19690406.md](../vault/skills/19690406.md)
 
