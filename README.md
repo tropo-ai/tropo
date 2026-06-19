@@ -4,6 +4,8 @@
 
 Tropo turns a shared folder into a governed multi-agent system. No code. No server. No database. Describe how you work — the system captures it, and your expertise runs without you.
 
+*Tropo has been developed and dogfooded internally for months; v1.73.0 is its first public release. The team builds Tropo with Tropo.*
+
 ## Getting Started
 
 You need a folder-aware AI tool — one that can read and write files on your computer. Claude Code, OpenAI Codex, Cursor, or similar.
