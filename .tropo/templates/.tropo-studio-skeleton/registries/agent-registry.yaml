@@ -1,0 +1,30 @@
+# Vault Agent Registry
+# Machine-readable roster of registered agents on this vault.
+# Schema: files map uid -> {name, type, class, path, purpose, status}
+# Updated by agents after any agent commissioning, retirement, or status change.
+#
+# System agents (sa.*) below are kernel-tier verification primitives — they ship
+# pre-registered. User agents are added here as you commission them.
+version: 1
+
+system_agents:
+  6742f183:
+    name: sa.first-use-walker
+    class: session-agent
+    path: agents/sa/sa.first-use-walker/sa.first-use-walker.md
+    purpose: "Walks the vault as a first-time user and verifies the new-user experience end-to-end. Dispatched by run-release-test-plan (Stage 3.1)."
+    status: active
+  3c844ee6:
+    name: sa.user-error-walker
+    class: session-agent
+    path: agents/sa/sa.user-error-walker/sa.user-error-walker.md
+    purpose: "Walks a list of common new-user mistakes and reports per-mistake gracefulness verdicts (Skeptic mode). Dispatched by dispatch-cold-boot (Stage 3.3)."
+    status: active
+  a71ace01:
+    name: sa.pipeline-walker
+    class: session-agent
+    path: agents/sa/sa.pipeline-walker/sa.pipeline-walker.md
+    purpose: "Walks the release pipeline and verifies the build/ship process end-to-end. Dispatched by run-release-test-plan."
+    status: active
+
+user_agents: {}   # your commissioned agents go here

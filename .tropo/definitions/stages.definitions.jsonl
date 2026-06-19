@@ -1,0 +1,9 @@
+{"term":"ideate","definition":"Exploring possibilities, not yet committed to design","aliases":["explore","brainstorm","discovery","pre-design","considering","thinking about"],"terminal":false,"type":"stage"}
+{"term":"design","definition":"In active design — defining the problem and approach","aliases":["designing","in-design","designing-it","working-on-design"],"terminal":false,"type":"stage"}
+{"term":"specify","definition":"Specification being written — translating design into a locked technical contract","aliases":["speccing","writing-spec","in-spec","specifying","spec-writing"],"terminal":false,"type":"stage"}
+{"term":"build","definition":"Implementation in progress","aliases":["building","implementing","developing","coding","in-progress","in-development","working-on"],"terminal":false,"type":"stage"}
+{"term":"test","definition":"Under testing and verification","aliases":["testing","qa","in-test","under-review","being-tested","verifying"],"terminal":false,"type":"stage"}
+{"term":"deploy","definition":"Being deployed or released","aliases":["deploying","releasing","shipping","going-live","in-deploy"],"terminal":false,"type":"stage"}
+{"term":"verify","definition":"Post-deploy governance check — cold-boot tests, sign-off, final validation","aliases":["verifying","validating","checking","sign-off","in-review","final-check"],"terminal":false,"type":"stage"}
+{"term":"done","definition":"Completed the pipeline successfully","aliases":["complete","finished","shipped","closed","resolved","delivered","completed"],"terminal":true,"type":"stage"}
+{"term":"cancelled","definition":"Deliberately abandoned — work was stopped before completion","aliases":["abandoned","wont-do","wont-fix","dropped","out-of-scope","not-doing","killed","shelved"],"terminal":true,"type":"stage"}

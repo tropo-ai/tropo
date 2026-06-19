@@ -1,0 +1,5 @@
+{"term":"bug","definition":"A defect in existing functionality — something that worked and now doesn't","aliases":["defect","error","fix","regression","broken","issue","problem","fault"],"type":"tag"}
+{"term":"feature","definition":"New capability being added to the system","aliases":["enhancement","improvement","new-capability","addition","new feature","request","fr"],"type":"tag"}
+{"term":"chore","definition":"Maintenance, cleanup, or housekeeping work — no new capability added","aliases":["maintenance","cleanup","housekeeping","tech-debt","refactor","tidy","debt"],"type":"tag"}
+{"term":"spike","definition":"A time-boxed investigation to reduce uncertainty before committing to a design","aliases":["poc","research-task","investigation","proof-of-concept","discovery","explore","experiment","rnd"],"type":"tag"}
+{"term":"issue","definition":"A user-reported problem or concern broader than a specific defect","aliases":["complaint","feedback","report","concern","user-issue","user-report"],"type":"tag"}
