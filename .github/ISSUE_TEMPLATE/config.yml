@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions & ideas
+    url: https://github.com/tropo-ai/tropo/discussions
+    about: Ask how something works or propose an idea. Discussions is our community forum.
+  - name: 🛠 Show what you built
+    url: https://github.com/tropo-ai/tropo/discussions/categories/show-and-tell
+    about: Share an agent, capsule, or studio you made with Tropo.
+  - name: 📬 The Agentic Builders
+    url: https://tropo-ai.com/agentic-builders
+    about: Our free newsletter and learning series for building with agents.
+  - name: 🔒 Report a security issue
+    url: https://github.com/tropo-ai/tropo/blob/main/SECURITY.md
+    about: Please follow responsible disclosure rather than opening a public issue.

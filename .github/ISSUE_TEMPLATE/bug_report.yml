@@ -1,0 +1,48 @@
+name: Bug report
+description: Something in Tropo is not working the way it should.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping make Tropo better. The clearer the report, the faster we can reproduce it.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: I pointed my AI tool at the studio and asked it to ... but instead ...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: false
+  - type: input
+    id: ai-tool
+    attributes:
+      label: Which AI tool and model?
+      placeholder: e.g. Claude Code (Opus 4.x), Codex, Cursor
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Tropo version
+      description: The release you downloaded, or the version stamp in the README footer.
+      placeholder: e.g. v1.73.0
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Logs, screenshots, or context. Please do not paste secrets or private content.
+    validations:
+      required: false
