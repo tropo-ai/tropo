@@ -32,7 +32,7 @@ Your vault concierge will greet you and walk you through setting up your first a
 ## Learn More
 
 - [tropo-ai.com](https://tropo-ai.com)
-- [The Agentic Builders](https://tropo-ai.com/blog) — our newsletter for non-technical leaders building with AI
+- [The Agentic Builders](https://tropo-ai.com/agentic-builders) — our newsletter for non-technical leaders building with AI
 
 ## Contributing
 
