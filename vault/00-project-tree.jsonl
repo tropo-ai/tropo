@@ -1,0 +1,102 @@
+{"uid":"2d5f9b04","title":"01-studio-inbox","stage":"build","state":"active","parent":null,"children":[],"depth":0}
+{"uid":"a39ca493","title":"Get Started with Tropo","stage":"build","state":"active","parent":null,"children":[],"depth":0}
+{"uid":"aae9a37b","title":"tropo-subsystems","stage":"ideate","state":"active","parent":null,"children":["1aba710c","2d083137","3a207ed3","76bab75f","8dd772a0","952f3aa3","99ed55fd","dbc1cbbf","f87e33f0"],"depth":0}
+{"uid":"1aba710c","title":"Tropo Library","stage":"build","state":"active","parent":"aae9a37b","children":["d9b8a9bb"],"depth":1}
+{"uid":"d9b8a9bb","title":"Packs","stage":"build","state":"active","parent":"1aba710c","children":["1a17e001","9b74ffe5"],"depth":2}
+{"uid":"1a17e001","title":"Lantern \u2014 Monthly Newsletter Planning (Toy Project for Governed Work Starter)","stage":"done","state":"active","parent":"d9b8a9bb","children":[],"depth":3}
+{"uid":"9b74ffe5","title":"Green City Energy \u2014 The Ridgewood Pilot","stage":"build","state":"active","parent":"d9b8a9bb","children":[],"depth":3}
+{"uid":"2d083137","title":"Tropo Work","stage":"ideate","state":"active","parent":"aae9a37b","children":["a7f4b2e3","b4e9d572","b5d4a1f8","c6a1f483","d28e95b1","e1c8d3a5","e8d1a4f6","f3a2c819"],"depth":1}
+{"uid":"a7f4b2e3","title":"Hospitality Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"2d083137","children":[],"depth":2}
+{"uid":"b4e9d572","title":"Finance Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"2d083137","children":[],"depth":2}
+{"uid":"b5d4a1f8","title":"Content Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"2d083137","children":[],"depth":2}
+{"uid":"c6a1f483","title":"Booth Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"2d083137","children":[],"depth":2}
+{"uid":"d28e95b1","title":"Staffing Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"2d083137","children":[],"depth":2}
+{"uid":"e1c8d3a5","title":"Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example: auto-task-spawn)","stage":"build","state":"active","parent":"2d083137","children":[],"depth":2}
+{"uid":"e8d1a4f6","title":"Hello Tropo \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"2d083137","children":["a7f4b2e3","b4e9d572","b5d4a1f8","c6a1f483","d28e95b1","e1c8d3a5","f3a2c819"],"depth":2}
+{"uid":"a7f4b2e3","title":"Hospitality Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"e8d1a4f6","children":[],"depth":3}
+{"uid":"b4e9d572","title":"Finance Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"e8d1a4f6","children":[],"depth":3}
+{"uid":"b5d4a1f8","title":"Content Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"e8d1a4f6","children":[],"depth":3}
+{"uid":"c6a1f483","title":"Booth Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"e8d1a4f6","children":[],"depth":3}
+{"uid":"d28e95b1","title":"Staffing Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"e8d1a4f6","children":[],"depth":3}
+{"uid":"e1c8d3a5","title":"Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example: auto-task-spawn)","stage":"build","state":"active","parent":"e8d1a4f6","children":[],"depth":3}
+{"uid":"f3a2c819","title":"2026 Customer Event Plan \u2014 Master Pipeline","stage":"build","state":"active","parent":"e8d1a4f6","children":["a7f4b2e3","b4e9d572","b5d4a1f8","c6a1f483","d28e95b1","e1c8d3a5"],"depth":3}
+{"uid":"a7f4b2e3","title":"Hospitality Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":4}
+{"uid":"b4e9d572","title":"Finance Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":4}
+{"uid":"b5d4a1f8","title":"Content Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":4}
+{"uid":"c6a1f483","title":"Booth Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":4}
+{"uid":"d28e95b1","title":"Staffing Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":4}
+{"uid":"e1c8d3a5","title":"Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example: auto-task-spawn)","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":4}
+{"uid":"f3a2c819","title":"2026 Customer Event Plan \u2014 Master Pipeline","stage":"build","state":"active","parent":"2d083137","children":["a7f4b2e3","b4e9d572","b5d4a1f8","c6a1f483","d28e95b1","e1c8d3a5"],"depth":2}
+{"uid":"a7f4b2e3","title":"Hospitality Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":3}
+{"uid":"b4e9d572","title":"Finance Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":3}
+{"uid":"b5d4a1f8","title":"Content Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":3}
+{"uid":"c6a1f483","title":"Booth Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":3}
+{"uid":"d28e95b1","title":"Staffing Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":3}
+{"uid":"e1c8d3a5","title":"Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example: auto-task-spawn)","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":3}
+{"uid":"3a207ed3","title":"Tropo Link","stage":"ideate","state":"active","parent":"aae9a37b","children":[],"depth":1}
+{"uid":"76bab75f","title":"Tropo Playbooks","stage":"ideate","state":"active","parent":"aae9a37b","children":["e2f4a8c1"],"depth":1}
+{"uid":"e2f4a8c1","title":"publish-pipeline","stage":"build","state":"active","parent":"76bab75f","children":[],"depth":2}
+{"uid":"8dd772a0","title":"Tropo Governance","stage":"ideate","state":"active","parent":"aae9a37b","children":["3a207ed3","58722bdf","70ece701"],"depth":1}
+{"uid":"3a207ed3","title":"Tropo Link","stage":"ideate","state":"active","parent":"8dd772a0","children":[],"depth":2}
+{"uid":"58722bdf","title":"Import Primitive \u2014 Capability Overview","stage":"build","state":"active","parent":"8dd772a0","children":[],"depth":2}
+{"uid":"70ece701","title":"Toy Project \u2014 1-Page Content Brief for Hypothetical HR Analytics SaaS","stage":"done","state":"archived","parent":"8dd772a0","children":[],"depth":2}
+{"uid":"952f3aa3","title":"Tropo Test Harness","stage":"build","state":"active","parent":"aae9a37b","children":[],"depth":1}
+{"uid":"99ed55fd","title":"Tropo Agents","stage":"ideate","state":"active","parent":"aae9a37b","children":[],"depth":1}
+{"uid":"dbc1cbbf","title":"Tropo Rendering","stage":"ideate","state":"active","parent":"aae9a37b","children":[],"depth":1}
+{"uid":"f87e33f0","title":"Tropo Documentation","stage":"build","state":"active","parent":"aae9a37b","children":[],"depth":1}
+{"uid":"b8e5f3a2","title":"tropo-work","stage":"build","state":"active","parent":null,"children":["2918e3b4","5a4337ff","7b2e94c1","9dab87a0","cd1fcd25","da3f50dc","e2f4a8c1","e8d1a4f6"],"depth":0}
+{"uid":"2918e3b4","title":"app-pipeline","stage":"ideate","state":"active","parent":"b8e5f3a2","children":["2c8d1f47","34afcebc","3f9c2e84","46dfbb0a","4d2f8a17","52dadffd","5772556c","6e1f4b73","7f3d8c91","8826b753","9b4d2e58","a1c4e6f3","a53fc475","c03bc3fc","c4d8e2a1","c8ab4772","dc0f800e","e8a3b621","ed9a3a4e","f1b8c7d3","f33dfb17","f8c5b343"],"depth":1}
+{"uid":"2c8d1f47","title":"app-deploy-14 \u2014 no-explicit-any sweep in scripts/ (partial close 5e3a82c1)","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"34afcebc","title":"app-deploy-5 \u2014 UI primitives forms+layout + tagline removal","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"3f9c2e84","title":"app-deploy-18 \u2014 close CSS-token finding 53a7a624 (sa.ui dispatch 003)","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"46dfbb0a","title":"01-inbox \u2014 app-pipeline","stage":"build","state":"active","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"4d2f8a17","title":"app-deploy-16 \u2014 CLAUDE.md drift walk (engineering substrate refresh)","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"52dadffd","title":"app-deploy-1 \u2014 UI Foundation Step 1a + 1b","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"5772556c","title":"app-deploy-7 \u2014 Brand sweep Mo \u2192 Tropo + wordmark home link","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"6e1f4b73","title":"app-deploy-12 \u2014 eslint --fix auto-cleanup (partial close 5e3a82c1)","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"7f3d8c91","title":"app-deploy-11 \u2014 Minimum-viable smoke-test layer (close c7a4b819)","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"8826b753","title":"app-deploy-8 \u2014 Decompose app/page.tsx via useChatSession hook","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"9b4d2e58","title":"app-deploy-13 \u2014 Next.js framework migrations + eslint worktree ignore","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"a1c4e6f3","title":"app-deploy-15 \u2014 close 11 React-design lint errors (zero-errors milestone; sa.ui dispatch 002)","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"a53fc475","title":"app-deploy-4 \u2014 UI primitives foundation (Panel/Pane/Chip/Button)","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"c03bc3fc","title":"app-deploy-9 \u2014 Decompose app/crew/page.tsx via components/crew/*","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"c4d8e2a1","title":"app-deploy-19.1 \u2014 AppShell + chat-session hook stability hotfix (sa.ui dispatch 004)","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"c8ab4772","title":"app-deploy-10 \u2014 Decompose app/projects/[id]/page.tsx via useProjectChatSession hook","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"dc0f800e","title":"app-deploy-3 \u2014 Step 1c-rest + 1d retire aliases","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"e8a3b621","title":"app-deploy-17 \u2014 exhaustive-deps investigation in ArtifactPane.tsx (hoist boolean to variable)","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"ed9a3a4e","title":"Tropo Platform UI Foundation Refactor","stage":"done","state":"archived","parent":"2918e3b4","children":["34afcebc","52dadffd","5772556c","8826b753","a53fc475","c03bc3fc","c8ab4772","dc0f800e","f33dfb17","f8c5b343"],"depth":2}
+{"uid":"34afcebc","title":"app-deploy-5 \u2014 UI primitives forms+layout + tagline removal","stage":"done","state":"archived","parent":"ed9a3a4e","children":[],"depth":3}
+{"uid":"52dadffd","title":"app-deploy-1 \u2014 UI Foundation Step 1a + 1b","stage":"done","state":"archived","parent":"ed9a3a4e","children":[],"depth":3}
+{"uid":"5772556c","title":"app-deploy-7 \u2014 Brand sweep Mo \u2192 Tropo + wordmark home link","stage":"done","state":"archived","parent":"ed9a3a4e","children":[],"depth":3}
+{"uid":"8826b753","title":"app-deploy-8 \u2014 Decompose app/page.tsx via useChatSession hook","stage":"done","state":"archived","parent":"ed9a3a4e","children":[],"depth":3}
+{"uid":"a53fc475","title":"app-deploy-4 \u2014 UI primitives foundation (Panel/Pane/Chip/Button)","stage":"done","state":"archived","parent":"ed9a3a4e","children":[],"depth":3}
+{"uid":"c03bc3fc","title":"app-deploy-9 \u2014 Decompose app/crew/page.tsx via components/crew/*","stage":"done","state":"archived","parent":"ed9a3a4e","children":[],"depth":3}
+{"uid":"c8ab4772","title":"app-deploy-10 \u2014 Decompose app/projects/[id]/page.tsx via useProjectChatSession hook","stage":"done","state":"archived","parent":"ed9a3a4e","children":[],"depth":3}
+{"uid":"dc0f800e","title":"app-deploy-3 \u2014 Step 1c-rest + 1d retire aliases","stage":"done","state":"archived","parent":"ed9a3a4e","children":[],"depth":3}
+{"uid":"f33dfb17","title":"app-deploy-2 \u2014 UI Foundation Step 1c-crew (sweep crew page + selectors)","stage":"done","state":"archived","parent":"ed9a3a4e","children":[],"depth":3}
+{"uid":"f8c5b343","title":"app-deploy-6 \u2014 Shared AppShell + Header collapse","stage":"done","state":"archived","parent":"ed9a3a4e","children":[],"depth":3}
+{"uid":"f1b8c7d3","title":"app-deploy-19 \u2014 bundle-native KB wiring (multi-KB foundation; lib/kb-bundle.ts + V2 smoke test)","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"f33dfb17","title":"app-deploy-2 \u2014 UI Foundation Step 1c-crew (sweep crew page + selectors)","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"f8c5b343","title":"app-deploy-6 \u2014 Shared AppShell + Header collapse","stage":"done","state":"archived","parent":"2918e3b4","children":[],"depth":2}
+{"uid":"5a4337ff","title":"doc-pipeline","stage":"build","state":"active","parent":"b8e5f3a2","children":[],"depth":1}
+{"uid":"7b2e94c1","title":"web-pipeline","stage":"build","state":"active","parent":"b8e5f3a2","children":["2c8e93f1","b39e7d54"],"depth":1}
+{"uid":"2c8e93f1","title":"tropo-ai.com Launch Foundations","stage":"build","state":"active","parent":"7b2e94c1","children":[],"depth":2}
+{"uid":"b39e7d54","title":"01-inbox","stage":"build","state":"active","parent":"7b2e94c1","children":[],"depth":2}
+{"uid":"9dab87a0","title":"vault-ops-pipeline","stage":"build","state":"active","parent":"b8e5f3a2","children":[],"depth":1}
+{"uid":"cd1fcd25","title":"dev-pipeline","stage":"build","state":"active","parent":"b8e5f3a2","children":[],"depth":1}
+{"uid":"da3f50dc","title":"test-pipeline","stage":"build","state":"active","parent":"b8e5f3a2","children":[],"depth":1}
+{"uid":"e2f4a8c1","title":"publish-pipeline","stage":"build","state":"active","parent":"b8e5f3a2","children":[],"depth":1}
+{"uid":"e8d1a4f6","title":"Hello Tropo \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"b8e5f3a2","children":["a7f4b2e3","b4e9d572","b5d4a1f8","c6a1f483","d28e95b1","e1c8d3a5","f3a2c819"],"depth":1}
+{"uid":"a7f4b2e3","title":"Hospitality Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"e8d1a4f6","children":[],"depth":2}
+{"uid":"b4e9d572","title":"Finance Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"e8d1a4f6","children":[],"depth":2}
+{"uid":"b5d4a1f8","title":"Content Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"e8d1a4f6","children":[],"depth":2}
+{"uid":"c6a1f483","title":"Booth Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"e8d1a4f6","children":[],"depth":2}
+{"uid":"d28e95b1","title":"Staffing Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"e8d1a4f6","children":[],"depth":2}
+{"uid":"e1c8d3a5","title":"Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example: auto-task-spawn)","stage":"build","state":"active","parent":"e8d1a4f6","children":[],"depth":2}
+{"uid":"f3a2c819","title":"2026 Customer Event Plan \u2014 Master Pipeline","stage":"build","state":"active","parent":"e8d1a4f6","children":["a7f4b2e3","b4e9d572","b5d4a1f8","c6a1f483","d28e95b1","e1c8d3a5"],"depth":2}
+{"uid":"a7f4b2e3","title":"Hospitality Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":3}
+{"uid":"b4e9d572","title":"Finance Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":3}
+{"uid":"b5d4a1f8","title":"Content Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":3}
+{"uid":"c6a1f483","title":"Booth Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":3}
+{"uid":"d28e95b1","title":"Staffing Workstream \u2014 2026 Customer Event Plan","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":3}
+{"uid":"e1c8d3a5","title":"Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example: auto-task-spawn)","stage":"build","state":"active","parent":"f3a2c819","children":[],"depth":3}

@@ -32,7 +32,7 @@ In order:
 1. `.tropo-studio/CAPSULE.md` — folder governance for this director
 2. `AGENTS.md` — operating rules for this director's folder
 3. `soul.md` — the director's character
-4. `.tropo-capsule/memory/MEMORY.md` — empty, ready to learn
+4. `.tropo-capsule/memory/agent-memory.md` — empty, ready to learn (v3 surface; v1 MEMORY.md retired per v1.67)
 5. `channels/inbox.md` — persistent conversation log
 6. `sessions/session-history.md` — session arc
 

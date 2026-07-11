@@ -27,17 +27,17 @@ pipeline_executor: argus-a55
 reviewer_of_record: argus-a55
 founder_acceptor: mike-maziarz
 member_of:
-- 03ccd072
+  - 03ccd072
 capabilities_touched:
-- 9eaf53c6
-- 14ed5da6
-- 478b0b0c
-- e98420c3
-- 3a207ed3
-- e668a385
-- 7cac6473
-- 154b0577
-- 9731a6f6
+  - 9eaf53c6
+  - 14ed5da6
+  - 478b0b0c
+  - e98420c3
+  - 3a207ed3
+  - e668a385
+  - 7cac6473
+  - 154b0577
+  - 9731a6f6
 verification:
   argus_build: complete — all 9 streams + bundled remediation v1.0 → v1.0.1 + Round 3 polish
   sa_skeptic_round_1: '39 findings (P0:11 / P1:17 / P2:11) — verdict: structurally-sound-with-bundled-remediation-needed; record agents/sa/sa.skeptic/activation-log/039-argus-a55-record.md'
@@ -49,83 +49,83 @@ verification:
   round_3_cleanup: Closed P1-NEW Pattern 2 propagation across 3 files + 2 walker P0 PARTIALs (Phase 4 vocabulary + project.capsule explicit link)
   validators: PASS — 8 passed / 1 failed (pre-existing Vela gen-log not from this cycle) / 713 warnings (orphan-detection pre-existing)
 mike_pins_received_this_cycle:
-- 'Tropo-link (subsystem name) — Mike-A55 reframe at walk Q1: ''critical linkage between all the federated vaults and home-base/HQ'''
-- Studio Registration + Studio-Prefixed UIDs (federation foundation thesis) — long-held thesis surfaced + filed at 7cac6473
-- Welcome.playbook is Studio-facing not kernel-hidden (Q3 sharper architectural read on agent-folder-as-identity-only principle)
-- Universal Storage Convergence is the destination — moving away from Studio folders toward attachments to project within vault/ (multi-cycle Convergence Locks A-E reshaping v1.18.0+ chain)
-- Pedagogy-first governance — 'My first priority is just compliance with the intent... I am a little less concerned with strict rules' (reoriented governance backstop hybrid from rule-enforcement primary to pedagogy-primary with mechanical-enforcement-as-safety-net)
-- Design for reasoning on memory reconciliation — 'we are lucky to have the most powerful reasoning engine at our disposal... it can reconcile from new concepts to the existing memory and work out a curation' (pressure-tested to Path 1/Path 2 hybrid)
-- Don't substrate-engineer creative-class authoring — 'I am just caught off guard on the rules around this... Feels like over engineering' (recalibrated Q6 brand-voice authoring approach to lighter Argus-drafts-Mike-reviews-and-locks pattern)
-- US-keyboard option labels only — 'do not use greek letter encoding. use us english keyboard queues' (extended feedback_no_option_labels memory pin)
-- Lock and Ship — direct ship signal 2026-05-11 post-Round-3 cleanup verification PASS; no soul re-read pre-lock; principal-lock signal as trust in verification verdict
+  - 'Tropo-link (subsystem name) — Mike-A55 reframe at walk Q1: ''critical linkage between all the federated vaults and home-base/HQ'''
+  - Studio Registration + Studio-Prefixed UIDs (federation foundation thesis) — long-held thesis surfaced + filed at 7cac6473
+  - Welcome.playbook is Studio-facing not kernel-hidden (Q3 sharper architectural read on agent-folder-as-identity-only principle)
+  - Universal Storage Convergence is the destination — moving away from Studio folders toward attachments to project within vault/ (multi-cycle Convergence Locks A-E reshaping v1.18.0+ chain)
+  - Pedagogy-first governance — 'My first priority is just compliance with the intent... I am a little less concerned with strict rules' (reoriented governance backstop hybrid from rule-enforcement primary to pedagogy-primary with mechanical-enforcement-as-safety-net)
+  - Design for reasoning on memory reconciliation — 'we are lucky to have the most powerful reasoning engine at our disposal... it can reconcile from new concepts to the existing memory and work out a curation' (pressure-tested to Path 1/Path 2 hybrid)
+  - Don't substrate-engineer creative-class authoring — 'I am just caught off guard on the rules around this... Feels like over engineering' (recalibrated Q6 brand-voice authoring approach to lighter Argus-drafts-Mike-reviews-and-locks pattern)
+  - US-keyboard option labels only — 'do not use greek letter encoding. use us english keyboard queues' (extended feedback_no_option_labels memory pin)
+  - Lock and Ship — direct ship signal 2026-05-11 post-Round-3 cleanup verification PASS; no soul re-read pre-lock; principal-lock signal as trust in verification verdict
 multi_cycle_architectural_locks_set:
-- Lock A — Universal Storage Convergence is the destination
-- Lock B — Five exception classes accepted (.tropo/, .tropo-studio/, channels/, runtime state, agents/)
-- Lock C — Governance backstop hybrid (capsule-defaults + governance-contract capsules + per-file overrides + validators); pedagogy-first; mechanical enforcement as safety net
-- Lock D — AGENTS.md retires for converged classes; persists for explicit exceptions
-- Lock E (sequencing) — v1.17.0 → v1.18.0 → v1.19.0 (Convergence Phase 1) → v1.20.0 (Convergence Phase 2) → v1.21.0 (sa.* harden) → v1.22.0 (Vault Import + Export) → v1.23.0 (Memory) → v2.0
+  - Lock A — Universal Storage Convergence is the destination
+  - Lock B — Five exception classes accepted (.tropo/, .tropo-studio/, channels/, runtime state, agents/)
+  - Lock C — Governance backstop hybrid (capsule-defaults + governance-contract capsules + per-file overrides + validators); pedagogy-first; mechanical enforcement as safety net
+  - Lock D — AGENTS.md retires for converged classes; persists for explicit exceptions
+  - Lock E (sequencing) — v1.17.0 → v1.18.0 → v1.19.0 (Convergence Phase 1) → v1.20.0 (Convergence Phase 2) → v1.21.0 (sa.* harden) → v1.22.0 (Vault Import + Export) → v1.23.0 (Memory) → v2.0
 pristine_no_rule_7: true
 pristine_cycle_count: 23
 substrate_introducing: true
 first_a55_owned_end_to_end: true
 dev_pipeline_activation_number: 22
 streams_complete:
-- A
-- B
-- C
-- D
-- E
-- F
-- G
-- H
-- I
+  - A
+  - B
+  - C
+  - D
+  - E
+  - F
+  - G
+  - H
+  - I
 streams_dropped: []
 verification_posture: four-instrument fold (Argus build + sa.skeptic + sa.cold-boot + sa.first-use-walker) — bigger surface than v1.15.4 substrate-introducing precedent argued for more verification, not the same
 bundled_remediation_rounds:
-- v1.0 → v1.0.1 (post-Round-1 convergent P0s)
-- Round 3 cleanup (post-Round-2 P1-NEW + walker P0 PARTIALs)
+  - v1.0 → v1.0.1 (post-Round-1 convergent P0s)
+  - Round 3 cleanup (post-Round-2 P1-NEW + walker P0 PARTIALs)
 self_healing_path_2_dogfoods_filed:
-- 7cac6473
-- 154b0577
-- 9731a6f6
+  - 7cac6473
+  - 154b0577
+  - 9731a6f6
 chain_reshape: Multi-cycle Convergence Locks A-E set; v1.18.0+ chain reshaped to absorb Universal Storage Convergence as Phase 1 + Phase 2 cycles before sa.* hardening + Vault Import/Export + Memory System + v2.0 ship
 tags:
-- v1.17.0
-- release
-- first-a55-owned-end-to-end
-- twenty-second-dev-pipeline-run
-- substrate-introducing
-- four-instrument-verification
-- bundled-remediation-v1-0-1
-- round-3-cleanup
-- multi-cycle-architectural-lock
-- tropo-link-subsystem-introduced
-- hq-push-studio-pull
-- brand-walks-through-the-door
-- mike-A55-locked-and-shipped
+  - v1.17.0
+  - release
+  - first-a55-owned-end-to-end
+  - twenty-second-dev-pipeline-run
+  - substrate-introducing
+  - four-instrument-verification
+  - bundled-remediation-v1-0-1
+  - round-3-cleanup
+  - multi-cycle-architectural-lock
+  - tropo-link-subsystem-introduced
+  - hq-push-studio-pull
+  - brand-walks-through-the-door
+  - mike-A55-locked-and-shipped
 subsystem_hub:
-- 76bab75f
-- 99ed55fd
-- 8dd772a0
-- 3a207ed3
+  - 76bab75f
+  - 99ed55fd
+  - 8dd772a0
+  - 3a207ed3
 capsule_version: '2.5'
 kernel_substrate_touched:
-- agents/tropo/tropo-activation.md (ad9256af) — NEW agent-activation thin-loader
-- agents/tropo/CAPSULE.md (02c1958d) — NEW kernel-managed-vs-user-owned governance contract + update-pipeline stub
-- agents/tropo/briefing-package/00-index.md (5f6b2cb7) — NEW briefing-package entry
-- agents/tropo/briefing-package/current-release-notes.md (f6a967fd) — NEW release-news substrate + v1.17.0 worked-example content
-- .tropo-studio/scheduled-tasks/tropo-schedule.yaml (98abee4e) — NEW L1 portable schedule registry
-- .tropo-studio/scheduled-tasks/adapters/claude-code-adapter.md (c0652d9c) — NEW opt-in Claude Code harness adapter
-- '.tropo/playbooks/agent-activation.playbook.md — Step 5.1.5 added (Hooks 1+3 universal Tropo-invitation check + pre-flight gating: sentinel = tropo-status.md, user-disable, first-agent-of-day flag)'
-- .tropo/playbooks/concierge-paths/create-an-agent.playbook.md — Step 4.5 added (Hook 2 Tropo-invitation reference for new user-created agents; belt-and-suspenders)
-- .tropo/version.md — bumped 1.16.0 → 1.17.0
-- .tropo/playbooks/concierge-paths/welcome.playbook.md — RECYCLED to recycle/v1.17.0-deprecated-concierge-paths-2026-05-10/
-- .tropo/playbooks/concierge-paths/tour-tropo.playbook.md — RECYCLED
-- .tropo/playbooks/concierge-paths/personal-chief-of-staff.playbook.md — RECYCLED
+  - agents/tropo/tropo-activation.md (ad9256af) — NEW agent-activation thin-loader
+  - agents/tropo/CAPSULE.md (02c1958d) — NEW kernel-managed-vs-user-owned governance contract + update-pipeline stub
+  - agents/tropo/briefing-package/00-index.md (5f6b2cb7) — NEW briefing-package entry
+  - agents/tropo/briefing-package/current-release-notes.md (f6a967fd) — NEW release-news substrate + v1.17.0 worked-example content
+  - .tropo-studio/scheduled-tasks/tropo-schedule.yaml (98abee4e) — NEW L1 portable schedule registry
+  - .tropo-studio/scheduled-tasks/adapters/claude-code-adapter.md (c0652d9c) — NEW opt-in Claude Code harness adapter
+  - '.tropo/playbooks/agent-activation.playbook.md — Step 5.1.5 added (Hooks 1+3 universal Tropo-invitation check + pre-flight gating: sentinel = tropo-status.md, user-disable, first-agent-of-day flag)'
+  - .tropo/playbooks/concierge-paths/create-an-agent.playbook.md — Step 4.5 added (Hook 2 Tropo-invitation reference for new user-created agents; belt-and-suspenders)
+  - .tropo/version.md — bumped 1.16.0 → 1.17.0
+  - .tropo/playbooks/concierge-paths/welcome.playbook.md — RECYCLED to recycle/v1.17.0-deprecated-concierge-paths-2026-05-10/
+  - .tropo/playbooks/concierge-paths/tour-tropo.playbook.md — RECYCLED
+  - .tropo/playbooks/concierge-paths/personal-chief-of-staff.playbook.md — RECYCLED
 v1_53_f1_unresolved_entries:
-- subsystem-registry.jsonl — NEW row for tropo-link at v1.17.0 (subsystem-introducing)
-- channels/tropo.md — NEW initial empty standing channel
-- Reference-sweep across 5 active substrate files updating cross-refs to recycled artifacts (evaluate-tropo + set-up-my-team + start-a-project + dispatch-cold-boot + dispatch-walker)
+  - subsystem-registry.jsonl — NEW row for tropo-link at v1.17.0 (subsystem-introducing)
+  - channels/tropo.md — NEW initial empty standing channel
+  - Reference-sweep across 5 active substrate files updating cross-refs to recycled artifacts (evaluate-tropo + set-up-my-team + start-a-project + dispatch-cold-boot + dispatch-walker)
 v1_53_f1_converted_at: '2026-05-25'
 v1_53_f1_converted_by: argus-a83
 v1_53_f1_conversion_note: F1 prose-caps-to-UIDs conversion per v1.53 Lane A. 9 entries kept as resolved vault UIDs; 12 entries moved to kernel_substrate_touched (preserves historical UID-in-parens references for pre-v1.21 capsule substrate that lives at .tropo/capsules/ paths not vault/files/); 3 entries kept as v1_53_f1_unresolved_entries for substrate-honest record.
@@ -136,14 +136,10 @@ v1_53_f1_conversion_note: F1 prose-caps-to-UIDs conversion per v1.53 Lane A. 9 e
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Playbooks](76bab75f.md) → **Tropo-OS v1.17.0 — First-User Experience Redesign + Perma...**
 
-**🌳 Tropo-Nav Path** (VS Code): [../../00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/v1.17.0 — First-User Experience Redesign + Permanent Tropo Agent/dbb0bace — Tropo-OS v1.17.0 — First-User Experience Redesign + Permanent Tropo Agent.md](../../00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/v1.17.0%20%E2%80%94%20First-User%20Experience%20Redesign%20%2B%20Permanent%20Tropo%20Agent/dbb0bace%20%E2%80%94%20Tropo-OS%20v1.17.0%20%E2%80%94%20First-User%20Experience%20Redesign%20%2B%20Permanent%20Tropo%20Agent.md)
-
-**🌳 Tropo-Nav Path** (chat): [argo-os/00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/v1.17.0 — First-User Experience Redesign + Permanent Tropo Agent/dbb0bace — Tropo-OS v1.17.0 — First-User Experience Redesign + Permanent Tropo Agent.md](argo-os/00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/v1.17.0%20%E2%80%94%20First-User%20Experience%20Redesign%20%2B%20Permanent%20Tropo%20Agent/dbb0bace%20%E2%80%94%20Tropo-OS%20v1.17.0%20%E2%80%94%20First-User%20Experience%20Redesign%20%2B%20Permanent%20Tropo%20Agent.md)
-
 **🔗 This file** — UID `dbb0bace` · type `release` · state `archived` · status `shipped`
 
 **↔ Siblings (9):**
-  - **under [v1.17.0 — First-User Experience Redes...](03ccd072.md):** [02c1958d](02c1958d.md) · [How Tropo's Update Orchestration Works](e668a385.md) · [Tropo Link](3a207ed3.md) · [Tropo Release Notes — v1.17.0](f6a967fd.md) · [Tropo — Agent Boot Extension (Tier 3)](478b0b0c.md) · [Tropo — Briefing Package Index](5f6b2cb7.md) · + 3 more
+  - **under [03ccd072](03ccd072.md):** [agents/tropo/ — Tropo Agent Governance](02c1958d.md) · [How Tropo's Update Orchestration Works](e668a385.md) · [Tropo Link](3a207ed3.md) · [Tropo Release Notes — v1.17.0](f6a967fd.md) · [Tropo — Agent Boot Extension (Tier 3)](478b0b0c.md) · [Tropo — Briefing Package Index](5f6b2cb7.md) · + 3 more
 
 **📥 Cited by (6):**
 - [Tropo-OS v1.20.0 — Convergence Phase 2](4920ce3a.md) — `4920ce3a` (type `release`, via `refs`)
@@ -159,7 +155,6 @@ v1_53_f1_conversion_note: F1 prose-caps-to-UIDs conversion per v1.53 Lane A. 9 e
 | Relation | Target |
 |---|---|
 | Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](222873b9.md) |
-| Member of | [v1.17.0 — First-User Experience Redesign + Permanent Tropo Agent (03ccd072)](03ccd072.md) |
 
 *Released 2026-05-11 by Mike Maziarz. "Lock and Ship." Twenty-second dev-pipeline activation. First A55-owned end-to-end. Substrate-introducing — new permanent agent class + new subsystem + new governance contract + new scheduling pattern + multi-cycle architectural locks. Pristine-no-Rule-7 22→23 cycle precedent extended.*
 

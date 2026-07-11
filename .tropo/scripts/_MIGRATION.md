@@ -16,16 +16,16 @@ single-file-truth pattern. This folder now contains:
 
 | Old path | New path | UID |
 |---|---|---|
-| `.tropo/scripts/tropo-validate.py` | `vault/tools/d2b9c8e6.py` | d2b9c8e6 |
-| `.tropo/scripts/rebuild-vault.py` | `vault/tools/e8d4c1b9.py` | e8d4c1b9 |
-| `.tropo/scripts/rebuild-index.py` | `vault/tools/f4b8a6e2.py` | f4b8a6e2 |
-| `.tropo/scripts/pipeline-activate.py` | `vault/tools/e337f1dd.py` | e337f1dd |
-| `.tropo/scripts/pipeline-runtime.py` | `vault/tools/9e7003b1.py` | 9e7003b1 |
-| `.tropo/scripts/publish.py` | `vault/tools/2e642578.py` | 2e642578 |
-| `.tropo/scripts/tropo-recycle.py` | `vault/tools/2573f6dd.py` | 2573f6dd |
-| `.tropo/scripts/write-activation-entry.py` | `vault/tools/40b2f455.py` | 40b2f455 |
-| `.tropo/scripts/vault-search.py` | `vault/tools/943149d4.py` | 943149d4 |
-| `.tropo/scripts/build-web-content.py` | `vault/tools/11f3ebd4.py` | 11f3ebd4 |
+| `vault/tools/tropo-validate.py` | `vault/tools/d2b9c8e6.py` | d2b9c8e6 |
+| `vault/tools/tropo-rebuild-vault.py` | `vault/tools/e8d4c1b9.py` | e8d4c1b9 |
+| `vault/tools/tropo-rebuild-index.py` | `vault/tools/f4b8a6e2.py` | f4b8a6e2 |
+| `vault/tools/e337f1dd.py` | `vault/tools/e337f1dd.py` | e337f1dd |
+| `vault/tools/9e7003b1.py` | `vault/tools/9e7003b1.py` | 9e7003b1 |
+| `vault/tools/2e642578.py` | `vault/tools/2e642578.py` | 2e642578 |
+| `vault/tools/tropo-recycle.py` | `vault/tools/2573f6dd.py` | 2573f6dd |
+| `vault/tools/40b2f455.py` | `vault/tools/40b2f455.py` | 40b2f455 |
+| `vault/tools/tropo-vault-search.py` | `vault/tools/943149d4.py` | 943149d4 |
+| `vault/tools/11f3ebd4.py` | `vault/tools/11f3ebd4.py` | 11f3ebd4 |
 
 v1.57+ text sweep (capsules + playbooks + how-tos) to replace `.tropo/scripts/<name>.py`
 references with `vault/tools/<uid>.py` canonical paths per R5 deferral pattern.

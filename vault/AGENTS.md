@@ -4,21 +4,28 @@ tier: vault
 folder_type: vault
 maintained_by: vault-owner
 owner: mike
-write_access: [mike, metis, vela, argus, orpheus, silas, talos]
+write_access:
+  - mike
+  - metis
+  - vela
+  - argus
+  - orpheus
+  - silas
+  - talos
 read_access: all
-purpose: "The Tropo Vault — authoritative store of every governed work artifact in this vault"
-governs: "vault/ and everything within it"
+purpose: The Tropo Vault — authoritative store of every governed work artifact in this vault
+governs: vault/ and everything within it
 extraction_scope: ship
 refs:
   - uid: null
-    title: "Tropo Vault Phase 1 Specification"
-    path: "vault/files/5eb5fd1f.md"
+    title: Tropo Vault Phase 1 Specification
+    path: vault/files/5eb5fd1f.md
   - uid: 2d016ecf
-    title: "Tropo Work Architecture Specification"
+    title: Tropo Work Architecture Specification
   - uid: ee225d4f
-    title: "Capabilities Matrix Design Brief"
-member_of:
-  - "2d083137"   # tropo-work (v1.12 backfill 2026-05-08)
+    title: Capabilities Matrix Design Brief
+subsystem_hub:
+  - 2d083137
 ---
 
 # vault/ — The Tropo Vault
@@ -143,39 +150,40 @@ The Vault ships with the following capsule types under [Tropo Work v3 (8b3f1d92)
 
 | Type | Class | Capsule | Notes |
 |------|-------|---------|-------|
-| `note` | WorkItem | [`note.capsule`](../.tropo/capsules/note.capsule.md) | v3.1 — subsumes the deprecated `concept` primitive (D1). Lightweight capture; rewriteable. |
-| `task` | WorkItem | [`task.capsule`](../.tropo/capsules/task.capsule.md) | v3.0 — request-lifecycle: `requested → accepted → active → verify → done` (+ `blocked`, `rejected`, `cancelled`). Owner ≠ verifier. |
-| `design-brief` | WorkItem | [`design-brief.capsule`](../.tropo/capsules/design-brief.capsule.md) | v3.0 — informs a spec; not itself locked. |
-| `arch-spec` | WorkItem | [`arch-spec.capsule`](../.tropo/capsules/arch-spec.capsule.md) | v2.0 — architectural lock; only the locking authority locks. |
-| `design-spec` | WorkItem | [`design-spec.capsule`](../.tropo/capsules/design-spec.capsule.md) | v2.1 — design-side lock (e.g., release plans before they ship). v3.1-consistency-pass candidate. |
-| `build` | WorkItem | [`build.capsule`](../.tropo/capsules/build.capsule.md) | v2.2 — versioned-package discipline; produces a release. |
-| `release` | WorkItem | [`release.capsule`](../.tropo/capsules/release.capsule.md) | v3.0 — post-ship artifact; immutable. |
-| `decision` | WorkItem | [`decision.capsule`](../.tropo/capsules/decision.capsule.md) | v3.1 — `status:` enum aligned with v3 (was `stage:` pre-v3; existing index entries may carry residual `stage:` until v1.4 Phase 7 migration). |
-| `document` | WorkItem | [`document.capsule`](../.tropo/capsules/document.capsule.md) | v3.1 — pattern exemplar; `status: draft → published → archived`. Content-production pipelines terminate here per D11. |
-| `collection-ref` | WorkItem | [`collection-ref.capsule`](../.tropo/capsules/collection-ref.capsule.md) | v3.0 — pointer to a collection file in `collections/`. |
-| `project` | non-WorkItem | [`project.capsule`](../.tropo/capsules/project.capsule.md) | v2.3 — container; retains `stage:` lifecycle enum during v3.1 capsule-consistency carve-out. |
-| `pipeline` | non-WorkItem | [`pipeline.capsule`](../.tropo/capsules/pipeline.capsule.md) | v2.0 — entity-authored protocol declaration; recursive WorkflowNode model. |
-| `pipeline-run` | non-WorkItem | [`pipeline-run.capsule`](../.tropo/capsules/pipeline-run.capsule.md) | v2.1 — ephemeral execution instance with pinned `playbook_version`. |
-| `entity` | foundation | [`entity.capsule`](../.tropo/capsules/entity.capsule.md) | v1.0 — Tropo Work v3 §2.3 D7 invariant: every WorkItem `member_of` an entity-owned project. |
-| `agent` | foundation | [`agent.capsule`](../.tropo/capsules/agent.capsule.md) | v1.0 — registered crew/personal/worker/service identity. |
-| `team` | foundation | [`team.capsule`](../.tropo/capsules/team.capsule.md) | v1.0 — multi-agent groupings; no cycles in `parent_teams`. |
-| `vault` | foundation | [`vault.capsule`](../.tropo/capsules/vault.capsule.md) | v1.0 — vault-entity principal; owns top-level projects. |
-| `concept` | DEPRECATED | [`concept.capsule`](../.tropo/capsules/concept.capsule.md) | Subsumed into `note` per v3 D1. Existing `type: concept` entries migrate at v1.4 Phase 7. Do not author new. |
-| `board-def` | rendering | [`board-definition.capsule`](../.tropo/capsules/board-definition.capsule.md) | Board declarations; boards themselves are regenerated snapshots. |
-| `board-snapshot` | rendering | [`board-snapshot.capsule`](../.tropo/capsules/board-snapshot.capsule.md) | Immutable point-in-time board capture. |
-| `playbook` | governance | [`playbook.capsule`](../.tropo/capsules/playbook.capsule.md) | v2.1 — Group/milestone procedural declaration. |
-| `playbook-run` | governance | [`playbook-run.capsule`](../.tropo/capsules/playbook-run.capsule.md) | v2.1 — execution instance of a playbook. |
-| `project-plan` | governance | [`project-plan.capsule`](../.tropo/capsules/project-plan.capsule.md) | v1.1 — multi-stream coordinator. |
-| `release-plan` | governance | [`release-plan.capsule`](../.tropo/capsules/release-plan.capsule.md) | v1.0 — release coordinator; v3.1-consistency-pass candidate. |
-| `ship-artifact` | release | [`ship-artifact.capsule`](../.tropo/capsules/ship-artifact.capsule.md) | v1.1.4 — manifest entry per shippable folder/file (kind discriminator). |
-| `subsystem-hub` | infrastructure | [`subsystem-hub.capsule`](../.tropo/capsules/subsystem-hub.capsule.md) | v1.2 — evergreen subsystem root (Library / Work / Agents / Playbooks / Rendering / Governance). |
-| `action` | governance | [`action.capsule`](../.tropo/capsules/action.capsule.md) | v1.1 — atomic create-* operations governed by capsule. |
-| `tool` | governance | [`tool.capsule`](../.tropo/capsules/tool.capsule.md) | v1.0 — registered scripts / harness extensions. |
-| `how-to` | governance | [`how-to.capsule`](../.tropo/capsules/how-to.capsule.md) | v1.0 — procedural knowledge for humans + agents. |
-| `session-agent` | governance | [`session-agent.capsule`](../.tropo/capsules/session-agent.capsule.md) | v1.2 — sa.* one-shot or live-channel. |
-| `agent-configurator` | governance | [`agent-configurator.capsule`](../.tropo/capsules/agent-configurator.capsule.md) | v2.1 — thin-loader activation file. |
-| `collection` | rendering | [`collection.capsule`](../.tropo/capsules/collection.capsule.md) | v1.0 — collection manifest body. v3.1-consistency-pass candidate. |
-| `kb-article` | content | [`document.capsule`](../.tropo/capsules/document.capsule.md) | Knowledge base article (uses document.capsule with `pattern_family: document`). |
+| `note` | WorkItem | [`note.capsule`](vault/capsules/tropo-note.capsule.md) | v3.1 — subsumes the deprecated `concept` primitive (D1). Lightweight capture; rewriteable. |
+| `task` | WorkItem | [`task.capsule`](vault/capsules/tropo-task.capsule.md) | v3.0 — request-lifecycle: `requested → accepted → active → verify → done` (+ `blocked`, `rejected`, `cancelled`). Owner ≠ verifier. |
+| `design-brief` | WorkItem | [`design-brief.capsule`](vault/capsules/tropo-design-brief.capsule.md) | v3.0 — informs a spec; not itself locked. |
+| `arch-spec` | WorkItem | [`arch-spec.capsule`](vault/capsules/tropo-arch-spec.capsule.md) | v2.0 — architectural lock; only the locking authority locks. |
+| `design-spec` | WorkItem | [`design-spec.capsule`](vault/capsules/tropo-design-spec.capsule.md) | v2.1 — design-side lock (e.g., release plans before they ship). v3.1-consistency-pass candidate. |
+| `build` | WorkItem | [`build.capsule`](vault/capsules/tropo-build.capsule.md) | v2.2 — versioned-package discipline; produces a release. |
+| `release` | WorkItem | [`release.capsule`](vault/capsules/tropo-release.capsule.md) | v3.0 — post-ship artifact; immutable. |
+| `decision` | WorkItem | [`decision.capsule`](vault/capsules/tropo-decision.capsule.md) | v3.1 — `status:` enum aligned with v3 (was `stage:` pre-v3; existing index entries may carry residual `stage:` until v1.4 Phase 7 migration). |
+| `document` | WorkItem | [`document.capsule`](vault/capsules/tropo-document.capsule.md) | v3.1 — pattern exemplar; `status: draft → published → archived`. Content-production pipelines terminate here per D11. |
+| `collection-ref` | WorkItem | [`collection-ref.capsule`](vault/capsules/tropo-collection-ref.capsule.md) | v3.0 — pointer to a collection file in `collections/`. |
+| `project` | non-WorkItem | [`project.capsule`](vault/capsules/tropo-project.capsule.md) | v2.3 — container; retains `stage:` lifecycle enum during v3.1 capsule-consistency carve-out. |
+| `pipeline` | non-WorkItem | [`pipeline.capsule`](vault/capsules/tropo-pipeline.capsule.md) | v2.0 — entity-authored protocol declaration; recursive WorkflowNode model. |
+| `pipeline-run` | non-WorkItem | [`pipeline-run.capsule`](vault/capsules/tropo-pipeline-run.capsule.md) | v2.1 — ephemeral execution instance with pinned `playbook_version`. |
+| `entity` | foundation | [`entity.capsule`](vault/capsules/tropo-entity.capsule.md) | v1.0 — Tropo Work v3 §2.3 D7 invariant: every WorkItem `member_of` an entity-owned project. |
+| `agent` | foundation | [`agent.capsule`](vault/capsules/tropo-agent.capsule.md) | v1.0 — registered crew/personal/worker/service identity. |
+| `team` | foundation | [`team.capsule`](vault/capsules/tropo-team.capsule.md) | v1.0 — multi-agent groupings; no cycles in `parent_teams`. |
+| `vault-entity` | foundation | [`vault-entity.capsule`](vault/capsules/tropo-vault-entity.capsule.md) | v1.1 — RENAMED from `vault` 2026-07-07 (ADR-051 Fork 1, `18059aef`; UID `4d6e2f9a` preserved). Principal-grounding + the D7 anchor, now **per vault-node**; owns top-level projects. |
+| `vault` | foundation | [`vault.capsule`](vault/capsules/tropo-vault.capsule.md) | v1.0 — NEW 2026-07-07 (ADR-051 Fork 1). The vault-node **manifest**: membership + publish + audience + curation + contract. Distinct lifecycle from `vault-entity` — do not conflate. |
+| `concept` | DEPRECATED | [`concept.capsule`](vault/capsules/tropo-concept.capsule.md) | Subsumed into `note` per v3 D1. Existing `type: concept` entries migrate at v1.4 Phase 7. Do not author new. |
+| `board-def` | rendering | [`board-definition.capsule`](vault/capsules/tropo-board-definition.capsule.md) | Board declarations; boards themselves are regenerated snapshots. |
+| `board-snapshot` | rendering | [`board-snapshot.capsule`](vault/capsules/tropo-board-snapshot.capsule.md) | Immutable point-in-time board capture. |
+| `playbook` | governance | [`playbook.capsule`](vault/capsules/tropo-playbook.capsule.md) | v2.1 — Group/milestone procedural declaration. |
+| `playbook-run` | governance | [`playbook-run.capsule`](vault/capsules/tropo-playbook-run.capsule.md) | v2.1 — execution instance of a playbook. |
+| `project-plan` | governance | [`project-plan.capsule`](vault/capsules/tropo-project-plan.capsule.md) | v1.1 — multi-stream coordinator. |
+| `release-plan` | governance | [`release-plan.capsule`](vault/capsules/tropo-release-plan.capsule.md) | v1.0 — release coordinator; v3.1-consistency-pass candidate. |
+| `ship-artifact` | release | [`ship-artifact.capsule`](vault/capsules/tropo-ship-artifact.capsule.md) | v1.1.4 — manifest entry per shippable folder/file (kind discriminator). |
+| `subsystem-hub` | infrastructure | [`subsystem-hub.capsule`](vault/capsules/tropo-subsystem-hub.capsule.md) | v1.2 — evergreen subsystem root (Library / Work / Agents / Playbooks / Rendering / Governance). |
+| `action` | governance | [`action.capsule`](vault/capsules/tropo-action.capsule.md) | v1.1 — atomic create-* operations governed by capsule. |
+| `tool` | governance | [`tool.capsule`](vault/capsules/tropo-tool.capsule.md) | v1.0 — registered scripts / harness extensions. |
+| `how-to` | governance | [`how-to.capsule`](vault/capsules/tropo-how-to.capsule.md) | v1.0 — procedural knowledge for humans + agents. |
+| `session-agent` | governance | [`session-agent.capsule`](vault/capsules/tropo-session-agent.capsule.md) | v1.2 — sa.* one-shot or live-channel. |
+| `agent-configurator` | governance | [`agent-configurator.capsule`](vault/capsules/tropo-agent-configurator.capsule.md) | v2.1 — thin-loader activation file. |
+| `collection` | rendering | [`collection.capsule`](vault/capsules/tropo-collection.capsule.md) | v1.0 — collection manifest body. v3.1-consistency-pass candidate. |
+| `kb-article` | content | [`document.capsule`](vault/capsules/tropo-document.capsule.md) | Knowledge base article (uses document.capsule with `pattern_family: document`). |
 
 For the full schema of each type, see the corresponding capsule definition in `.tropo/capsules/`. The meta-spec (capsule-of-capsules) is [Vault Schema v2 — Architecture Specification (222873b9)](files/222873b9.md).
 
@@ -218,7 +226,7 @@ The vault steward runs periodic health checks against the Vault:
 **The rule:** every removal of an entry from `vault/files/<uid>.md` (or other governed substrate; see canonical scope table) goes through the canonical soft-delete gesture:
 
 ```
-python3 .tropo/scripts/tropo-recycle.py <uid> [<uid> ...] --reason "<brief rationale>"
+python3 vault/tools/tropo-recycle.py <uid> [<uid> ...] --reason "<brief rationale>"
 ```
 
 Never `rm`. Never `find ... -delete`. Never `git rm`. Never bypass for "obvious" cases (those are the cases that train future agents to bypass — which is how the v1.35.0 critical incident + the Talos T8 commit `7a8df68` 2026-05-17 incident both happened).

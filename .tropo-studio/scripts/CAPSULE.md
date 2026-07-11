@@ -3,11 +3,13 @@ spec_version: 2
 tier: capsule
 folder_type: governed
 owner: vault-admin
-write_access: [vault-admin-delegate, human-owner]
+write_access:
+  - vault-admin-delegate
+  - human-owner
 read_access: all
-purpose: "Vault-admin-tier Python helpers — board renderers, navigation utilities, ad-hoc vault-scoped tooling. Mirrors.tropo/scripts/ at the vault-admin tier."
+purpose: Vault-admin-tier Python helpers — board renderers, navigation utilities, ad-hoc vault-scoped tooling. Mirrors.tropo/scripts/ at the vault-admin tier.
 uid: ffecdf39
-governed_by: e6c3f410 # ADR-032 — Three-Layer Boot Configuration Model
+governed_by: e6c3f410
 ---
 
 # `.tropo-studio/scripts/` — Vault-Admin Helpers

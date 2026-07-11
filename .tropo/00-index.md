@@ -2,12 +2,18 @@
 uid: 6eeaf1ca
 type: document
 status: published
-title: "Tropo Kernel — System Index"
-description: "One-stop navigation for the.tropo/ kernel. When you have a system question, start here."
+title: Tropo Kernel — System Index
+description: One-stop navigation for the.tropo/ kernel. When you have a system question, start here.
 owner: tropo
 created: 2026-04-13
 modified: 2026-04-13
-tags: [kernel, index, navigation, system, orientation, scope-ship]
+tags:
+  - kernel
+  - index
+  - navigation
+  - system
+  - orientation
+  - scope-ship
 file_ext: md
 schema_version: 1
 created_by: argus-a22

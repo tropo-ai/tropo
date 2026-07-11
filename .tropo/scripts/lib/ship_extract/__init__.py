@@ -13,7 +13,7 @@ Five sub-modules under one engine:
 
 Consumed by:
 - `.tropo/scripts/build-release.py` — release-target orchestration (target='release')
-- `.tropo/scripts/build-web-content.py` — web-target orchestration (target='web'; v1.43 Stream D)
+- `vault/tools/11f3ebd4.py` — web-target orchestration (target='web'; v1.43 Stream D)
 - Future-target orchestration scripts can be added per v1.42 capsule v1.3 target enum extensibility
 
 Engine design principles:

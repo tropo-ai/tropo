@@ -1,7 +1,7 @@
 ---
 extraction_scope: argo-reference
-member_of:
-  - "8dd772a0"   # tropo-governance (v1.12 backfill 2026-05-08)
+subsystem_hub:
+  - 8dd772a0
 ---
 
 # Tropo Studio

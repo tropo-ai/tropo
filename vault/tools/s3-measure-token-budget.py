@@ -36,7 +36,7 @@ File classes measured:
   operating_principles — .tropo-studio/operating-principles.md
   self_healing         — .tropo/SELF-HEALING.md
   mission_brief        — context/mission-brief.md
-  write_time_capsule   — .tropo/capsules/*.md (consulted at every vault write)
+  write_time_capsule   — vault/capsules/*.md (consulted at every vault write; ADR-045: moved from .tropo/capsules/)
   vault_playbook       — vault/playbooks/*.md (all playbooks)
   activation_playbook  — vault/playbooks/99341618.md only
   retire_playbook      — vault/playbooks/e2c7d185.md only
@@ -122,7 +122,7 @@ CLASSES = [
     ),
     (
         "write_time_capsule",
-        ".tropo/capsules/*.md",
+        "vault/capsules/*.md",  # ADR-045: moved from .tropo/capsules/ (v1.21.0)
         51200,   # 50 KB — events.capsule 77 KB + ship-artifact 65 KB WARN immediately
         "Consulted at every governed write. SPLIT candidates: events.capsule (77 KB), "
         "ship-artifact.capsule (65 KB), publish.pipeline.capsule (60 KB). "
@@ -275,7 +275,7 @@ def main() -> int:
     if args.apply:
         write_budget_table(table, Path(args.output))
         print("\nRe-run validator to activate check_token_budget_per_class:\n"
-              "  python3 vault/tools/d2b9c8e6.py | grep 'Token Budget'")
+              "  python3 vault/tools/tropo-validate.py | grep 'Token Budget'")
     else:
         print("Re-run with --apply to write the budget table and activate the WARN check.")
 

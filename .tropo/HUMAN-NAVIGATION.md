@@ -1,10 +1,10 @@
 ---
 uid: 57a9c11f
 type: os-primitive
-title: "Human Navigation — Tropo-OS P0 Primitive"
-description: "Every Tropo Studio's vault is governed substrate for agents. Its rendered markdown body is ALSO a deliverable surface for humans — specifically the principal who reviews work, walks the graph, and verifies outcomes. Substrate that is not human-navigable is incomplete: the agent half ships, the human half doesn't. This primitive declares the contract every governed vault entry must satisfy at the rendered-body level: filesystem-tree walkability on the composable graph. Up (path) / Self (identity) / Down (children) / Lateral (siblings) / Inbound (cited-by). Readable-name first; UIDs in code-fences for copy-paste."
-version: "1.3"
-v1_3_amendment_note: "v1.3 (Argus A95, 2026-06-03, captain-mode per Mike-A95 directive) — adds the 'Where surfaces live' clause to §Agent-Authored Visual Surfaces. v1.1 said author the surface; v1.2 said deliver it openable + keep it live; v1.3 says WHERE it lives so the human can FIND and PRUNE it: the canonical home is <studio>/boards/<agent>/ (the Dashboard home in STUDIO.md System Map), exposed at the studio root — never a hidden dotfolder. Private scratch + memory stay in .tropo-capsule/. Driven by finding 5afbbdd2 (Metis G65 / Mike-G65): agent-authored boards were landing in hidden .tropo-capsule/workspace/, so the human could neither find nor prune them. ADDITIVE; v1.0/v1.1/v1.2 content unchanged. SIGNED by Mike at OS-tier 2026-06-03 ('approved')."
+title: Human Navigation — Tropo-OS P0 Primitive
+description: 'Every Tropo Studio''s vault is governed substrate for agents. Its rendered markdown body is ALSO a deliverable surface for humans — specifically the principal who reviews work, walks the graph, and verifies outcomes. Substrate that is not human-navigable is incomplete: the agent half ships, the human half doesn''t. This primitive declares the contract every governed vault entry must satisfy at the rendered-body level: filesystem-tree walkability on the composable graph. Up (path) / Self (identity) / Down (children) / Lateral (siblings) / Inbound (cited-by). Readable-name first; UIDs in code-fences for copy-paste.'
+version: '1.3'
+v1_3_amendment_note: 'v1.3 (Argus A95, 2026-06-03, captain-mode per Mike-A95 directive) — adds the ''Where surfaces live'' clause to §Agent-Authored Visual Surfaces. v1.1 said author the surface; v1.2 said deliver it openable + keep it live; v1.3 says WHERE it lives so the human can FIND and PRUNE it: the canonical home is <studio>/boards/<agent>/ (the Dashboard home in STUDIO.md System Map), exposed at the studio root — never a hidden dotfolder. Private scratch + memory stay in .tropo-capsule/. Driven by finding 5afbbdd2 (Metis G65 / Mike-G65): agent-authored boards were landing in hidden .tropo-capsule/workspace/, so the human could neither find nor prune them. ADDITIVE; v1.0/v1.1/v1.2 content unchanged. SIGNED by Mike at OS-tier 2026-06-03 (''approved'').'
 tier: os
 status: active
 state: active
@@ -13,25 +13,38 @@ created: 2026-05-15
 modified: 2026-06-03
 created_by: vela-v45
 modified_by: argus-a95
-v1_2_amendment_note: "v1.2 (Metis G64, 2026-05-31, same day as v1.1) - adds two requirements to §Agent-Authored Visual Surfaces that the first Po pressure test proved were missing. v1.1 said the render 'ships in the bare zip on day one' - necessary but NOT sufficient. (1) DELIVERY / last-mile: a render the human cannot open is incomplete; ship it with the one-line command that opens it (macOS `open <path>`), never a folder-navigation instruction. (2) LIVENESS: a snapshot of chat input is not the deliverable; render from real tracked state where possible, and a snapshot is acceptable only when labeled AND paired with an in-session offer to make it real. Driven by finding a7d2e5c9 (Po bailed a cold skeptic partly because the board couldn't be opened and was a static cartoon). ADDITIVE; SIGNED by Mike at OS-tier 2026-06-02 ('approved', G65 closeout walk) alongside v1.1. Argus notified."
+v1_2_amendment_note: 'v1.2 (Metis G64, 2026-05-31, same day as v1.1) - adds two requirements to §Agent-Authored Visual Surfaces that the first Po pressure test proved were missing. v1.1 said the render ''ships in the bare zip on day one'' - necessary but NOT sufficient. (1) DELIVERY / last-mile: a render the human cannot open is incomplete; ship it with the one-line command that opens it (macOS `open <path>`), never a folder-navigation instruction. (2) LIVENESS: a snapshot of chat input is not the deliverable; render from real tracked state where possible, and a snapshot is acceptable only when labeled AND paired with an in-session offer to make it real. Driven by finding a7d2e5c9 (Po bailed a cold skeptic partly because the board couldn''t be opened and was a static cartoon). ADDITIVE; SIGNED by Mike at OS-tier 2026-06-02 (''approved'', G65 closeout walk) alongside v1.1. Argus notified.'
 signed_by: mike-maziarz
 signed_at: 2026-05-15
 signed_v1_3_at: 2026-06-03
-signed_v1_3_context: "Mike-A95 sign-off 2026-06-03 — 'approved.' Locks the v1.3 additive 'Where surfaces live' clause at OS-tier; prior signatures unchanged. Recorded by argus-a95 captain-mode (closes finding 5afbbdd2)."
-signing_context: "Mike-V45 sign-off 2026-05-15 — 'I'm good.' Same OS-tier sign-off pattern as SELF-HEALING.md (db0fd9b1; Mike-signed 2026-05-09). Authored 2026-05-15 by vela-v45 in captain-mode per Mike-V45 directive arc (substrate-coherence cleanup session). v1.0 ships in every Studio via the release pipeline."
+signed_v1_3_context: Mike-A95 sign-off 2026-06-03 — 'approved.' Locks the v1.3 additive 'Where surfaces live' clause at OS-tier; prior signatures unchanged. Recorded by argus-a95 captain-mode (closes finding 5afbbdd2).
+signing_context: Mike-V45 sign-off 2026-05-15 — 'I'm good.' Same OS-tier sign-off pattern as SELF-HEALING.md (db0fd9b1; Mike-signed 2026-05-09). Authored 2026-05-15 by vela-v45 in captain-mode per Mike-V45 directive arc (substrate-coherence cleanup session). v1.0 ships in every Studio via the release pipeline.
 signed_v1_1_v1_2_at: 2026-06-02
-signed_v1_1_v1_2_context: "Mike-G65 sign-off 2026-06-02 — 'approved.' Locks the v1.1 (L1-native visual surfaces) + v1.2 (render delivery + liveness) additive amendments at OS-tier; v1.0 signature (2026-05-15) unchanged. Recorded by metis-g65 in the small-stuff closeout walk."
-v1_1_amendment_note: "v1.1 (Metis G64, 2026-05-31, captain-mode per Mike-G64 directive) — adds §Agent-Authored Visual Surfaces — and Why They Are L1-Native. Extends the primitive from the auto-rendered text nav-block (v1.0) to the broader truth Mike-G64 surfaced: humans navigate visually, agents author rich rendered surfaces (boards / diagrams / maps as SVG / PNG / self-contained HTML), and this is L1-native — a harnessed agent writes static rendered files with no npm and no server, so the visual surface ships in the bare L1 zip. Composes with the three-tier product model (L1 agent-authored static → L2 served-live-operable cockpit → hosted). ADDITIVE — does not alter the v1.0 Mike-signed content; SIGNED by Mike at OS-tier 2026-06-02 ('approved', G65 closeout walk; same sign-off gesture as v1.0). Authored under the Vela-V45 captain-mode precedent (executive authors the OS primitive on Mike's directive; Mike signs). Argus notified for architectural-stewardship review."
-governed_by: 8dd772a0   # Tropo Governance hub
+signed_v1_1_v1_2_context: Mike-G65 sign-off 2026-06-02 — 'approved.' Locks the v1.1 (L1-native visual surfaces) + v1.2 (render delivery + liveness) additive amendments at OS-tier; v1.0 signature (2026-05-15) unchanged. Recorded by metis-g65 in the small-stuff closeout walk.
+v1_1_amendment_note: 'v1.1 (Metis G64, 2026-05-31, captain-mode per Mike-G64 directive) — adds §Agent-Authored Visual Surfaces — and Why They Are L1-Native. Extends the primitive from the auto-rendered text nav-block (v1.0) to the broader truth Mike-G64 surfaced: humans navigate visually, agents author rich rendered surfaces (boards / diagrams / maps as SVG / PNG / self-contained HTML), and this is L1-native — a harnessed agent writes static rendered files with no npm and no server, so the visual surface ships in the bare L1 zip. Composes with the three-tier product model (L1 agent-authored static → L2 served-live-operable cockpit → hosted). ADDITIVE — does not alter the v1.0 Mike-signed content; SIGNED by Mike at OS-tier 2026-06-02 (''approved'', G65 closeout walk; same sign-off gesture as v1.0). Authored under the Vela-V45 captain-mode precedent (executive authors the OS primitive on Mike''s directive; Mike signs). Argus notified for architectural-stewardship review.'
+governed_by: 8dd772a0
 aligned_with:
-  - "a4f9e2b1"   # operating-principles.md OP-12 (Studio-tier interpretation)
-  - "ee814120"   # core.capsule (structural contract supporting this primitive)
-  - "db0fd9b1"   # SELF-HEALING.md (sibling P0 primitive; precedent for this shape)
-member_of:
-  - "8dd772a0"   # Tropo Governance hub (OS-tier substrate)
+  - a4f9e2b1
+  - ee814120
+  - db0fd9b1
 extraction_scope: ship
 schema_version: 2
-tags: [os-primitive, human-navigation, p0, every-agent-every-studio, rendered-surface-as-deliverable, navigation-block, filesystem-tree-on-graph, agent-authored-visual-surfaces, l1-native-rendering, boards-svg-png-html, render-delivery-last-mile, render-liveness, v1-1-v1-2-mike-signed-2026-06-02]
+tags:
+  - os-primitive
+  - human-navigation
+  - p0
+  - every-agent-every-studio
+  - rendered-surface-as-deliverable
+  - navigation-block
+  - filesystem-tree-on-graph
+  - agent-authored-visual-surfaces
+  - l1-native-rendering
+  - boards-svg-png-html
+  - render-delivery-last-mile
+  - render-liveness
+  - v1-1-v1-2-mike-signed-2026-06-02
+subsystem_hub:
+  - 8dd772a0
 ---
 
 # Human Navigation — Tropo-OS P0 Primitive
@@ -152,9 +165,9 @@ Same concept the whole way up. The static L1 render and the live L2 cockpit are 
 
 This primitive is the OS-tier authoritative declaration. Studio-tier and agent-tier documents *interpret* and *apply* it; they don't restate it.
 
-- **[`.tropo/capsules/core.capsule.md`](capsules/core.capsule.md)** (v1.2+) — the structural contract supporting this primitive. Declares `title:` as required core frontmatter (display-name field — distinct from `name:` which is structured); declares the Navigation block render obligation; ratchets validation from latent to enforced.
+- **[`vault/capsules/tropo-core.capsule.md`](capsules/core.capsule.md)** (v1.2+) — the structural contract supporting this primitive. Declares `title:` as required core frontmatter (display-name field — distinct from `name:` which is structured); declares the Navigation block render obligation; ratchets validation from latent to enforced.
 - **[`.tropo/scripts/generate-relations-header.py`](scripts/generate-relations-header.py)** (v1.X — vela-v45 amendment 2026-05-14) — the canonical render pipeline. Authors the five-section Navigation block on every governed vault entry at rebuild time.
-- **[`.tropo/scripts/tropo-validate.py`](scripts/tropo-validate.py)** `check_navigation_block_render_safety()` — extends the validator to catch missing-title + missing-Navigation-block defects. WARN at v1.X; ERROR ratchet at v1.X+1 once migration substrate is clean.
+- **[`vault/tools/tropo-validate.py`](scripts/tropo-validate.py)** `check_navigation_block_render_safety()` — extends the validator to catch missing-title + missing-Navigation-block defects. WARN at v1.X; ERROR ratchet at v1.X+1 once migration substrate is clean.
 - **[`.tropo-studio/operating-principles.md`](../.tropo-studio/operating-principles.md) OP-12** — Studio-tier interpretation; "Design for Human Navigation — the Rendered Surface Is a Deliverable." Operationalizes the primitive for Argo-OS specifically. Mirrors how OP-3 operationalizes SELF-HEALING.md for Argo-OS.
 - **Agent boot extensions** at `vault/files/<boot-extension-uid>.md` — no per-agent restatement needed; the primitive inherits automatically.
 

@@ -1,11 +1,14 @@
 ---
-uid: "<FILL: assign a UID when you register this file (see vault/AGENTS.md)>"
+uid: '<FILL: assign a UID when you register this file (see vault/AGENTS.md)>'
 tier: capsule
 folder_type: vault-root
 owner: human-owner
-write_access: [human-owner, concierge, designated-agents]
+write_access:
+  - human-owner
+  - concierge
+  - designated-agents
 read_access: all
-purpose: "Vault-root governance — what belongs at this level, who writes here, and how your vault as a whole is organized."
+purpose: Vault-root governance — what belongs at this level, who writes here, and how your vault as a whole is organized.
 spec_version: 2
 ---
 

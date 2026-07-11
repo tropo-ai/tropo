@@ -39,7 +39,7 @@ executing the cascade_spec (per pipeline.capsule v2.6) if declared, all
 atomically with roll-back on failure.
 
 Usage:
-    python3 .tropo/scripts/pipeline-activate.py \\
+    python3 vault/tools/e337f1dd.py \\
         --pipeline-uid <8-hex> \\
         --activated-by <activator-entity-uid-or-"user"> \\
         [--cycle-context <description>] \\
@@ -91,7 +91,7 @@ def yaml_quote(s: str) -> str:
 # f9751636 chokepoint: delegate to the canonical collision-checked minter.
 import importlib.util as _ilu_e337
 _mint_spec_337 = _ilu_e337.spec_from_file_location(
-    "_mint_uid_canonical_337", Path(__file__).resolve().parent / "5187be30.py"
+    "_mint_uid_canonical_337", Path(__file__).resolve().parent / "tropo-mint-id.py"
 )
 _mint_mod_337 = _ilu_e337.module_from_spec(_mint_spec_337)
 _mint_spec_337.loader.exec_module(_mint_mod_337)
@@ -102,14 +102,14 @@ def load_existing_uids():
 
 
 def mint_uid(existing):
-    """Mint a fresh 8-hex UID not colliding with existing or disk state."""
-    existing_with_session = _mint_mod_337.load_existing_uids() | existing
-    for _ in range(64):
-        candidate = secrets.token_hex(4)
-        if candidate not in existing_with_session:
-            existing.add(candidate)
-            return candidate
-    raise RuntimeError("Could not mint unique UID in 64 attempts (vault saturated?)")
+    """Mint a fresh 8-hex UID not colliding with existing or disk state.
+
+    796d9330 (ADR-050): delegates to the canonical mint() rather than reimplementing
+    the collision loop; extra_existing merges this caller's session-accumulated set.
+    """
+    minted = _mint_mod_337.mint(1, extra_existing=existing)[0]
+    existing.add(minted)
+    return minted
 
 
 def parse_frontmatter(content: str) -> dict:
@@ -136,6 +136,34 @@ def resolve_pipeline(uid: str) -> dict:
     if fm.get("type") != "pipeline":
         raise ValueError(f"UID {uid} is not type:pipeline (got type:{fm.get('type')})")
     return fm
+
+
+def find_open_activation(pipeline_uid: str, dev_spec_uid: str):
+    """Engine gate (board item 3b433691): scan LIVE vault/files/ — not the
+    index, which can lag exactly the moment this matters — for an OPEN
+    (status:active) pipeline-class activation already covering this
+    (pipeline_uid, dev_spec_uid) pair. Returns its frontmatter dict, or None.
+
+    Proof-case: on 2026-07-01, two dev-pipeline ceremonies opened in parallel
+    for one dev-spec (ba454e56) — Argus's ad02f944 (canonical) and Talos's
+    9edee670 (crossed messages, duplicate) — the engine accepted both,
+    producing duplicate cascade substrate and a lost-update race on the
+    dev-spec's engine-appended coupling fields. This gate makes that
+    structurally impossible; supersession (retire the open run, then
+    re-activate) remains the sanctioned path for a legitimate re-run.
+    """
+    for f in VAULT_FILES.glob("*.md"):
+        try:
+            fm = parse_frontmatter(f.read_text())
+        except (ValueError, OSError):
+            continue
+        if (fm.get("type") == "activation"
+                and fm.get("activation_class") == "pipeline"
+                and fm.get("pipeline_uid") == pipeline_uid
+                and fm.get("dev_spec_uid") == dev_spec_uid
+                and fm.get("status") == "active"):
+            return fm
+    return None
 
 
 def validate_cascade_spec(cascade: dict, parent_uid: str, depth: int, seen: set) -> None:
@@ -651,6 +679,24 @@ def main():
             print(f"[WARN] dev-spec {dev_spec_uid!r} expected stage:active + status:locked; "
                   f"got stage:{ds_fm.get('stage')!r} status:{ds_fm.get('status')!r} "
                   f"(proceeding per v1.51 grace period)", file=sys.stderr)
+
+        # Engine gate (board item 3b433691; ERROR): refuse a second OPEN
+        # activation for the same (pipeline, dev-spec) pair. See
+        # find_open_activation() docstring for the proof-case this closes.
+        collision = find_open_activation(pipeline_uid, dev_spec_uid)
+        if collision:
+            print(
+                f"ERROR: an OPEN activation already exists for pipeline {pipeline_uid!r} "
+                f"+ dev-spec {dev_spec_uid!r}: activation {collision.get('uid', '?')!r} "
+                f"(activated_by={collision.get('activated_by', '?')!r}, "
+                f"activated_at={collision.get('activated_at', '?')!r}). "
+                f"Two open ceremonies for one dev-spec produce duplicate cascade substrate "
+                f"and a lost-update race on the dev-spec's coupling fields (2026-07-01 "
+                f"collision, board item 3b433691). To supersede: close/mark-superseded "
+                f"the open run first (status: retired + closure_reason), then re-activate.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
     else:
         # No dev-spec provided — WARN at v1.51, will ERROR at v1.52
         pipeline_path = VAULT_FILES / f"{pipeline_uid}.md"

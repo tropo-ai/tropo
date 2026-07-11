@@ -48,7 +48,7 @@ Add your own identity checks here if your vault has conventions beyond the OS fl
 - [`.tropo-studio/operating-principles.md`](operating-principles.md) — baseline principles every agent reads. **(v1.8 update: Principle 3 now includes the vocabulary fix-on-encounter directive — see CAPSULE.md §Canonical Taxonomy for the canonical map.)**
 
 **Vault-level memory — required read (default):**
-- [`.tropo-studio/memory/MEMORY.md`](memory/MEMORY.md) — vault-wide cross-agent memories. Read the index; read pinned or CRITICAL entries in full.
+- [`.tropo-studio/memory/memory-current.md`](memory/memory-current.md) — vault-level cross-crew memories (v3 surface; v1 MEMORY.md pointer retired per v1.67 Memory v3.0 migration). Read top-of-mind entries; read pinned or CRITICAL entries in full.
 
 **Vault directives — required read (default):**
 - All files in [`.tropo-studio/directives/`](directives/) — standing instructions to all crew.
@@ -66,18 +66,11 @@ Add your own identity checks here if your vault has conventions beyond the OS fl
 **Fleet-ops execution — optional:**
 - If your vault runs a scheduled fleet, declare `playbooks/fleet-ops.playbook.md` here and require executives to run it at boot. Skip if no scheduled fleet.
 
-**Vault-wide default channels** (every agent scans these unless suppressed by Tier 3):
-- `channels/ops.md` — operational updates
-- `channels/alerts.md` — FLASH-priority only, should be empty most days
-- *(Add or remove channels as your vault's communication model evolves.)*
-
-Agent-specific channels (agent-to-agent pairs) are declared in each agent's Tier 3 extension.
-
-**Channel read bounding (recommended):**
-- **Since-predecessor rule:** read only entries dated on or after the predecessor's `last_session`. Earlier entries were processed already.
-- **Silent-skip on empty delta:** if a channel has no new entries since `last_session`, skip the read.
-
-These rules cap channel-read cost at "last 1–3 days" in typical cases.
+**Coordination via event log** (v1.61+; Rule 13 — crew coordination retired from channel files to typed event log):
+- `check-events` — the canonical drain (v1.70 v1.1: receipts + set-difference; surfaces everything addressed to you, directed + broadcasts, with no cursor-boundary misses). This is THE boot drain even in degraded mode (the tool reads the log directly).
+- `query-events --type tropo.broadcast.crew` — specialized broadcast scan (survives as a type-filtered query; not the primary drain)
+- `channels/` may hold user-facing event-projection surfaces (`tropo.md`, `releases.md`) — scan if present.
+- *(The retired pre-v1.61 model used `channels/ops.md` + `channels/alerts.md` as audit-trail surfaces — these are no longer shipped or used.)*
 
 **Vault navigation — declare your indexes here:**
 - `vault/00-project-tree.jsonl` — project hierarchy backbone (if your vault uses the Vault pattern)

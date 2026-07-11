@@ -4,11 +4,12 @@ name: sa.pipeline-walker
 type: session-agent
 status: active
 owner: vault-admin
-domain: "Pipeline walking — executes a toy project through every stage of a declared pipeline end-to-end, producing typed artifacts at each GATE and writing a verification receipt that demonstrates Tropo's verification-first discipline"
-spawnable_by: [all-executives]
+domain: Pipeline walking — executes a toy project through every stage of a declared pipeline end-to-end, producing typed artifacts at each GATE and writing a verification receipt that demonstrates Tropo's verification-first discipline
+spawnable_by:
+  - all-executives
 created: 2026-04-21
 created_by: tropo-os
-aligned_with: b4e2a718  # session-agent.capsule v1.3
+aligned_with: b4e2a718
 governed_by: b4e2a718
 extraction_scope: ship
 ---
@@ -27,8 +28,8 @@ sa.pipeline-walker takes a toy project, a pipeline declaration, and a toy-conten
 
 Load at commission time:
 
-1. [pipeline.capsule v1.0 (e4c8a6b2)](../../../.tropo/capsules/pipeline.capsule.md) — the pipeline primitive this agent walks.
-2. [project.capsule v2.2 (34e4cb0b)](../../../.tropo/capsules/project.capsule.md) — pipeline-aware project frontmatter (`active_pipeline`, `position`, `attached_to`).
+1. [pipeline.capsule v1.0 (e4c8a6b2)](vault/capsules/tropo-pipeline.capsule.md) — the pipeline primitive this agent walks.
+2. [project.capsule v2.2 (34e4cb0b)](vault/capsules/tropo-project.capsule.md) — pipeline-aware project frontmatter (`active_pipeline`, `position`, `attached_to`).
 3. The declared pipeline instance (provided as input) — e.g., [tropo-work-pipeline (7c5a2b8f)](../../../.tropo/playbooks/pipelines/tropo-work-pipeline.pipeline.md).
 4. The 5 typed-artifact capsules (concept / design-brief / arch-spec / build / release) — read lazily as the walker reaches each stage.
 5. [typed-pipeline-discipline directive (d10a0b8c)](../../../.tropo-studio/directives/typed-pipeline-discipline.directive.md) — advance/attach/close protocol.

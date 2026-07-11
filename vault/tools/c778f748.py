@@ -63,7 +63,7 @@ from pathlib import Path
 VAULT_ROOT = Path(__file__).resolve().parents[2]
 TOOLS_DIR = VAULT_ROOT / "vault" / "tools"
 FILES_DIR = VAULT_ROOT / "vault" / "files"
-RECYCLE_SCRIPT = VAULT_ROOT / "vault" / "tools" / "2573f6dd.py"  # tropo-recycle (v1.56 migrated)
+RECYCLE_SCRIPT = VAULT_ROOT / "vault" / "tools" / "tropo-recycle.py"  # tropo-recycle (v1.56 migrated)
 
 UID_RE = re.compile(r"^[0-9a-f]{8}$")
 

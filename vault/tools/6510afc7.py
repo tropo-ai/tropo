@@ -64,7 +64,7 @@ operational crew tables (matches existing crew-brief shape).
 
 Wired into rebuild-vault.py Step 4 (canonical render pass) so it runs at
 every vault rebuild. Can also be invoked standalone via:
-  python3 .tropo/scripts/render-crew-brief.py
+  python3 vault/tools/6510afc7.py
 """
 import os
 import re
@@ -243,7 +243,7 @@ def render_tables(crew: list[dict]) -> str:
     for a in dormant:
         out.append(render_row(a))
     out.append("")
-    out.append(f"*Tables auto-rendered from per-agent status cards by `.tropo/scripts/render-crew-brief.py` on {today}. Status cards are the canonical source of truth; the body sections above and below this block remain human-authored.*")
+    out.append(f"*Tables auto-rendered from per-agent status cards by `vault/tools/6510afc7.py` on {today}. Status cards are the canonical source of truth; the body sections above and below this block remain human-authored.*")
     return "\n".join(out)
 
 
@@ -259,7 +259,7 @@ def replace_between_sentinels(text: str, start: str, end: str, replacement: str)
 def update_last_updated(text: str) -> str:
     """Update the last_updated: frontmatter field to today's date."""
     today = datetime.date.today().isoformat()
-    new_value = f'"{today} (auto-rendered by render-crew-brief.py)"'
+    new_value = f'"{today} (auto-rendered by vault/tools/6510afc7.py)"'
     pattern = re.compile(r'^last_updated:\s*.*$', re.MULTILINE)
     if pattern.search(text):
         return pattern.sub(f"last_updated: {new_value}", text, count=1)

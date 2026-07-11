@@ -584,7 +584,7 @@ def _run_dry_run(agent_slug: str, unified_uid: str, overrides: dict = None) -> i
     print(f"\n{'─'*72}")
     print(f"[DIFF-5] Rebuild index slice")
     print(f"{'─'*72}")
-    print(f"  python3 vault/tools/e8d4c1b9.py --only {unified_uid}")
+    print(f"  python3 vault/tools/tropo-rebuild-vault.py --only {unified_uid}")
 
     print(f"\n{'─'*72}")
     print(f"[DIFF-6] Re-render crew brief")
@@ -678,7 +678,7 @@ def _run_apply(agent_slug: str, unified_uid: str, overrides: dict = None) -> int
 
         # Step 5 — rebuild index slice
         result = subprocess.run(
-            ['python3', str(VAULT_ROOT / 'vault/tools/e8d4c1b9.py'), '--only', unified_uid],
+            ['python3', str(VAULT_ROOT / 'vault/tools/tropo-rebuild-vault.py'), '--only', unified_uid],
             capture_output=True, text=True, cwd=str(VAULT_ROOT),
             stdin=subprocess.DEVNULL, timeout=120,
         )
@@ -725,7 +725,7 @@ def main() -> int:
     parser.add_argument("--agent", required=True, help="Agent slug to migrate (e.g., cosmo, vela)")
     parser.add_argument("--unified-uid", default=None,
                         help="Pre-minted UID for the unified entry. "
-                             "If omitted, minted fresh via vault/tools/5187be30.py.")
+                             "If omitted, minted fresh via vault/tools/tropo-mint-id.py (UID 5187be30).")
     parser.add_argument("--dry-run", action="store_true", default=True,
                         help="Print full diff without writing (default)")
     parser.add_argument("--apply", action="store_true",
@@ -756,13 +756,13 @@ def main() -> int:
     if not unified_uid:
         import subprocess
         result = subprocess.run(
-            ['python3', str(VAULT_ROOT / 'vault/tools/5187be30.py'),
+            ['python3', str(VAULT_ROOT / 'vault/tools/tropo-mint-id.py'),
              '--reason', f'{args.agent} unified agent entry v1.69'],
             capture_output=True, text=True, cwd=str(VAULT_ROOT), stdin=subprocess.DEVNULL,
         )
         unified_uid = result.stdout.strip()
         if not unified_uid:
-            print(f"ERROR: Failed to mint UID via mint-uid tool: {result.stderr}")
+            print(f"ERROR: Failed to mint UID via mint-id tool: {result.stderr}")
             return 1
         print(f"Minted unified entry UID: {unified_uid}")
 

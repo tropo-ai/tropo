@@ -1,20 +1,26 @@
 ---
 uid: 7f2efd7c
-title: "First Vault Setup"
-version: "4.0"
+title: First Vault Setup
+version: '4.0'
 status: superseded
-superseded_by: ".tropo/playbooks/concierge-paths/"
+superseded_by: .tropo/playbooks/concierge-paths/
 superseded_at: 2026-04-21
 superseded_by_agent: argus-a31
 author:
- name: "Tropo"
- role: "Framework"
-domain: "onboarding"
-tags: [onboarding, first-run, agent-creation, getting-started, superseded]
-estimated_duration: "5-15 minutes"
-readers: [agent]
-member_of:
-  - "76bab75f"   # tropo-playbooks (v1.12 backfill 2026-05-08)
+  name: Tropo
+  role: Framework
+domain: onboarding
+tags:
+  - onboarding
+  - first-run
+  - agent-creation
+  - getting-started
+  - superseded
+estimated_duration: 5-15 minutes
+readers:
+  - agent
+subsystem_hub:
+  - 76bab75f
 ---
 
 # First Vault Setup — SUPERSEDED v4.0
@@ -28,7 +34,7 @@ member_of:
 > - v4.0 Path 4 (Learn First, restructured as outcome+routing) → [`concierge-paths/tour-tropo.playbook.md`](concierge-paths/tour-tropo.playbook.md)
 > - NEW outcome (no v4.0 precedent): [`concierge-paths/evaluate-tropo.playbook.md`](concierge-paths/evaluate-tropo.playbook.md) — architect/skeptic path. v1.3 added this outcome to dogfood the three-instrument verification discipline as a live demonstration; v4.0 lacked a dedicated evaluation flow for technical audiences.
 >
-> **The 13 Rules of agent creation** are now codified once in [`create-executive-agent.skill (c7ea9e01)`](../skills/c7ea9e01.md) — the shared skill called by every concierge-paths outcome playbook that creates an agent. Do not re-implement them.
+> **The 13 Rules of agent creation** are now codified once in [`create-executive-agent.skill (c7ea9e01)`](../skills/tropo-create-executive-agent.md) — the shared skill called by every concierge-paths outcome playbook that creates an agent. Do not re-implement them.
 >
 > **Why the split?** v4.0 combined 4 internal paths with significant branching logic into one ~450-line file. Each outcome is independently cold-boot-testable, independently versionable, and independently maintainable in the new library. Adding new outcomes is additive — drop a file into `concierge-paths/`, update the concierge's library map in [activate.md §Section 1.3](../concierge/activate.md), route to it. The concierge v1.2.0 routes via LLM-native intent interpretation, not menu selection.
 >
@@ -71,8 +77,8 @@ Four paths serve four intents:
 - Every agent file MUST have a `uid:` in frontmatter.
 - Every agent file MUST have the `owner:` field set to the founder's name.
 - Every agent MUST have a `workspace/` folder created inside its agent folder.
-- Every agent MUST have a `memory.md` file created from `.tropo/templates/memory.template.md`.
-- Every agent MUST have a `sessions.md` file created from `.tropo/templates/sessions.template.md`.
+- Every agent MUST have a `memory.md` file created from `vault/templates/tropo-memory.template.md`.
+- Every agent MUST have a `sessions.md` file created from `vault/templates/tropo-sessions.template.md`.
 - Every agent MUST be registered in `.tropo-studio/registries/agent-registry.yaml`.
 - Every agent creation MUST be logged in `channels/ops.md`.
 - Every agent creation MUST update `agents/00-index.md`.
@@ -83,10 +89,10 @@ Four paths serve four intents:
 
 ### Knowledge Base
 - `.tropo/schema/charter-schema.md` — the agent file format
-- `.tropo/templates/executive-activation.template.md` — executive agent activation file (the ignition key)
-- `.tropo/templates/executive-charter.template.md` — executive agent charter (identity, soul, boot paths)
-- `.tropo/templates/executive-briefing.template.md` — executive agent briefing (on-demand reference)
-- `.tropo/templates/task.template.md` — starting point for task agents
+- `vault/templates/tropo-executive-activation.template.md` — executive agent activation file (the ignition key)
+- `vault/templates/tropo-executive-charter.template.md` — executive agent charter (identity, soul, boot paths)
+- `vault/templates/tropo-executive-briefing.template.md` — executive agent briefing (on-demand reference)
+- `vault/templates/tropo-task.template.md` — starting point for task agents
 - `operating-agreement.md` — the vault's governance constitution
 - KB articles at `vault/files/` (typed `kb-article`; navigable via subsystem hub member lists, primary: `tropo-documentation`) — Tropo knowledge base for answering questions about the system
 
@@ -217,12 +223,12 @@ Create the agent using the three-file executive pattern:
 1. Read `.tropo/schema/charter-schema.md` for the field definitions
 2. Read `vault/files/3572cded.md` (or `agents/AGENTS.md` if pre-v0.3.0)
 3. Create `agents/[name]/` folder and `agents/[name]/workspace/` folder
-4. **Create the charter** from `.tropo/templates/executive-charter.template.md` at `agents/[name]/[name]-charter.md`. Fill in identity, soul, lineage (Gen 1 — the founding row), captain context, crew relationships, boot paths in frontmatter, and retirement acts. This is the persistent identity. Include a `uid:` (8-char hex) in the frontmatter. Populate EVERY placeholder from the conversation — do not ship with `[agent-name]` in the file.
-5. **Create the briefing** from `.tropo/templates/executive-briefing.template.md` at `agents/[name]/[name]-briefing.md`. Fill in what the agent owns, tiered reading, working protocol, memory protocol, transparency protocol, child protocol, and platform capabilities. This is on-demand reference — not loaded at boot.
-6. **Create the activation file** from `.tropo/templates/executive-activation.template.md` at `agents/[name]/[name]-activation.md`. This is the ignition key — short, simple, points to the charter and the boot playbook. This is what the founder attaches to start a session.
-7. Create `agents/[name]/memory.md` from `.tropo/templates/memory.template.md` — populate the owner field and set Status Board to "First session pending"
-8. Create `agents/[name]/sessions.md` from `.tropo/templates/sessions.template.md` — add the agent name
-9. Copy `.tropo/templates/AGENTS.md` to `agents/[name]/AGENTS.md` and generate a `CAPSULE.md` for the agent folder (folder_type: workspace, owner: the agent)
+4. **Create the charter** from `vault/templates/tropo-executive-charter.template.md` at `agents/[name]/[name]-charter.md`. Fill in identity, soul, lineage (Gen 1 — the founding row), captain context, crew relationships, boot paths in frontmatter, and retirement acts. This is the persistent identity. Include a `uid:` (8-char hex) in the frontmatter. Populate EVERY placeholder from the conversation — do not ship with `[agent-name]` in the file.
+5. **Create the briefing** from `vault/templates/tropo-executive-briefing.template.md` at `agents/[name]/[name]-briefing.md`. Fill in what the agent owns, tiered reading, working protocol, memory protocol, transparency protocol, child protocol, and platform capabilities. This is on-demand reference — not loaded at boot.
+6. **Create the activation file** from `vault/templates/tropo-executive-activation.template.md` at `agents/[name]/[name]-activation.md`. This is the ignition key — short, simple, points to the charter and the boot playbook. This is what the founder attaches to start a session.
+7. Create `agents/[name]/memory.md` from `vault/templates/tropo-memory.template.md` — populate the owner field and set Status Board to "First session pending"
+8. Create `agents/[name]/sessions.md` from `vault/templates/tropo-sessions.template.md` — add the agent name
+9. Copy `vault/templates/AGENTS.md` to `agents/[name]/AGENTS.md` and generate a `CAPSULE.md` for the agent folder (folder_type: workspace, owner: the agent)
 10. Generate UID, update `.tropo-studio/registries/agent-registry.yaml`, update `agents/00-index.md`, log to `channels/ops.md`
 
 **Why three files:** The activation file is what the founder attaches to start a session. The charter is who the agent is (persistent identity, soul, lineage). The briefing is what the agent owns (on-demand reference). This structure keeps boot context lean — the activation file is ~15 lines, the charter is loaded at boot via the playbook, the briefing is read only when a task requires it.
@@ -449,7 +455,7 @@ Before the launch handoff, offer:
 1. Ask them to point you to a folder or list the files
 2. Scan the folder — list all files with types, sizes, rough descriptions
 3. Create a `00-index.md` for the folder describing every file (including non-markdown). Non-markdown files (Word, PDF, images) get index rows only — no UIDs, no frontmatter. Only markdown files created by agents get UIDs.
-4. Copy `.tropo/templates/AGENTS.md` to the folder and create a `CAPSULE.md` with appropriate governance (content folder type, relaxed write rules)
+4. Copy `vault/templates/AGENTS.md` to the folder and create a `CAPSULE.md` with appropriate governance (content folder type, relaxed write rules)
 5. Show the index to the founder: "Here's what I found. Does this look right?" Use the transparency protocol — these files will appear in their folder.
 6. Confirm. Register the `00-index.md` and `AGENTS.md` in `.tropo-studio/registries/agent-registry.yaml` (the binary files themselves don't need registry entries).
 

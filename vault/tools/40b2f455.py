@@ -75,6 +75,9 @@ from pathlib import Path
 VAULT_ROOT = Path(__file__).resolve().parents[2]
 VAULT_FILES = VAULT_ROOT / "vault" / "files"
 LOCK_DIR = VAULT_ROOT / ".tropo-studio" / "locks"
+_TOOLS_DIR = Path(__file__).resolve().parent
+if str(_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TOOLS_DIR))
 TODAY = time.strftime("%Y-%m-%d")
 SCRIPT_NAME = "write-activation-entry.py"
 
@@ -115,7 +118,7 @@ def yaml_quote(s: str) -> str:
 # f9751636 chokepoint: delegate to the canonical collision-checked minter.
 import importlib.util as _ilu_40b2
 _mint_spec_40b2 = _ilu_40b2.spec_from_file_location(
-    "_mint_uid_canonical_40b2", Path(__file__).resolve().parent / "5187be30.py"
+    "_mint_uid_canonical_40b2", Path(__file__).resolve().parent / "tropo-mint-id.py"
 )
 _mint_mod_40b2 = _ilu_40b2.module_from_spec(_mint_spec_40b2)
 _mint_spec_40b2.loader.exec_module(_mint_mod_40b2)
@@ -126,13 +129,12 @@ def load_existing_uids():
 
 
 def mint_uid(existing):
-    existing_with_session = _mint_mod_40b2.load_existing_uids() | existing
-    for _ in range(64):
-        candidate = secrets.token_hex(4)
-        if candidate not in existing_with_session:
-            existing.add(candidate)
-            return candidate
-    raise RuntimeError("UID collision storm")
+    # 796d9330 (ADR-050): delegate the actual mint to the canonical collision-checked
+    # mint() instead of reimplementing the loop; extra_existing carries this caller's
+    # in-session accumulated set (minted but not yet written to disk).
+    minted = _mint_mod_40b2.mint(1, extra_existing=existing)[0]
+    existing.add(minted)
+    return minted
 
 
 def parse_frontmatter(path):
@@ -322,6 +324,15 @@ def op_open(args):
         print(f"ERROR: lock acquisition timeout for agent {args.agent!r}", file=sys.stderr)
         sys.exit(2)
     try:
+        # Git Beat 1 (98b9610a): boot-reconcile orphaned drift before new activation work
+        try:
+            from lib.tropo_git_history import boot_reconcile_if_dirty
+            _ok, _detail = boot_reconcile_if_dirty(args.agent, args.generation, scan_activations)
+            if not _ok:
+                print(f"ERROR: boot-reconcile failed: {_detail}", file=sys.stderr)
+                sys.exit(1)
+        except ImportError:
+            pass
         # ADR-016 substrate check
         entries = scan_activations()
         active_for_agent = [(uid, fm) for uid, fm in entries
@@ -707,6 +718,20 @@ def op_close(args):
                       lifecycle="evergreen",
                       data={"uid": args.activation_uid, "status": args.target_status})
         except Exception:
+            pass
+        # Git Beat 1 (98b9610a): per-activation commit on close success path
+        try:
+            from lib.tropo_git_history import activation_close_commit
+            _agent = fm.get("agent", "unknown")
+            _gen = str(fm.get("generation", "")).lower()
+            _closer = f"{_agent}-{_gen}"
+            _ok, _detail = activation_close_commit(
+                fm, args.activation_uid, args.target_status,
+                args.closure_reason or "", args.transfer_uid or "", _closer,
+            )
+            if not _ok:
+                print(f"WARN: activation-close git commit failed: {_detail}", file=sys.stderr)
+        except ImportError:
             pass
         return 0
     finally:

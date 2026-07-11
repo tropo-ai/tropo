@@ -3,10 +3,12 @@ spec_version: 2
 tier: capsule
 folder_type: registry
 owner: concierge
-write_access: [concierge, human-owner]
+write_access:
+  - concierge
+  - human-owner
 read_access: all
-purpose: "Agent files — one folder per agent"
-naming: "[agent-name]/[agent-name]-agent.md"
+purpose: Agent files — one folder per agent
+naming: '[agent-name]/[agent-name]-agent.md'
 lifecycle: permanent
 uid: 208457f4
 ---

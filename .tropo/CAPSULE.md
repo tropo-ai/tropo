@@ -3,9 +3,10 @@ spec_version: 2
 tier: capsule
 folder_type: system
 owner: tropo
-write_access: [tropo-update-pipeline]
+write_access:
+  - tropo-update-pipeline
 read_access: all
-purpose: "Tropo-OS kernel — templates, schemas, skills, playbooks, concierge, steward"
+purpose: Tropo-OS kernel — templates, schemas, skills, playbooks, concierge, steward
 uid: 71b3ca43
 ---
 

@@ -12,7 +12,7 @@ validation invariants before build extraction proceeds:
 
 This module exposes the MVP-level basic validator used by build-release.py.
 The full 24-check validator lives at `.tropo/scripts/validate-release-manifest.py`
-and `.tropo/scripts/tropo-validate.py`; this module wraps the canonical_source-resolution
+and `vault/tools/tropo-validate.py`; this module wraps the canonical_source-resolution
 check as the MVP gate for extraction.
 
 v1.42 capsule v1.3 amendment: target-aware checks. The validator accepts `target`
@@ -27,7 +27,7 @@ def validate_manifest_basic(entries, vault_root, target='release'):
     """Phase 1 (basic) — verify canonical_source resolves for non-skip entries.
 
     MVP Phase E validation only. Full 23+1-check validator at
-    .tropo/scripts/validate-release-manifest.py and .tropo/scripts/tropo-validate.py.
+    .tropo/scripts/validate-release-manifest.py and vault/tools/tropo-validate.py.
     Halts the calling script with sys.exit on any unresolved canonical_source.
 
     Args:

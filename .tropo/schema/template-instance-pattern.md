@@ -14,10 +14,10 @@ The **definition**. What this type of artifact looks like, what fields it requir
 
 | Artifact | Template Location |
 |----------|------------------|
-| Executive agent — activation | `.tropo/templates/executive-activation.template.md` |
-| Executive agent — charter | `.tropo/templates/executive-charter.template.md` |
-| Executive agent — briefing | `.tropo/templates/executive-briefing.template.md` |
-| Task agent | `.tropo/templates/task.template.md` |
+| Executive agent — activation | `vault/templates/tropo-executive-activation.template.md` |
+| Executive agent — charter | `vault/templates/tropo-executive-charter.template.md` |
+| Executive agent — briefing | `vault/templates/tropo-executive-briefing.template.md` |
+| Task agent | `vault/templates/tropo-task.template.md` |
 | System agent | `.tropo/system/[name].template.md` |
 | Playbook | `.tropo/playbooks/` (framework playbooks serve as reference templates) |
 

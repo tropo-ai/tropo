@@ -4,8 +4,8 @@ type: os-primitive
 status: active
 owner: tropo
 tier: os
-modified: 2026-05-09
-modified_by: argus-a53
+modified: '2026-06-27'
+modified_by: argus-a120
 ---
 
 # Tropo-OS — Harness Map (L2)
@@ -18,17 +18,30 @@ modified_by: argus-a53
 
 ---
 
+## How Discovery Works (One Home — v1.76)
+
+Since the One Home migration (ADR-045), **every governed thing lives in one indexed home and the master index is complete** — discovery is now simple and uniform:
+
+- **The index (`vault/00-index.jsonl`) is the spine.** Grep it for *anything* — tools, skills, capsules, actions, playbooks, ADRs, work items — by `type`, `owner`, `status`, or `title`. It now holds the whole studio (it did **not** before One Home — skills/capsules were unindexed; that gap is closed).
+- **Names are readable; the UID is the address.** Shipped OS components carry a clean `tropo-<name>` filename (e.g. `vault/tools/tropo-validate.py`); your own content is `<slug>-<uid>.md`. The presence/absence of the `tropo-` prefix tells you OS-owned vs. your content at a glance. Cross-references resolve by **UID**, so a rename never breaks a link.
+- **The capability catalogs are the curated "what exists + when to reach for it" layer** (below), generated from the index. The **Toolbelt** ([`toolbelt.md`](toolbelt.md)) is the compact boot-known quick-reference over the same set.
+- **Lenses on the same data:** relationships → `vault/00-graph-index.json`; structured frontmatter queries → the SQLite layer; project hierarchy → `vault/00-project-tree.jsonl`.
+
+*If you can name what you're looking for, grep the index. If you want "what can I do here," read the catalogs. One home, one complete index, readable names.*
+
+---
+
 ## Capability Catalogs — Read These First
 
 | Catalog | Covers | Source |
 |---|---|---|
 | [Tropo Tool Catalog](tool-catalog.md) | Every kernel script + action surface (`type: tool`, `transport: cli/action/mcp/http/platform/sa`) | `vault/00-index.jsonl` filtered by type:tool + extraction_scope:ship |
-| [Tropo Skill Catalog](skill-catalog.md) | Every kernel skill (`type: how-to` per canonical schema; "skill" is the user-facing label per Mike-A52 mirror-Claude-Code lock 2026-05-09) | `.tropo/skills/*.skill.md` filtered by type:how-to + extraction_scope:ship |
-| [Tropo sa.\* Agent Catalog](sa-agent-catalog.md) | Every shipped session agent (`type: session-agent`) | `agents/sa/<name>/<name>.md` filtered by type:session-agent + extraction_scope:ship |
+| [Tropo Skill Catalog](skill-catalog.md) | Every kernel skill (`type: how-to` per canonical schema; "skill" is the user-facing label per Mike-A52 mirror-Claude-Code lock 2026-05-09) | `vault/00-index.jsonl` filtered by type:how-to + extraction_scope:ship (canonical files now at `vault/skills/tropo-<name>.md` per One Home) |
+| [Tropo sa.\* Agent Catalog](sa-agent-catalog.md) | Every shipped session agent (`type: session-agent`) | `vault/00-index.jsonl` filtered by type:session-agent + extraction_scope:ship (files at `agents/sa/<name>/`) |
 
 Each catalog entry includes its hand-authored `trigger_description:` — the agent-facing "when to reach for it" prose. The Tier 2 boot extension loads all three at Group 2; agents scan once at boot, dive into specific entries by UID when invoking.
 
-**Re-generate when sources change:** `python3 .tropo/scripts/generate-capability-catalogs.py --apply` (catalog generator [`d4e9a2c7`](../vault/files/d4e9a2c7.md)).
+**Re-generate when sources change:** `python3 vault/tools/tropo-generate-capability-catalogs.py --apply` (catalog generator [`d4e9a2c7`](../vault/files/d4e9a2c7.md)).
 
 ---
 
@@ -44,9 +57,10 @@ Each catalog entry includes its hand-authored `trigger_description:` — the age
 | All pipeline definitions in the vault | Grep `vault/00-index.jsonl` for `type: pipeline` |
 | All pipeline-runs (active or historical) | `vault/pipeline-runs/` (or `agents/<pipeline-name>/activations/` for in-tree pipelines like `dev-pipeline`) |
 | Today's vault health | `shared/orientation/daily-health-report.md` |
-| Substrate health check (one-gesture) | `npm test` (canonical; green/yellow/red verdict) OR `python3 .tropo/scripts/tropo-test.py` (direct fallback for users without node installed). JSON mode via `npm run test:json` or `--json` flag; full validator output via `npm run test:verbose` or `--verbose` flag. Script at [`.tropo/scripts/tropo-test.py`](.tropo/scripts/tropo-test.py); validator wrapped: [`.tropo/scripts/tropo-validate.py`](.tropo/scripts/tropo-validate.py). v1.33.0 Stream H deliverable. |
+| Substrate health check (one-gesture) | `npm test` (canonical; green/yellow/red verdict) OR `python3 vault/tools/tropo-test.py` (direct fallback for users without node installed). JSON mode via `npm run test:json` or `--json` flag; full validator output via `npm run test:verbose` or `--verbose` flag. Script at [`vault/tools/tropo-test.py`](../vault/tools/tropo-test.py); validator wrapped: [`vault/tools/tropo-validate.py`](../vault/tools/tropo-validate.py). v1.33.0 Stream H deliverable. |
+| What capabilities the studio actually has + whether the tool chain runs | The capability regression test `vault/tools/tests/test_capability_chain_smoke.py` (rebuild + index-coverage + emit + build-release/archive + no-two-homes adversarial) — the One Home cold-boot proof |
 | What capability exists for X | The three catalogs above. If unsure between tool / skill / sa.*, scan all three. |
-| Delete a vault entry (one or many) | `python3 .tropo/scripts/tropo-recycle.py <uid> [...]` — soft-delete to `recycle/agent-deletions/<YYYY-MM-DD>/`. **Never `rm` files in `vault/files/`.** Bash `grep -l \| xargs rm` patterns have deleted load-bearing substrate when keywords matched files describing the feature they named (v1.35.0 critical incident). Recovery from recycle is `mv` back. |
+| Delete a vault entry (one or many) | `python3 vault/tools/tropo-recycle.py <uid> [...]` — soft-delete to `recycle/agent-deletions/<YYYY-MM-DD>/`. **Never `rm` files in `vault/files/`.** Bash `grep -l \| xargs rm` patterns have deleted load-bearing substrate when keywords matched files describing the feature they named (v1.35.0 critical incident). Recovery from recycle is `mv` back. |
 
 ---
 
@@ -60,12 +74,12 @@ Each catalog entry includes its hand-authored `trigger_description:` — the age
 | `agent-retire` | Retirement procedure — knowledge transfer, status close |
 | `apply-update` | Apply a versioned OS update package to a vault |
 | `cold-boot-test` | Verify a vault boots correctly from a cold start |
-| `import-to-ledger` | Migrate existing files into the Vault (batch) |
+| `import-to-vault` | Migrate existing files into the Vault (batch) |
 | `fleet-ops` | Check and dispatch scheduled operations agents |
 | `new-hire-onboarding` | Reference playbook — multi-group onboarding workflow |
 | `team-onboarding-day2` | Day 2 of team onboarding |
 
-Location: `.tropo/playbooks/` (OS-level, ships with every Studio) and `playbooks/` (Studio-level, per-vault).
+Location: canonical at `vault/playbooks/<uid>.md` (One Home); thin pointers remain at `.tropo/playbooks/` for the bootstrap-floor set (e.g. the agent-activation playbook the boot chain reads before the index is loaded). Studio-level playbooks: `playbooks/` (per-vault).
 
 *Playbooks may earn a dedicated catalog in a future cycle if the Pillar 1 four-primitive pattern (tool / how-to / session-agent + playbook) becomes load-bearing for boot-time discovery; for now, playbook discovery is grep-driven.*
 
@@ -99,5 +113,5 @@ For per-release "what's new" content, see the canonical record at [`RELEASE-NOTE
 
 ---
 
-*Tropo-OS Harness Map (L2) | `.tropo/orientation.md` | v1.15 Stream G rescope (2026-05-09) — narrative capability inventories moved to agent-canonical catalogs (`tool-catalog.md` + `skill-catalog.md` + `sa-agent-catalog.md`); this file scoped to harness-map navigation. Previous v1.11 Stream C restructure (conceptual content promoted to L1 entry [`eca73d77`](../vault/files/eca73d77.md)) preserved.*
+*Tropo-OS Harness Map (L2) | `.tropo/orientation.md` | v1.76 One Home refresh (2026-06-27, Argus A120): added §How Discovery Works (the index is the complete spine; tropo- names; the OS-vs-user boundary); repointed catalog sources to the index + the renamed generator/test tools (the deleted `.tropo/scripts/` shims); playbook canonical home → `vault/playbooks/`; `import-to-ledger`→`import-to-vault` vocab. | v1.15 Stream G rescope (2026-05-09) — narrative capability inventories moved to agent-canonical catalogs (`tool-catalog.md` + `skill-catalog.md` + `sa-agent-catalog.md`); this file scoped to harness-map navigation. Previous v1.11 Stream C restructure (conceptual content promoted to L1 entry [`eca73d77`](../vault/files/eca73d77.md)) preserved.*
 *"If you know the harness, you can find anything. The catalogs tell you what exists."*

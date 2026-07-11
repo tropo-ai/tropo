@@ -1,15 +1,14 @@
 ---
 uid: d4f9c2e1
-folder: ".tropo/definitions/"
+folder: .tropo/definitions/
 type: capsule
 owner: argus
 governed_by: 222873b9
 created: 2026-04-16
 created_by: argus-a24
-v1_61_channel_tail_note: "Argus A97 2026-06-04 — v1.61 channel-retirement tail fix; replaced dead channel-post instructions with the canonical tropo.broadcast.crew event-log pattern. No contract change."
-member_of:
-  - "8dd772a0"   # tropo-governance (v1.8 Stream B1 backfill)
-
+v1_61_channel_tail_note: Argus A97 2026-06-04 — v1.61 channel-retirement tail fix; replaced dead channel-post instructions with the canonical tropo.broadcast.crew event-log pattern. No contract change.
+subsystem_hub:
+  - 8dd772a0
 ---
 
 # `.tropo/definitions/` — Controlled Vocabulary Definitions
@@ -80,7 +79,7 @@ This produces natural vocabulary normalization without enforcement. Agents self-
 ## What Does NOT Belong Here
 
 - Capsule definitions → `.tropo/capsules/`
-- Templates → `.tropo/templates/`
+- Templates → `vault/templates/`
 - Playbooks → `.tropo/playbooks/`
 - Skills → `.tropo/skills/`
 - Agent governance → `agents/`

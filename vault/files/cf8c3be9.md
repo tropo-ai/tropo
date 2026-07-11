@@ -8,7 +8,7 @@ layer: vault
 status: published
 state: active
 version: '2.5'
-history_companion: 83590936   # v2.1-v2.5 amendment notes lifted to companion (D4, boot-files-carry-history fix; Argus A106 2026-06-10)
+history_companion: 83590936
 modified: 2026-06-10
 modified_by: argus-a106
 supersedes_version: '2.0'
@@ -23,9 +23,9 @@ migrated_in_cycle: v1.20.0 — Convergence Phase 2
 migrated_in_release: pending-v1.20.0
 governed_by: 8dd772a0
 member_of:
-- 32610cb0
+  - 32610cb0
 subsystem_hub:
-- 8dd772a0
+  - 8dd772a0
 capsule_version: '2.5'
 ---
 
@@ -35,22 +35,13 @@ capsule_version: '2.5'
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Governance](8dd772a0.md) → **Argo-OS Studio Boot Extension — Tier 2 (Canonical Substrate)**
 
-**🌳 Tropo-Nav Path** (VS Code): [../../00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/v1.20.0 — Convergence Phase 2/cf8c3be9 — Argo-OS Studio Boot Extension — Tier 2 (Canonical Substrate).md](../../00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/v1.20.0%20%E2%80%94%20Convergence%20Phase%202/cf8c3be9%20%E2%80%94%20Argo-OS%20Studio%20Boot%20Extension%20%E2%80%94%20Tier%202%20%28Canonical%20Substrate%29.md)
-
-**🌳 Tropo-Nav Path** (chat): [argo-os/00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/v1.20.0 — Convergence Phase 2/cf8c3be9 — Argo-OS Studio Boot Extension — Tier 2 (Canonical Substrate).md](argo-os/00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/v1.20.0%20%E2%80%94%20Convergence%20Phase%202/cf8c3be9%20%E2%80%94%20Argo-OS%20Studio%20Boot%20Extension%20%E2%80%94%20Tier%202%20%28Canonical%20Substrate%29.md)
-
 **🔗 This file** — UID `cf8c3be9` · type `os-config` · state `active` · status `published`
 
-**↔ Siblings (9):**
-  - **under [v1.20.0 — Convergence Phase 2](32610cb0.md):** [Argus — Generation Log](37d22f44.md) · [Cosmo — Generation Log](343826d6.md) · [D.pm — Generation Log](4a929a70.md) · [Metis — Generation Log](8ba27c18.md) · [Orpheus — Generation Log (ARCHIVED — gen-log su...](7f3431d5.md) · [Talos — Generation Log](43dc39bc.md) · + 3 more
+**↔ Siblings (8):**
+  - **under [32610cb0](32610cb0.md):** [Argus — Generation Log](37d22f44.md) · [D.pm \u2014 Generation Log](4a929a70.md) · [Metis — Generation Log](8ba27c18.md) · [Orpheus — Generation Log (ARCHIVED — gen-log su...](7f3431d5.md) · [Talos — Generation Log](43dc39bc.md) · [Tropo-OS Boot Configuration — Tier 1 (Canonical...](8f6ea459.md) · + 2 more
 
-**📥 Cited by (13):**
-- [Convert Disciplinary Surfaces to Structural Primitives — the c...](2bc33c0f.md) — `2bc33c0f` (type `design-brief`, via `refs`)
-- [Boot-Protocol + Memory-System Hardening — three coupled gaps: ...](39468635.md) — `39468635` (type `design-brief`, via `refs`, `composes_with`)
+**📥 Cited by (1):**
 - [Tropo-OS v1.20.0 — Convergence Phase 2](4920ce3a.md) — `4920ce3a` (type `release`, via `capabilities_touched`)
-- [Unified Agent-Activation Registry + Activation Entity](5591f018.md) — `5591f018` (type `design-brief`, via `refs`)
-- [L1 template ships the retired v1.61 channel model into every n...](617e4e91.md) — `617e4e91` (type `note`, via `refs`)
-- *+ 8 more — full back-link sweep via `grep -l "cf8c3be9" vault/files/*.md`*
 <!-- nav-block:end -->
 
 **Relations**
@@ -58,7 +49,6 @@ capsule_version: '2.5'
 | Relation | Target |
 |---|---|
 | Governed by | [Tropo Governance (8dd772a0)](8dd772a0.md) |
-| Member of | [v1.20.0 — Convergence Phase 2 (32610cb0)](32610cb0.md) |
 
 *Layer 2 of the three-tier boot config (ADR-032). Applies to every agent on this vault.*
 *Read at Group 0, Step 0.2 of [.tropo/playbooks/agent-activation.playbook.md](../.tropo/playbooks/agent-activation.playbook.md).*
@@ -120,7 +110,7 @@ Catalogs are agent-canonical scannable surfaces (mirror Claude Code's tool-catal
 - Must not block activation. Boot proceeds regardless of fleet-ops outcome.
 
 **Vault health report — recommended:**
-- Dispatch [`vault/skills/9b1f3e48.md`](../skills/9b1f3e48.md) (check-vault-health). Report at `shared/orientation/daily-health-report.md`.
+- Dispatch [`vault/skills/tropo-check-vault-health.md`](../skills/tropo-check-vault-health.md) (check-vault-health). Report at `shared/orientation/daily-health-report.md`.
 
 **Vault-wide event scan (v1.61 — crew-internal channels retired per Rule 13; two user-facing surfaces kept as projections):**
 
@@ -215,7 +205,7 @@ When an agent receives the cue "check /events" or wakes at a polling tick, the c
 
 That is the whole semantic. No type filter. No substrate-modified inclusion. No multi-class aggregate. Just: messages with my name on them. The human-natural framing per Mike-A87 verbatim 2026-05-28: *"Let me check all the messages I should read. Then, I will do work."*
 
-**Tool support (Talos lane; V7 tool side).** [`vault/tools/1545ac97.py`](../tools/1545ac97.py) (query-events) gets `--party <uid>` flag (v1.59 V7 lane). Single flag; does the subject-OR-source filter with cursor state advancement; returns events the agent should read. The `--type` filter remains available for specialized queries (e.g., grepping substrate-modified events at a coherence pass), but `--party` is the default for the "check /events" semantic.
+**Tool support (Talos lane; V7 tool side).** [`vault/tools/tropo-query-events.py`](../tools/1545ac97.py) (query-events) gets `--party <uid>` flag (v1.59 V7 lane). Single flag; does the subject-OR-source filter with cursor state advancement; returns events the agent should read. The `--type` filter remains available for specialized queries (e.g., grepping substrate-modified events at a coherence pass), but `--party` is the default for the "check /events" semantic.
 
 **Why this is structurally enforced rather than memory-resident.** Substrate without a canonical operation invites agents to pick narrow filters by reflex. Talos's session-2026-05-28 query `--type tropo.message.sent --since-id 138` missed `tropo.message.replied` from Vela + substrate-modified events from Argus's Lane A; Vela's session-2026-05-28 `query-events --source-uid <X>` ergonomics ask filed in event 89 is the same gap from a different angle. Both surface the absence of a canonical "messages I should read" operation. v1.59 V7 closes the gap structurally + the doctrine survives whether the tool flag exists or not.
 

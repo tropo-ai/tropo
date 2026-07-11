@@ -3,14 +3,17 @@ uid: a7c9d4e2
 spec_version: 2
 tier: capsule
 folder_type: governed
-folder_purpose: "Persona substrate for the Release Cold-Boot Walk playbook (UID 6f3d2a18). Each file declares one persona that release-cold-boot-walk sub-agents inherit + walk the test-Studio as."
+folder_purpose: Persona substrate for the Release Cold-Boot Walk playbook (UID 6f3d2a18). Each file declares one persona that release-cold-boot-walk sub-agents inherit + walk the test-Studio as.
 owner: vela
-write_access: [vela, mike, argus]
+write_access:
+  - vela
+  - mike
+  - argus
 read_access: all
 extraction_scope: ship
 created: 2026-05-18
 created_by: vela-v47
-governed_by: "6f3d2a18"   # release-cold-boot-walk.playbook
+governed_by: 6f3d2a18
 ---
 
 # `.tropo/personas/cold-boot/` — Persona Substrate for Release Cold-Boot Walks

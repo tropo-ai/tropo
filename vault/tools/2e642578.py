@@ -33,7 +33,7 @@ Class core: load pipeline definition → extract + cleanup content from vault �
 dispatch to target module stage() → call target publish() if defined.
 
 Usage:
-    python3 .tropo/scripts/publish.py <pipeline-uid-or-path> [options]
+    python3 vault/tools/2e642578.py <pipeline-uid-or-path> [options]
 
 Arguments:
     pipeline-uid-or-path  8-hex vault UID (looked up via 00-index.jsonl) or direct file path
@@ -205,7 +205,7 @@ def _load_cross_target_uids() -> set[str]:
     """Load release-target UIDs for cross-target broken-link detection (P1-c preservation)."""
     try:
         from lib.ship_extract import load_manifest_entries, read_manifest_root_uid
-        capsule_path = os.path.join(VAULT_ROOT, '.tropo', 'capsules', 'ship-artifact.capsule.md')
+        capsule_path = os.path.join(VAULT_ROOT, 'vault', 'capsules', 'tropo-ship-artifact.capsule.md')  # ADR-045: moved from .tropo/capsules/ (v1.21.0)
         release_root = read_manifest_root_uid(capsule_path, target='release')
         release_entries = load_manifest_entries(INDEX_PATH, VAULT_ROOT, release_root, target='release')
         return {e['uid'] for e in release_entries}

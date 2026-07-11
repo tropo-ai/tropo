@@ -59,8 +59,8 @@ ANTI-FOOTGUN INVARIANTS:
    exists, the entry's member_of: becomes [] post-migration. This is correct schema (the hub
    membership is now in subsystem_hub:); but Rule 1 may flag if no vault-entity owner. DEFECT
    path applies.
-6. Files outside vault/files/ are never touched. Capsule definitions at .tropo/capsules/ are
-   excluded (capsule entries are governance not work-items).
+6. Files outside vault/files/ are never touched. Capsule definitions at vault/capsules/ are
+   excluded (capsule entries are governance not work-items). ADR-045: moved from .tropo/capsules/.
 7. Files with no frontmatter are skipped silently.
 8. YAML parse failures are logged as ERROR (no migration); script continues.
 

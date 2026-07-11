@@ -56,6 +56,7 @@ HEX8_RE = re.compile(r"^[0-9a-f]{8}$")
 MESSAGING_TYPES = {"tropo.message.sent", "tropo.message.replied",
                    "tropo.message.acked", "tropo.broadcast.crew"}
 PARTY_AXIS_CUTOFF = "2026-06-03"  # events.capsule v1.4 amendment date; pre-cutoff agent-root emits grandfathered
+CHECK22_NAMED_EXEMPT = {"00004553", "00004606", "00005385"}  # T21 emits from activation-entry uid 586ce42d; grandfathered per talos-t22 disposition evt 00005054 (event log append-only; retro-fix impossible). Mechanism: orpheus-o26 evt 00005070; applied by argus-a122 (provenance chain 00005004 -> 00005054 -> 00005070). 00005385: T24 first-emit from unified-entry uid 3031ffa3 instead of party uid 34cf0f1c (Cursor harness first-emit shape; --as flag corrects going-forward; waiver applied per e3ef923a finding 2, argus-a124 confirmed).
 COMPLETION_CUTOFF = "2026-06-13" # v1.70 S2.4 rollout
 
 def _registered_party_uids(vault: Path) -> set[str]:
@@ -179,6 +180,11 @@ def run_all_event_checks(vault: Path) -> tuple[list[str], int, int]:
             if not (src.startswith("/agents/") or src.startswith("//")):
                 continue
             if (ev.get("time", "") or "")[:10] < PARTY_AXIS_CUTOFF:
+                continue
+            if ev.get("id") in CHECK22_NAMED_EXEMPT:
+                findings.append(
+                    f"  [INFO] event {ev.get('id','?')} named-exempt (Check 22 waiver; "
+                    f"talos-t22 disposition 00005054)")
                 continue
             if ev.get("source_uid", "") not in party_uids:
                 findings.append(

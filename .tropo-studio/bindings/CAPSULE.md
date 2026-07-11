@@ -3,9 +3,11 @@ spec_version: 2
 tier: capsule
 folder_type: governed
 owner: vault-admin
-write_access: [human-owner, vault-admin-delegate]
+write_access:
+  - human-owner
+  - vault-admin-delegate
 read_access: all
-purpose: "Reserved slot for binding contracts — future use. Cross-reference / integration bindings between this vault and external systems."
+purpose: Reserved slot for binding contracts — future use. Cross-reference / integration bindings between this vault and external systems.
 uid: e89818d0
 status: reserved
 ---

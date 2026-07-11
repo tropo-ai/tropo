@@ -11,25 +11,25 @@ status: draft
 state: active
 role: stage
 children:
-- 804e339e
-- 674af8fe
-- 0cf86ea5
-- 4f64ec3c
-- "37996741"
-- 8654900a
-- bc6b17ec
-- c6b61fb9
-- 3e0bb81e
+  - 804e339e
+  - 674af8fe
+  - 0cf86ea5
+  - 4f64ec3c
+  - '37996741'
+  - 8654900a
+  - bc6b17ec
+  - c6b61fb9
+  - 3e0bb81e
 next_steps: []
 relationships:
-- rel: member_of
-  uid: cd1fcd25
+  - rel: member_of
+    uid: cd1fcd25
 schema_version: 2
 extraction_scope: ship
 v1_51_0_amendment_note: 'Argus A80 2026-05-23 — Phase A of v1.51.0 Three-Pipeline Substrate-Engineering cycle. Deploy stage children: amendment adds 0cf86ea5 (step-4.5 trigger-doc-pipeline-activation) + 4f64ec3c (step-4.6 trigger-test-pipeline-activation) between 674af8fe (step-5.5) and 8654900a (step-6). The two new trigger steps fire in parallel after step-4 (9d4f7e21 update-subsystem-canonical-docs in build stage, but executes after step-5.5 per v1.49.0 reordered chain) and converge multi-input on step-6 (8654900a produce-release-folder). Step-4 (9d4f7e21) is structurally in build stage (3bd8f5b6) but in the v1.49.0 reordered substantive-time chain it fires after step-5.5 in deploy stage — chain visualization in §Structure below acknowledges. Three-Pipeline Substrate-Enforcement Architecture per [c3dc9f00 v0.3] + Mike-A80 trigger-timing walk 2026-05-23. Companion edits at 9d4f7e21 (next_steps fan-out) + 8654900a (multi-input convergence) + cd1fcd25 (dev-pipeline definition v1.2.0).'
 member_of: []
 subsystem_hub:
-- 76bab75f
+  - 76bab75f
 capsule_version: '2.5'
 ---
 

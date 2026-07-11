@@ -64,6 +64,15 @@ import secrets
 import sys
 from pathlib import Path
 
+import importlib.util as _ilu_6342
+
+# 796d9330 (ADR-050) chokepoint: delegate to the canonical collision-checked minter.
+_mint_spec_6342 = _ilu_6342.spec_from_file_location(
+    "_mint_id_canonical_6342", Path(__file__).resolve().parent / "tropo-mint-id.py"
+)
+_mint_mod_6342 = _ilu_6342.module_from_spec(_mint_spec_6342)
+_mint_spec_6342.loader.exec_module(_mint_mod_6342)
+
 _CANONICAL_HUBS_FALLBACK = {
     "8dd772a0": "tropo-governance",
     "dbc1cbbf": "tropo-rendering",
@@ -207,7 +216,7 @@ def resolve_uid_to_file(uid: str, vault_root: Path) -> Path | None:
         return fast
 
     kernel_dirs = [
-        (vault_root / ".tropo" / "capsules", "*.capsule.md"),
+        (vault_root / "vault" / "capsules", "*.capsule.md"),    # ADR-045: moved from .tropo/capsules/ (v1.21.0)
         (vault_root / ".tropo" / "playbooks", "*.playbook.md"),
         (vault_root / ".tropo-studio", "*.md"),
         (vault_root / ".tropo", "*.md"),
@@ -347,7 +356,8 @@ def build_registry_rows(releases: list[dict], vault_root: Path) -> list[dict]:
         for hub_uid in sorted(touched_hubs):
             summary = rel["hub_summaries"].get(hub_uid) if rel["hub_summaries"] else None
             row = {
-                "registry_uid": secrets.token_hex(4),
+                # 796d9330 (ADR-050) chokepoint: route through the canonical minter.
+                "registry_uid": _mint_mod_6342.mint(1)[0],
                 "release_uid": rel["uid"],
                 "release_version": version,
                 "subsystem_uid": hub_uid,

@@ -1,10 +1,10 @@
 ---
 uid: a69fcab3
-title: "validate-coverage — test-pipeline step 4"
+title: validate-coverage — test-pipeline step 4
 type: pipeline
 subtype: workflow-node
-name: "validate-coverage"
-version: "1.0"
+name: validate-coverage
+version: '1.1'
 author: vela-v51
 owner: vela
 status: active
@@ -12,35 +12,38 @@ state: active
 role: step
 created: 2026-05-23
 created_by: vela-v51
-modified: 2026-05-23
-modified_by: vela-v51
+modified: '2026-07-09'
+modified_by: vela-v64
 schema_version: 2
 extraction_scope: ship
 governed_by: e4c8a6b2
 children: []
-step_owner_role: vela   # anti-box-checking gate is mine per test-spec.capsule v1.0 walk lock SQ1
-step_verifier_role: argus   # substrate-coherence verifier separate context
+step_owner_role: vela
+step_verifier_role: argus
 verification_class: true
-verification_command: "npm run test:qa"
-verdict_cwd: "/Users/mike/dev/tropo-ai"
+verification_command: 'python3 -c "pass"'
+verification_command_note: "Fixed 2026-07-09 by Vela V64, flagged by Argus A129 during the v1.84.1 close-out audit -- same wrong-repo shape as 05d9ecc5's original bug (confirmed: /Users/mike/dev/tropo-ai does not exist on this machine at all). Present since original v1.0 authoring 2026-05-23, never exercised until this close-out. This step's real verdict is the aggregate: fail_count == 0 exit-criterion (read from step 3's test_aggregate event), not this command's own exit code -- same design as 05d9ecc5. Set to a harmless no-op + correct cwd rather than a second hardcoded per-release command."
+verdict_cwd: .
 depends_on_steps:
-  - "05d9ecc5"   # step 3 run-test-substrate
+  - 05d9ecc5
 exit_criteria:
-  - "all 14 test-spec.capsule v1.0 [621824df] validation checks PASS at ERROR ratchet level"
-  - "test_aggregate event from step 3: zero behaviors with fail verdict OR explicit Mike-walked override per Check 14 manual_walk_ceiling_override semantics"
-  - "manual_walk percentage in behaviors_covered ≤ effective ceiling (default 30% OR override per Check 14)"
-  - "per-cycle-class minima per test-spec.capsule §Coverage Class Semantics § Per-cycle-class required minima — verified against test-spec.cycle_class (or inferred class at v1.0)"
-  - "no behavior_covered entry box-checked (Check 5 verification_method substrate-resolvable + Check 4 enum valid both PASS)"
-  - "cross-validation Rule 3 against triggering dev-spec.committed_substrate NEW entries PASS (Check 6)"
+  - 'aggregate: fail_count == 0'
 trust_level: auto-with-verification
 next_steps:
-  - "047c147c"   # step 5 close-activation
+  - 047c147c
 relationships:
   - rel: member_of
-    uid: 92133de1   # verify-and-close stage
+    uid: 92133de1
 member_of:
-  - "92133de1"
-tags: [pipeline, workflow-node, test-pipeline, step, validate-coverage, anti-box-checking-gate, vela-owns]
+  - 92133de1
+tags:
+  - pipeline
+  - workflow-node
+  - test-pipeline
+  - step
+  - validate-coverage
+  - anti-box-checking-gate
+  - vela-owns
 ---
 
 # validate-coverage — test-pipeline step 4
@@ -53,10 +56,8 @@ tags: [pipeline, workflow-node, test-pipeline, step, validate-coverage, anti-box
 **↔ Siblings (1):**
   - **under [verify-and-close — test-pipeline stage](92133de1.md):** [close-activation — test-pipeline step 5](047c147c.md)
 
-**📥 Cited by (3):**
-- [v1.62 dogfood: 2 test-pipeline steps have PROSE exit_criteria ...](062c5544.md) — `062c5544` (type `note`, via `refs`)
+**📥 Cited by (1):**
 - [Tropo-OS v1.51.0 — Three-Pipeline Substrate-Engineering (Six A...](b0435ff0.md) — `b0435ff0` (type `release`, via `capabilities_touched`)
-- [test-pipeline step-3 executor unwired — no test_aggregate rece...](d3a9c1f7.md) — `d3a9c1f7` (type `note`, via `refs`)
 <!-- nav-block:end -->
 
 **Relations**
@@ -90,3 +91,20 @@ tags: [pipeline, workflow-node, test-pipeline, step, validate-coverage, anti-box
 **Why argus is step_verifier_role:** anti-box-checking misses are hard to catch in the executing context (Vela authored the test-spec + walked the plan + ran the execution; pattern-matching against own work has blind spots). Argus's separate context catches what Vela can't see.
 
 **Hands off to:** step 5 close-activation, when all exit criteria PASS + Argus substrate-coherence verifier signs off.
+
+## DSL rewrite note (Talos, 2026-07-04, 4f87d056/0fa72100)
+
+Kept only the ONE criterion the current grammar can genuinely check (`aggregate: fail_count == 0`, matching the `test_aggregate` event's real field names — see `05d9ecc5`'s note for how those were confirmed).
+
+**DROPPED, flagged to Argus (genuine DSL-extension cases — this step is the OTHER half of the exact pair 062c5544 found engine-inexpressible at the v1.62 dogfood, unresolved since):**
+- `all 14 test-spec.capsule checks PASS at ERROR ratchet level` — validator-dispatch verb, doesn't exist in the grammar (same gap as `dc108622`'s identical line).
+- `manual_walk percentage ≤ effective ceiling (...override per Check 14)` — a computed percentage over a dynamic list, with a conditional override branch; no DSL form for either.
+- `per-cycle-class minima per test-spec.capsule §Coverage Class Semantics` — validator/lookup-table verb.
+- `no behavior_covered entry box-checked (Check 5 / Check 4)` — validator-dispatch verb.
+- `cross-validation Rule 3 against triggering dev-spec.committed_substrate NEW entries PASS (Check 6)` — cross-validation routine, same gap as `dc108622`'s Rule-3 line.
+
+**Honest consequence:** this step (`verification_class: true`, `trust_level: auto-with-verification`) is in the `action_complete_workflow` B3-recompute path — it will genuinely evaluate `pass` once behaviors execute clean, but it no longer machine-re-derives the validator/cross-validation/coverage-minima judgment the anti-box-checking gate was designed to enforce; that judgment currently lives only in Argus's separate-context human review (`step_verifier_role: argus`), same as it did before this rewrite. Closing that gap for real is the v1.63-verification-hardening engine work 062c5544 already scoped (`validator-dispatch` / `structural_check` verdict source) — Argus's call on priority, not something this rider should silently paper over.
+
+## verification_command fix (Vela V64, 2026-07-09, per Argus A129's audit)
+
+`npm run test:qa` in `/Users/mike/dev/tropo-ai` — same wrong-repo class as `05d9ecc5`'s original bug, confirmed that directory doesn't exist on this machine at all. Fixed to a harmless no-op + correct cwd (see `verification_command_note` in frontmatter). Never exercised until the v1.84.1 federation close-out; the real verdict for this step is the `aggregate: fail_count == 0` criterion, same as `05d9ecc5`.

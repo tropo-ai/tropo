@@ -1,45 +1,55 @@
 ---
 uid: 4a2f6dbd
-title: "Reconcile Imports"
+title: Reconcile Imports
 type: playbook
-version: "1.2"
+version: '1.2'
 status: active
 locked_by: argus-a62
 locked_at: 2026-05-14
 v1_1_locked_by: argus-a61
 v1_1_locked_at: 2026-05-13
-modified: 2026-05-14
-modified_by: argus-a62
+modified: 2026-07-02
+modified_by: argus-a123
 created: 2026-05-13
 created_by: argus-a60
 author:
-  name: "Argus"
-  role: "Chief Architect"
-domain: "substrate-reconciliation"
-tags: [reconcile-imports, sa-reconciler, import-primitive, v1.25.0-stream-c, v1.26.0-stream-c-amendment, v1.28.0-stream-c-amendment]
-v1_2_amendment_note: "v1.28.0 Stream C amendment per arch-spec [5a89297a v0.5](../files/5a89297a.md) §3.8 v0.5 — additive (semver minor). Three changes. (1) `template-binary-drift` event ACTIVATED — was reserved-deferred at v1.1; now live at §Step 4 + §Step 6 (judgment-class 0.50; surface_to_user with three resolution paths: accept-and-export / re-register / abort per arch-spec §3.7 precondition 3). (2) NEW `folder-mirror-orphan-state` event per arch-spec §3.8 v0.5 (closes sa.skeptic-008 P1-1 + sa.cold-boot-007 B2): emitted when reconciler encounters partial state from interrupted create-sidecar co-write (orphan .tmp mirror file OR on-disk marker without matching vault mirror); judgment-class 0.55; resolution path is reconciler-deterministic retro-fill using marker UID. (3) Folder-mirror UID-duplication sanctioned exception per arch-spec §3.8 v0.5 (closes sa.skeptic-008 P0-2): the existing v1.0 duplicate-UID-at-different-paths rule now treats `mirror_of: <same-uid>` self-reference + matching folder_marker_path as a sanctioned dual-residence pattern (skip duplicate-UID detection); composes with §3.10 check 8 NEW validator. Existing v1.0 + v1.1 behavior unchanged; v1.28.0 sa.reconciler runs detect template-binary-drift and folder-mirror-orphan-state in addition to the prior delta types."
-v1_1_amendment_note: "v1.26.0 Stream C amendment per arch-spec [5a89297a v0.3](../files/5a89297a.md) §3.8 — additive (semver minor per the playbook's stated versioning rule: 'New patterns added to Step 5 catalog — semver minor'). §Step 2 extended with a SEPARATE working-copy + template enumeration walk (clean abstraction layer per arch-spec §3.8 layering fix — closes sa.skeptic-006 P1-5). §Step 4 extended with new delta type `working-copy-source-drift` (judgment-class; honors hash_function semantics per §3.8 closing sa.skeptic-006 P1-4). §Step 6 categorization table extended with row for the new event. Existing v1.0 behavior unchanged; v1.25.0 sa.reconciler runs continue to operate cleanly. v1.28.0 will add `template-binary-drift` event in the same shape."
-trigger: [commissioned-by-sa-reconciler]
-readers: [agent]
+  name: Argus
+  role: Chief Architect
+domain: substrate-reconciliation
+tags:
+  - reconcile-imports
+  - sa-reconciler
+  - import-primitive
+  - v1.25.0-stream-c
+  - v1.26.0-stream-c-amendment
+  - v1.28.0-stream-c-amendment
+v1_2_amendment_note: 'v1.28.0 Stream C amendment per arch-spec [5a89297a v0.5](../files/5a89297a.md) §3.8 v0.5 — additive (semver minor). Three changes. (1) `template-binary-drift` event ACTIVATED — was reserved-deferred at v1.1; now live at §Step 4 + §Step 6 (judgment-class 0.50; surface_to_user with three resolution paths: accept-and-export / re-register / abort per arch-spec §3.7 precondition 3). (2) NEW `folder-mirror-orphan-state` event per arch-spec §3.8 v0.5 (closes sa.skeptic-008 P1-1 + sa.cold-boot-007 B2): emitted when reconciler encounters partial state from interrupted create-sidecar co-write (orphan .tmp mirror file OR on-disk marker without matching vault mirror); judgment-class 0.55; resolution path is reconciler-deterministic retro-fill using marker UID. (3) Folder-mirror UID-duplication sanctioned exception per arch-spec §3.8 v0.5 (closes sa.skeptic-008 P0-2): the existing v1.0 duplicate-UID-at-different-paths rule now treats `mirror_of: <same-uid>` self-reference + matching
+  folder_marker_path as a sanctioned dual-residence pattern (skip duplicate-UID detection); composes with §3.10 check 8 NEW validator. Existing v1.0 + v1.1 behavior unchanged; v1.28.0 sa.reconciler runs detect template-binary-drift and folder-mirror-orphan-state in addition to the prior delta types.'
+v1_1_amendment_note: 'v1.26.0 Stream C amendment per arch-spec [5a89297a v0.3](../files/5a89297a.md) §3.8 — additive (semver minor per the playbook''s stated versioning rule: ''New patterns added to Step 5 catalog — semver minor''). §Step 2 extended with a SEPARATE working-copy + template enumeration walk (clean abstraction layer per arch-spec §3.8 layering fix — closes sa.skeptic-006 P1-5). §Step 4 extended with new delta type `working-copy-source-drift` (judgment-class; honors hash_function semantics per §3.8 closing sa.skeptic-006 P1-4). §Step 6 categorization table extended with row for the new event. Existing v1.0 behavior unchanged; v1.25.0 sa.reconciler runs continue to operate cleanly. v1.28.0 will add `template-binary-drift` event in the same shape.'
+trigger:
+  - commissioned-by-sa-reconciler
+readers:
+  - agent
 scope: single-reconciliation-pass
-estimated_duration: "5-30 seconds (full-studio scope at typical knowledge-worker scale)"
-spec: "vault/files/2b49ba79.md"   # Import Primitive Architecture Specification v1.0 LOCKED
+estimated_duration: 5-30 seconds (full-studio scope at typical knowledge-worker scale)
+spec: vault/files/2b49ba79.md
 requires:
   roles:
     - sa-reconciler-instance
 calls:
-  - "import-walker.py"
-  - "scan-import-state.py"
+  - vault/tools/tropo-import-walker.py
+  - vault/tools/tropo-scan-import-state.py
 schema_version: 2
 extraction_scope: ship
-governed_by: e6d373bc   # playbook.capsule
+governed_by: e6d373bc
 aligned_with:
-  - "2b49ba79"   # Import Primitive Architecture Specification v1.0 LOCKED
-  - "eedd7034"   # external-artifact.capsule v1.0
-  - "013b7b6e"   # reconcile-report.capsule v1.0
+  - 2b49ba79
+  - eedd7034
+  - 013b7b6e
 member_of:
-  - "d36c63c8"   # v1.25.0 Stream C — Reconciler Subsystem
-  - "76bab75f"   # tropo-playbooks
+  - d36c63c8
+subsystem_hub:
+  - 76bab75f
 ---
 
 # Reconcile Imports
@@ -94,8 +104,8 @@ The playbook is **the intelligence**. sa.reconciler is the process that runs it.
 
 | Tool | Step | Purpose |
 |---|---|---|
-| `import-walker.py scan` | 2 | Enumeration; UID-to-state map |
-| `import-walker.py apply` | 7 | Per-event application (writes) |
+| `tropo-import-walker.py scan` | 2 | Enumeration; UID-to-state map |
+| `tropo-import-walker.py apply` | 7 | Per-event application (writes) |
 | Internal hash routines | 3 | Hash function per §C.5 Rule 6 |
 | JSONL append | 8 | Audit log writes |
 
@@ -129,7 +139,7 @@ Output: bounded scope for Step 2 enumeration.
 
 ### Step 2 — Enumeration
 
-**Executor:** sa.reconciler invokes `import-walker.py scan --scope <...>` + (v1.1) reads working-copy + template vault entries directly
+**Executor:** sa.reconciler invokes `tropo-import-walker.py scan --scope <...>` + (v1.1) reads working-copy + template vault entries directly
 
 **v1.0 binary-layer walks** (unchanged):
 Walk all `.tropo-studio/*.tropo.md` sidecars in scope (recursive). Walk all source files in governed folders in scope (recursive; respecting `.tropoignore`). Walk all `vault/files/<uid>.md` (Tier 1) + `vault/files/<uid>/metadata.md` (Tier 2) projections with `type: external-artifact` in scope.
@@ -148,7 +158,7 @@ Output (v1.1 derived-artifact-layer): two additional lists — `working_copies[]
 
 ### Step 3 — Hash Computation
 
-**Executor:** sa.reconciler invokes `import-walker.py` internal hash routines
+**Executor:** sa.reconciler invokes `tropo-import-walker.py` internal hash routines
 
 For each source file in scope, compute hash per the fallback chain:
 
@@ -261,9 +271,9 @@ Output: `events[]` augmented with category + confidence + proposed action + evid
 
 ### Step 7 — Application
 
-**Executor:** sa.reconciler invokes `import-walker.py apply --operation <event-json>` per event
+**Executor:** sa.reconciler invokes `tropo-import-walker.py apply --operation <event-json>` per event
 
-Acquire lock at `.tropo-studio/reconciler/.lock` (if not already held). Apply each `routine` + `pattern-matched` event by invoking `import-walker.py apply` with the event payload. Skip `judgment` and `blocking` events (those defer to executive).
+Acquire lock at `.tropo-studio/reconciler/.lock` (if not already held). Apply each `routine` + `pattern-matched` event by invoking `tropo-import-walker.py apply` with the event payload. Skip `judgment` and `blocking` events (those defer to executive).
 
 For each applied event:
 - Tool performs the substrate write (sidecar move, projection update, etc.)
@@ -330,7 +340,7 @@ Executive picks up the report; triages per §A.7 + §C.5 of the arch-spec; compo
 |---|---|
 | Lock held by another reconciler | Exit cleanly; STATUS bulletin to channels/ops.md; defer to lock-holder |
 | Stale lock (mtime > 1 hour) | Override with WARN bulletin to channels/ops.md; proceed |
-| import-walker.py error during apply | Mark event as deferred; continue with remaining events; surface error in §Blocking |
+| tropo-import-walker.py error during apply | Mark event as deferred; continue with remaining events; surface error in §Blocking |
 | journal.jsonl write failure | HALT; surface CRITICAL to channels/alerts.md; substrate may be in inconsistent state |
 | Tool unavailable / Python error | HALT; surface CRITICAL to channels/alerts.md; this pass terminates without producing a report |
 | Activation record [RESPONSE] missing scope | Request clarification via additional [QUERY]; if no response in reasonable window, terminate with [SHUTDOWN] + skip-reason |
@@ -342,8 +352,8 @@ Executive picks up the report; triages per §A.7 + §C.5 of the arch-spec; compo
 This playbook composes with:
 
 - **[sa.reconciler activation file](../../agents/sa/sa.reconciler/sa.reconciler.md)** — the agent that runs this playbook
-- **[import-walker.py (bf886f30)](../files/bf886f30.md)** — the primary tool invoked at Steps 2 + 3 + 7
-- **[scan-import-state.py (0a316ca6)](../files/0a316ca6.md)** — optional pre-pass tool for fast scope reduction
+- **[tropo-import-walker.py (bf886f30)](../files/bf886f30.md)** — the primary tool invoked at Steps 2 + 3 + 7
+- **[tropo-scan-import-state.py (0a316ca6)](../files/0a316ca6.md)** — optional pre-pass tool for fast scope reduction
 - **[external-artifact.capsule v1.0 (eedd7034)](../files/eedd7034.md)** — the type sa.reconciler reads + writes
 - **[reconcile-report.capsule v1.0 (013b7b6e)](../files/013b7b6e.md)** — the output schema this playbook authors against
 - **fleet-ops.playbook** (registry extension in v1.25.0 Stream D) — scheduled trigger source

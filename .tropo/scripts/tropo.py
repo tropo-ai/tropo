@@ -37,7 +37,7 @@ pyyaml. Pure stdlib otherwise.
 Canonical dispatcher since v1.64.0 (Talos T12, tool-discovery-l1 cycle per
 dev-spec b7d4f1a9). Promoted from the A90 prototype after: name backfill across
 the full catalog (0 uid-only tools), tool.capsule v1.7 validator ratchet landed,
-shim-supersession documented. The .tropo/scripts/query-events.py and
+shim-supersession documented. The vault/tools/tropo-query-events.py and
 emit-event.py shims remain as discoverable-name aliases; retire-on-adoption when
 agents uniformly reach for `tropo <name>` instead.
 """
@@ -182,7 +182,7 @@ def cmd_list(catalog, _args):
         for r in unnamed:
             print("    %s  %s" % (r["uid"], (r["description"] or "")[:66]))
     print("\nrun:  tropo <name> [args]   |   tropo call <name> [args]   |   tropo help <name>\n"
-          "note: .tropo/scripts/query-events.py and emit-event.py are name-alias shims;\n"
+          "note: vault/tools/tropo-query-events.py and emit-event.py are name-alias shims;\n"
           "      retire-on-adoption when agents uniformly use `tropo <name>`")
     return 0
 

@@ -3,13 +3,16 @@ spec_version: 2
 tier: capsule
 folder_type: governed
 owner: argus
-write_access: [argus, talos, vela]
+write_access:
+  - argus
+  - talos
+  - vela
 read_access: all
-purpose: "Tropo-OS kernel scripts — ship with every release. Python, domain-general Tropo-OS capabilities."
+purpose: Tropo-OS kernel scripts — ship with every release. Python, domain-general Tropo-OS capabilities.
 uid: 4c2a8f39
 created: 2026-04-20
 created_by: vela-v31
-governed_by_convention: ".tropo/scripts/ is one of three scripts/ locations in the Tropo ecosystem; see §Cross-references."
+governed_by_convention: .tropo/scripts/ is one of three scripts/ locations in the Tropo ecosystem; see §Cross-references.
 ---
 
 # `.tropo/scripts/` — Tropo-OS Kernel Scripts
@@ -57,7 +60,7 @@ Changes here require architectural review because they ship in every release.
 1. **Portable.** No hardcoded absolute paths. Resolve vault root via argument or walk-up for `settings/env.md`. If resolution fails, raise with a clear error — never silently default.
 2. **Python.** Kernel scripts are Python 3. The engineering repo's TS scripts at `/scripts/` don't belong here; they're a different layer.
 3. **Ship-ready.** Every script here ends up in user vaults on the next release cut. Write for a stranger, not for Argo.
-4. **Fail loud on declared-but-unreachable.** Per the v2.2 boot playbook Tier Reachability rule and [ADR-032](../../vault/files/e6c3f410.md) 2026-04-20 amendment: if a script declares a dependency exists, it should throw on missing — not silently skip. See [`.tropo/scripts/rebuild-vault.py`:608](../../../`.tropo/scripts/rebuild-vault.py`) for the pattern.
+4. **Fail loud on declared-but-unreachable.** Per the v2.2 boot playbook Tier Reachability rule and [ADR-032](../../vault/files/e6c3f410.md) 2026-04-20 amendment: if a script declares a dependency exists, it should throw on missing — not silently skip. See [`vault/tools/tropo-rebuild-vault.py`:608](../../../`vault/tools/tropo-rebuild-vault.py`) for the pattern.
 5. **Documented.** Every script's docstring declares: what it does, inputs, outputs, where it's called from, what it depends on.
 6. **Verify against canonical L0 registry before mutating `member_of:`.** Per [Operating Principle 11](../../.tropo-studio/operating-principles.md#11-verify-against-canonical-reference-before-architectural-calls), any kernel script that mutates a project's `member_of:` array MUST consult [`.tropo-studio/registries/canonical-l0-projects.yaml`](../../.tropo-studio/registries/canonical-l0-projects.yaml) first. If the target project's UID appears in `canonical_l0_projects` or `non_l0_with_hub_only_risk`, the mutation requires explicit Mike approval before the script runs. The pre-flight gate ([`validate-canonical-l0.py`](validate-canonical-l0.py)) catches drift after the fact; this rule is the discipline that prevents drift in the first place. Mirrors Rule 6 in [`.tropo-studio/scripts/CAPSULE.md`](../../.tropo-studio/scripts/CAPSULE.md). **Why:** v1.12 substrate-membership backfill replaced empty `member_of: []` with hub-UIDs without distinguishing "missing parent" from "true L0 root" — collapsed the rendered nav. v1.13.5 closed the symptom; this rule closes the cause.
 

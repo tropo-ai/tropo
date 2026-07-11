@@ -237,6 +237,41 @@ def check_loop_run_contract_locked(vault: Path) -> tuple[list[str], int, int]:
             
     return findings, total, len(findings)
 
+# =============================================================================
+# 7. check_loop_consent_mode (v1.79 S7)
+# =============================================================================
+VALID_CONSENT_MODES = ('ask', 'auto')
+
+def check_loop_consent_mode(vault: Path) -> tuple[list[str], int, int]:
+    """v1.79 S7 — Every maintenance loop must declare consent_mode.
+
+    Factory default is 'ask' — nothing spends silently before owner consent.
+    Valid values: 'ask' | 'auto'.
+    Missing consent_mode is treated as 'ask' (safe default) but WARN to encourage
+    explicit declaration (covenant posture: explicit consent is always better).
+    """
+    findings = []
+    total = 0
+    for path, fm in _iter_loops(vault):
+        total += 1
+        rel = path.relative_to(vault)
+        consent_mode = fm.get('consent_mode')
+
+        if consent_mode is None:
+            findings.append(
+                f'[WARN] {rel} — loop missing consent_mode field; '
+                f'implicit default is "ask" but explicit declaration required '
+                f'(v1.79 S7 consent-first covenant)'
+            )
+        elif consent_mode not in VALID_CONSENT_MODES:
+            findings.append(
+                f'[ERROR] {rel} — consent_mode {consent_mode!r} not in '
+                f'{VALID_CONSENT_MODES} (v1.79 S7 consent_mode enum)'
+            )
+
+    return findings, total, len(findings)
+
+
 LOOP_CHECKS = (
     ('check_loop_basic_fields', check_loop_basic_fields),
     ('check_loop_has_brakes', check_loop_has_brakes),
@@ -244,6 +279,7 @@ LOOP_CHECKS = (
     ('check_loop_verifier_independent', check_loop_verifier_independent),
     ('check_loop_consequence_scope', check_loop_consequence_scope),
     ('check_loop_run_contract_locked', check_loop_run_contract_locked),
+    ('check_loop_consent_mode', check_loop_consent_mode),
 )
 
 def run_all_loop_checks(vault: Path) -> tuple[list[str], int, int]:

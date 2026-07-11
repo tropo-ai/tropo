@@ -3,17 +3,17 @@ uid: b7e3a291
 tier: 1
 type: os-config-pointer
 status: published
-version: "2.0"
-supersedes_version: "1.2"
+version: '2.0'
+supersedes_version: '1.2'
 owner: tropo
 created: 2026-04-15
 modified: 2026-06-04
 modified_by: argus-a97
-v2_0_1_hygiene_note: "Argus A97 2026-06-04 — v1.61 channel-retirement tail fix (no contract change). The degraded-mode fallback block instructed agents to post to retired channels/alerts.md (substrate-resolution failure) + channels/ops.md (ADR-016 HALT); both retired at v1.61 per Rule 13. Replaced with the canonical event-log pattern (emit tropo.broadcast.crew severity:flash / category:ops), matching the activation playbook v2.12 + canonical Tier 1 substrate 8f6ea459. Low-traffic fallback block missed by the v1.61 sweep; surfaced at A97 boot diagnostic, fixed per Mike-A97 self-healing directive. Boot semantics unchanged; only the coordination mechanism corrected to reality."
+v2_0_1_hygiene_note: Argus A97 2026-06-04 — v1.61 channel-retirement tail fix (no contract change). The degraded-mode fallback block instructed agents to post to retired channels/alerts.md (substrate-resolution failure) + channels/ops.md (ADR-016 HALT); both retired at v1.61 per Rule 13. Replaced with the canonical event-log pattern (emit tropo.broadcast.crew severity:flash / category:ops), matching the activation playbook v2.12 + canonical Tier 1 substrate 8f6ea459. Low-traffic fallback block missed by the v1.61 sweep; surfaced at A97 boot diagnostic, fixed per Mike-A97 self-healing directive. Boot semantics unchanged; only the coordination mechanism corrected to reality.
 governed_by: 78c2126d
-canonical_substrate_uid: "8f6ea459"   # Canonical Tier 1 substrate at vault/files/<uid>.md (per v1.20.0 Q5 lock: two-file pattern; kernel pointer + canonical vault substrate)
-member_of:
-  - "8dd772a0"   # tropo-governance
+canonical_substrate_uid: 8f6ea459
+subsystem_hub:
+  - 8dd772a0
 ---
 
 # Tropo-OS — Boot Configuration (Tier 1 Kernel Pointer)

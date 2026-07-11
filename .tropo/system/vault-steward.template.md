@@ -76,7 +76,7 @@ Verify the matched-primitive registries match file frontmatter across the vault 
 
 **Auto-Repair:** ✅ ENABLED for two sub-cases:
 
-1. **Missing UIDs on files with frontmatter.** The steward generates an 8-character lowercase hex UID (use `openssl rand -hex 4` if available, otherwise generate deterministically), writes it to the file's frontmatter, and triggers a rebuild of the appropriate matched-primitive index (`.tropo/scripts/rebuild-vault.py` for vault entries, `scripts/rebuild-registry.ts` for runtime callables; agent-registry.yaml updates are surfaced as findings, not auto-applied). Conservative because it only adds a field — it never modifies an existing `uid:` value.
+1. **Missing UIDs on files with frontmatter.** The steward generates an 8-character lowercase hex UID (use `openssl rand -hex 4` if available, otherwise generate deterministically), writes it to the file's frontmatter, and triggers a rebuild of the appropriate matched-primitive index (`vault/tools/tropo-rebuild-vault.py` for vault entries, `scripts/rebuild-registry.ts` for runtime callables; agent-registry.yaml updates are surfaced as findings, not auto-applied). Conservative because it only adds a field — it never modifies an existing `uid:` value.
 2. **Missing registry entries for files with UIDs.** If a file has `uid: abc12345` in frontmatter but is absent from its matched-primitive registry, the steward triggers the appropriate rebuild — the file is the source of truth and the registry is the projection. Conservative because the rebuilders are deterministic from frontmatter.
 
 **Auto-Repair:** ❌ DISABLED for:
@@ -114,7 +114,7 @@ Verify agents wrote only to files within their declared `scope.writes`.
 
 **Auto-Repair:** ❌ DISABLED. Scope violations are either (a) a legitimate write the agent's scope should be expanded to permit, (b) a bug in the agent, or (c) a symptom of a broader coordination issue. The steward cannot distinguish and should not attempt to. All three cases require human (or concierge-mediated) review. Flag only.
 
-**Exception (v1.1 migrations):** A write that occurred during a user-approved migration phase of an Update Spec v1.1 update is NOT a scope violation, even if it touched files outside the writing agent's declared `scope.writes`. The user's approval of the migration temporarily authorized the declared migration scope per apply-update.playbook.md v1.1's "migration governance authority" rule. The steward recognizes migration-phase writes by cross-referencing the ops log entry against the active update in `system/updates/applied/` — if the write's timestamp falls inside a migration commit run for an applied update, skip the scope check for that write and note it as "authorized-by-migration" in the report.
+**Exception (v1.1 migrations):** A write that occurred during a user-approved migration phase of an Update Spec v1.1 update is NOT a scope violation, even if it touched files outside the writing agent's declared `scope.writes`. The user's approval of the migration temporarily authorized the declared migration scope per apply-update.playbook.md v2.0's "migration governance authority" rule. The steward recognizes migration-phase writes by cross-referencing the ops log entry against the active update in `vault/updates/applied/` (re-homed from `system/updates/applied/` at Gate 2, dev-spec fc4874f4) — if the write's timestamp falls inside a migration commit run for an applied update, skip the scope check for that write and note it as "authorized-by-migration" in the report.
 
 ### 6. Governance Coverage
 
@@ -143,7 +143,7 @@ Walk the entire vault directory tree. For every subfolder containing files, veri
 
 **Auto-Repair:** ✅ ENABLED for the two missing-file cases, with sensible defaults:
 
-1. **Missing `AGENTS.md`.** The steward copies the thin template from `.tropo/templates/AGENTS.md`. This is the universal v2 pointer file — identical in every folder.
+1. **Missing `AGENTS.md`.** The steward copies the thin template from `vault/templates/AGENTS.md`. This is the universal v2 pointer file — identical in every folder.
 
 2. **Missing `CAPSULE.md`.** The steward generates a minimal CAPSULE.md with `folder_type: workspace`, `owner: human-owner`, `purpose:` derived from folder name. Default `write_access:` is set to the parent agent (if the folder is inside an agent's workspace) or to `[human-owner]` (if at vault root or in shared space). The generated file includes a comment noting the steward created it with defaults. The owning agent is notified via the three-tier notification protocol.
 
@@ -211,7 +211,7 @@ Validate the four-file governance model is complete and consistent.
 
 2. **AGENTS.md uniformity:**
  - Every AGENTS.md in the vault has `spec_version: 2` in frontmatter.
- - Every AGENTS.md is byte-identical to `.tropo/templates/AGENTS.md`.
+ - Every AGENTS.md is byte-identical to `vault/templates/AGENTS.md`.
  - If any AGENTS.md differs: auto-repair (replace with template).
 
 3. **CAPSULE.md presence:**
@@ -237,7 +237,7 @@ Validate the four-file governance model is complete and consistent.
 - INFO: STUDIO.md version gap (steward suggests updates, admin decides).
 
 **Auto-Repair:**
-- AGENTS.md drift: ✅ ENABLED (replace with template from `.tropo/templates/`).
+- AGENTS.md drift: ✅ ENABLED (replace with template from `vault/templates/`).
 - Missing CAPSULE.md: ✅ ENABLED (generate minimal default — same as Function 6).
 - Everything else: ❌ DISABLED (requires human judgment).
 
@@ -377,7 +377,7 @@ When the steward applies auto-repairs, it notifies three audiences at different 
 
 ### Tier 1 — Canonical Health Report (full detail)
 
-**Location:** `system/vault-steward/workspace/[YYYY-MM-DD]-health-report.md`
+**Location:** `vault/tropo-vault-steward/workspace/[YYYY-MM-DD]-health-report.md`
 
 Full report in the format defined in the Report Format section above. Every finding, every auto-repair, every counted metric. This is the authoritative record — if there's ever a question about what the steward did on a given day, this file answers it.
 
@@ -415,7 +415,7 @@ The vault steward ran on [date] and applied auto-repair fixes inside this worksp
 - If a UID was generated for a file that already had one elsewhere (collision), check the appropriate matched-primitive registry (`vault/00-index.jsonl`, `agent-registry.yaml`, or `registry.jsonl` depending on file class) for the mismatch and fix it. This is rare but not impossible.
 - If you disagree with any auto-repair decision, raise it with the user — the steward's auto-repair scope is documented at `.tropo/system/vault-steward.template.md` and can be narrowed.
 
-**Full report:** `system/vault-steward/workspace/[YYYY-MM-DD]-health-report.md`
+**Full report:** `vault/tropo-vault-steward/workspace/[YYYY-MM-DD]-health-report.md`
 
 ---
 ```
@@ -429,13 +429,13 @@ The vault steward ran on [date] and applied auto-repair fixes inside this worksp
 **Format:**
 
 ```
-[YYYY-MM-DD HH:MM] vault-steward — [N] fixes applied, [M] findings reported. Agents touched: [comma-separated names]. Full report: system/vault-steward/workspace/[YYYY-MM-DD]-health-report.md
+[YYYY-MM-DD HH:MM] vault-steward — [N] fixes applied, [M] findings reported. Agents touched: [comma-separated names]. Full report: vault/tropo-vault-steward/workspace/[YYYY-MM-DD]-health-report.md
 ```
 
 **Examples:**
 
 ```
-[2026-04-05 14:32] vault-steward — 3 fixes applied, 2 findings reported. Agents touched: market-strategist, company-builder. Full report: system/vault-steward/workspace/2026-04-05-health-report.md
+[2026-04-05 14:32] vault-steward — 3 fixes applied, 2 findings reported. Agents touched: market-strategist, company-builder. Full report: vault/tropo-vault-steward/workspace/2026-04-05-health-report.md
 ```
 
 ```
@@ -443,7 +443,7 @@ The vault steward ran on [date] and applied auto-repair fixes inside this worksp
 ```
 
 ```
-[2026-04-05 14:32] vault-steward — 7 fixes applied, 1 finding reported. Agents touched: none (vault-root fixes only). Full report: system/vault-steward/workspace/2026-04-05-health-report.md
+[2026-04-05 14:32] vault-steward — 7 fixes applied, 1 finding reported. Agents touched: none (vault-root fixes only). Full report: vault/tropo-vault-steward/workspace/2026-04-05-health-report.md
 ```
 
 **Edge cases:**
@@ -466,7 +466,7 @@ The vault steward ran on [date] and applied auto-repair fixes inside this worksp
 
 ## Instance Convention
 
-The steward instance lives at `system/vault-steward/activate.md` and inherits from this template. Its workspace at `system/vault-steward/workspace/` stores health reports.
+The steward instance lives at `vault/tropo-vault-steward/activate.md` and inherits from this template. Its workspace at `vault/tropo-vault-steward/workspace/` stores health reports.
 
 ---
 

@@ -17,9 +17,11 @@ import sys, os, json, re, argparse
 from pathlib import Path
 
 # Files/dirs every Tropo release must contain for a stranger to cold-boot.
+# H1 (258f5aa6): CLAUDE.md + .tropo/concierge/activate.md added per gate-4 gauntlet finding.
 REQUIRED = [
-    "AGENTS.md", "README.md", "START-TROPO.md", "CAPSULE.md",
-    ".tropo/version.md", ".tropo/orientation.md", ".tropo/capsules", ".tropo/playbooks",
+    "AGENTS.md", "README.md", "START-TROPO.md", "CAPSULE.md", "CLAUDE.md",
+    ".tropo/version.md", ".tropo/orientation.md", ".tropo/playbooks",
+    ".tropo/concierge/activate.md",
     "vault/00-index.jsonl",
 ]
 PRIVATE_SCOPES = ("argo-private", "reference-only")  # must NEVER ship
@@ -55,8 +57,10 @@ def run_checks(root: Path):
                     uids.add(d["uid"])
             except Exception:
                 bad += 1
-        results.append(_check("index parses (every row valid JSON + uid/type)", bad == 0,
-                              f"{rows} rows, {bad} malformed"))
+        # (E) v0.1 fix: rows>0 guard — empty file gives rows=0,bad=0 which was PASS before
+        ok = bad == 0 and rows > 0
+        results.append(_check("index parses (every row valid JSON + uid/type)", ok,
+                              f"{rows} rows, {bad} malformed" if rows > 0 else "EMPTY — index has 0 rows"))
     else:
         results.append(_check("index parses", False, "00-index.jsonl absent"))
 
@@ -72,11 +76,24 @@ def run_checks(root: Path):
         m2 = re.search(r'v?(\d+\.\d+\.\d+)', raw)
         if m2:
             ver = "v" + m2.group(1)
-    results.append(_check("version stamped", bool(ver), f"version = {ver or '(unparseable)'}"))
+    # (F) v0.1 fix: value floor — v0.0.0 matches the shape regex but is not a real release version
+    ver_ok = bool(ver) and ver != "v0.0.0"
+    results.append(_check("version stamped", ver_ok, f"version = {ver or '(unparseable)'}"))
 
-    # 4. Capsules present (the type system ships)
-    caps = list((root / ".tropo" / "capsules").glob("*.capsule.md")) if (root / ".tropo" / "capsules").is_dir() else []
-    results.append(_check("capsule definitions ship", len(caps) > 0, f"{len(caps)} capsules"))
+    # 4. Capsules present — the type system ships (v1.60+ path: vault/files/ as type:capsule-definition)
+    # Pre-v1.60: capsules lived at .tropo/capsules/*.capsule.md (kernel copy).
+    # Post-v1.60 migration: capsules are vault entries (extraction_scope:ship) landing in vault/files/<uid>.md.
+    vfiles_dir = root / "vault" / "files"
+    caps = []
+    if vfiles_dir.is_dir():
+        for p in vfiles_dir.glob("*.md"):
+            if p.stat().st_size == 0:
+                continue
+            head = p.read_bytes()[:500].decode("utf-8", errors="replace")
+            if "type: capsule-definition" in head:
+                caps.append(p)
+    results.append(_check("capsule definitions ship", len(caps) > 0,
+                          f"{len(caps)} capsule-definition entries in vault/files"))
 
     # 5. Manifest present
     results.append(_check("MANIFEST present", (root / "MANIFEST.md").is_file(),
@@ -95,7 +112,43 @@ def run_checks(root: Path):
     results.append(_check("no private/reference-only content leaked", not leaks,
                           "clean" if not leaks else f"LEAKED: {leaks[:5]}{'…' if len(leaks) > 5 else ''}"))
 
-    return results, {"index_rows": rows, "uids": len(uids), "version": ver, "capsules": len(caps)}
+    # 7. (G) v0.1 fix: .tropo/playbooks/*.md count>0 — dir-exists was PASS even with 0 playbooks
+    playbooks_dir = root / ".tropo" / "playbooks"
+    playbooks = list(playbooks_dir.glob("*.md")) if playbooks_dir.is_dir() else []
+    results.append(_check(".tropo/playbooks has at least one .md playbook", len(playbooks) > 0,
+                          f"{len(playbooks)} playbooks" if playbooks else "EMPTY — no .md files in .tropo/playbooks/"))
+
+    # 8. H2 (258f5aa6) — START-TROPO.md is non-empty (has ≥ 1 non-blank line)
+    st = root / "START-TROPO.md"
+    st_lines = [ln for ln in st.read_text().splitlines() if ln.strip()] if st.is_file() else []
+    results.append(_check("START-TROPO.md non-empty", len(st_lines) > 0,
+                          f"{len(st_lines)} non-blank lines" if st_lines else "empty or absent"))
+
+    # 8. H3 (258f5aa6) + (H3) v0.1 fix: size>0 — a 0-byte validator placeholder was presence-PASS before
+    validator = root / "vault" / "tools" / "tropo-validate.py"
+    val_ok = validator.is_file() and validator.stat().st_size > 0
+    val_detail = (f"present ({validator.stat().st_size} bytes)" if val_ok
+                  else ("ABSENT" if not validator.is_file() else "EMPTY (0 bytes) — not a real validator"))
+    results.append(_check("tropo-validate.py present and non-empty", val_ok, val_detail))
+
+    # 9. H4 (258f5aa6) — golden-output snapshot (compare if expected-checks.json exists, else skip)
+    snapshot_f = root / "expected-checks.json"
+    if snapshot_f.is_file():
+        try:
+            expected = json.loads(snapshot_f.read_text())
+            actual_names = [r["check"] for r in results]
+            missing = [n for n in expected if n not in actual_names]
+            extra = [n for n in actual_names if n not in expected]
+            ok = not missing and not extra
+            detail = "matches snapshot" if ok else f"missing={missing[:3]} extra={extra[:3]}"
+            results.append(_check("golden-output snapshot match", ok, detail))
+        except Exception as e:
+            results.append(_check("golden-output snapshot match", False, f"snapshot parse error: {e}"))
+    else:
+        results.append(_check("golden-output snapshot (not seeded — skip)", True,
+                              "no expected-checks.json; seed with check names to activate"))
+
+    return results, {"index_rows": rows, "uids": len(uids), "version": ver, "capsule_defs": len(caps)}
 
 
 def write_report(root: Path, results, stats, mode="mechanical"):

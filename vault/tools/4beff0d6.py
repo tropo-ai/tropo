@@ -57,6 +57,7 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
 
 import yaml
 
@@ -71,6 +72,14 @@ PUBLISH_TARGETS_DIR = os.path.join(_SCRIPTS_DIR, 'publish_targets')
 # Make lib/ importable (sibling of this script)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
+
+# 796d9330 (ADR-050) chokepoint: delegate to the canonical collision-checked minter.
+import importlib.util as _ilu_4be
+_mint_spec_4be = _ilu_4be.spec_from_file_location(
+    '_mint_id_canonical_4be', Path(__file__).resolve().parent / 'tropo-mint-id.py'
+)
+_mint_mod_4be = _ilu_4be.module_from_spec(_mint_spec_4be)
+_mint_spec_4be.loader.exec_module(_mint_mod_4be)
 
 # Shared rule logic per c5a7e391 §13.3 DRY-refactor (R1 paired-walk P1 absorption 2026-05-22)
 from lib.article_readiness import (
@@ -388,7 +397,6 @@ def _create_wrapper(source_uid: str, source_fm: dict, target: str, category_uid:
     publishing draft articles by composing wrapper-auto-author + vault rebuild + publish.py.
     Per c5a7e391 §13.3 P4 spec verbatim: "when source has subtype:article + published_at."
     """
-    import secrets
     from datetime import date
 
     # Source-readiness gate (P0 absorption from R1 paired-walk 2026-05-22)
@@ -415,7 +423,8 @@ def _create_wrapper(source_uid: str, source_fm: dict, target: str, category_uid:
         print(f'  Re-run with --force to skip the interactive confirm in non-tty contexts (CI, pipelines, etc.).')
         return None
 
-    new_uid = secrets.token_hex(4)
+    # 796d9330 (ADR-050) chokepoint: route through the canonical minter.
+    new_uid = _mint_mod_4be.mint(1)[0]
     title = source_fm.get('title', '(no title)')
     wrapper_path = os.path.join(VAULT_FILES, f'{new_uid}.md')
     today = date.today().isoformat()
@@ -636,7 +645,7 @@ def main() -> int:
 
         # No --create-wrapper: print scaffold + exit 3
         import secrets
-        suggested_uid = secrets.token_hex(4)
+        suggested_uid = secrets.token_hex(4)  # noqa: mint-id-chokepoint-deferred (796d9330 triage: printed scaffold suggestion, advisory/low-priority, out of scope)
         _print_wrapper_scaffold(source_uid, target_for_action, suggested_uid)
         return 3
 
@@ -685,9 +694,9 @@ def main() -> int:
         print(_ok(f'READY — article {source_uid} can publish'))
         if pipeline_uid:
             print(f'\nTo publish (your specific pipeline UID resolved):')
-            print(f'  python3 .tropo/scripts/publish.py {pipeline_uid}')
+            print(f'  python3 vault/tools/2e642578.py {pipeline_uid}')
             print(f'\nDry-run first (recommended):')
-            print(f'  python3 .tropo/scripts/publish.py {pipeline_uid} --dry-run')
+            print(f'  python3 vault/tools/2e642578.py {pipeline_uid} --dry-run')
         else:
             print(f'\nNo matching publish-pipeline.md definition found for the wrapper\'s manifest_root.')
             print(f'Author one or check vault/00-index.jsonl for `type:publish-pipeline` entries.')

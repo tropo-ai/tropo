@@ -1,12 +1,16 @@
 ---
 uid: 213eec51
-title: "Agent Operating Principles"
+title: Agent Operating Principles
 type: document
 status: published
 owner: vault-admin
-created: "[date on first edit]"
-modified: "[date on first edit]"
-tags: [governance, core, boot-required, all-agents]
+created: '[date on first edit]'
+modified: '[date on first edit]'
+tags:
+  - governance
+  - core
+  - boot-required
+  - all-agents
 tier: vault
 ---
 
@@ -123,7 +127,7 @@ See `directives/example.directive.md` (the Meta-Feedback Loop directive shipped 
 **The rule:** every removal of governed substrate goes through the canonical soft-delete gesture:
 
 ```
-python3 .tropo/scripts/tropo-recycle.py <uid> [<uid> ...] --reason "<rationale>"
+python3 vault/tools/tropo-recycle.py <uid> [<uid> ...] --reason "<rationale>"
 ```
 
 Never reach for `rm`. The discipline is the **process**, not the **outcome** — even when the deletion has been approved, even when the file is archived or superseded, even when the content is recoverable from git history.

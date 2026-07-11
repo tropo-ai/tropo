@@ -2,11 +2,11 @@
 uid: 7a1ca900
 lifecycle: standing
 type: document
-title: "Tropo Capabilities"
-description: "The capability matrix — what Tropo does, organized by 7 subsystems (6 v1.7-anchored + Documentation NEW v1.8). L1 shipped + L2/L3 futures (Tropo-built + ecosystem). Anchor document for first-contact readers."
+title: Tropo Capabilities
+description: The capability matrix — what Tropo does, organized by 7 subsystems (6 v1.7-anchored + Documentation NEW v1.8). L1 shipped + L2/L3 futures (Tropo-built + ecosystem). Anchor document for first-contact readers.
 stage: specify
 state: active
-status: locked
+status: published
 owner: argus
 priority: p0
 created: 2026-04-20
@@ -16,17 +16,29 @@ modified_by: argus-a31
 locked_by: argus-a31
 locked_at: 2026-04-21
 supersedes: c41a5bf0
-member_of: [aae9a37b, d1aa6e47, 17e70a00]
-tags: [capability-matrix, subsystems, documentation, anchor, architecture, verification-first, v1.3, locked, p0]
+member_of:
+  - aae9a37b
+  - d1aa6e47
+  - 17e70a00
+tags:
+  - capability-matrix
+  - subsystems
+  - documentation
+  - anchor
+  - architecture
+  - verification-first
+  - v1.3
+  - locked
+  - p0
 file_ext: md
 schema_version: 2
 extraction_scope: ship
 refs:
- - aae9a37b # tropo-subsystems root
- - c41a5bf0 # Matrix v0.1 first-cut (superseded by this v1.0)
- - a7c4e5b2 # ADR-035 Declared-Presence — Governance anchor
- - e6c3f410 # ADR-032 Three-Layer Boot — Agents anchor
- - 74fd9b61 # Board Reconciliation v0.3 — Rendering anchor
+  - aae9a37b
+  - c41a5bf0
+  - a7c4e5b2
+  - e6c3f410
+  - 74fd9b61
 ---
 
 # Tropo Capabilities
@@ -165,7 +177,7 @@ Each subsystem links to a hub that hosts its living history — what's shipped, 
 | 5. Rendering | [Rendering hub (dbc1cbbf)](vault/files/dbc1cbbf.md) *(renamed from TLGS in v1.3; reframed from layered-graph to render-engine)* | Board-definitions + board-snapshots + prose query vocabulary + render engine + synthesizer |
 | 6. Governance | [Governance hub (8dd772a0)](vault/files/8dd772a0.md) *(renamed from TVS in v1.3)* | ADRs + operating principles + verification instruments + three-instrument discipline |
 
-All hubs govern by [subsystem-hub.capsule v1.1 (8a4e21c5)](.tropo/capsules/subsystem-hub.capsule.md).
+All hubs govern by [subsystem-hub.capsule v1.1 (8a4e21c5)](vault/capsules/tropo-subsystem-hub.capsule.md).
 
 ---
 

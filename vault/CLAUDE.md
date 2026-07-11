@@ -1,6 +1,6 @@
 ---
-member_of:
-  - "2d083137"   # tropo-work (v1.12 backfill 2026-05-08 — vault/CLAUDE.md is the work-domain folder Claude Code pointer)
+subsystem_hub:
+  - 2d083137
 ---
 
 # vault/ — The Vault (protected governed-content storage)

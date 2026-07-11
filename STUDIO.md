@@ -37,9 +37,9 @@ Key locations in this vault:
 | Operations channel | `channels/ops.md` |
 | Agent home | `agents/` |
 | Knowledge base | `vault/files/` (typed `kb-article`; navigable via subsystem hub member lists, primary `f87e33f0` Tropo Documentation) |
-| Templates | `.tropo/templates/` |
+| Templates | `vault/templates/` |
 | Playbooks | `.tropo/playbooks/` |
-| Vault steward | `system/vault-steward/` |
+| Vault steward | `vault/tropo-vault-steward/` |
 | Pending updates | `system/updates/pending/` |
 | Work management | `vault/` — see `vault/files/60228176.md` |
 
@@ -130,7 +130,7 @@ If you have been here before, check `agents/visitors/` for your registration rec
 - **Need to create an agent?** Ask the concierge or read `vault/files/6f675456.md`.
 - **Need to run a playbook?** Read `vault/files/2b5a3dd5.md`.
 - **Need a health check?** Ask the concierge to activate the vault steward.
-- **Something broken?** Check `channels/ops.md` for recent activity and `system/vault-steward/workspace/` for the latest health report.
+- **Something broken?** Check `channels/ops.md` for recent activity and `vault/tropo-vault-steward/workspace/` for the latest health report.
 
 ---
 

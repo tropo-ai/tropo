@@ -9,17 +9,17 @@ owner: metis
 created: 2026-04-12
 modified: '2026-06-11'
 tags:
-- release
-- schema
-- folder-structure
-- build-contract
-- canonical
+  - release
+  - schema
+  - folder-structure
+  - build-contract
+  - canonical
 file_ext: md
 schema_version: 2
 extraction_scope: argo-reference
 scope: ship
 member_of:
-- 809ca265
+  - 809ca265
 created_by: metis-g40
 archived_at: '2026-06-11'
 archived_by: metis-g77
@@ -29,23 +29,10 @@ modified_by: metis-g77
 # Tropo-OS Release Folder Structure Schema
 
 <!-- nav-block:start -->
-**📍 Vault Path:** [tropo-work](b8e5f3a2.md) → [legacy-work-pipeline (deprecated 2026...](020274e0.md) → [4-build](a93faa83.md) → [3-active](a5f7a762.md) → [Tropo Work — The First App on Tropo-OS](809ca265.md) → **Tropo-OS Release Folder Structure Schema**
-
-**🌳 Tropo-Nav Path** (VS Code): [../../00-tropo-nav/00-tropo-all/tropo-work/legacy-work-pipeline (deprecated 2026-05-04)/4-build/3-active/Tropo Work — The First App on Tropo-OS/bdbe82dc — Tropo-OS Release Folder Structure Schema.md](../../00-tropo-nav/00-tropo-all/tropo-work/legacy-work-pipeline%20%28deprecated%202026-05-04%29/4-build/3-active/Tropo%20Work%20%E2%80%94%20The%20First%20App%20on%20Tropo-OS/bdbe82dc%20%E2%80%94%20Tropo-OS%20Release%20Folder%20Structure%20Schema.md)
-
-**🌳 Tropo-Nav Path** (chat): [argo-os/00-tropo-nav/00-tropo-all/tropo-work/legacy-work-pipeline (deprecated 2026-05-04)/4-build/3-active/Tropo Work — The First App on Tropo-OS/bdbe82dc — Tropo-OS Release Folder Structure Schema.md](argo-os/00-tropo-nav/00-tropo-all/tropo-work/legacy-work-pipeline%20%28deprecated%202026-05-04%29/4-build/3-active/Tropo%20Work%20%E2%80%94%20The%20First%20App%20on%20Tropo-OS/bdbe82dc%20%E2%80%94%20Tropo-OS%20Release%20Folder%20Structure%20Schema.md)
+**📍 Vault Path:** [809ca265](809ca265.md) → **Tropo-OS Release Folder Structure Schema**
 
 **🔗 This file** — UID `bdbe82dc` · type `document` · state `archived` · status `published`
-
-**↔ Siblings (35):**
-  - **under [Tropo Work — The First App on Tropo-OS](809ca265.md):** [Add Outcome section to task capsule spec](1cffea32.md) · [Agent identity integration design](77d03e3d.md) · [Agent Identity Patterns — Research Report](f06be862.md) · [All tasks belong to one or more projects — 'no ...](d7da9885.md) · [Architecture spec v0.2 — incorporate research +...](c7a73c66.md) · [Capsule definition format v1](25b67be6.md) · + 29 more
 <!-- nav-block:end -->
-
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Member of | [Tropo Work — The First App on Tropo-OS (809ca265)](809ca265.md) |
 
 *What does a stranger get when they unzip tropo-os? This document defines it.*
 *This is the contract between the build script and the cold-boot test. If it's not in this schema, it doesn't ship. If it IS in this schema, the build must produce it and the cold-boot must find it.*

@@ -49,7 +49,7 @@ v1.43.0 Stream D deliverable per brief [c47b9d82](../../vault/files/c47b9d82.md)
 Authored 2026-05-18 by argus-a72 under Mike-A72 captain-mode authorization.
 
 Usage:
-    python3 .tropo/scripts/build-web-content.py [--output-dir PATH] [--dry-run] [--verbose]
+    python3 vault/tools/11f3ebd4.py [--output-dir PATH] [--dry-run] [--verbose]
 
 Default --output-dir: ../tropo-ai-website-content/ (sibling-to-platform-repo convention;
 the actual repo path is established by Talos web-deploy-3 operational lane post-v1.43 ship).
@@ -90,7 +90,7 @@ from lib.ship_extract.output_writer import write_content
 VAULT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PLATFORM_ROOT = os.path.dirname(VAULT_ROOT)
 INDEX_PATH = os.path.join(VAULT_ROOT, 'vault', '00-index.jsonl')
-CAPSULE_PATH = os.path.join(VAULT_ROOT, '.tropo', 'capsules', 'ship-artifact.capsule.md')
+CAPSULE_PATH = os.path.join(VAULT_ROOT, 'vault', 'capsules', 'tropo-ship-artifact.capsule.md')  # ADR-045: moved from .tropo/capsules/ (v1.21.0)
 
 # Default output: tropo-ai-website-content repo working copy (sibling to platform repo)
 DEFAULT_OUTPUT_DIR = os.path.join(os.path.dirname(PLATFORM_ROOT), 'tropo-ai-website-content')

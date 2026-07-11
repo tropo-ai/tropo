@@ -44,7 +44,7 @@ pipeline-runtime.py writes its own pipeline-run entry at v2.0-shape with
 substrate_authored_by: linking field (type:pipeline-run).
 
 Usage:
-    python3 .tropo/scripts/pipeline-runtime.py \\
+    python3 vault/tools/9e7003b1.py \\
         --activation-uid <8-hex> \\
         [--action <verb>] \\
         [action-specific args]
@@ -127,13 +127,13 @@ def now_iso() -> str:
 
 
 # ---------------------- UID minting (f9751636 chokepoint) ----------------------
-# Delegate to the canonical collision-checked minter at vault/tools/5187be30.py.
-# importlib required because the module name starts with a digit.
+# Delegate to the canonical collision-checked minter at vault/tools/tropo-mint-id.py.
+# importlib required because the module name contains hyphens.
 
 import importlib.util as _ilu
 _mint_spec = _ilu.spec_from_file_location(
     "_mint_uid_canonical",
-    Path(__file__).resolve().parent / "5187be30.py"
+    Path(__file__).resolve().parent / "tropo-mint-id.py"
 )
 _mint_mod = _ilu.module_from_spec(_mint_spec)
 _mint_spec.loader.exec_module(_mint_mod)
@@ -144,15 +144,13 @@ def load_existing_uids() -> set:
 
 
 def mint_uid(existing: set) -> str:
-    # Delegates to the canonical minter's collision universe (disk) merged with the
-    # caller's accumulated session set (UIDs minted but not yet written to disk).
-    existing_with_session = _mint_mod.load_existing_uids() | existing
-    for _ in range(64):
-        candidate = secrets.token_hex(4)
-        if candidate not in existing_with_session:
-            existing.add(candidate)
-            return candidate
-    return secrets.token_hex(8)  # fallback (original behavior)
+    # 796d9330 (ADR-050): delegate to the canonical mint() rather than reimplementing
+    # the collision loop; extra_existing merges this caller's session-accumulated set.
+    # Improvement over the prior behavior: mint() raises loudly on a collision storm
+    # instead of silently falling back to an un-checked wider token_hex(8).
+    minted = _mint_mod.mint(1, extra_existing=existing)[0]
+    existing.add(minted)
+    return minted
 
 
 def mint_span_id() -> str:
@@ -482,12 +480,38 @@ def derive_state(events: list[dict]) -> dict:
     return state
 
 
+def _get_or_create_run_nonce(run_folder: Path) -> str:
+    """Read the run's bootstrap secret nonce from an existing run.state.json, or mint one.
+
+    S9 round-2 fix (v1.80 addendum, f417a577): the nonce is generated with os.urandom
+    (not derivable from run_uid/work-shape/timestamps), written into run.state.json's
+    `run_nonce` field ONCE — at whichever write is first to touch this folder (i.e.
+    bootstrap) — and preserved verbatim by every subsequent write. It is never rewritten
+    once present, and it is never included in the minted key (see release_authorization.py).
+    """
+    state_path = run_folder / "run.state.json"
+    if state_path.is_file():
+        try:
+            existing = json.loads(state_path.read_text())
+        except Exception:
+            existing = {}
+        nonce = existing.get("run_nonce")
+        if nonce:
+            return str(nonce)
+    return os.urandom(16).hex()
+
+
 def write_run_state_json(run_folder: Path, pipeline_run_entry: dict, state: dict, activation_uid: str) -> None:
-    """Overwrite run.state.json with current derived state (§6)."""
+    """Overwrite run.state.json with current derived state (§6).
+
+    Carries forward (or mints, on the first/bootstrap write) the per-run `run_nonce` secret
+    used by release_authorization.py's S9 fingerprint binding — see _get_or_create_run_nonce.
+    """
     fm = pipeline_run_entry
     obj = {
         "schema_version": SCHEMA_VERSION,
         "pipeline_run_uid": fm.get("uid"),
+        "run_nonce": _get_or_create_run_nonce(run_folder),
         "activation_uid": activation_uid,
         "substrate_authored_by": fm.get("substrate_authored_by"),
         "pipeline_uid": fm.get("pipeline"),
@@ -651,6 +675,68 @@ def resolve_uid_ref(ref: str, context: dict) -> str | None:
     return context.get(ref)
 
 
+# ---------------------- branch-applicability fix (event 00005650, Talos 2026-07-05) ----------------------
+#
+# B3-ext close-ceremony defect: step 9d4f7e21 ("update-subsystem-canonical-docs") declares
+# exit_criteria `dev_spec.triggered_doc_spec_uids == []` — a literal "no doc-leg was
+# triggered" assertion. That's correct for cycles with NO doc leg, but v1.77's dev-spec
+# (ba454e56) legitimately triggered a doc leg (triggered_doc_spec_uids: [06552e01]) that
+# ran to completion (06552e01 status:archived; its doc-activation 8dafc72e retired). The
+# recompute (action_complete_workflow's B3-ext loop, and verify-step) evaluated the
+# literal `== []` check against that substrate and failed a cycle that had, in fact,
+# satisfied the step's real intent (the cycle's doc-artifact obligation is discharged).
+#
+# Diagnosis: this is a recompute branch-applicability gap, not a criterion-authoring
+# error. `triggered_doc_spec_uids == []` / `triggered_test_spec_uids == []` are really
+# shorthand for "this cycle has no outstanding doc/test-leg obligation" — which is true
+# either when no leg was ever triggered (list empty) OR when a triggered leg ran to a
+# terminal (done/archived) state. The DSL had no way to express the second branch, so
+# every consumer of this shape (today: only 9d4f7e21, but the field names are generic
+# and reused by future steps) was blindly failing the moment a cycle legitimately used
+# the three-pipeline coupling trigger.
+#
+# Fix scope (Talos's call, not just a 9d4f7e21 special-case): generalize inside
+# evaluate_criterion for BOTH triggered_doc_spec_uids and triggered_test_spec_uids —
+# any current or future `== []` criterion against these two fields becomes branch-aware.
+# This closes the class engine-wide without inventing a new DSL operator or touching the
+# step's authored criterion text. A FULLER fix — every recompute-class criterion
+# declaring its own branch-applicability as first-class schema, so authors don't rely on
+# the engine special-casing specific field names — is a bigger DSL/capsule-grammar
+# decision than this ticket's scope; flagged to Argus as a systemic-fix question
+# alongside this patch (see Talos's reply on event 00005650).
+_TRIGGERED_LEG_FIELDS = frozenset({"triggered_doc_spec_uids", "triggered_test_spec_uids"})
+_LEG_TERMINAL_STATUSES = frozenset({"done", "archived"})
+
+
+def _evaluate_triggered_leg_criterion(criterion: str, field: str, actual, target: str) -> dict:
+    """Branch-aware evaluation of `<ref>.<triggered_*_spec_uids> == []`.
+
+    NO-LEG branch (actual empty): passes as before — nothing was triggered, nothing owed.
+    LEG-TRIGGERED branch (actual non-empty): passes iff every triggered spec UID resolves
+    to a vault entry whose status is terminal (done/archived) — i.e. the leg ran to a real
+    completion, not merely "still open" or "triggered and abandoned".
+    """
+    if not actual:
+        return {"criterion": criterion, "verdict": "pass",
+                "rationale": f"{field}=[] (no leg triggered — no-leg branch satisfied)",
+                "substrate_state_at_check": f"{target}.{field}"}
+    pending = []
+    for spec_uid in actual:
+        spec_entry = read_vault_entry(str(spec_uid))
+        spec_status = spec_entry["frontmatter"].get("status") if spec_entry else None
+        if spec_status not in _LEG_TERMINAL_STATUSES:
+            pending.append({"uid": spec_uid, "status": spec_status})
+    if pending:
+        return {"criterion": criterion, "verdict": "fail",
+                "rationale": f"{field}={list(actual)!r} — leg triggered but not cleanly complete: {pending} "
+                             f"(needs status in {sorted(_LEG_TERMINAL_STATUSES)})",
+                "substrate_state_at_check": f"{target}.{field}"}
+    return {"criterion": criterion, "verdict": "pass",
+            "rationale": f"{field}={list(actual)!r} — leg(s) triggered and all resolved to a terminal "
+                         f"status ({sorted(_LEG_TERMINAL_STATUSES)}); leg-completed branch satisfied",
+            "substrate_state_at_check": f"{target}.{field}"}
+
+
 def evaluate_criterion(
     criterion: str,
     context_uids: dict,
@@ -747,6 +833,17 @@ def evaluate_criterion(
                 "rationale": f"DSL parse failure: {e}", "substrate_state_at_check": None}
     if kind == "file_exists":
         path = args["path"]
+        # §10 DSL rider (Talos 2026-07-04, 4f87d056): {handle} substitution for file:
+        # criterion paths — the SAME token syntax action_step_complete/action_verify_step
+        # already use for verification_command (see build_run_context_uids call sites),
+        # applied to the second call site that lacked it. Needed for per-run-instantiated
+        # artifact paths (e.g. a per-activation plan substrate file) that a shared step
+        # TEMPLATE cannot hardcode a literal UID into. Unresolved tokens are left as-is
+        # (so an author typo surfaces as a "missing" file, not a silent wildcard).
+        if "{" in path:
+            for _h, _v in context_uids.items():
+                if _v:
+                    path = path.replace("{" + _h + "}", str(_v))
         abs_path = (VAULT_ROOT / path) if not path.startswith("/") else Path(path)
         ok = abs_path.is_file()
         return {"criterion": criterion, "verdict": "pass" if ok else "fail",
@@ -770,6 +867,8 @@ def evaluate_criterion(
     fm = entry["frontmatter"]
     if kind == "field_equals":
         actual = fm.get(args["field"])
+        if args["field"] in _TRIGGERED_LEG_FIELDS and args["value"] == "[]":
+            return _evaluate_triggered_leg_criterion(criterion, args["field"], actual, target)
         ok = str(actual) == args["value"] or actual == args["value"]
         return {"criterion": criterion, "verdict": "pass" if ok else "fail",
                 "rationale": f"{args['field']}={actual!r} (expected {args['value']!r})",
@@ -822,19 +921,45 @@ def find_pipeline_run_for(activation_uid: str) -> dict | None:
     return None
 
 
+# Canonical pipeline-definition UIDs (§10 DSL rider, Talos 2026-07-04): doc-pipeline
+# and test-pipeline are each a single shared template reused by every triggered
+# activation, so their pipeline_uid is stable and safe to special-case below.
+_TEST_PIPELINE_UID = "da3f50dc"
+_DOC_PIPELINE_UID = "5a4337ff"
+
+
 def build_run_context_uids(pipeline_run_entry: dict, activation_uid: str) -> dict:
     """Build context-uid map for DSL resolution (§10).
 
     Named handles available to exit_criteria DSL authors:
       activation          — the activation entry UID
-      pipeline            — the pipeline definition UID
-      activation_root     — the activation root project UID (first member of pipeline-run)
-      dev_spec            — dev_spec_uid from activation frontmatter (dev-pipeline only)
-      triggered_doc_spec  — first triggered doc-spec UID (from dev-spec frontmatter)
-      triggered_test_spec — first triggered test-spec UID (from dev-spec frontmatter)
+      pipeline             — the pipeline definition UID
+      activation_root      — the activation root project UID (first member of pipeline-run)
+      dev_spec             — dev_spec_uid from activation frontmatter (dev-pipeline only)
+      triggered_doc_spec   — first triggered doc-spec UID (from dev-spec frontmatter)
+      triggered_test_spec  — first triggered test-spec UID (from dev-spec frontmatter)
       triggered_doc_activation  — first triggered doc-pipeline activation UID
       triggered_test_activation — first triggered test-pipeline activation UID
+
+      test_spec            — (test-pipeline activations ONLY) this run's OWN test-spec UID
+      doc_spec             — (doc-pipeline activations ONLY) this run's OWN doc-spec UID
+      triggering_dev_spec  — (test/doc-pipeline activations ONLY) the dev-spec that triggered
+                             this cascade — the "reverse" of dev_spec, read from the SAME
+                             pipeline_uid/activation_root/dev-cycle chain described below.
     Plus any literal 8-hex UID resolves directly.
+
+    §10 DSL rider fix (Talos 2026-07-04, 4f87d056/0fa72100): a doc/test-pipeline's OWN
+    activation has no `dev_spec_uid` of its own (that field only exists on the triggering
+    DEV activation) — so without this branch, a test-pipeline step's exit_criteria could
+    never resolve a handle for "my own test-spec" at all; resolve_uid_ref would return
+    None for every non-literal ref regardless of what the criterion author intended.
+    Reverse-resolve via the SAME forward edge the dev-side branch above already walks:
+    parse the triggering dev-cycle (activation) UID out of `cycle_context`
+    ("triggered-by-dev-cycle:<uid>"), read ITS dev_spec_uid, then read that dev-spec's
+    own triggered_test_spec_uids/triggered_doc_spec_uids (already pre-populated at
+    trigger-step time — see action_trigger_step) — the first entry is this run's own
+    spec. This is read-only reverse traversal of edges the engine already writes; it
+    does not add a new field or a new criterion SHAPE, only a new context HANDLE.
     """
     fm = pipeline_run_entry["frontmatter"] if "frontmatter" in pipeline_run_entry else pipeline_run_entry
     ctx: dict = {"activation": activation_uid, "pipeline": fm.get("pipeline")}
@@ -864,6 +989,45 @@ def build_run_context_uids(pipeline_run_entry: dict, activation_uid: str) -> dic
                     ctx["triggered_doc_activation"] = doc_acts[0]
                 if test_acts:
                     ctx["triggered_test_activation"] = test_acts[0]
+        else:
+            # This activation IS the triggered doc/test-pipeline run — reverse-resolve
+            # its own spec handle + the triggering dev-spec handle (see docstring).
+            cycle_context = str(afm.get("cycle_context") or "")
+            m = re.search(r"triggered-by-dev-cycle:([0-9a-f]{8})", cycle_context)
+            if m:
+                dev_cycle_uid = m.group(1)
+                dev_cycle_entry = read_vault_entry(dev_cycle_uid)
+                dc_dev_spec_uid = (dev_cycle_entry["frontmatter"].get("dev_spec_uid")
+                                    if dev_cycle_entry else None)
+                if dc_dev_spec_uid:
+                    dc_ds = read_vault_entry(dc_dev_spec_uid)
+                    if dc_ds:
+                        ctx["triggering_dev_spec"] = dc_dev_spec_uid
+                        dcf = dc_ds["frontmatter"]
+                        pipeline_uid = fm.get("pipeline")
+                        # d2f8a91c fix pt.2 (Talos T28, 2026-07-09): a dev-spec's
+                        # triggered_test_spec_uids/triggered_test_activation_uids grow by one
+                        # pair per re-trigger (each re-fire appends, never replaces). Blindly
+                        # taking index [0] resolves to the FIRST-EVER triggered spec, not the
+                        # spec for THIS activation's own re-trigger — caught live: mount-gate's
+                        # 3rd re-trigger (activation b1c3847c, spec 50ce4b13) had its 047c147c
+                        # exit_criteria evaluate against ac6e3792 (the original spec from weeks
+                        # earlier), reading stale closed_at/acceptance_evidence/stage. Match the
+                        # CURRENT activation_uid's own index in the paired activation-uids array
+                        # instead; fall back to [0] only if the pairing can't be found (e.g. an
+                        # older dev-spec authored before the activation-uids array existed).
+                        if pipeline_uid == _TEST_PIPELINE_UID:
+                            test_specs = dcf.get("triggered_test_spec_uids") or []
+                            test_acts = dcf.get("triggered_test_activation_uids") or []
+                            if test_specs:
+                                idx = test_acts.index(activation_uid) if activation_uid in test_acts else 0
+                                ctx["test_spec"] = test_specs[idx] if idx < len(test_specs) else test_specs[0]
+                        elif pipeline_uid == _DOC_PIPELINE_UID:
+                            doc_specs = dcf.get("triggered_doc_spec_uids") or []
+                            doc_acts = dcf.get("triggered_doc_activation_uids") or []
+                            if doc_specs:
+                                idx = doc_acts.index(activation_uid) if activation_uid in doc_acts else 0
+                                ctx["doc_spec"] = doc_specs[idx] if idx < len(doc_specs) else doc_specs[0]
     return ctx
 
 
@@ -981,6 +1145,8 @@ def action_bootstrap(activation_uid: str, contract_input_path: str | None, dry_r
     }
 
     if dry_run:
+        print(f"[DRY-RUN] bootstrap: would lock contract for activation {activation_uid!r} "
+              f"({len(steps_locked)} steps) — no writes performed", file=sys.stderr)
         print(json.dumps({"dry_run": True, "contract": contract}, indent=2), file=sys.stdout)
         return ""
 
@@ -1242,7 +1408,7 @@ def collect_contract_responses(contract_input_path: str | None, steps_locked: li
 # ---------------------- shared bootstrap state ----------------------
 
 def _auto_heal_stale_def(
-    pr: dict, run_folder: Path, events: list[dict], activation_uid: str
+    pr: dict, run_folder: Path, events: list[dict], activation_uid: str, dry_run: bool = False,
 ) -> tuple[list[dict], dict]:
     """B1 (v1.54) — auto-heal active pipeline-run whose def-snapshot is stale.
 
@@ -1257,6 +1423,15 @@ def _auto_heal_stale_def(
 
     Returns updated (events, state) tuple; no-ops if def is current or auto-heal fails.
     Self-Healing Path 1 posture: fix-on-see, no surfacing to owner.
+
+    dry_run (aaf96178 fix, Talos 2026-07-05): load_run() runs this on EVERY action
+    invocation, including previews. Pre-fix, a stale def would silently write
+    step_declared events + a pipeline-run frontmatter bump even when the caller
+    passed --dry-run to a downstream action — a second, more obscure instance of
+    the same "safety flag doesn't actually prevent the write" class the ticket was
+    filed for. When dry_run is set, this computes the same healed step set and
+    returns it as IN-MEMORY events (so the calling action's own dry-run preview is
+    accurate) but never calls append_event / write_vault_entry.
     """
     pr_fm = pr["frontmatter"]
     pipeline_uid = pr_fm.get("pipeline")
@@ -1298,6 +1473,11 @@ def _auto_heal_stale_def(
 
     if not new_steps:
         # Fingerprint changed (e.g. step removed) but no new steps to declare.
+        if dry_run:
+            print(f"[DRY-RUN] auto-heal: would update pipeline-run {pr_fm.get('uid')!r} "
+                  f"pipeline_version/pipeline_step_fingerprint ({recorded_version!r} → {current_version!r}); "
+                  f"no new steps to declare", file=sys.stderr)
+            return events, derive_state(events)
         # Update fingerprint + version record so future ticks don't re-evaluate.
         pr_fm["pipeline_version"] = current_version
         pr_fm["pipeline_step_fingerprint"] = current_fingerprint
@@ -1306,8 +1486,10 @@ def _auto_heal_stale_def(
         write_vault_entry(pr_fm["uid"], pr_fm, pr.get("body", ""))
         return events, derive_state(events)
 
-    print(f"[INFO] B1 auto-heal: def {pipeline_uid!r} updated {recorded_version!r} → {current_version!r}; "
-          f"declaring {len(new_steps)} new step(s): {new_steps}", file=sys.stderr)
+    print(f"[{'DRY-RUN' if dry_run else 'INFO'}] B1 auto-heal: def {pipeline_uid!r} updated "
+          f"{recorded_version!r} → {current_version!r}; "
+          f"{'would declare' if dry_run else 'declaring'} {len(new_steps)} new step(s): {new_steps}",
+          file=sys.stderr)
 
     # Build step declarations from current def (v3.0 schema defaults)
     contract_parent = None
@@ -1316,6 +1498,7 @@ def _auto_heal_stale_def(
             contract_parent = ev.get("span_id")
             break
 
+    new_step_data: list[tuple[str, dict]] = []
     for step_uid in new_steps:
         sfm = nodes.get(step_uid, {})
         step_data = {
@@ -1330,8 +1513,36 @@ def _auto_heal_stale_def(
             "timeout_hours": sfm.get("timeout_hours") or 24,
             "compensation_step_id": sfm.get("compensation_step_id"),
             "instructions_ref": sfm.get("instructions_ref"),
+            # Parity fix (Vela V64 diagnosis 2026-07-09, event 00006024 → 974b08ad):
+            # this auto-heal builder was constructed independently of the normal
+            # declaration path above (~L1072-1081, the v1.66 S1 fix per Argus A102
+            # design-lock + finding 7c4e9a1b) and never picked up the same two
+            # fields. Any step declared via auto-heal (a fingerprint-drift mid-run)
+            # silently lost verification_command + verdict_cwd regardless of what
+            # the step's own vault frontmatter declared — action_step_complete and
+            # action_verify_step both read decl.get("verification_command") and
+            # got None, so the declared command never ran and a vc:true step fell
+            # back to same-as-executor self-attestation. Same bug class as the one
+            # the normal path was already fixed for; the auto-heal path was simply
+            # never brought to parity.
+            "verification_command": sfm.get("verification_command"),
+            "verdict_cwd": sfm.get("verdict_cwd"),
             "auto_healed": True,  # provenance marker
         }
+        new_step_data.append((step_uid, step_data))
+
+    if dry_run:
+        # Return an in-memory preview event list (never written) so the calling
+        # action's own dry-run logic sees the healed step set.
+        preview_events = list(events)
+        for step_uid, step_data in new_step_data:
+            ev = make_event("step_declared", SCRIPT_NAME,
+                            step=step_uid, trace_id=activation_uid,
+                            parent_span_id=contract_parent, data=step_data)
+            preview_events.append(ev)
+        return preview_events, derive_state(preview_events)
+
+    for step_uid, step_data in new_step_data:
         ev = make_event("step_declared", SCRIPT_NAME,
                         step=step_uid,
                         trace_id=activation_uid,
@@ -1360,11 +1571,15 @@ def _auto_heal_stale_def(
     return updated_events, updated_state
 
 
-def load_run(activation_uid: str) -> tuple[dict, dict, Path, list[dict], dict]:
+def load_run(activation_uid: str, dry_run: bool = False) -> tuple[dict, dict, Path, list[dict], dict]:
     """Returns (activation_entry, pipeline_run_entry, run_folder, events, state).
 
     Includes B1 auto-heal: if pipeline def was amended since bootstrap, new steps
     are declared transparently before returning to the caller.
+
+    dry_run threads through to _auto_heal_stale_def (aaf96178 fix, Talos 2026-07-05):
+    every mutating action calls load_run() before its own dry-run gate, so without
+    this, a stale def would silently auto-heal-write even under --dry-run.
     """
     activation = read_vault_entry(activation_uid)
     if activation is None:
@@ -1375,7 +1590,7 @@ def load_run(activation_uid: str) -> tuple[dict, dict, Path, list[dict], dict]:
     run_folder = run_folder_for(pr["frontmatter"])
     events = read_events(run_folder)
     # B1 auto-heal: detect + reconcile stale def-snapshot silently
-    events, state = _auto_heal_stale_def(pr, run_folder, events, activation_uid)
+    events, state = _auto_heal_stale_def(pr, run_folder, events, activation_uid, dry_run=dry_run)
     return activation, pr, run_folder, events, state
 
 
@@ -1383,10 +1598,28 @@ def actor_uid_or_default(args, fallback: str) -> str:
     return getattr(args, "actor", None) or fallback
 
 
+# ---------------------- dry-run reporting (aaf96178 fix, Talos 2026-07-05) ----------------------
+
+def _dry_run_report(action: str, would_do: str) -> str:
+    """Uniform [DRY-RUN] banner for every mutating action.
+
+    Mirrors trigger-step's pre-existing pattern (the only two actions — bootstrap +
+    trigger-step — that honored --dry-run before this fix). Printed to stderr (so it
+    survives --json stdout capture) AND returned as the action's result string, so
+    both the human-readable and --json callers see the banner. Call this ONLY after
+    every validation/eligibility check that would also fire on a real run has already
+    passed — a dry-run preview must fail exactly like a real run would on a genuine
+    contract violation; it should only diverge at the write.
+    """
+    banner = f"[DRY-RUN] {action}: {would_do} — no writes performed"
+    print(banner, file=sys.stderr)
+    return banner
+
+
 # ---------------------- per-action handlers ----------------------
 
-def action_step_start(activation_uid: str, step_uid: str, actor: str) -> str:
-    activation, pr, run_folder, events, state = load_run(activation_uid)
+def action_step_start(activation_uid: str, step_uid: str, actor: str, dry_run: bool = False) -> str:
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     decls = get_step_declarations(events)
     if step_uid not in decls:
         raise ValidationError(f"step {step_uid!r} not in activation contract")
@@ -1396,6 +1629,10 @@ def action_step_start(activation_uid: str, step_uid: str, actor: str) -> str:
             f"step {step_uid!r} not eligible (status={state['step_status'].get(step_uid)!r}; "
             f"deps not satisfied or already started)")
     decl = decls[step_uid]
+    if dry_run:
+        if decl.get("trust_level") == "approval-required" and step_uid not in state.get("pause_resumed_pending", set()):
+            return _dry_run_report("step-start", f"would emit pause_started for {step_uid!r} (approval-required)")
+        return _dry_run_report("step-start", f"would emit step_started for {step_uid!r}")
     # v1.46.0.1 fix (V48 finding 2026-05-20): approval-required steps gate on
     # pause_resumed_pending. First step-start invocation writes pause_started;
     # after pause_resumed clears the gate, the next step-start fires step_started.
@@ -1417,8 +1654,8 @@ def action_step_start(activation_uid: str, step_uid: str, actor: str) -> str:
 
 
 def action_step_complete(activation_uid: str, step_uid: str, artifact_links: list[str], actor: str,
-                          natural_verdict: str | None = None) -> str:
-    activation, pr, run_folder, events, state = load_run(activation_uid)
+                          natural_verdict: str | None = None, dry_run: bool = False) -> str:
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     if state["step_status"].get(step_uid) != "started":
         raise ContractError(f"step {step_uid!r} not in 'started' status (got {state['step_status'].get(step_uid)!r})")
     parent = find_event_span(events, "step_started", step_uid)
@@ -1445,6 +1682,18 @@ def action_step_complete(activation_uid: str, step_uid: str, artifact_links: lis
             f"verification_receipt, or accepted human_signoff. "
             f"(v1.66 S1 state-machine fix (a); ed04d931)"
         )
+    if dry_run:
+        # Never execute verification_command / behavior scripts under --dry-run: they
+        # are arbitrary declared commands whose exit code IS the verdict for some steps,
+        # but for others the "verification" command may BE the step's own executor with
+        # real substrate side effects. A preview flag must not run unknown external code.
+        if decl.get("verification_class") and verification_command:
+            detail = f"would run verification_command {verification_command!r} and record step_completed"
+        elif decl.get("verification_class"):
+            detail = f"would record step_completed (natural_verdict={natural_verdict!r})"
+        else:
+            detail = "would record step_completed + auto-receipt verification_receipt (verification_class:false)"
+        return _dry_run_report("step-complete", f"step {step_uid!r}: {detail}")
     if decl.get("verification_class") and verification_command:
         # Run the verification command; derive verdict from exit code
         # v1.66 S1 (ed04d931): named-handle substitution + per-step verdict_cwd
@@ -1483,12 +1732,22 @@ def action_step_complete(activation_uid: str, step_uid: str, artifact_links: lis
         # from the T13 partial fix. Two sources for behaviors_covered:
         #   (a) inline on step declaration (decl.get("behaviors_covered"))
         #   (b) triggered_test_spec document (test-pipeline path: 05d9ecc5 run-test-substrate)
+        #
+        # d2f8a91c fix (Talos T28, 2026-07-09): a test-pipeline activation's OWN spec
+        # resolves via the reverse-resolution key `test_spec` (build_run_context_uids
+        # line ~1011), not `triggered_test_spec` (only populated on the dev-pipeline's
+        # forward-looking side). Querying the wrong key silently found nothing here,
+        # so this always fell through to the degenerate single-command fallback below —
+        # a step declared verification_class:true with a real behaviors_covered test file
+        # was "passing" on a no-op `python3 -c "pass"` instead of actually running the
+        # test. Caught live: mount-gate's 05d9ecc5 (activation 91c5531a) reported a fake
+        # pass:1/total:1 instead of executing test_mount_gate_409ef1cc.py at all.
         _behaviors = list(decl.get("behaviors_covered") or [])
         if not _behaviors:
             _pr2 = find_pipeline_run_for(activation_uid)
             if _pr2:
                 _ctx2 = build_run_context_uids(_pr2, activation_uid)
-                _ts_uid = _ctx2.get("triggered_test_spec")
+                _ts_uid = _ctx2.get("test_spec") or _ctx2.get("triggered_test_spec")
                 if _ts_uid:
                     _ts_entry = read_vault_entry(_ts_uid)
                     if _ts_entry:
@@ -1624,10 +1883,10 @@ def action_step_complete(activation_uid: str, step_uid: str, artifact_links: lis
     return f"completed:{step_uid}"
 
 
-def action_verify_step(activation_uid: str, step_uid: str, actor: str) -> str:
+def action_verify_step(activation_uid: str, step_uid: str, actor: str, dry_run: bool = False) -> str:
     # B4 (v1.62): --verification-data-stdin self-attestation hatch removed. Criteria are
     # always engine-computed against substrate — never accepted as agent-authored prose.
-    activation, pr, run_folder, events, state = load_run(activation_uid)
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     if state["step_status"].get(step_uid) not in ("completed",):
         raise ContractError(f"step {step_uid!r} not in 'completed' status (got {state['step_status'].get(step_uid)!r})")
     decls = get_step_declarations(events)
@@ -1660,6 +1919,19 @@ def action_verify_step(activation_uid: str, step_uid: str, actor: str) -> str:
                     "rubric_scores": {"exit_criteria_coverage": 0.0},
                     "overall_rationale": "FAIL — exit_criteria is empty; step was never specified. "
                                          "Populate exit_criteria DSL before verification (v1.62 B1).",
+                }
+            elif dry_run and decl.get("verification_command"):
+                # DSL-only evaluate_criterion() is pure substrate reads (safe to run for
+                # preview); a declared verification_command is an arbitrary external
+                # script whose exit code is the verdict — never executed under --dry-run
+                # (same rationale as action_step_complete).
+                data = {
+                    "verifier_role_resolved": "verification_command",
+                    "verdict": "unknown",
+                    "per_criterion": [],
+                    "rubric_scores": {"exit_criteria_coverage": 0.0},
+                    "overall_rationale": f"[DRY-RUN] would run verification_command "
+                                         f"{decl.get('verification_command')!r} — not executed under --dry-run",
                 }
             else:
                 # Fix (1): pass run_events so human: and aggregate: criteria can dispatch
@@ -1721,6 +1993,12 @@ def action_verify_step(activation_uid: str, step_uid: str, actor: str) -> str:
                         "rubric_scores": rubric,
                         "overall_rationale": f"{passes}/{total} criteria pass",
                     }
+    if dry_run:
+        return _dry_run_report(
+            "verify-step",
+            f"step {step_uid!r}: would emit verification_receipt "
+            f"verdict={data.get('verdict', 'unknown')!r} ({data.get('overall_rationale', '')})"
+        )
     ev = make_event("verification_receipt", actor, step=step_uid,
                     trace_id=activation_uid, parent_span_id=parent, data=data)
     append_event(run_folder, ev)
@@ -1730,8 +2008,8 @@ def action_verify_step(activation_uid: str, step_uid: str, actor: str) -> str:
 
 def action_step_fail(activation_uid: str, step_uid: str, actor: str, failure_phase: str,
                      failure_class: str, disposition: str, error_detail: str,
-                     retry_count: int = 0) -> str:
-    activation, pr, run_folder, events, state = load_run(activation_uid)
+                     retry_count: int = 0, dry_run: bool = False) -> str:
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     parent = find_event_span(events, "step_started", step_uid)
     data = {
         "failure_phase": failure_phase,
@@ -1740,6 +2018,8 @@ def action_step_fail(activation_uid: str, step_uid: str, actor: str, failure_pha
         "retry_count": retry_count,
         "error_detail": error_detail,
     }
+    if dry_run:
+        return _dry_run_report("step-fail", f"would emit step_failed for {step_uid!r} (disposition={disposition!r})")
     ev = make_event("step_failed", actor, step=step_uid,
                     trace_id=activation_uid, parent_span_id=parent, data=data)
     append_event(run_folder, ev)
@@ -1747,10 +2027,13 @@ def action_step_fail(activation_uid: str, step_uid: str, actor: str, failure_pha
     return f"failed:{step_uid}:{disposition}"
 
 
-def action_skip_request(activation_uid: str, step_uid: str, actor: str, reason: str) -> str:
-    activation, pr, run_folder, events, state = load_run(activation_uid)
+def action_skip_request(activation_uid: str, step_uid: str, actor: str, reason: str,
+                         dry_run: bool = False) -> str:
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     parent = (find_event_span(events, "step_started", step_uid)
               or find_event_span(events, "step_declared", step_uid))
+    if dry_run:
+        return _dry_run_report("skip-request", f"would emit skip_request for {step_uid!r} (reason={reason!r})")
     ev = make_event("skip_request", actor, step=step_uid,
                     trace_id=activation_uid, parent_span_id=parent,
                     data={"step_id": step_uid, "requested_by": actor, "reason": reason})
@@ -1760,8 +2043,8 @@ def action_skip_request(activation_uid: str, step_uid: str, actor: str, reason: 
 
 
 def action_authorize_skip(activation_uid: str, step_uid: str, authorized_by: str,
-                          conditions: str, actor: str) -> str:
-    activation, pr, run_folder, events, state = load_run(activation_uid)
+                          conditions: str, actor: str, dry_run: bool = False) -> str:
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     # Validate authorizer resolves to type:principal
     authorizer = read_vault_entry(authorized_by)
     if authorizer is not None:
@@ -1770,6 +2053,9 @@ def action_authorize_skip(activation_uid: str, step_uid: str, authorized_by: str
             raise SkipAuthError(f"authorized_by {authorized_by!r} resolves to type:{atype!r}, "
                                 f"not type:principal (or type:human at v1.47.0+)")
     parent = find_event_span(events, "skip_request", step_uid)
+    if dry_run:
+        return _dry_run_report("authorize-skip",
+                                f"would emit skip_authorization for {step_uid!r} (authorized_by={authorized_by!r})")
     ev = make_event("skip_authorization", actor, step=step_uid,
                     trace_id=activation_uid, parent_span_id=parent,
                     data={"step_id": step_uid, "authorized_by": authorized_by, "conditions": conditions})
@@ -1778,11 +2064,13 @@ def action_authorize_skip(activation_uid: str, step_uid: str, authorized_by: str
     return f"skip_authorized:{step_uid}"
 
 
-def action_apply_skip(activation_uid: str, step_uid: str, actor: str) -> str:
-    activation, pr, run_folder, events, state = load_run(activation_uid)
+def action_apply_skip(activation_uid: str, step_uid: str, actor: str, dry_run: bool = False) -> str:
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     auth_span = state["skip_authorizations"].get(step_uid)
     if auth_span is None:
         raise SkipAuthError(f"no prior skip_authorization event for step {step_uid!r}")
+    if dry_run:
+        return _dry_run_report("apply-skip", f"would emit step_skipped for {step_uid!r}")
     ev = make_event("step_skipped", actor, step=step_uid,
                     trace_id=activation_uid, parent_span_id=auth_span,
                     data={"disposition": "skip_with_authorization",
@@ -1792,19 +2080,70 @@ def action_apply_skip(activation_uid: str, step_uid: str, actor: str) -> str:
     return f"skipped:{step_uid}"
 
 
-def action_pause(activation_uid: str, reason: str, actor: str) -> str:
-    activation, pr, run_folder, events, state = load_run(activation_uid)
+def _step_has_pending_human_criterion(step_uid: str, decl: dict, events: list[dict]) -> bool:
+    """True if the step has vc:true with at least one 'human:' criterion still unsatisfied.
+
+    Used to gate retro-scoped pause (8275c814) and to extend action_resume's
+    signoff-required check beyond trust_level:approval-required.
+    """
+    if not decl.get("verification_class"):
+        return False
+    criteria = decl.get("exit_criteria") or []
+    if not any(c.strip().startswith("human:") for c in criteria):
+        return False
+    # Already satisfied if a valid scoped human_signoff exists for this step
+    for ev in events:
+        if ev.get("event") != "human_signoff":
+            continue
+        data = ev.get("data") or {}
+        if data.get("verdict") not in ("accepted", "pass", "approved"):
+            continue
+        ev_step = data.get("step") or ev.get("step")
+        if ev_step == step_uid:
+            return False
+    return True
+
+
+def action_pause(activation_uid: str, reason: str, actor: str,
+                 step_uid: str | None = None, dry_run: bool = False) -> str:
+    """Pause the run.
+
+    With optional --step <uid>: retro-scoped pause for a completed step that has
+    a pending human-verification criterion (8275c814). Records data.step on the
+    pause_started event so action_resume can emit the step-scoped human_signoff.
+    """
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
+    if step_uid is not None:
+        decls = get_step_declarations(events)
+        if step_uid not in decls:
+            raise ContractError(f"--step {step_uid!r}: step not declared in this run")
+        if state["step_status"].get(step_uid) != "completed":
+            raise ContractError(
+                f"--step {step_uid!r}: step must be in 'completed' status for retro-signoff "
+                f"(got {state['step_status'].get(step_uid)!r}); (8275c814)")
+        if not _step_has_pending_human_criterion(step_uid, decls[step_uid], events):
+            raise ContractError(
+                f"--step {step_uid!r}: step has no pending human-verification criterion "
+                f"(must be vc:true with an unsatisfied 'human: <step_uid>' exit criterion); "
+                f"(8275c814)")
+    data: dict = {"reason": reason}
+    if step_uid is not None:
+        data["step"] = step_uid
+    if dry_run:
+        return _dry_run_report("pause", f"would emit pause_started (reason={reason!r})"
+                                         + (f" scoped to step {step_uid!r}" if step_uid else ""))
     ev = make_event("pause_started", actor,
                     trace_id=activation_uid,
                     parent_span_id=events[-1]["span_id"] if events else None,
-                    data={"reason": reason})
+                    data=data)
     append_event(run_folder, ev)
     write_run_state_json(run_folder, pr["frontmatter"], derive_state(read_events(run_folder)), activation_uid)
     return "paused"
 
 
-def action_resume(activation_uid: str, confirmation_granted_by: str | None, actor: str) -> str:
-    activation, pr, run_folder, events, state = load_run(activation_uid)
+def action_resume(activation_uid: str, confirmation_granted_by: str | None, actor: str,
+                   dry_run: bool = False) -> str:
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     if state["run_status"] != "paused":
         raise ContractError(f"run status is {state['run_status']!r}, not paused")
     # v1.46.0.1 fix (V48 finding 2026-05-20): walk back to the most recent
@@ -1825,40 +2164,49 @@ def action_resume(activation_uid: str, confirmation_granted_by: str | None, acto
     # must differ from the caller, and a human_signoff with verdict:accepted must
     # exist in the run events. Closes the paper-gate hole where any agent could
     # resume an approval-required step with 0 real signoffs (Argus A102 ed04d931 §c).
+    # 8275c814 extension: also fires for vc:true + pending human: criterion steps
+    # (e.g. trust_level:auto-with-verification) to support retro-scoped pause signoffs.
+    would_emit_signoff = False
+    signoff_ev = None
     if paused_step:
         decls = get_step_declarations(events)
         paused_decl = decls.get(paused_step, {})
-        if paused_decl.get("trust_level") == "approval-required":
+        needs_signoff = (
+            paused_decl.get("trust_level") == "approval-required" or
+            _step_has_pending_human_criterion(paused_step, paused_decl, events)
+        )
+        if needs_signoff:
             if not confirmation_granted_by:
                 raise ContractError(
-                    f"step {paused_step!r} is trust_level:approval-required; "
-                    f"--confirmation-granted-by <actor> is required to resume. "
-                    f"(v1.66 S1 fix (c); ed04d931)"
+                    f"step {paused_step!r} requires --confirmation-granted-by <actor> to resume "
+                    f"(trust_level:approval-required or pending human: verification criterion). "
+                    f"(v1.66 S1 fix (c); ed04d931; 8275c814)"
                 )
             # C: resolve to canonical principal UIDs — closes two-label spoof + unregistered bypass
             granter_uid = _resolve_principal_uid(confirmation_granted_by, VAULT_ROOT)
             caller_uid = _resolve_principal_uid(actor, VAULT_ROOT)
             if granter_uid is None:
                 raise ContractError(
-                    f"step {paused_step!r} is trust_level:approval-required; "
+                    f"step {paused_step!r} requires --confirmation-granted-by from a registered principal; "
                     f"confirmation_granted_by {confirmation_granted_by!r} does not resolve "
                     f"to a registered type:principal vault entry — only registered principals may sign. "
-                    f"(v1.66 S1 consolidated fix; ed04d931)"
+                    f"(v1.66 S1 consolidated fix; ed04d931; 8275c814)"
                 )
             if granter_uid is not None and granter_uid == caller_uid:
                 raise ContractError(
-                    f"step {paused_step!r} is trust_level:approval-required; "
+                    f"step {paused_step!r}: "
                     f"self-approval refused: {confirmation_granted_by!r} and {actor!r} "
                     f"resolve to the same principal ({granter_uid}). "
-                    f"(v1.66 S1 fix (c/C); ed04d931)"
+                    f"(v1.66 S1 fix (c/C); ed04d931; 8275c814)"
                 )
             elif confirmation_granted_by == actor:
                 raise ContractError(
-                    f"step {paused_step!r} is trust_level:approval-required; "
+                    f"step {paused_step!r}: "
                     f"self-approval refused (confirmation_granted_by must differ from actor). "
-                    f"(v1.66 S1 fix (c); ed04d931)"
+                    f"(v1.66 S1 fix (c); ed04d931; 8275c814)"
                 )
             # Emit human_signoff event BEFORE pause_resumed (the gate record)
+            would_emit_signoff = True
             signoff_ev = make_event("human_signoff", confirmation_granted_by,
                                     step=paused_step,
                                     trace_id=activation_uid, parent_span_id=parent,
@@ -1866,12 +2214,18 @@ def action_resume(activation_uid: str, confirmation_granted_by: str | None, acto
                                           "step": paused_step,
                                           "signed_by": confirmation_granted_by,
                                           "signer_principal_uid": granter_uid})
-            append_event(run_folder, signoff_ev)
+            if not dry_run:
+                append_event(run_folder, signoff_ev)
     data: dict = {}
     if confirmation_granted_by:
         data["confirmation_granted_by"] = confirmation_granted_by
     if paused_step:
         data["step"] = paused_step
+    if dry_run:
+        detail = "would emit pause_resumed" + (f" for step {paused_step!r}" if paused_step else "")
+        if would_emit_signoff:
+            detail = f"would emit human_signoff (signed_by={confirmation_granted_by!r}), then " + detail
+        return _dry_run_report("resume", detail)
     ev = make_event("pause_resumed", actor,
                     step=paused_step,
                     trace_id=activation_uid, parent_span_id=parent, data=data)
@@ -1880,10 +2234,10 @@ def action_resume(activation_uid: str, confirmation_granted_by: str | None, acto
     return "resumed"
 
 
-def action_terminal_verify(activation_uid: str, actor: str) -> str:
+def action_terminal_verify(activation_uid: str, actor: str, dry_run: bool = False) -> str:
     """v1.46.0 minimum-viable: inline verifier walks log + emits verifier_findings.
     Full sa.pipeline-verify dispatch defers to terminal-state-verifier substrate."""
-    activation, pr, run_folder, events, state = load_run(activation_uid)
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     decls = get_step_declarations(events)
     gaps = []
     for step_id in decls:
@@ -1902,6 +2256,8 @@ def action_terminal_verify(activation_uid: str, actor: str) -> str:
             "step_completion_coverage": (len(decls) - len(gaps)) / max(len(decls), 1),
         },
     }
+    if dry_run:
+        return _dry_run_report("terminal-verify", f"would emit verifier_findings verdict={verdict!r} (gaps={gaps})")
     parent = events[-1]["span_id"] if events else None
     ev = make_event("verifier_findings", actor,
                     trace_id=activation_uid, parent_span_id=parent, data=data)
@@ -2241,6 +2597,21 @@ def action_trigger_step(
     # B5 (v1.62): single-cascade idempotency — refuse a second trigger-step for the same
     # pipeline-class on this dev-run. Exactly one doc activation + one test activation per run.
     # Closes the v1.61 phantom-duplicate class where re-fires created orphaned cascade activations.
+    #
+    # STATUS-AWARE FIX (Argus A129 ruling 2026-07-09, event 00006039 — v1.84.1 close-out
+    # remediation, same arc as the auto-heal parity fix / 974b08ad): the original check
+    # refused on ANY non-empty existing_acts list, forever, regardless of whether those
+    # activations were still live. Its own error message promised a remedy ("retire the
+    # existing cascade activation first") that the code never actually implemented — neither
+    # mark-superseded nor a status-retire mutates this list, so retiring a stuck cascade could
+    # never actually unblock a re-trigger. TRUE invariant B5 wants: exactly one ACTIVE cascade
+    # per dev-run, not one-ever-for-all-time (confirmed sanctioned pattern: dev-pipeline-
+    # 13092876 legitimately re-fired its test trigger 3 times in one run). Fix: filter
+    # existing_acts to only NON-terminal (still-live) activations before refusing — mirrors
+    # check_triggered_pipeline_completion's own terminal-status set (~L2404) so both checks
+    # agree on what "done with this cascade" means. Same class as the terminal-state-awareness
+    # fix already landed on the member_of D7 gate (a gate must not count a retired/superseded
+    # record the same as a live one).
     ds_entry = read_vault_entry(dev_spec_uid)
     if ds_entry:
         dsf = ds_entry["frontmatter"]
@@ -2248,14 +2619,53 @@ def action_trigger_step(
             existing_acts = dsf.get("triggered_doc_activation_uids") or []
         else:
             existing_acts = dsf.get("triggered_test_activation_uids") or []
-        if existing_acts:
+        _b5_terminal_statuses = {"done", "retired", "archived", "shipped", "closed", "complete"}
+        _live_acts = []
+        for _act_uid in existing_acts:
+            _act_entry = read_vault_entry(_act_uid)
+            _act_status = ((_act_entry["frontmatter"].get("status") if _act_entry else None) or "").lower()
+            if _act_status not in _b5_terminal_statuses:
+                _live_acts.append(_act_uid)
+        if _live_acts:
             raise ContractError(
                 f"B5 single-cascade refused: {pipeline_class} already triggered for this dev-run "
-                f"(activation(s): {existing_acts}). Each dev-run fires exactly one doc + one test "
-                f"cascade. To re-trigger, retire the existing cascade activation first."
+                f"and still ACTIVE (activation(s): {_live_acts}). Each dev-run fires exactly one "
+                f"live doc + one live test cascade at a time. To re-trigger, retire the existing "
+                f"cascade activation first (status must reach one of {sorted(_b5_terminal_statuses)})."
             )
 
     triggered_spec_path = VAULT_FILES / f"{triggered_spec_uid}.md"
+
+    # aaf96178 fix (Talos 2026-07-05): dry-run must short-circuit BEFORE the O_EXCL
+    # create below. Pre-fix, this block unconditionally attempted the real atomic
+    # file create regardless of dry_run — the ONLY check for dry_run lived further
+    # down, after the write had already landed for any triggered_spec_uid that did
+    # not already exist on disk. That made trigger-step's own "canonical" dry-run
+    # pattern a partial no-op in exactly the class of bug this ticket is about.
+    # dry-run inspects current disk state (best-effort; no O_EXCL atomicity needed
+    # since nothing is committed) and returns without touching the filesystem.
+    if dry_run:
+        if triggered_spec_path.is_file():
+            existing = read_vault_entry(triggered_spec_uid)
+            owner = existing["frontmatter"].get("triggered_by_dev_cycle") if existing else None
+            if existing and owner == activation_uid:
+                print(f"[DRY-RUN] trigger-step idempotent: {triggered_spec_uid!r} already created "
+                      f"by this cycle", file=sys.stderr)
+            elif owner is None:
+                print(f"[DRY-RUN] trigger-step would claim orphaned spec {triggered_spec_uid!r} "
+                      f"for cycle {activation_uid!r} (was unowned)", file=sys.stderr)
+            else:
+                raise ContractError(
+                    f"trigger-step collision: {triggered_spec_uid!r} owned by dev-cycle "
+                    f"{owner!r}, not {activation_uid!r}")
+        else:
+            print(f"[DRY-RUN] trigger-step would create spec {triggered_spec_uid!r} "
+                  f"({len(triggered_spec_body)} bytes)", file=sys.stderr)
+        print(f"[DRY-RUN] trigger-step would activate pipeline {triggered_pipeline_uid!r} "
+              f"(class={pipeline_class!r}) and update dev-spec {dev_spec_uid!r} — no writes performed",
+              file=sys.stderr)
+        return {"dry_run": True, "triggered_spec_uid": triggered_spec_uid,
+                "triggered_activation_uid": "dry-run"}
 
     # Race surface 1: O_EXCL atomic create — fail if another process beat us
     try:
@@ -2283,23 +2693,15 @@ def action_trigger_step(
             # Per Argus A95 ruling (event 1147): None/unset triggered_by_dev_cycle means
             # the spec was pre-authored standalone; the triggering cycle claims ownership.
             # Only error when owned by a DIFFERENT cycle (a real conflict).
-            print(f"[INFO] trigger-step: {'(dry-run) would claim' if dry_run else 'claiming'} orphaned spec "
+            print(f"[INFO] trigger-step: claiming orphaned spec "
                   f"{triggered_spec_uid!r} for cycle {activation_uid!r} (was unowned)", file=sys.stderr)
-            if not dry_run:
-                fm = existing["frontmatter"].copy()
-                fm["triggered_by_dev_cycle"] = activation_uid
-                write_vault_entry(triggered_spec_uid, fm, existing.get("body", ""))
+            fm = existing["frontmatter"].copy()
+            fm["triggered_by_dev_cycle"] = activation_uid
+            write_vault_entry(triggered_spec_uid, fm, existing.get("body", ""))
         else:
             raise ContractError(
                 f"trigger-step collision: {triggered_spec_uid!r} owned by dev-cycle "
                 f"{owner!r}, not {activation_uid!r}")
-
-    # dry-run: skip all writes — return a preview of what would fire.
-    if dry_run:
-        print(f"[DRY-RUN] trigger-step would activate pipeline {triggered_pipeline_uid!r} "
-              f"(class={pipeline_class!r}) and update dev-spec {dev_spec_uid!r}", file=sys.stderr)
-        return {"dry_run": True, "triggered_spec_uid": triggered_spec_uid,
-                "triggered_activation_uid": "dry-run"}
 
     # Spawn pipeline-activate.py for the triggered pipeline class.
     # Pass --rollback-manifest to a trigger-scoped path so pipeline-activate treats
@@ -2474,8 +2876,8 @@ def run_close_out_hook(activation: dict, dev_spec_uid: str | None, actor: str) -
     return closed
 
 
-def action_complete_workflow(activation_uid: str, actor: str) -> str:
-    activation, pr, run_folder, events, state = load_run(activation_uid)
+def action_complete_workflow(activation_uid: str, actor: str, dry_run: bool = False) -> str:
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
 
     # B3 (v1.62): assert every step carries a real verification_receipt before workflow_complete.
     # (A94 2026-06-02, 5th sibling-drift fix): a step is terminal if verified OR a skip that
@@ -2527,7 +2929,12 @@ def action_complete_workflow(activation_uid: str, actor: str) -> str:
         if not criteria:
             continue  # empty criteria already handled by B1
         snapshot = build_snapshot(criteria, ctx)
-        per_criterion = [evaluate_criterion(c, ctx, snapshot) for c in criteria]
+        # d2f8a91c fix pt.3 (Talos T28, 2026-07-09): evaluate_criterion's 4th positional
+        # param (run_events) is required for human:/aggregate: dispatch but was omitted
+        # here, so any recomputed step with an aggregate: criterion always errored —
+        # caught live: mount-gate's 05d9ecc5 (a genuinely PASSING real test_aggregate
+        # already in the log) errored at workflow_complete instead of reading it.
+        per_criterion = [evaluate_criterion(c, ctx, snapshot, events) for c in criteria]
         verdict = "pass"
         if any(p["verdict"] == "error" for p in per_criterion):
             verdict = "error"
@@ -2549,10 +2956,11 @@ def action_complete_workflow(activation_uid: str, actor: str) -> str:
                 ),
             }
         )
-        append_event(run_folder, receipt_ev)
+        if not dry_run:
+            append_event(run_folder, receipt_ev)
         events.append(receipt_ev)
-        print(f"  [B3-ext] engine-recomputed {step_uid}: {verdict} ({passes}/{total} criteria)",
-              file=sys.stderr)
+        print(f"  [{'DRY-RUN ' if dry_run else ''}B3-ext] engine-recomputed {step_uid}: {verdict} "
+              f"({passes}/{total} criteria)", file=sys.stderr)
         if verdict != "pass":
             print(f"BLOCKED: B3-extension recompute — step {step_uid!r} fails criteria (v1.62 B3-ext)",
                   file=sys.stderr)
@@ -2566,6 +2974,18 @@ def action_complete_workflow(activation_uid: str, actor: str) -> str:
         print(f"BLOCKED: complete-workflow coupling enforcement — {reason}", file=sys.stderr)
         print(f"BLOCKED: complete-workflow coupling enforcement — {reason}")
         sys.exit(5)
+
+    # aaf96178 fix (Talos 2026-07-05): all real gates (B3, B3-ext, three-pipeline
+    # coupling) have now run — a dry-run preview must fail exactly like a real
+    # complete-workflow on a genuine gate failure (sys.exit(5) above already fires
+    # identically either way). Only the terminal writes below are skipped.
+    if dry_run:
+        return _dry_run_report(
+            "complete-workflow",
+            f"all close gates pass for {activation_uid!r} — would emit workflow_complete, "
+            f"flip pipeline-run {pr['frontmatter'].get('uid')!r} status to complete, retire "
+            f"activation {activation_uid!r}, render completion-report.md, and run the close-out hook"
+        )
 
     parent = find_event_span(events, "human_signoff") or (events[-1]["span_id"] if events else None)
     ev = make_event("workflow_complete", actor,
@@ -2702,8 +3122,18 @@ def render_completion_report(activation_uid: str, run_folder: Path, events: list
             fail_count += 1
             marker = "✗"
         else:
-            unverified_count += 1
-            marker = "?"
+            # S6 fix (e7c1a4b9, v1.80): verification_class:false steps use completion as their
+            # terminal gate — "completed" IS a pass (pipeline-run.capsule Rule E2, auto-receipt).
+            # The prior renderer counted them as Unverified, producing "FAIL/Unverified:4" over
+            # a 6/6-verified run. Only verification_class:true steps without a real verdict are
+            # genuinely unverified.
+            if not decl.get("verification_class") and status == "completed":
+                pass_count += 1
+                verdict = "pass (auto)"
+                marker = "✓"
+            else:
+                unverified_count += 1
+                marker = "?"
 
         lines.append(f"### {marker} {step_uid} — {status} / {verdict}")
         lines.append(f"- Owner: {decl.get('step_owner_role', '—')}")
@@ -2759,6 +3189,7 @@ def action_amend_step_criteria(
     new_criteria: list[str],
     actor: str,
     verification_command: str | None = None,
+    dry_run: bool = False,
 ) -> str:
     """Gap-3 fix (Vela V56 00000660 2026-06-01): amend exit_criteria on a declared step.
 
@@ -2766,13 +3197,19 @@ def action_amend_step_criteria(
     prefers the latest amendment over the original step_declared, so re-authored
     step definitions reach verify-step without re-bootstrapping the run.
     """
-    activation, pr, run_folder, events, state = load_run(activation_uid)
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     decls = get_step_declarations(events)
     if step_uid not in decls:
         raise ValidationError(f"step {step_uid!r} not in activation contract; cannot amend")
     data: dict = {"step_id": step_uid, "exit_criteria": new_criteria}
     if verification_command:
         data["verification_command"] = verification_command
+    if dry_run:
+        return _dry_run_report(
+            "amend-step-criteria",
+            f"would emit step_criteria_amended for {step_uid!r} → {new_criteria!r}"
+            + (f" (verification_command={verification_command!r})" if verification_command else "")
+        )
     ev = make_event("step_criteria_amended", actor, step=step_uid,
                     trace_id=activation_uid, parent_span_id=None, data=data)
     append_event(run_folder, ev)
@@ -2782,13 +3219,24 @@ def action_amend_step_criteria(
 
 
 def action_mark_superseded(activation_uid: str, superseded_by: str, supersession_reason: str,
-                            actor: str) -> str:
-    activation, pr, run_folder, events, state = load_run(activation_uid)
+                            actor: str, dry_run: bool = False) -> str:
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     fm = pr["frontmatter"]
     if actor not in (fm.get("owner"), fm.get("principal"), fm.get("authorized_by")):
         raise ContractError(f"mark-superseded invoker {actor!r} is not owner/principal/authorized_by")
     if supersession_reason not in ("self-bootstrap", "contract-modification", "restart-from-scratch", "other"):
         raise ContractError(f"invalid supersession_reason {supersession_reason!r}")
+    if dry_run:
+        # aaf96178 (Talos 2026-07-05): this is the exact action the incident fired on —
+        # a "safe preview" mark-superseded --dry-run actually wrote to disk. Fixed by
+        # threading dry_run all the way through: validation above still runs for real
+        # (an invalid actor/reason must still surface as an error in preview), but the
+        # activation_superseded event + the activation-entry retirement below are gated.
+        return _dry_run_report(
+            "mark-superseded",
+            f"would emit activation_superseded for {activation_uid!r} (superseded_by={superseded_by!r}, "
+            f"reason={supersession_reason!r}) and flip activation status to retired"
+        )
     parent = events[-1]["span_id"] if events else None
     ev = make_event("activation_superseded", actor,
                     trace_id=activation_uid, parent_span_id=parent,
@@ -2859,6 +3307,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     pa = sub.add_parser("pause")
     pa.add_argument("--reason", default="explicit-pause")
+    pa.add_argument("--step", default=None,
+                    help="retro-scoped signoff: step UID (must be completed with pending human: criterion)")
 
     rs = sub.add_parser("resume")
     rs.add_argument("--confirmation-granted-by", default=None)
@@ -2915,44 +3365,49 @@ def main() -> int:
                                        args.dry_run)
             print(result if not args.json else json.dumps({"pipeline_run_uid": result}))
         elif action == "step-start":
-            result = action_step_start(args.activation_uid, args.step_uid, actor)
+            result = action_step_start(args.activation_uid, args.step_uid, actor, dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
         elif action == "step-complete":
             links = [s.strip() for s in args.artifact_links.split(",") if s.strip()]
             result = action_step_complete(args.activation_uid, args.step_uid, links, actor,
-                                            args.natural_verdict)
+                                            args.natural_verdict, dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
         elif action == "verify-step":
-            result = action_verify_step(args.activation_uid, args.step_uid, actor)
+            result = action_verify_step(args.activation_uid, args.step_uid, actor, dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"verdict": result}))
         elif action == "step-fail":
             result = action_step_fail(args.activation_uid, args.step_uid, actor,
                                        args.failure_phase, args.failure_class, args.disposition,
-                                       args.error_detail, args.retry_count)
+                                       args.error_detail, args.retry_count, dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
         elif action == "skip-request":
-            result = action_skip_request(args.activation_uid, args.step_uid, actor, args.reason)
+            result = action_skip_request(args.activation_uid, args.step_uid, actor, args.reason,
+                                          dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
         elif action == "authorize-skip":
             result = action_authorize_skip(args.activation_uid, args.step_uid,
-                                            args.authorized_by, args.conditions, actor)
+                                            args.authorized_by, args.conditions, actor,
+                                            dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
         elif action == "apply-skip":
-            result = action_apply_skip(args.activation_uid, args.step_uid, actor)
+            result = action_apply_skip(args.activation_uid, args.step_uid, actor, dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
         elif action == "pause":
-            result = action_pause(args.activation_uid, args.reason, actor)
+            result = action_pause(args.activation_uid, args.reason, actor,
+                                  getattr(args, "step", None), dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
         elif action == "resume":
-            result = action_resume(args.activation_uid, args.confirmation_granted_by, actor)
+            result = action_resume(args.activation_uid, args.confirmation_granted_by, actor,
+                                    dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
         elif action == "terminal-verify":
-            result = action_terminal_verify(args.activation_uid, actor)
+            result = action_terminal_verify(args.activation_uid, actor, dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"verdict": result}))
         elif action == "amend-step-criteria":
             result = action_amend_step_criteria(
                 args.activation_uid, args.step_uid, args.criteria, actor,
                 verification_command=args.verification_command,
+                dry_run=args.dry_run,
             )
             print(result if not args.json else json.dumps({"result": result}))
         elif action == "human-signoff":
@@ -2983,14 +3438,16 @@ def main() -> int:
             )
             print(json.dumps(result) if not args.json else json.dumps(result))
         elif action == "complete-workflow":
-            result = action_complete_workflow(args.activation_uid, actor)
+            result = action_complete_workflow(args.activation_uid, actor, dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
         elif action == "resume-from-log":
+            # Read-only action (no mutating call sites) — --dry-run is accepted but has no
+            # effect since this action never writes; not a silent no-op class violation.
             result = action_resume_from_log(args.activation_uid)
             print(json.dumps(result, indent=2))
         elif action == "mark-superseded":
             result = action_mark_superseded(args.activation_uid, args.superseded_by,
-                                              args.supersession_reason, actor)
+                                              args.supersession_reason, actor, dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
         else:
             print(f"ERROR: unknown action {action!r}", file=sys.stderr)

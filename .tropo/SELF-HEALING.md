@@ -1,9 +1,9 @@
 ---
 uid: db0fd9b1
 type: os-primitive
-title: "Self-Healing — Tropo-OS P0 Primitive"
-description: "Every Tropo agent in every Studio is empowered and obligated to act on structural defects they encounter during their work. Trivial defects: fix in place. Substantive defects: file as a tracked work-item in the relevant project's 01-inbox/. Don't carry forward; don't defer."
-version: "1.1.0"
+title: Self-Healing — Tropo-OS P0 Primitive
+description: 'Every Tropo agent in every Studio is empowered and obligated to act on structural defects they encounter during their work. Trivial defects: fix in place. Substantive defects: file as a tracked work-item in the relevant project''s 01-inbox/. Don''t carry forward; don''t defer.'
+version: 1.1.0
 tier: os
 status: active
 state: active
@@ -13,32 +13,41 @@ modified: 2026-05-10
 created_by: argus-a54
 modified_by: argus-a54
 remediation_history:
-  - version: "1.1.0"
+  - version: 1.1.0
     date: 2026-06-10
     by: argus-a108
-    summary: "EXIT-SIDE sentence added to §Two-Path Action Model per Mike-V55 directive (b8bda711) + v1.68 S2 build: filed items live in the inbox only while unclaimed; work-start re-parents to the work home. Mike-A108 signed verbatim 'Well said. Proceed.' 2026-06-10. Structural enforcement shipped same cycle (check_inbox_transition + activation wire)."
-  - version: "1.0.1"
+    summary: 'EXIT-SIDE sentence added to §Two-Path Action Model per Mike-V55 directive (b8bda711) + v1.68 S2 build: filed items live in the inbox only while unclaimed; work-start re-parents to the work home. Mike-A108 signed verbatim ''Well said. Proceed.'' 2026-06-10. Structural enforcement shipped same cycle (check_inbox_transition + activation wire).'
+  - version: 1.0.1
     date: 2026-05-09
     by: argus-a54
-    summary: "In-cycle remediation post-three-instrument verification: added §Defect Classification rubric (skeptic P0); added inbox-nonexistence escape hatch (skeptic P1); reframed cycle-drift as meta-path not third-path (skeptic P1); added confidence-calibration rule (when uncertain, file — skeptic P1); softened performative standard to focus on responsiveness (skeptic P2); added Path 2 operational note (cold-boot finding)."
-  - version: "1.0.2"
+    summary: 'In-cycle remediation post-three-instrument verification: added §Defect Classification rubric (skeptic P0); added inbox-nonexistence escape hatch (skeptic P1); reframed cycle-drift as meta-path not third-path (skeptic P1); added confidence-calibration rule (when uncertain, file — skeptic P1); softened performative standard to focus on responsiveness (skeptic P2); added Path 2 operational note (cold-boot finding).'
+  - version: 1.0.2
     date: 2026-05-10
     by: argus-a54
-    summary: "In-cycle wording remediation per Mike-A54 read 2026-05-10: §The Primitive opener was too aphoristic for an agent reader (\"if you see something, fix it\" works as a tagline but not as the load-bearing instruction). Reshaped opener to lead with explicit empowerment-and-obligation framing + enumerated what triggers action (errors, stale references, structural defects, inconsistencies, broken UIDs, vocabulary drift, status drift, confusion, judgment-risk). Aphorism preserved as closing tagline of the section."
+    summary: 'In-cycle wording remediation per Mike-A54 read 2026-05-10: §The Primitive opener was too aphoristic for an agent reader ("if you see something, fix it" works as a tagline but not as the load-bearing instruction). Reshaped opener to lead with explicit empowerment-and-obligation framing + enumerated what triggers action (errors, stale references, structural defects, inconsistencies, broken UIDs, vocabulary drift, status drift, confusion, judgment-risk). Aphorism preserved as closing tagline of the section.'
 signed_by: mike-maziarz
 signed_at: 2026-05-09
-governed_by: 8dd772a0   # Tropo Governance hub
+governed_by: 8dd772a0
 member_of:
-  - "8dd772a0"   # Tropo Governance hub (OS-tier substrate)
-  - "c8a933cf"   # v1.15.4 activation root
+  - c8a933cf
 aligned_with:
-  - "a4f9e2b1"   # operating-principles.md (Studio-tier interpretation)
-  - "b7e3a291"   # boot-config.md Tier 1 (boot-time enforcement)
-  - "99341618"   # agent-activation.playbook (read at Group 2)
-  - "cdecbde0"   # STUDIO.md (organization acknowledgment)
+  - a4f9e2b1
+  - b7e3a291
+  - '99341618'
+  - cdecbde0
 extraction_scope: ship
 schema_version: 2
-tags: [os-primitive, self-healing, p0, every-agent-every-studio, structural-defect-empowerment, two-path-action-model, cycle-drift-detection, mike-signed]
+tags:
+  - os-primitive
+  - self-healing
+  - p0
+  - every-agent-every-studio
+  - structural-defect-empowerment
+  - two-path-action-model
+  - cycle-drift-detection
+  - mike-signed
+subsystem_hub:
+  - 8dd772a0
 ---
 
 # Self-Healing — Tropo-OS P0 Primitive
@@ -141,7 +150,7 @@ This list is not exhaustive. The principle is: when something looks structurally
 The canonical gesture:
 
 ```
-python3 .tropo/scripts/tropo-recycle.py <uid> [<uid> ...] --reason "<brief rationale>"
+python3 vault/tools/tropo-recycle.py <uid> [<uid> ...] --reason "<brief rationale>"
 ```
 
 **Why this lives in SELF-HEALING.md.** Maintenance and preservation are the two halves of the agent-substrate contract. Self-Healing makes agents active maintainers; Preservation prevents the inverse failure (active destruction of substrate they don't recognize). Both are OS-tier; both ship with every Studio.

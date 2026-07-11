@@ -36,7 +36,7 @@ from datetime import date
 from pathlib import Path
 
 VAULT_ROOT = Path(__file__).resolve().parents[2]
-CHECK_EVENTS = VAULT_ROOT / "vault" / "tools" / "2471edc0.py"
+CHECK_EVENTS = VAULT_ROOT / "vault" / "tools" / "tropo-check-events.py"
 BOARD = VAULT_ROOT / "boards" / "crew" / "activation-board.html"
 CREW = ["vela", "metis", "orpheus", "cosmo", "talos", "argus"]
 TODAY = date.today().isoformat()

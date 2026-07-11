@@ -4,11 +4,14 @@ tier: capsule
 folder_type: governed
 layer: vault-admin
 owner: human-owner
-write_access: [human-owner, concierge, vault-admin-delegate]
+write_access:
+  - human-owner
+  - concierge
+  - vault-admin-delegate
 read_access: all
-purpose: "Vault-admin tier — the layer between Tropo-OS kernel (.tropo/) and individual agents (agents/<name>/). Contains vault-wide governance, memory, registries, and scripts specific to THIS vault."
+purpose: Vault-admin tier — the layer between Tropo-OS kernel (.tropo/) and individual agents (agents/<name>/). Contains vault-wide governance, memory, registries, and scripts specific to THIS vault.
 uid: 911e97ca
-governed_by: e6c3f410 # ADR-032 — Three-Layer Boot Configuration Model
+governed_by: e6c3f410
 ---
 
 # `.tropo-studio/` — Vault-Admin Tier

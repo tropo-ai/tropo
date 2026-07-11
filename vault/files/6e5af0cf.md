@@ -15,8 +15,8 @@ governed_by: 4cb20382
 extraction_scope: ship
 member_of: []
 subsystem_hub:
-- 2d083137
-- f87e33f0
+  - 2d083137
+  - f87e33f0
 capsule_version: '2.5'
 ---
 

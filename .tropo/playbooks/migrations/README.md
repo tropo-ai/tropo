@@ -1,6 +1,6 @@
 ---
-member_of:
-  - "76bab75f"   # tropo-playbooks (v1.12 backfill 2026-05-08 — minimal frontmatter prepended)
+subsystem_hub:
+  - 76bab75f
 ---
 
 #.tropo/playbooks/migrations/

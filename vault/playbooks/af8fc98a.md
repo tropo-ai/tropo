@@ -1,46 +1,55 @@
 ---
 uid: af8fc98a
 type: playbook
-title: "Run Release Test Plan — v1.4.2 Ship Gauntlet Orchestrator"
-description: "Top-level orchestrator for the 3-stage release ship gauntlet codified in release-test-plan v2 (`f4a8c2d6`). Calls dispatch-walker.playbook + dispatch-cold-boot.playbook (Strict + Skeptic). Aggregates verdicts. Outputs structured report for ship-signal eligibility."
-version: "0.3"
+title: Run Release Test Plan — v1.4.2 Ship Gauntlet Orchestrator
+description: Top-level orchestrator for the 3-stage release ship gauntlet codified in release-test-plan v2 (`f4a8c2d6`). Calls dispatch-walker.playbook + dispatch-cold-boot.playbook (Strict + Skeptic). Aggregates verdicts. Outputs structured report for ship-signal eligibility.
+version: '0.3'
 status: active
 locked_by: vela-v37
 locked_at: 2026-05-01
 owner: vela
-readers: [agent, human]
+readers:
+  - agent
+  - human
 scope: multi-session
 trigger: release-pre-ship-verification
 domain: test-harness
-estimated_duration: "2-6 hours wall-clock end-to-end (Stage 1 ~15 min, Stage 2 ~10 min, Stage 3 ~1-4 hours depending on agent runtime + paired-mode dispatch)"
+estimated_duration: 2-6 hours wall-clock end-to-end (Stage 1 ~15 min, Stage 2 ~10 min, Stage 3 ~1-4 hours depending on agent runtime + paired-mode dispatch)
 target_artifact_type: release
-verdict_format: "PASS / PASS-WITH-FINDINGS / HALT-SHIP"
-tags: [test-harness, orchestrator, release-gate, kernel-tier, v1.4.2, doctrine-grounded, three-stage-gauntlet]
-governed_by: e7b3c509   # playbook.capsule v2.4 (test-harness subtype)
+verdict_format: PASS / PASS-WITH-FINDINGS / HALT-SHIP
+tags:
+  - test-harness
+  - orchestrator
+  - release-gate
+  - kernel-tier
+  - v1.4.2
+  - doctrine-grounded
+  - three-stage-gauntlet
+governed_by: e7b3c509
 calls:
   - .tropo/playbooks/dispatch-walker.playbook.md
   - .tropo/playbooks/dispatch-cold-boot.playbook.md
 relationships:
   - kind: implements
-    target: f4a8c2d6   # release-test-plan v2 (in-place v1→v2 amendment per Sprint 5; UID preserved)
+    target: f4a8c2d6
   - kind: governed-by
-    target: b19e8d43   # release.capsule v3.1 Rule 10
+    target: b19e8d43
   - kind: composes
-    target: 7579f894   # dispatch-walker.playbook v0.2 (Stage 3.1)
+    target: 7579f894
   - kind: composes
-    target: a5fb24a6   # dispatch-cold-boot.playbook v0.2 (Stages 3.2-strict + 3.3-skeptic)
+    target: a5fb24a6
   - kind: grounded-in
-    description: "The Patient Honing Doctrine — institutionalizes the v1.4.2 ship gauntlet as kernel primitive."
+    description: The Patient Honing Doctrine — institutionalizes the v1.4.2 ship gauntlet as kernel primitive.
 created: 2026-05-01
 created_by: vela-v37
 modified: 2026-05-01
 modified_by: vela-v37
 schema_version: 2
 extraction_scope: ship
-member_of: [8e4a2c1f]   # Stream 1 — Test-Harness Authoring
 member_of:
-  - "76bab75f"   # tropo-playbooks (v1.8 Stream B1 backfill)
-
+  - 8e4a2c1f
+subsystem_hub:
+  - 76bab75f
 ---
 
 # Run Release Test Plan — v1.4.2 Ship Gauntlet Orchestrator
@@ -126,15 +135,15 @@ This is the state anchor for Group milestones. Multi-run canonical-of-record: la
 **Milestone:** Pre-Build PASS
 **Milestone timeout:** 30 min
 
-Run before invoking `scripts/build-release.py`. Per release-test-plan v2 §Stage 1.
+Run before invoking `vault/tools/tropo-build-release.py`. Per release-test-plan v2 §Stage 1.
 
 **Source-vs-extracted tree note:** Stage 1 runs against the SOURCE vault (live vault tree at vault root). Stage 3 runs against the EXTRACTED vault (separately-extracted ship-zip). Do not conflate.
 
 #### Step 1.1 — Vault validate
-*Executor: dispatcher.* Run `python3 .tropo/scripts/tropo-validate.py`. Pass criterion: exit 0; zero unresolved cross-references; AGENTS.md/CAPSULE.md coverage 100% on governed folders.
+*Executor: dispatcher.* Run `python3 vault/tools/tropo-validate.py`. Pass criterion: exit 0; zero unresolved cross-references; AGENTS.md/CAPSULE.md coverage 100% on governed folders.
 
 #### Step 1.2 — Ledger rebuild
-*Executor: dispatcher.* Run `npx tsx `.tropo/scripts/rebuild-vault.py`. Pass criterion: all vault entries parse; zero unclosed-frontmatter; index regenerates cleanly.
+*Executor: dispatcher.* Run `npx tsx `vault/tools/tropo-rebuild-vault.py`. Pass criterion: all vault entries parse; zero unclosed-frontmatter; index regenerates cleanly.
 
 #### Step 1.3 — KB freshness
 *Executor: dispatcher.* Manual review + `npm run kb:index`. Pass criterion: no KB article contradicts current ledger / capsule conventions.
@@ -158,10 +167,10 @@ Run before invoking `scripts/build-release.py`. Per release-test-plan v2 §Stage
 **Milestone:** Build PASS
 **Milestone timeout:** 30 min
 
-Run during `scripts/build-release.py` execution. Per release-test-plan v2 §Stage 2.
+Run during `vault/tools/tropo-build-release.py` execution. Per release-test-plan v2 §Stage 2.
 
 #### Step 2.1 — Build script success
-*Executor: dispatcher.* Run `python3 .tropo/scripts/build-release.py --version <ver>` (or `--bump patch`). Pass criterion: script exits 0; produces zip + extracted vault at `releases/v<ver>/testing/`.
+*Executor: dispatcher.* Run `python3 vault/tools/tropo-build-release.py --version <ver>` (or `--bump patch`). Pass criterion: script exits 0; produces zip + extracted vault at `releases/v<ver>/testing/`.
 
 #### Step 2.2 — Inventory check
 *Executor: dispatcher.* Pass criterion: ship-tagged vault entries copied; ship-artifact-declared files copied; kernel files copied; version stamps applied.
@@ -216,7 +225,7 @@ Invoke [`dispatch-cold-boot.playbook` v0.2](dispatch-cold-boot.playbook.md) per 
 #### Step 3.4 — Extracted-vault validate
 *Executor: dispatcher.*
 
-Run `python3 .tropo/scripts/tropo-validate.py --vault-root <extracted-path>`. Pass criterion: exit 0. May run in parallel-with-isolation per Rule 3, but is cheap enough that sequential is preferred.
+Run `python3 vault/tools/tropo-validate.py --vault-root <extracted-path>`. Pass criterion: exit 0. May run in parallel-with-isolation per Rule 3, but is cheap enough that sequential is preferred.
 
 #### Step 3.5 — Stage 3 verdict + milestone
 *Executor: dispatcher.*

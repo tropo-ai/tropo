@@ -77,6 +77,7 @@ Every record is a JSON object with the following fields, in this order:
 - **Type:** string, enum
 - **Valid values (Phase 1):** `task`, `project`, `design-spec`, `design-brief`, `decision`, `document`, `collection-ref`, `board-def`, `team-def`
 - **Valid values (post-Phase-1 additions):** `playbook-run` (Argus A23, April 14), `agent-configurator` (Argus A27, April 17), `release` (April 16), `release-plan` (locked Argus A28, April 19), `board` (April 12). The capsule definition files in [`.tropo/capsules/`](../capsules/00-index.md) are the authoritative list — this schema enum was not kept in lockstep during April 10–18 and was partially updated by Argus A28 on 2026-04-19 as part of the `release-plan` lock. Full reconciliation pass owed.
+- **Valid values (ADR-051 Fork 1 additions, 2026-07-07):** `vault-entity` (RENAMED from `vault`, UID `4d6e2f9a` preserved — principal-grounding + D7-anchor, one per vault-node) and `vault` (NEW — the vault-node MANIFEST type, UID `a1f7c750` — membership + publish + audience + curation + contract, distinct lifecycle from `vault-entity`). See [`vault-entity.capsule.md`](../../vault/capsules/tropo-vault-entity.capsule.md) + [`vault.capsule.md`](../../vault/capsules/tropo-vault.capsule.md) and dev-spec [943bb220](../../vault/files/943bb220.md).
 - **Constraints:** must match a registered capsule type
 - **Purpose:** identifies the entry's capsule definition and state machine
 - **Adding new types:** requires a capsule definition and Mike's approval, plus update of this schema
@@ -221,12 +222,12 @@ Every record is a JSON object with the following fields, in this order:
 ### `path` — optional (v1.1 additive, April 12, 2026)
 
 - **Type:** string
-- **Format:** vault-relative path to the file (e.g., `.tropo/capsules/core.capsule.md`)
+- **Format:** vault-relative path to the file (e.g., `vault/capsules/tropo-core.capsule.md`)
 - **Constraints:** if present, the file MUST exist at this path. If absent, the file lives at the default location `vault/files/<uid>.md`.
 - **Purpose:** allows vault registration of files that live outside `vault/files/` — kernel files in `.tropo/`, agent charters in `agents/`, governance files at root. The Vault becomes a universal registry without requiring files to move.
 - **Build pipeline usage:** the build script resolves each entry's location as `path` if present, else `vault/files/<uid>.md`. One mechanism for all entries regardless of where they live on disk.
 - **fm alignment:** matches `path:` in the entry's frontmatter (optional — only present on entries that don't live in `vault/files/`).
-- **Example:** `".tropo/capsules/core.capsule.md"` or absent
+- **Example:** `"vault/capsules/tropo-core.capsule.md"` or absent
 
 ---
 

@@ -2,9 +2,9 @@
 spec_version: 2
 tier: os
 maintained_by: tropo
-tropo_version: "0.3.0"
-member_of:
-  - "8dd772a0"   # tropo-governance (v1.12 backfill 2026-05-08)
+tropo_version: 0.3.0
+subsystem_hub:
+  - 8dd772a0
 ---
 
 # Tropo-OS Governed Folder

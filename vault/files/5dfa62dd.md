@@ -10,11 +10,11 @@ created: 2026-04-14
 modified: 2026-04-16
 member_of: []
 tags:
-- adr-034
-- collection
-- ledger
-- schema
-- v0.4
+  - adr-034
+  - collection
+  - ledger
+  - schema
+  - v0.4
 file_ext: md
 schema_version: 2
 extraction_scope: ship
@@ -24,7 +24,7 @@ created_by: argus-a23
 locked_by: argus-a23
 locked_at: 2026-04-14
 subsystem_hub:
-- 8dd772a0
+  - 8dd772a0
 capsule_version: '2.5'
 ---
 
@@ -34,9 +34,6 @@ capsule_version: '2.5'
 **📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Governance](8dd772a0.md) → **ADR-034 — collection-ref is the canonical collection pattern**
 
 **🔗 This file** — UID `5dfa62dd` · type `decision` · state `active` · status `done`
-
-**📥 Cited by (1):**
-- [Duplicate ADR-034 entries in ledger](b4d1c283.md) — `b4d1c283` (type `task`, via `refs`)
 <!-- nav-block:end -->
 
 ## Status

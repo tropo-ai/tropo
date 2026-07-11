@@ -4,13 +4,18 @@ spec_version: 2
 extraction_scope: ship
 tier: capsule
 folder_type: directors
-name: "directors"
+name: directors
 owner: vela
-write_access: [mike, vela, metis, argus]
+write_access:
+  - mike
+  - vela
+  - metis
+  - argus
 read_access: all
-purpose: "Director agents — standing specialist agents that serve the vault and its users directly"
+purpose: Director agents — standing specialist agents that serve the vault and its users directly
 capability_level: L1
-permitted_types: [director-agent]
+permitted_types:
+  - director-agent
 created: 2026-04-16
 last_modified: 2026-04-16
 created_by: metis-g42

@@ -3,9 +3,11 @@ spec_version: 2
 tier: capsule
 folder_type: governed
 owner: vault-admin
-write_access: [human-owner, vault-admin-delegate]
+write_access:
+  - human-owner
+  - vault-admin-delegate
 read_access: all
-purpose: "Vault-level standing directives — instructions every agent in this vault reads at boot. One directive per file."
+purpose: Vault-level standing directives — instructions every agent in this vault reads at boot. One directive per file.
 uid: 7724238f
 ---
 

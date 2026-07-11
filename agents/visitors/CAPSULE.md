@@ -3,9 +3,11 @@ spec_version: 2
 tier: capsule
 folder_type: registry
 owner: mike
-write_access: [mike, visiting-agents]
+write_access:
+  - mike
+  - visiting-agents
 read_access: all
-purpose: "Registration records for visiting agents (Visa tier)"
+purpose: Registration records for visiting agents (Visa tier)
 uid: a4e19c87
 ---
 

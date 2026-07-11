@@ -18,32 +18,32 @@ created: 2026-05-17
 created_by: argus-a70
 modified: 2026-05-25
 modified_by: orpheus-o11
-v1_0_narrative_extension_note: "v1.0 narrative extension 2026-05-25 by orpheus-o11 during v1.53 D2.d (doc-pipeline activation c7a26c5a; doc-spec c660ec29). Added 3 new Composes With rows (Workbench Surface Visibility 3c02f3b7 + doc-pipeline 5a4337ff + publish.pipeline sentinel 7e3a91c8 §6) + new §Composition with Substrate-Preservation Architecture section naming the wider 5-tier pattern (filesystem soft-delete + frontmatter supersession + git sentinel + index pre-check + memory archival). Schema unchanged; narrative-only amendment per Argus A83 D2.d directive."
+v1_0_narrative_extension_note: v1.0 narrative extension 2026-05-25 by orpheus-o11 during v1.53 D2.d (doc-pipeline activation c7a26c5a; doc-spec c660ec29). Added 3 new Composes With rows (Workbench Surface Visibility 3c02f3b7 + doc-pipeline 5a4337ff + publish.pipeline sentinel 7e3a91c8 §6) + new §Composition with Substrate-Preservation Architecture section naming the wider 5-tier pattern (filesystem soft-delete + frontmatter supersession + git sentinel + index pre-check + memory archival). Schema unchanged; narrative-only amendment per Argus A83 D2.d directive.
 schema_version: 2
 extraction_scope: ship
 signed_by: mike-maziarz
 signed_at: 2026-05-17
 governed_by: 8dd772a0
 aligned_with:
-- db0fd9b1
-- a4f9e2b1
+  - db0fd9b1
+  - a4f9e2b1
 related_substrate:
-- agents/argus/.tropo-capsule/memory/entries/6bbb625b.md
-- .tropo/scripts/tropo-recycle.py
-- .tropo/orientation.md
+  - agents/argus/.tropo-capsule/memory/entries/6bbb625b.md
+  - vault/tools/tropo-recycle.py
+  - .tropo/orientation.md
 member_of:
-- 2f34d5f8
+  - 2f34d5f8
 tags:
-- substrate-doctrine
-- deletion-discipline
-- ban-on-rm
-- soft-delete-via-recycle
-- every-agent-every-studio
-- mike-signed
-- canonical-source-of-truth
-- v1-40-0
+  - substrate-doctrine
+  - deletion-discipline
+  - ban-on-rm
+  - soft-delete-via-recycle
+  - every-agent-every-studio
+  - mike-signed
+  - canonical-source-of-truth
+  - v1-40-0
 subsystem_hub:
-- 8dd772a0
+  - 8dd772a0
 capsule_version: '2.5'
 ---
 
@@ -52,22 +52,15 @@ capsule_version: '2.5'
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Governance](8dd772a0.md) → **Deletion Discipline — Substrate Preservation Doctrine**
 
-**🌳 Tropo-Nav Path** (VS Code): [../../00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/v1.40.0 — Deletion Discipline Doctrine (Comprehensive Multi-Tier Codification) Cycle Activation Root/0aefe71d — Deletion Discipline — Substrate Preservation Doctrine.md](../../00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/v1.40.0%20%E2%80%94%20Deletion%20Discipline%20Doctrine%20%28Comprehensive%20Multi-Tier%20Codification%29%20Cycle%20Activation%20Root/0aefe71d%20%E2%80%94%20Deletion%20Discipline%20%E2%80%94%20Substrate%20Preservation%20Doctrine.md)
-
-**🌳 Tropo-Nav Path** (chat): [argo-os/00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/v1.40.0 — Deletion Discipline Doctrine (Comprehensive Multi-Tier Codification) Cycle Activation Root/0aefe71d — Deletion Discipline — Substrate Preservation Doctrine.md](argo-os/00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/v1.40.0%20%E2%80%94%20Deletion%20Discipline%20Doctrine%20%28Comprehensive%20Multi-Tier%20Codification%29%20Cycle%20Activation%20Root/0aefe71d%20%E2%80%94%20Deletion%20Discipline%20%E2%80%94%20Substrate%20Preservation%20Doctrine.md)
-
 **🔗 This file** — UID `0aefe71d` · type `document` · state `active` · status `published`
 
-**↔ Siblings (2):**
-  - **under [v1.40.0 — Deletion Discipline Doctrin...](2f34d5f8.md):** [Tropo-OS v1.40.0 — Deletion Discipline Doctrine...](8c9962a7.md) · [Tropo-OS v1.40.0 — Deletion Discipline Doctrine...](8f94abbd.md)
+**↔ Siblings (1):**
+  - **under [2f34d5f8](2f34d5f8.md):** [Tropo-OS v1.40.0 — Deletion Discipline Doctrine...](8c9962a7.md)
 
-**📥 Cited by (8):**
-- [tropo-recycle should check inbound refs before recycling — the...](2784b2d8.md) — `2784b2d8` (type `note`, via `refs`)
-- [P0 CLOSED — the silent file-deleter (substrate-loss bug): root...](770b32cb.md) — `770b32cb` (type `note`, via `refs`)
-- [Tropo-OS v1.41.0 — Ship v1.40 Properly (Block 4 Hardening Cycl...](800c3352.md) — `800c3352` (type `design-brief`, via `aligned_with`)
+**📥 Cited by (3):**
 - [Tropo-OS v1.40.0 — Deletion Discipline Doctrine (Multi-Tier Co...](8c9962a7.md) — `8c9962a7` (type `release`, via `foundation`, `capabilities_touched`)
 - [Tropo Test Harness](952f3aa3.md) — `952f3aa3` (type `project`, via `aligned_with`)
-- *+ 3 more — full back-link sweep via `grep -l "0aefe71d" vault/files/*.md`*
+- [Release Cold-Boot Walk](6f3d2a18.md) — `6f3d2a18` (type `playbook`, via `aligned_with`)
 <!-- nav-block:end -->
 
 **Relations**
@@ -75,7 +68,6 @@ capsule_version: '2.5'
 | Relation | Target |
 |---|---|
 | Governed by | [Tropo Governance (8dd772a0)](8dd772a0.md) |
-| Member of | [v1.40.0 — Deletion Discipline Doctrine (Comprehensive Multi-Tier Co... (2f34d5f8)](2f34d5f8.md) |
 
 *Authoritative substrate declaration. Single source of truth. Tier-specific amendments at SELF-HEALING.md + operating-principles.md + vault/AGENTS.md + vault-level memory reference this entry; they do not duplicate content.*
 
@@ -88,7 +80,7 @@ capsule_version: '2.5'
 When you need to remove a file from `vault/files/` (or any governed folder where destructive operations are possible), the canonical gesture is:
 
 ```
-python3 .tropo/scripts/tropo-recycle.py <uid> [<uid> ...] --reason "<brief rationale>"
+python3 vault/tools/tropo-recycle.py <uid> [<uid> ...] --reason "<brief rationale>"
 ```
 
 This moves the target(s) from `vault/files/<uid>.md` to `recycle/agent-deletions/<YYYY-MM-DD>/<uid>.md` with a log entry. Recovery is `mv` back from `recycle/` to `vault/files/`.
@@ -235,7 +227,7 @@ git show <delete-commit>^:vault/files/<uid>.md > /tmp/<uid>.md
 
 # Restore + soft-delete properly if you want to preserve the paper trail
 mv /tmp/<uid>.md vault/files/<uid>.md
-python3 .tropo/scripts/tropo-recycle.py <uid> --reason "Restituted from git history; original hard-delete at commit <hash>"
+python3 vault/tools/tropo-recycle.py <uid> --reason "Restituted from git history; original hard-delete at commit <hash>"
 ```
 
 ---
@@ -255,7 +247,7 @@ Three reads of the same doctrine at three different agent-attention moments. The
 ## Composes With
 
 - [`.tropo/SELF-HEALING.md` OS-tier primitive (db0fd9b1)](db0fd9b1.md) — inverse-vector composition (maintenance + preservation)
-- [`.tropo/scripts/tropo-recycle.py`](../../.tropo/scripts/tropo-recycle.py) — the canonical tool the doctrine mandates
+- [`vault/tools/tropo-recycle.py`](../../vault/tools/tropo-recycle.py) — the canonical tool the doctrine mandates
 - [`.tropo-studio/operating-principles.md` Principle 13 (a4f9e2b1)](a4f9e2b1.md) — Studio-tier interpretation
 - [`vault/AGENTS.md` §Deletion Discipline](../../vault/AGENTS.md) — folder-tier governance
 - [`.tropo-studio/memory/MEMORY.md` vault-level pin](../../.tropo-studio/memory/MEMORY.md) — memory-tier crew-wide inheritance

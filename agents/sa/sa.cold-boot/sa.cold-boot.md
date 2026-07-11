@@ -4,11 +4,12 @@ name: sa.cold-boot
 type: session-agent
 status: active
 owner: vault-admin
-domain: "Cold-boot testing — validates that vault artifacts are self-sufficient from cold context"
-spawnable_by: [all-executives]
+domain: Cold-boot testing — validates that vault artifacts are self-sufficient from cold context
+spawnable_by:
+  - all-executives
 created: 2026-04-27
 created_by: tropo-os
-governed_by: b4e2a718   # session-agent.capsule v1.3
+governed_by: b4e2a718
 extraction_scope: ship
 ---
 

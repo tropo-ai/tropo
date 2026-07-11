@@ -7,4 +7,4 @@ released: "2026-07-11"
 
 Released 2026-07-11.
 
-See CHANGELOG.md for what changed in this version.
+See RELEASE-NOTES.md for what changed in this version.

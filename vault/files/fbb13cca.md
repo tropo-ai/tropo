@@ -23,23 +23,23 @@ published_at: 2026-05-18
 version: 1.0.2
 governed_by: d0c00001
 aligned_with:
-- 5a766c42
-- 8b3f1d92
+  - 5a766c42
+  - 8b3f1d92
 member_of: []
 tags:
-- manifesto
-- workshop
-- positioning
-- three-layer-model
-- agentic-builders
-- stranger-facing
-- v1.4
+  - manifesto
+  - workshop
+  - positioning
+  - three-layer-model
+  - agentic-builders
+  - stranger-facing
+  - v1.4
 file_ext: md
 schema_version: 2
 extraction_scope: ship
 subsystem_hub:
-- 8dd772a0
-- f87e33f0
+  - 8dd772a0
+  - f87e33f0
 capsule_version: '2.5'
 ---
 
@@ -50,13 +50,12 @@ capsule_version: '2.5'
 
 **🔗 This file** — UID `fbb13cca` · type `document` · state `active` · status `locked`
 
-**📥 Cited by (12):**
-- [The Studio for Agentic Builders](0d8ef6ec.md) — `0d8ef6ec` (type `document`, via `aligned_with`)
-- [Tropo-OS v1.9.0](1b4bb15a.md) — `1b4bb15a` (type `release`, via `capabilities_touched`)
+**📥 Cited by (5):**
 - [Tropo-OS v1.48.0 — Cycle B Extraction-and-Publish Engineering ...](1d25e142.md) — `1d25e142` (type `release`, via `capabilities_touched`)
-- [Tropo-OS v1.8 — Release Plan](1fe60f02.md) — `1fe60f02` (type `release-plan`, via `capabilities_touched`)
-- [A36 Session — v1.4 Ship-Arc Coordination — Project Plan](6c881eb8.md) — `6c881eb8` (type `project-plan`, via `foundation`)
-- *+ 7 more — full back-link sweep via `grep -l "fbb13cca" vault/files/*.md`*
+- [Tropo-OS v1.17.0 — First-User Experience Redesign + Permanent ...](9fc8a149.md) — `9fc8a149` (type `design-brief`, via `refs`)
+- [The Tropo Handbook](c92ae197.md) — `c92ae197` (type `document`, via `aligned_with`)
+- [Tropo-OS v1.18.0 — Capsule Library Phase 1 (kernel substrate q...](d95d75e5.md) — `d95d75e5` (type `design-brief`, via `refs`)
+- [Tropo Work — How Work and Agents Share the Same Substrate](db313f9c.md) — `db313f9c` (type `document`, via `aligned_with`)
 <!-- nav-block:end -->
 
 **Relations**
@@ -65,7 +64,6 @@ capsule_version: '2.5'
 |---|---|
 | Governed by | [document (d0c00001)](d0c00001.md) |
 | Aligned with | [Tropo-OS — Architectural Principles v2 (5a766c42)](5a766c42.md) |
-| Aligned with | [Tropo Work v3 — Architecture Specification (8b3f1d92)](8b3f1d92.md) |
 
 *A Manifesto for Agentic Builders*
 

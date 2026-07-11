@@ -18,7 +18,7 @@ extraction_scope: ship
 
 An **sa.\*** ("session agent") is a short-lived, scoped specialist that an executive agent spawns to do bounded work in a single session and then terminate. Each sa.\* lives at a conventional path:
 
-- **The agent's boot file:** `agents/sa/sa.<slug>/sa.<slug>.md` — a markdown file declaring the agent's purpose, boot sequence, invocation protocol, output format, constraints, and termination behavior. Conforms to `.tropo/capsules/session-agent.capsule.md`. The spawning agent does NOT write this file at commission time — it must already exist (either pre-shipped with the vault or authored as a one-time agent design exercise).
+- **The agent's boot file:** `agents/sa/sa.<slug>/sa.<slug>.md` — a markdown file declaring the agent's purpose, boot sequence, invocation protocol, output format, constraints, and termination behavior. Conforms to `vault/capsules/tropo-session-agent.capsule.md`. The spawning agent does NOT write this file at commission time — it must already exist (either pre-shipped with the vault or authored as a one-time agent design exercise).
 - **The agent's activation-log folder:** `agents/sa/sa.<slug>/activation-log/` — append-only history of every commissioning. Each commission gets a numbered record file (`001-<spawner>-record.md`, `002-<spawner>-record.md`, ...). The spawning agent creates the next numbered record file at commission time; this is the IPC channel for the run.
 
 **Pre-shipped sa.\* on a fresh Tropo vault:** `sa.cold-boot` (cold-boot testing primitive) at `agents/sa/sa.cold-boot/sa.cold-boot.md`. Other sa.\* are authored on demand using `session-agent.capsule.md` as the contract.

@@ -56,7 +56,7 @@ If the team adopts a specific verification regime (e.g., three-instrument verifi
 
 This agreement evolves as the team grows. Amendments require:
 
-1. A proposal recorded as a vault entry of `type: decision` (use [.tropo/actions/create-decision.action.md](.tropo/actions/create-decision.action.md), which ships with the kernel; or author the vault entry directly per [.tropo/capsules/decision.capsule.md](.tropo/capsules/decision.capsule.md)).
+1. A proposal recorded as a vault entry of `type: decision` (use [.tropo/actions/create-decision.action.md](.tropo/actions/create-decision.action.md), which ships with the kernel; or author the vault entry directly per [vault/capsules/tropo-decision.capsule.md](vault/capsules/tropo-decision.capsule.md)).
 2. The vault owner's approval — explicit acceptance noted on the decision record.
 3. The OA file updated only after the decision is accepted.
 
