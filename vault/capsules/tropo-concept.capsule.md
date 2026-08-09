@@ -7,10 +7,10 @@ version: 1.0
 tier: os
 author: argus
 created: 2026-04-21
-modified: 2026-04-24
-modified_by: argus-a33
+modified: '2026-07-25'
+modified_by: "vela-v69"
 created_by: argus-a30
-status: deprecated
+status: retired
 locked_by: argus-a30
 locked_at: 2026-04-21
 superseded_by: 7c47429a
@@ -20,6 +20,23 @@ governed_by: 222873b9
 aligned_with: d2e7b1f4
 subsystem_hub:
   - 8dd772a0
+retired_at: '2026-07-12'
+retired_by: argus-a130
+retired_via: "Type Disposition walk 5dcbadbd (Mike-verdicted 2026-07-12, S2 activation 0d9f89bc) — zero instances ever authored; retired on the how-to precedent (v1.60, 'never earned itself empirically'). Verified no live convention references before retirement (grep 2026-07-12: historical mentions only). Tombstone-in-place per the how-to pattern; a future need re-enters via the closed registry (propose capsule → Mike locks)."
+pruning:
+  verdict: superseded
+  evidence_span: '> **⚠️ DEPRECATED as of 2026-04-24 (v3 Decision 1).** The `concept` type is subsumed by [note.capsule (7c47429a)](note.capsule.md).'
+  evidence_locator:
+    body_sha256: db7441af701d71e6ab3da7d94a08b69e74954ffffab7254479be1ec81fb8dc05
+    start_byte: 1
+    end_byte: 136
+  judge_policy_uid: 341823aa
+  judge_version: 2.0.0
+  judge_prompt_sha256: 855e18bd29d09ed8ecff16c006a3b0f18c39aa913207619978dda02fdc54f6db
+  origin_studio: f1a7b3c2
+  judged_at: '2026-07-25T22:18:27Z'
+  confidence: 0.95
+  normalized_body_hash_judged: db7441af701d71e6ab3da7d94a08b69e74954ffffab7254479be1ec81fb8dc05
 ---
 
 > **⚠️ DEPRECATED as of 2026-04-24 (v3 Decision 1).** The `concept` type is subsumed by [note.capsule (7c47429a)](note.capsule.md). Ideas, notes, and concepts are all one primitive in v3 — the simplest WorkItem, tagged per context (e.g., `tags: [idea]`, `tags: [product-idea]`). Historical concept instances remain readable and valid; new captures use note. See [Tropo Work v3 Architecture Specification (8b3f1d92)](../../vault/files/8b3f1d92.md) §6 Decision 1.

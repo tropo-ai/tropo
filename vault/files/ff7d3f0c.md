@@ -26,22 +26,7 @@ created_by: metis-g42
 
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Library](1aba710c.md) → [Packs](d9b8a9bb.md) → [Green City Energy — The Ridgewood Pilot](9b74ffe5.md) → **Green City — Concept Note: The Ridgewood Solar Pilot**
-
-**🌳 Tropo-Nav Path** (VS Code): [../../00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Library/Packs/Green City Energy — The Ridgewood Pilot/ff7d3f0c — Green City — Concept Note- The Ridgewood Solar Pilot.md](../../00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo%20Library/Packs/Green%20City%20Energy%20%E2%80%94%20The%20Ridgewood%20Pilot/ff7d3f0c%20%E2%80%94%20Green%20City%20%E2%80%94%20Concept%20Note-%20The%20Ridgewood%20Solar%20Pilot.md)
-
-**🌳 Tropo-Nav Path** (chat): [tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Library/Packs/Green City Energy — The Ridgewood Pilot/ff7d3f0c — Green City — Concept Note- The Ridgewood Solar Pilot.md](tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo%20Library/Packs/Green%20City%20Energy%20%E2%80%94%20The%20Ridgewood%20Pilot/ff7d3f0c%20%E2%80%94%20Green%20City%20%E2%80%94%20Concept%20Note-%20The%20Ridgewood%20Solar%20Pilot.md)
-
-**🔗 This file** — UID `ff7d3f0c` · type `document` · state `active` · status `published`
-
-**↔ Siblings (9):**
-  - **under [Green City Energy — The Ridgewood Pilot](9b74ffe5.md):** [Build vendor shortlist — three qualified instal...](e2ae8e49.md) · [Complete household consent documentation — all ...](b400ea7a.md) · [Green City Energy — Ridgewood Pilot Board](7e766fde.md) · [Green City — Agent Coordination Model for the R...](ac231d58.md) · [Green City — Ridgewood Pilot Agent Architecture...](8fbfe701.md) · [Permit Research Agent — Charter](3cebbcde.md) · + 3 more
 <!-- nav-block:end -->
-
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Member of | [Green City Energy — The Ridgewood Pilot (9b74ffe5)](9b74ffe5.md) |
 
 *Stage: Ideate | Green City Energy | April 2026*
 

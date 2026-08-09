@@ -50,22 +50,7 @@ tags:
 
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-work](b8e5f3a2.md) → [test-pipeline](da3f50dc.md) → [verify-and-close — test-pipeline stage](92133de1.md) → **validate-coverage — test-pipeline step 4**
-
-**🔗 This file** — UID `a69fcab3` · type `pipeline` · state `active` · status `active`
-
-**↔ Siblings (1):**
-  - **under [verify-and-close — test-pipeline stage](92133de1.md):** [close-activation — test-pipeline step 5](047c147c.md)
-
-**📥 Cited by (1):**
-- [Tropo-OS v1.51.0 — Three-Pipeline Substrate-Engineering (Six A...](b0435ff0.md) — `b0435ff0` (type `release`, via `capabilities_touched`)
 <!-- nav-block:end -->
-
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Governed by | [pipeline (e4c8a6b2)](e4c8a6b2.md) |
-| Member of | [verify-and-close — test-pipeline stage (92133de1)](92133de1.md) |
 
 *The anti-box-checking gate. Vela owns per test-spec.capsule v1.0 walk lock SQ1 (Mike-V51 2026-05-23). This is where "test coverage is real, not box-checking" becomes structurally enforced — not memory-resident.*
 

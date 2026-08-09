@@ -73,11 +73,17 @@ def run_all_action_checks(vault: Path) -> tuple[list[str], int, int]:
             findings.append(f"  [WARN] {label}: frontmatter uid {uid!r} != filename {path.stem!r} (Check 3)")
 
     # Check 4: index parity
-    index_path = vault / "vault" / "00-index.jsonl"
-    if index_path.exists():
+    index_paths = (
+        vault / "vault" / "00-index.jsonl",
+        vault / "vault" / "00-archive-index.jsonl",
+    )
+    if any(path.exists() for path in index_paths):
         try:
             indexed = sum(
-                1 for l in index_path.read_text().splitlines()
+                1
+                for index_path in index_paths
+                if index_path.exists()
+                for l in index_path.read_text().splitlines()
                 if l.strip() and json.loads(l).get("type") == "action"
             )
             disk = sum(
@@ -86,7 +92,7 @@ def run_all_action_checks(vault: Path) -> tuple[list[str], int, int]:
             )
             if indexed != disk:
                 findings.append(
-                    f"  [WARN] vault/actions/ index parity: {disk} on disk vs {indexed} indexed "
+                    f"  [WARN] vault/actions/ index-union parity: {disk} on disk vs {indexed} indexed "
                     f"— run rebuild-index --apply (Check 4)"
                 )
         except Exception as e:

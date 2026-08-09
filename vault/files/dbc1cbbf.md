@@ -80,26 +80,7 @@ release_history:
 
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → **Tropo Rendering**
-
-**🌳 Tropo-Nav Path** (VS Code): [../../00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Rendering/dbc1cbbf — Tropo Rendering.md](../../00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo%20Rendering/dbc1cbbf%20%E2%80%94%20Tropo%20Rendering.md)
-
-**🌳 Tropo-Nav Path** (chat): [tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Rendering/dbc1cbbf — Tropo Rendering.md](tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo%20Rendering/dbc1cbbf%20%E2%80%94%20Tropo%20Rendering.md)
-
-**🔗 This file** — UID `dbc1cbbf` · type `project` · state `active` · status `evergreen`
-
-**↔ Siblings (9):**
-  - **under [tropo-subsystems](aae9a37b.md):** [Tropo Agents](99ed55fd.md) · [Tropo Capabilities](7a1ca900.md) · [Tropo Documentation](f87e33f0.md) · [Tropo Governance](8dd772a0.md) · [Tropo Library](1aba710c.md) · [Tropo Link](3a207ed3.md) · + 3 more
-
-**📥 Cited by (1):**
-- [Tropo-OS v1.8.0](14e5f79c.md) — `14e5f79c` (type `release`, via `subsystems_touched`)
 <!-- nav-block:end -->
-
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Aligned with | [subsystem-hub (8a4e21c5)](8a4e21c5.md) |
-| Member of | [tropo-subsystems (aae9a37b)](aae9a37b.md) |
 
 *Evergreen subsystem hub. Child of [tropo-subsystems root (aae9a37b)](aae9a37b.md). Never closes.*
 *Renamed from "Tropo Layered Graph System (TLGS)" in v1.3 per [capability matrix v1.0](../../TROPO-CAPABILITIES.md) OD2-F. UID preserved. Reframe rationale: the subsystem's operational value is render-engine-on-governed-sources (board-definitions + snapshots + query vocabulary) more than layered-graph-infrastructure (graph primitives moved to [Library hub (1aba710c)](1aba710c.md)). v1.2 shipped Board Reconciliation v0.3 as the rendering pillar — the promotion from "part of Work" to its own subsystem is evidence-driven per sa.research 030.*

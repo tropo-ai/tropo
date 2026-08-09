@@ -26,22 +26,7 @@ lifecycle: standing
 
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-work](b8e5f3a2.md) → [app-pipeline](2918e3b4.md) → **01-inbox — app-pipeline**
-
-**🌳 Tropo-Nav Path** (VS Code): [../../00-tropo-nav/00-tropo-active/tropo-work/app-pipeline/app-pipeline-01-inbox — app-pipeline/46dfbb0a — 01-inbox — app-pipeline.md](../../00-tropo-nav/00-tropo-active/tropo-work/app-pipeline/app-pipeline-01-inbox%20%E2%80%94%20app-pipeline/46dfbb0a%20%E2%80%94%2001-inbox%20%E2%80%94%20app-pipeline.md)
-
-**🌳 Tropo-Nav Path** (chat): [tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-work/app-pipeline/app-pipeline-01-inbox — app-pipeline/46dfbb0a — 01-inbox — app-pipeline.md](tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-work/app-pipeline/app-pipeline-01-inbox%20%E2%80%94%20app-pipeline/46dfbb0a%20%E2%80%94%2001-inbox%20%E2%80%94%20app-pipeline.md)
-
-**🔗 This file** — UID `46dfbb0a` · type `project` · state `active` · status `active`
-
-**↔ Siblings (26):**
-  - **under [app-pipeline](2918e3b4.md):** [app-deploy-1 — UI Foundation Step 1a + 1b](52dadffd.md) · [app-deploy-10 — Decompose app/projects/[id]/pag...](c8ab4772.md) · [app-deploy-11 — Minimum-viable smoke-test layer...](7f3d8c91.md) · [app-deploy-12 — eslint --fix auto-cleanup (part...](6e1f4b73.md) · [app-deploy-13 — Next.js framework migrations + ...](9b4d2e58.md) · [app-deploy-14 — no-explicit-any sweep in script...](2c8d1f47.md) · + 20 more
 <!-- nav-block:end -->
-
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Member of | [app-pipeline (2918e3b4)](2918e3b4.md) |
 
 ## Purpose
 

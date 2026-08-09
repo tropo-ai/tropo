@@ -3,14 +3,14 @@ uid: toolbelt
 name: toolbelt
 type: catalog
 kind: belt
-generated_at: 2026-07-11
+generated_at: 2026-08-08
 generated_by: generate-capability-catalogs.py
 extraction_scope: ship
 ---
 
 # Tropo Toolbelt
 
-*14 core tools. Derived from `belt: true` frontmatter — do not hand-edit.*
+*18 core tools. Derived from `belt: true` frontmatter — do not hand-edit.*
 
 ---
 
@@ -61,13 +61,29 @@ python3 vault/tools/tropo-emit-event.py --as <name> ...
 ```
 *Example:* `python3 vault/tools/tropo-emit-event.py --type tropo.message.sent --as talos --lifecycle ephemeral --subject <party_uid> --data '{\"body\": \"...\"}'`
 
+### generate-mint-registry
+Regenerate the typed mint registry after capsule or companion-template changes.
+
+```
+python3 vault/tools/tropo-generate-mint-registry.py
+```
+*Example:* `python3 vault/tools/tropo-generate-mint-registry.py --check`
+
 ### mint-id
-Get a fresh collision-checked identifier before authoring (file/agent UID or studio genesis today; vault/event declared, not yet built).
+Mint a bare collision-checked identifier, list human typed bindings, or atomically birth a registry-bound human artifact.
 
 ```
 python3 vault/tools/tropo-mint-id.py
 ```
 *Example:* `python3 vault/tools/tropo-mint-id.py --count 5 --kind file`
+
+### preflight
+First command on any new machine, and the first thing to run when a tool dies on an import.
+
+```
+python3 vault/tools/tropo-preflight.py
+```
+*Example:* `python3 vault/tools/tropo-preflight.py --json`
 
 ### query-events
 Query historical event log with advanced filtering.
@@ -101,6 +117,14 @@ python3 vault/tools/tropo-scan-import-state.py --output-dir <dir>
 ```
 *Example:* `python3 vault/tools/tropo-scan-import-state.py --output-dir agents/talos/...`
 
+### smoke
+Run after any retirement, after any commit that touches vault/tools/, and any time the studio feels wrong but the validator says it is fine.
+
+```
+python3 vault/tools/tropo-smoke.py
+```
+*Example:* `python3 vault/tools/tropo-smoke.py --only index --json`
+
 ### tropo-test
 Single-gesture green/yellow/red substrate health verdict.
 
@@ -117,6 +141,14 @@ python3 vault/tools/tropo-validate.py
 ```
 *Example:* `python3 vault/tools/tropo-validate.py --vault-path .`
 
+### sa.board-agent
+Per-agent backlog board rendering at activation Group 4.
+
+```
+'# (sa.board-agent is dispatched, not called directly)'
+```
+*Example:* `'# see agents/sa/sa.board-agent/sa.board-agent.md'`
+
 ### vault-search
 The lookup verb.
 
@@ -129,4 +161,4 @@ python3 vault/tools/tropo-vault-search.py \"<query>\"
 
 *Anything not here? → `python3 vault/tools/tropo-vault-search.py <query>`*
 
-*Tropo Toolbelt | 2026-07-11 | v1.15 substrate*
+*Tropo Toolbelt | 2026-08-08 | v1.15 substrate*

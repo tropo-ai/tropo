@@ -22,6 +22,7 @@ signing_context: Mike-V45 sign-off 2026-05-15 — 'I'm good.' Same OS-tier sign-
 signed_v1_1_v1_2_at: 2026-06-02
 signed_v1_1_v1_2_context: Mike-G65 sign-off 2026-06-02 — 'approved.' Locks the v1.1 (L1-native visual surfaces) + v1.2 (render delivery + liveness) additive amendments at OS-tier; v1.0 signature (2026-05-15) unchanged. Recorded by metis-g65 in the small-stuff closeout walk.
 v1_1_amendment_note: 'v1.1 (Metis G64, 2026-05-31, captain-mode per Mike-G64 directive) — adds §Agent-Authored Visual Surfaces — and Why They Are L1-Native. Extends the primitive from the auto-rendered text nav-block (v1.0) to the broader truth Mike-G64 surfaced: humans navigate visually, agents author rich rendered surfaces (boards / diagrams / maps as SVG / PNG / self-contained HTML), and this is L1-native — a harnessed agent writes static rendered files with no npm and no server, so the visual surface ships in the bare L1 zip. Composes with the three-tier product model (L1 agent-authored static → L2 served-live-operable cockpit → hosted). ADDITIVE — does not alter the v1.0 Mike-signed content; SIGNED by Mike at OS-tier 2026-06-02 (''approved'', G65 closeout walk; same sign-off gesture as v1.0). Authored under the Vela-V45 captain-mode precedent (executive authors the OS primitive on Mike''s directive; Mike signs). Argus notified for architectural-stewardship review.'
+v1_3_rescission_note: "v1.2 -> v1.3 RESCISSION 2026-07-26 by argus-a141, Mike-authorized in session (verbatim: 'I recind the old directive for nav-blocks'), with his standing intent stated the same session: 'my intention was to remove or reduce the Nav-blocks in all the files because they are cumbersome and don''t add enough value for me.' The five-section nav-block requirement is RETIRED, superseded by File Anatomy v2 (4506b6d4, Mike-ruled 2026-07-23): frontmatter truth + ONE breadcrumb line + content, nothing else derived. The retired specification is preserved verbatim as historical record with a do-not-implement notice, never deleted. THE PRINCIPLE IS UNCHANGED — humans navigate visually and agents author for them; what was retired is one mechanism that cost more to read than it returned. Mike's signatures on v1.0/v1.1/v1.2 are untouched and remain accurate for everything except the retired mechanism. Verified 2026-07-26: zero sentinel-wrapped nav-blocks remain vault-wide, measured with the renderer's own detector."
 governed_by: 8dd772a0
 aligned_with:
   - a4f9e2b1
@@ -56,6 +57,16 @@ subsystem_hub:
 ## The Primitive
 
 **The substrate is for agents. The rendered surface is also for humans.**
+
+> **RESCINDED by Mike 2026-07-26 — the five-section nav-block is retired.** Verbatim: *"I recind the old directive for nav-blocks."* Standing intent, same session: *"my intention was to remove or reduce the Nav-blocks in all the files because they are cumbersome and don't add enough value for me."*
+>
+> **What replaced it** (File Anatomy v2, [`4506b6d4`](../vault/files/4506b6d4.md), Mike-ruled 2026-07-23): a governed file carries **frontmatter truth + ONE breadcrumb line + content.** Nothing else derived — no sibling lists, no cited-by, no children, no Tropo-Nav paths, no body Relations tables.
+>
+> **Why the reversal is not a reversal of the principle.** The *principle* below — humans navigate visually and agents must author for them — is unchanged and is the reason this primitive exists. What failed was this one *mechanism*: five auto-rendered sections on every body cost more to read than they returned. Navigation is a surface, not substrate; it projects at read time (L2, the nav tree, the index) rather than being embedded in every file.
+>
+> **Status as of 2026-07-26:** zero sentinel-wrapped nav-blocks remain anywhere in the vault, verified with the renderer's own detector rather than a keyword search. The five-section spec below is preserved verbatim as the historical record of what was retired and why — **do not implement it.**
+
+*(Retired specification, preserved for the record:)*
 
 Every governed vault entry's rendered markdown body MUST provide filesystem-tree walkability on the composable graph. Five affordances, sentinel-wrapped at the top of every body, authored by the canonical render pipeline at rebuild time. Five sections, in order:
 
@@ -122,9 +133,9 @@ The link target stays the same (clicks work); the surface text the principal sca
 
 *Amendment authored 2026-05-31 by Metis G64 in captain-mode per Mike-G64 directive. Additive to the v1.0 Mike-signed primitive; pending Mike's OS-tier signature to lock, the same "I'm good" gesture as v1.0.*
 
-The Navigation block above is the **baseline** human surface — auto-rendered on every entry by the render pipeline. It answers "where am I and who points at me." But humans do not navigate a large system by reading text headers alone. **Humans are visual.** They navigate by maps, boards, trees, charts — rendered surfaces taken in at a glance.
+~~The Navigation block above is the **baseline** human surface — auto-rendered on every entry by the render pipeline.~~ **(Rescinded 2026-07-26 — see the notice at §The Navigation Block. The baseline is now one breadcrumb line.)** It answers "where am I and who points at me." But humans do not navigate a large system by reading text headers alone. **Humans are visual.** They navigate by maps, boards, trees, charts — rendered surfaces taken in at a glance.
 
-So the human-navigation contract is broader than the nav-block: **agents author rich visual surfaces for the humans they serve** — boards, diagrams, maps, ordered tables, status charts — not only the auto-rendered text block.
+So the human-navigation contract is broader than any embedded block: **agents author rich visual surfaces for the humans they serve** — boards, diagrams, maps, ordered tables, status charts. This is the part of the primitive that survived the nav-block's retirement, and it is now the *whole* of it: the auto-rendered text block was the weakest thing this primitive ever asked for, and removing it strengthens the claim rather than weakening it.
 
 **The load-bearing truth (Mike-G64, 2026-05-31): this is L1-native. It needs no server.**
 

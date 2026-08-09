@@ -3,17 +3,20 @@ uid: d5e1b4a3
 name: tool
 type: capsule-definition
 extends: core
-version: '1.7'
-supersedes_version: '1.6'
+version: '1.8'
+template_enforced_from: '2026-07-15'
+template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
+supersedes_version: '1.7'
 tier: os
 author: argus
 created: 2026-04-20
-modified: 2026-06-01
-modified_by: talos-t12
+modified: 2026-07-15
+modified_by: argus-a132
 created_by: argus-a28
 status: locked
 locked_by: argus-a53
 locked_at: 2026-05-09
+v1_8_amendment_note: 'v1.7 → v1.8 amendment 2026-07-15 by Argus A132 under Mike-locked Governed Autonomy S2 dev-spec bba40cd7 (AC4 tool-class replay + AC8 top-10 legs). Adds the missing §Template leg for draft library-class tool birth, enabling mint file --type tool at the canonical vault/tools/<uid>.md One-Home path; the locked S2 spec is the lock-break authority. Also reconciles the body transport enum/validation prose with v1.7 frontmatter by naming transport:library explicitly. Capsule remains locked.'
 enforced_enums:
   status:
     - draft
@@ -51,7 +54,7 @@ subsystem_hub:
   - 8dd772a0
 ---
 
-# tool — Capsule Definition v1.5
+# tool — Capsule Definition v1.8
 
 ## 1. Intent
 
@@ -89,7 +92,7 @@ The 10 slots: `uid`, `name`, `type`, `status`, `owner`, `domain`, `spawnable_by`
 | `owner` | string | Executive/role who registered the tool. Even for external MCP tools, ownership is Tropo-side. |
 | `domain` | string | One-sentence "what this tool does." ≤160 chars. Human-readable catalog entry. |
 | `spawnable_by` | YAML array | Who can invoke the tool. Values: `["all-executives"]`, specific agents, role tags. Array form preferred. |
-| `transport` | enum | `mcp` / `action` / `http` / `platform` / `sa` / `cli`. Drives conditional-required fields below. **(v1.4 addition):** `cli` covers kernel scripts at `.tropo/scripts/<name>.py` invoked via subprocess. |
+| `transport` | enum | `mcp` / `action` / `http` / `platform` / `sa` / `cli` / `library`. Drives conditional-required fields below. **(v1.4 addition):** `cli` covers kernel scripts invoked via subprocess. **(v1.7):** `library` covers import-only shared modules with no direct invocation command. |
 | `input` | JSON Schema (inline or `$ref`) | Structured input. May reference `.tropo/schema/tool-<name>.input.json`. MCP tools: can `$ref` the MCP server's `inputSchema` directly. |
 | provenance-pair | date + string | `created` + `created_by` OR legacy `commissioned` + `commissioned_by` OR legacy `last_updated` for `.tropo/actions/*` retrofit. |
 
@@ -103,6 +106,7 @@ The 10 slots: `uid`, `name`, `type`, `status`, `owner`, `domain`, `spawnable_by`
 | `platform` | `platform_route` (path into Tropo platform; e.g., `/api/research/run`) |
 | `sa` | `sa_name` (e.g., `sa.cold-boot`; MUST resolve to registered sa.* with `status: active`) |
 | `cli` | `cli_command` (executable invocation string with vault-relative path) + `script_path` (vault-relative path to implementation; e.g., `.tropo/scripts/validate-canonical-l0.py`) |
+| `library` | No additional field; `implementation_kind: library` identifies the import-only birth shape. |
 
 ### Optional Frontmatter
 
@@ -263,7 +267,7 @@ Mirrors session-agent.capsule and how-to.capsule.
 1. All 10 required frontmatter slots present with correct types
 2. `type` equals `"tool"`
 3. `status` ∈ {`draft`, `active`, `deprecated`, `superseded`}
-4. `transport` ∈ {`mcp`, `action`, `http`, `platform`, `sa`, `cli`}
+4. `transport` ∈ {`mcp`, `action`, `http`, `platform`, `sa`, `cli`, `library`}
 5. Conditional required fields present based on `transport`:
    - `mcp` → `mcp_server` + `mcp_tool_name`
    - `action` → `action_id` + `target_capsule`
@@ -271,6 +275,7 @@ Mirrors session-agent.capsule and how-to.capsule.
    - `platform` → `platform_route`
    - `sa` → `sa_name` (resolves to registered sa.* with `status: active`)
    - `cli` → `cli_command` + `script_path` (path resolves to existing file)
+   - `library` → no transport-specific field
 6. `name` format validation per transport:
    - `mcp` → `name` matches `<mcp_server>.<mcp_tool_name>` OR explicit re-namespace via distinct `name:` (`mcp_tool_name:` preserves upstream identifier)
    - `action` → `name` equals `action_id`
@@ -294,6 +299,45 @@ Core checks inherited: UID uniqueness + immutability, type immutability, provena
 
 ---
 
+## §Template (v1.8 — mint-stamped draft library tool)
+
+*Stamped verbatim by `mint file --type tool` under Governed Autonomy S2. The canonical birth path is `vault/tools/<uid>.md`; a surviving `<!-- REQUIRED: ... -->` placeholder makes `check-one` deterministically INCOMPLETE. Draft is the only honest generic birth status because implementation transport can be refined after authoring.*
+
+~~~markdown
+---
+uid: <<MINT:uid>>
+name: "<!-- REQUIRED: logical dispatch name; never repeat the UID -->"
+type: tool
+title: "<!-- REQUIRED: human-readable tool title -->"
+status: draft
+owner: <<MINT:author>>
+domain: "<!-- REQUIRED: one sentence, ≤160 chars, describing what the tool does -->"
+spawnable_by: []
+transport: library
+implementation_kind: library
+input:
+  type: object
+  description: "No parameters declared at draft birth."
+created: '<<MINT:date>>'
+created_by: <<MINT:author>>
+modified: '<<MINT:date>>'
+modified_by: <<MINT:author>>
+schema_version: 2
+capsule_version: '<<MINT:capsule_version>>'
+governed_by: d5e1b4a3
+---
+
+# <!-- REQUIRED: tool title matching frontmatter -->
+
+## Intent
+
+<!-- REQUIRED: what this tool does, when to invoke it, and when not to invoke it -->
+~~~
+
+**Leg rules:** `status: draft` is deliberate; only Intent is required at draft. Before activation, choose the real transport, populate every conditional field, declare permissions/audit posture, and add all six active-tool body sections. The default `library` posture has no executable command and therefore cannot pretend an implementation exists.
+
+---
+
 ## 5. Composes-With
 
 - **[session-agent.capsule (b4e2a718)](session-agent.capsule.md)** — sibling Pillar 1 typed primitive (internal specialists). ~70% frontmatter overlap. sa.* surface as tools via `transport: sa`.
@@ -312,5 +356,5 @@ The v0.1/v0.2/v1.0/v1.1/v1.3/v1.4 amendment-block opener prose, the "why renamed
 
 ---
 
-*tool capsule definition | LOCKED v1.6 | history at [tool.history.md](tool.history.md) | v1.6 amendment 2026-05-26 by Argus A84 captain-mode (v1.56 Pillar 1 single-file-truth reshape foundation - adds §2.5 Canonical File Layout specifying vault/tools/<uid>.{py|md|json} pattern + Python docstring frontmatter format + sidecar deprecation for new authoring + migration discipline; pairs with Mike-A84 taxonomy walk decisions during 2026-05-26 walk-period; composes with Pillar 1 sibling cycle pattern v1.57 how-to + v1.58 session-agent + v1.59 action). v1.5 body refactor 2026-05-11 by Argus A56 (v1.19.0 Stream C — 5-section pedagogy pattern; agent-read-not-human-read per Mike-A55). Prior v0.1–v1.4 locks preserved in history. UID `d5e1b4a3` preserved.*
+*tool capsule definition | LOCKED v1.8 | history at [tool.history.md](tool.history.md) | v1.8 amendment 2026-07-15 by Argus A132 under Mike-locked Governed Autonomy S2 (missing tool template leg + One-Home mint birth). Prior locks preserved in history. UID `d5e1b4a3` preserved.*
 *"One capsule. Six transports. Tropo sits above MCP. Single-file truth in the vault graph."*

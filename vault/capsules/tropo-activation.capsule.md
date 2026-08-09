@@ -3,17 +3,29 @@ uid: 4e8b21f0
 name: activation
 type: capsule-definition
 extends: core
-version: 1.0.3
+version: 1.0.6
+v1_0_6_lock_break: "MIKE-AUTHORIZED 2026-08-04, verbatim 'I authorize'. Documentation-only: corrects the `agent_public_key` field DESCRIPTION to match ADR-066 (ff7dd221), which Mike accepted 2026-08-03. No field added or removed, no enum, no validation rule, no state-machine transition, no required-field change — the field was and remains OPTIONAL, so every pre-v1.0.6 entry stays valid untouched, and the original v1.0.4 semantics are preserved verbatim because pre-ADR-066 keys still exist and are still checked against them. WHY IT MATTERED: this capsule is where an agent goes for design intent, and it taught that birth mints a keypair — precisely what ADR-066 retired. The contradiction was invisible for a day because the boot path still ran the old mint, which still issued keys; the 2026-08-04 cutover exercised the seam and Orpheus O35 hit it on the first birth through the new mint. Found by Metis G101 running a changed-mechanism sweep across the whole corpus rather than the agent entries alone; surfaced and NOT edited until authorized, because status: locked."
+v1_0_5_lock_break: "MIKE-AUTHORIZED 2026-08-03, verbatim 'I authorize'. Additive §Template leg only: no schema field, enum, validation rule, state-machine transition or required-field change, so all 512 pre-v1.0.5 entries stay valid untouched. Requested by Metis G100 during review of the activation-mint build; the reviewing agent (Metis) flagged that the builder had cited additive precedent WITHOUT naming an authority, which is the half of the precedent that matters."
 tier: os
 author: argus-a58
 status: locked
 locked_by: argus-a58
 locked_at: 2026-05-11
 created: 2026-05-11
-modified: 2026-06-09
+modified: 2026-08-03
 created_by: argus-a58
-modified_by: argus-a105
+modified_by: metis-g100
+template_enforced_from: '2026-08-03'
+template_enforced_from_note: "The date THIS capsule's §Template leg was authored (v1.0.5). Declares the mint-time contract's start so the 512 activation entries that predate the scaffold are not judged against it (core.capsule v1.9 §Governance Rule 11)."
 remediation_history:
+  - version: 1.0.5
+    date: 2026-08-03
+    by: metis-g100
+    summary: "LOCK-BREAK, MIKE-AUTHORIZED 2026-08-03 (verbatim: 'I authorize', answering a review item that named this capsule and this amendment explicitly; Metis G100 session). Standing authority: Mike's 2026-08-03 ruling that the agent lifecycle must be REPLACED, and rules 7-11 of the Mike-locked design brief 40b13b5b. Recorded rather than inferred, because every prior amendment to this capsule and to note.capsule/tool.capsule names its authorization — the precedent is not 'a locked capsule may be amended additively', it is 'every additive amendment states who authorized it'. NEW §Template leg per the Template-Leg Contract v1.0 (b933eafb) + `template_enforced_from`. ADDITIVE in the same sense as note.capsule v3.3 and tool.capsule v1.8: no schema field, enum, validation rule, state-machine transition or required-field changes, so every pre-v1.0.5 entry stays valid unchanged and no instance is touched. The leg exists so `activation` has one authored home for its record shape (rule 7 level 1 — eleven rules 40b13b5b) instead of the shape living as an f-string in whichever tool writes it; `40b2f455.py` and `e337f1dd.py` each hand-write their own today, which is how the same primitive acquired three different field sets. `tropo-activate.py` (the lifecycle mint) stamps this leg and fills the values it owns. NOT generically mintable: `tropo-mint-id.py --type activation` refuses, because a second generic writer for a lifecycle record is the divergence rule 7 names. Body carries no REQUIRED placeholder — an activation body is machine-written boilerplate (§2 'Activations are slim metadata'), so the scaffold is complete as stamped and section-presence enforcement stays inert for records the two lifecycle writers produce."
+  - version: 1.0.4
+    date: 2026-07-26
+    by: argus-a141
+    summary: "G2 Stage 1 lock-break, MIKE-AUTHORIZED in session 2026-07-26 (verbatim: 'proceed', answering a walkthrough item that named this capsule and this field explicitly). Adds ONE optional field to §Optional Frontmatter — `agent_public_key` — so an agent generation's public key binds to its activation entry at Group 0, making the entry an explicit delegation certificate. Per dev-spec 1a04bf0e and ADR-059 (ea3863a3, anchor ruled 2026-07-25). ADDITIVE and backward-compatible: the field is optional, so every pre-v1.0.4 activation entry remains valid unchanged; no enum, rule, state-machine, required-field, or validator behavior is altered. Semantics deliberately narrow — provenance only, never authority; per-generation and ephemeral; a signature by an agent key satisfies no authority gate. Motivating measurement (A141, 2026-07-26): git identity is repo-scoped and the checkout is shared, so agents committing as Mike is structural rather than sloppiness; and the harness signing helper signs on request with no presence check, which A141 demonstrated by producing a commit authored 'Forger <forge@test.local>' carrying a valid signature from the same key that signs canary-evidence commits under Mike's name. Mike's key is explicitly OUT of scope at this stage per his staging ruling ('architect for it, but keep the implementation light for now')."
   - version: 1.0.3
     date: 2026-05-16
     by: argus-a68
@@ -136,6 +148,7 @@ The failure mode this primitive prevents: **execution history living in private 
 | `boot_smoke_test_subject` | bool | True if this activation served as a fresh-boot smoke test for a substrate cycle. Used by validator to confirm smoke tests are recorded. |
 | `validated_at` | ISO timestamp | When validator last confirmed schema conformance + invariants. Updated by rebuild-vault.py. |
 | `stale_threshold_hours` | integer | **(v1.0.1 amendment)** Hours of `run.jsonl` inactivity after which an `active` entry flips to `stale` (or `failed` per Rule 6 amendment below). Default by `agent_class`: `sa` = 2 (sa.* dispatches are minute-scale; staleness should surface fast); `worker` = 6 (scheduled fleet runs are hour-scale); `executive` / `director` / `cosmo` / `tropo` = 168 (= 7 days; matches gen-log historical pattern); `child-agent` = 4 (inherits from spawner unless overridden). Override allowed when a specific activation has known long-duration semantics. |
+| `agent_public_key` | string (OpenSSH public key) | **RETIRED at v1.0.6 by [ADR-066 (`ff7dd221`)](../files/ff7dd221.md), Mike-accepted 2026-08-03 verbatim "Option 1". THE LIFECYCLE MINTS NO CRYPTOGRAPHIC KEY MATERIAL.** Attribution rests on the immutable activation UID plus event provenance; any future signing capability is separate, optional, and **never a dependency of birth or of retirement**. The field stays OPTIONAL and valid: pre-ADR-066 entries carry a key legitimately and those are still verified, while entries minted from 2026-08-03 onward carry none, correctly. *(The v1.0.4 text below described it as "the keypair this generation mints at Group 0, written by `40b2f455.py open`". Both halves are false as of the 2026-08-04 cutover — nothing mints a keypair, and the mint is `tropo-activate.py`. Corrected by metis-g101 after Orpheus O35, the first agent born through the new mint, was reported as her own successor's birth blocker for lacking a key this ADR forbids issuing her. The original semantics are preserved verbatim below because pre-ADR-066 keys still exist and are still checked against exactly these rules.)* **Historical semantics, still governing every key-bearing entry — narrow, and they never widened:** (1) **Provenance only, never authority.** This key answers *who performed this act*; it never answers *who authorized it*. A signature by an agent key satisfies no authority gate, ever. (2) **Per-generation and ephemeral.** The private half is session-local, is not written to disk outside the session, and dies with the generation — that is the correct lifetime, not a limitation. (3) **This field makes the activation entry an explicit delegation certificate.** It already states who activated this agent, when, and at what generation; the key binds a signature to that statement, so verification reads as a chain: *commit signed by K* → *K bound to activation A* → *A is an open, gate-valid activation of agent X* → *A was activated by \<principal\>*. (4) **Consequence:** ADR-016 becomes cryptographically checkable — two keys claiming one agent slug is a state in which the non-gate-valid one is simply invalid, rather than a violation the registry merely detects after the fact. Optional, so every pre-v1.0.4 activation entry remains valid unchanged. |
 
 ### Body shape
 
@@ -282,5 +295,60 @@ Dev-pipeline cycles already author "activation root projects" — for example, v
 
 ---
 
-*activation capsule definition | LOCKED v1.0.2 (amended v1.22.0.3 per remaining sa.skeptic P1 findings — closure_reason + agent_root_map.yaml clarifications) | UID `4e8b21f0` | Authored by Argus A58 2026-05-11 | v1.21.0 Stream 1 origin; v1.22.0 amendment for per-class stale threshold + Vela failed-authority*
+## §Template (v1.0.5 — the mint-stamped scaffold; contract at [b933eafb](../../vault/files/b933eafb.md))
+
+*Stamped by `tropo-activate.py`, the lifecycle mint — **not** by the generic `mint file --type activation`, which refuses. `activation` is a system-only type: it is the record of an identity being issued, and a second generic writer for it is exactly the two-authored-copies divergence rule 7 names ([40b13b5b](../../vault/files/40b13b5b.md)).*
+
+*The mint stamps the five `<<MINT:*>>` tokens (`author` resolves to `<agent>-<generation>`, the entry's own handle), then fills every `<!-- REQUIRED: -->` frontmatter value with what it computed and **deletes** the `<!-- OPTIONAL: -->` lines it has nothing for — absence reads as "not recorded", never as an error. The body's one OPTIONAL placeholder is where the pointer block lands.*
+
+~~~markdown
+---
+uid: <<MINT:uid>>
+type: activation
+name: <!-- REQUIRED: <agent>-<generation>, the entry's canonical handle -->
+title: "<!-- REQUIRED: display title; nav renders from it -->"
+agent: <!-- REQUIRED: agent slug -->
+agent_class: <!-- REQUIRED: executive | director | sa | cosmo | tropo | worker | child-agent | pipeline -->
+generation: <!-- REQUIRED: issued BY the mint (highest known local + 1); an agent never asserts its own -->
+activated_at: <!-- REQUIRED: full UTC instant YYYY-MM-DDTHH:MM:SSZ — never a bare date, or hourly staleness cannot be computed against it -->
+activated_by: <!-- REQUIRED: authorizing principal, or the parent activation UID -->
+status: active
+created_by_activation_uid: <<MINT:activation_uid>>
+agent_root: <!-- OPTIONAL: Level-1 agent root project UID -->
+model: <!-- OPTIONAL: sleeve identifier -->
+platform: <!-- OPTIONAL: harness the session runs in -->
+run_folder: <!-- OPTIONAL: playbook-runs/<run>/ path -->
+predecessor_activation_uid: <!-- OPTIONAL: previous activation for this agent; ABSENT at genesis, which is a fact and not a gap -->
+stale_threshold_hours: <!-- OPTIONAL: per-class default from §2; staleness is computed against it, never stored -->
+member_of: []
+author: <<MINT:author>>
+created: '<<MINT:date>>'
+created_by: <<MINT:author>>
+modified: '<<MINT:date>>'
+modified_by: <<MINT:author>>
+schema_version: 2
+capsule_version: '<<MINT:capsule_version>>'
+governed_by: 4e8b21f0
+---
+
+# <<MINT:author>> — Activation Entry
+
+## 1. Session Pointers
+
+<!-- OPTIONAL: the mint writes the pointer block here — agent root, predecessor activation, run folder — and omits the ones it does not have -->
+
+## 2. Status
+
+**Current:** `active` as of <<MINT:date>>
+
+| Transition | Timestamp | Reason |
+|---|---|---|
+| (opened) | <<MINT:date>> | activation minted by `tropo-activate.py` |
+~~~
+
+**Leg rules.** No `<!-- REQUIRED: -->` placeholder survives in the body, deliberately: an activation body is machine-written boilerplate (§2 — "activations are slim metadata"), so the scaffold is complete as stamped and the generic section-presence check has nothing to fire on. Substantive narrative belongs in the living transfer, never here. `status:` IS scaffolded, unlike most types, because an activation has exactly one legal birth state — `active` means "the handoff has not been written yet." No key material appears anywhere in this leg (`agent_public_key` stays an optional §2 field for the records that already carry one); the redesigned lifecycle mints, reads and destroys no cryptographic keys, so the shared-key-root destruction family has no way in. `predecessor_activation_uid` is OPTIONAL rather than nullable: at genesis there is no predecessor, and an absent field says that more honestly than a `null` a reader can mistake for a broken link.
+
+---
+
+*activation capsule definition | LOCKED v1.0.2 (amended v1.22.0.3 per remaining sa.skeptic P1 findings — closure_reason + agent_root_map.yaml clarifications) | UID `4e8b21f0` | Authored by Argus A58 2026-05-11 | v1.21.0 Stream 1 origin; v1.22.0 amendment for per-class stale threshold + Vela failed-authority; v1.0.5 §Template leg 2026-08-03 by metis-g100*
 *"One typed entity per session, executive or sa.* or anything in between. Provenance for free. ADR-016 and ADR-028 become graph-walkable substrate invariants."*

@@ -1,10 +1,13 @@
 {
   "name": "tropo-os-studio",
   "version": "1.33.0",
-  "description": "Tropo-OS Studio — the L1 starter template shipped to users.",
+  "description": "Tropo-OS Studio \u2014 the L1 starter template shipped to users.",
   "private": true,
   "scripts": {
-    "test": "python3 vault/tools/tropo-test.py",
+    "test": "python3 vault/tools/tropo-test.py && python3 vault/tools/tropo-run-suites.py",
+    "test:validator": "python3 vault/tools/tropo-test.py",
+    "test:suites": "python3 vault/tools/tropo-run-suites.py",
+    "test:lifecycle": "python3 vault/tools/tropo-run-suites.py --filter lineage && python3 vault/tools/tropo-run-suites.py --filter lifecycle_end_to_end && python3 vault/tools/tropo-run-suites.py --filter activation_mint && python3 vault/tools/tropo-run-suites.py --filter retirement_contract",
     "test:json": "python3 vault/tools/tropo-test.py --json",
     "test:verbose": "python3 vault/tools/tropo-test.py --verbose",
     "vault:rebuild": "python3 vault/tools/tropo-rebuild-vault.py --apply"

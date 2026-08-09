@@ -10,6 +10,7 @@ created: 2026-04-10
 status: locked
 subsystem_hub:
   - 8dd772a0
+disposition_hold: "FEDERATION-ARC HOLD (Mike verbatim 2026-07-12, sheet 5dcbadbd: 'I think team/team-def is a federation arc. let's just hold on that one for now.') — not retired, not active-precedent; Metis's multi-studio arc decides its fate."
 ---
 
 # team-def — Capsule Definition

@@ -3,7 +3,12 @@ uid: b19e8d43
 name: release
 type: capsule-definition
 extends: core
-version: '3.12'
+version: '3.14'
+template_enforced_from: '2026-07-13'
+template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
+v3_14_amendment_note: 'v3.13 -> v3.14 amendment 2026-07-13 by argus-a130 per Mike-locked Release Coupling dev-spec fbe50871 (activation 807144d1; committed substrate "Publish facts... Argus authors"). Additive + non-breaking: NEW §2.7 Publish Facts — publish_state enum (staged|live|deferred-by-mike|posted-unverified|pushed-no-release|stale-stage), published_at/published_tag/fired_by (verify-live-written only), defer_record (Mike-gestured --defer only). Binding: a release >= v1.85.0 is complete only at live or deferred-by-mike (the default-publish law, Mike verbatim 2026-07-13). All values remote-verifiable per S1. Changelog row appended to companion release.history.md per convention.'
+supersedes_version: '3.12'
+v3_13_amendment_note: 'v3.12 -> v3.13 amendment 2026-07-13 by talos-t29 per Mike-locked Governed Autonomy S2 dev-spec bba40cd7 (activation 0d9f89bc; committed substrate "Template legs for the top-10 types"). Additive + non-breaking: NEW §Template section (the mint-stamped scaffold) per the Template-Leg Contract v1.0 (b933eafb). Birth status resolved as pre-ship (the v3.9+ Required-at-Activation Field-Class direction), NOT the older L176 State Machine prose claiming "release is born at ship (no pre-ship state)" -- that line predates v3.9 and was not reconciled when pre-ship was added; flagged in the leg''s own rules paragraph rather than silently picking a side. No schema, enum, or state-machine change. Changelog row appended to companion release.history.md per that file''s own established convention.'
 v3_12_amendment_note: 'v3.11 -> v3.12 2026-06-06 by Argus A101 per Mike Call-① (e68503aa): release status TERMINAL renamed done -> shipped. The 11 body refs to status:done-as-terminal became shipped (§2 enum, §2.6 Required-at-Ship header+body, Rules 15/16/17, the authored-state line, the validation-check literal). Historical ''done'' deliberately preserved: the retired v1.0 state-machine (build->verify->deploy->done->archived, L149) + the v3_9/v3_10/v3_11 amendment notes (honest record). DATA: Vela V59 migrated all 23 pre-v1.9.2 type:release status:done -> shipped (23/23; validator 56/0; non-breaking - 50 shipped already accepted). GRANDFATHER GAP (Vela honest-catch, verify-dont-infer): the migration surfaced ~135 Rule-15 WARNs because the Rule-15 VALIDATOR does not honor the rule''s own declared ''releases >= v1.59.0 ship'' scope - the v3.9 required_at_ship/activation fields (ship_signal_verbatim etc.) are UNKNOWABLE for historical v1.3/v1.6/v1.9.x releases. Rule 15/16 text sharpened below
   to make the >=v1.59.0 grandfather explicit; validator code-fix routed to Talos (skip pre-v1.59.0 type:release entries, mirroring f5e2d1c7''s pre-v1.9.2 grandfather). Migration is CORRECT (not reverted); the gap is validator grandfathering, not the rename. Split per Vela 2055: Vela did the 23 data (release-data lane); Argus did this capsule edit (historical-exclusion judgment).'
 v3_11_amendment_note: 'v3.10 -> v3.11 amendment 2026-06-06 by Vela V59 per the member_of DISAMBIGUATE build (spec 6f5bb2cb v0.4; Mike-A100 approved 9 lock-breaks; core.capsule v1.5 Rule 9). Rule 12 subsystems_touched derivation retargeted member_of[cap] -> subsystem_hub[cap], and the hardcoded 7-hub literal set -> the DYNAMIC hub set discovered from subsystem_name: (SUBSYSTEM_HUBS; 11 at present) - matching Talos f5e2d1c7.py (_discover_subsystem_hubs). capabilities_touched + subsystems_touched field descs (L119-120) retargeted to subsystem_hub: + 1-hop subsystem_hub: traversal. LANDED ATOMICALLY with Talos f5e2d1c7.py (both derivers live dynamic-11; Talos 2018 ''land yours now''); status stays locked (amend-in-place per the approved lock-break). Exact edits drafted by Argus A101 (event 2013, 1a/1b/1c); landed by Vela V59 (release lane). Sibling release-plan.capsule landed v1.5 (#3). Status-enum done->shipped (#2) SPLIT to a focused follow-up (e68503aa, Mike Call-1). Adjacents deliberately
@@ -13,7 +18,6 @@ v3_10_amendment_note: 'v3.9 → v3.10 amendment 2026-05-31 by Vela V55 per v1.62
 v3_9_amendment_note: 'v3.8 → v3.9 amendment 2026-05-28 by Argus A87 captain-mode per v1.59 dev-spec d8c3f1b7 A1 (closes A85-stub-schema-drift defect class structurally; five empirical instances at v1.55+v1.56+v1.57+v1.58 + v1.59-by-Talos confirmed by Orpheus O12 event 136). Substrate-honesty: v3.8 contract said ''no pre-ship state — release is born at ship'' but A85 introduced pre-ship-stub authoring pattern at cycle activation 2026-05-26 onwards (per A.9 + A.12 + B.7 honest-record discipline) without updating the capsule. Pattern + capsule drifted; validator caught drift at each cycle ship as ~5-10 min remediation. v3.9 closes by formalizing status:pre-ship as valid + adding required_at_activation + required_at_ship field-class declarations + new Rule 15 enforcing population by status. NEW: (a) §2 Required Frontmatter status enum: {pre-ship, done} (v3.9; was: literal done only at v3.8); pre-ship = authored captain-mode at cycle activation per current pattern, done = flipped at ship by ship-firing
   agent (typically Vela). (b) §2.5 NEW subsection Required-at-Activation Field-Class declaration: 5 fields required when status:pre-ship (capabilities_touched, kernel_substrate_touched, foundation, member_of, ratchet_targets — all enumerable at activation moment). (c) §2.6 NEW subsection Required-at-Ship Field-Class declaration: 7 fields required at status:done flip (released_at, released_by, build_artifact_path, validator_state_at_ship, pristine_streak_at_ship, ship_signal_verbatim, cold_boot_walk_disposition — all only knowable at ship). (d) NEW Rule 15 (releases ≥ v1.59.0 ship): release_validators.py extension checks status:pre-ship entries have all required_at_activation fields populated (not TBD) + status:done entries have all required_at_ship fields populated. WARN at v1.59; ERROR ratchet at v1.60+ after audit pass of existing pre-ship + done entries. (e) Rule 16 NEW (composes with Lane B V2/V3): build-release.py ship-step refuses status:done flip when any required_at_ship field absent
   or TBD. Closes 3-cycle-recurring R11+R12 substrate-population-residue at structural level. Composes with Lane V Layer 3 meta-validator (M.1 at 8e2f1a47); Layer 3 catches schema-vs-implementation drift at validation-time; Rule 15 catches author-vs-schema drift at vault rebuild; Rule 16 catches author-vs-schema drift at ship-flip. Three-tier defense closing the defect class structurally.'
-supersedes_version: '3.10'
 tier: os
 author: tropo
 created: 2026-04-16
@@ -162,6 +166,16 @@ Ship-flip discipline: Rule 16 enforces this at build-release.py ship-step via pr
 9. *(optional)* **`## Credits`** — Contributors.
 
 v1.0 did not mandate body sections. v2.0+ entries follow the required shape; grandfathered v1.0 entries exempt per the composition rule below.
+
+### §2.7 Publish Facts (v3.14 — Release Coupling, dev-spec fbe50871; ≥ v1.85.0)
+
+Optional pre-coupling; populated by the coupled publish flow (`tropo-publish-release.py`) from v1.85.0 forward. **Every value is remote-verifiable per the S1 world-state law — the entry records what the remote confirmed, never what a tool claimed.**
+
+| Field | Type | Constraint |
+|---|---|---|
+| `publish_state` | enum | `staged` \| `live` \| `deferred-by-mike` \| `posted-unverified` \| `pushed-no-release` \| `stale-stage`. **A release ≥ v1.85.0 is complete only at `live` or `deferred-by-mike`** (the default-publish law, fbe50871 composition law 6) — any other value is an in-flight or fault state that nags at boot. |
+| `published_at` / `published_tag` / `fired_by` | ISO date / tag string / principal slug | Written only on verify-live green (tag + main sha + release object confirmed). Never authored by hand. |
+| `defer_record` | object | `{deferred_by, deferred_at, reason}` — written only by the Mike-gestured `--defer` (TTY-interactive, default-NO). `deferred_by` must resolve to a `type: principal`. A deferred release stays fireable; a later fire overwrites `publish_state` with the fire outcome and preserves the defer record as history. |
 
 ---
 
@@ -317,11 +331,72 @@ Canonical grandfathered exemplars: v1.1.0 (v1.0-era), v1.4.1 (v3.1-era), v1.6 (v
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — this capsule's own governance; Rule 1 scope clarifier delegates capsule-file amendment discipline here.
 - **[`render-chain-progress-board.skill (135be96d)`](../skills/render-chain-progress-board.skill.md)** *(v3.6)* — codifies the format + when + where for the `## Chain Progress Snapshot` required body section per Rule 13. Skill is the canonical authoring procedure; capsule is the structural enforcement.
 
-### History
+## §Template (v3.13 — the mint-stamped scaffold; contract at [b933eafb](../../vault/files/b933eafb.md))
 
-The v2.0 supersession note + amendment-block prose at top of the original v3.4 body, the verbose inline YAML 4-entry `verification_artifacts:` worked example (~40 lines; full authoring reference for cold dispatchers), the Stage 3 paired-mode dispatcher rationale + DEFERRED-PENDING-CAPSULE edge cases (preserved fully because audit-load-bearing), the Known Enforcement Gaps table (15 rows), the full §Studio — Shop Signage authoring procedure (human-facing quick-ref preserved per Mike-A55 *"capsules are agent-read, not human-read"* directive), the Relationship-to-release-plan comparison table, the Extension-from-core section, and the full changelog are preserved in the companion [release.history.md (ff5653d5)](release.history.md) governed by `capsule-history.capsule` (5ec083a3).
+*Stamped verbatim by `mint file --type release` (S2, bba40cd7); `<<MINT:*>>` tokens are the only substitution. **Birth-status contradiction, resolved and flagged (see amendment note above):** `status: pre-ship` is this leg's birth default, per the v3.9+ Required-at-Activation Field-Class machinery — NOT the older §3 State Machine prose ("release is born at ship, no pre-ship state"), which predates pre-ship and was never reconciled. The 5 Required-at-Activation fields are populated immediately since they're required the moment status is pre-ship; the 9 Required-at-Ship fields are NOT scaffolded (unknowable before the ship flip). Every required body section genuinely describes post-ship content (what shipped, verification performed, known issues) — a pre-ship mint cannot honestly fill these yet, so every placeholder below says so explicitly rather than inventing filler.*
+
+~~~markdown
+---
+uid: <<MINT:uid>>
+type: release
+title: "<!-- REQUIRED: <Product> v<version> -->"
+description: "<!-- REQUIRED: one-line summary, ≤200 chars -->"
+state: active
+status: pre-ship
+owner: <<MINT:author>>
+release_version: "<!-- REQUIRED: semver this release will ship, e.g. 1.85.0 -->"
+release_date: "<!-- REQUIRED: estimated ship date; correct at ship flip -->"
+derived_from:
+  - "<!-- REQUIRED: the build UID this release will ship -->"
+shipped_release_plan: "<!-- REQUIRED: the release-plan UID this release satisfies -->"
+manifest_path: "<!-- REQUIRED: path from vault root to the release manifest, populated at ship -->"
+zip_path: "<!-- REQUIRED: path from vault root to the distribution zip, populated at ship -->"
+member_of:
+  - "<!-- REQUIRED: release-planning project UID -->"
+  - "<!-- REQUIRED: pipeline stage bucket UID -->"
+capabilities_touched:
+  - "<!-- REQUIRED: Required-at-Activation - capability UIDs this cycle will touch -->"
+kernel_substrate_touched:
+  - "<!-- REQUIRED: Required-at-Activation - kernel substrate paths this cycle will touch -->"
+foundation:
+  - "<!-- REQUIRED: Required-at-Activation - substrate UIDs this cycle composes with -->"
+ratchet_targets: "<!-- REQUIRED: Required-at-Activation - object with pristine_streak target + cycle-position + next_cycle if known -->"
+created: '<<MINT:date>>'
+created_by: <<MINT:author>>
+modified: '<<MINT:date>>'
+modified_by: <<MINT:author>>
+schema_version: 2
+capsule_version: '<<MINT:capsule_version>>'
+governed_by: 8dd772a0
+---
+
+# <!-- REQUIRED: title (mirror frontmatter) -->
+
+## What Shipped
+<!-- REQUIRED: populate at ship -- concrete list of what's in this release -->
+
+## Release Notes
+<!-- REQUIRED: populate at ship -- user-facing narrative, 2-4 paragraphs -->
+
+## Chain Progress Snapshot
+<!-- REQUIRED: populate at ship, per render-chain-progress-board.skill (135be96d) -- frozen at ship, not updated after -->
+
+## Verification Summary
+<!-- REQUIRED: populate at ship -- verification performed, links to the build's test results -->
+
+## Known Issues
+<!-- REQUIRED: populate at ship -- defects shipping with this release, or state "No known issues at ship." explicitly -->
+~~~
+
+**Leg rules:** The 9 Required-at-Ship fields (`released_at`, `released_by`, `build_artifact_path`, `build_manifest_files`, `build_manifest_bytes`, `pristine_streak_at_ship`, `validator_state_at_ship`, `ship_signal_verbatim`, `cold_boot_walk_disposition`) are NOT scaffolded — they become required only at the `pre-ship → shipped` flip (Rule 16 refuses the flip without them), and are genuinely unknowable before then. `## Retrospective` (the only section appendable after `state: archived`), `## Upgrade Notes`, `## Breaking Changes`, `## Credits` are optional and not scaffolded.
 
 ---
 
-*release capsule definition | LOCKED v3.8 | history at [release.history.md](release.history.md) | v3.8 amendment 2026-05-27 by Argus A85 captain-mode (v1.56.0 cycle X.1 — Rule 14 + Check 26 RETIRED; Rule 12 1-hop derivation alone governs subsystems_touched post-Pillar-1-tools-migration; preserved as historical record for v1.54-v1.55 grandfathering per Mike-A85 standing architect-led-roadmap-optimization authority per stm-a85-001). v3.7 amendment 2026-05-25 by Argus A84 captain-mode (v1.54.0 ship - substrate_verify_twice_findings ledger + Rule 14 extended derivation per Mike-A84 walk-lock on [cycle brief 5d0c831f v0.2](../../vault/files/5d0c831f.md) + [dev-spec 137ac7e1 v1.0](../../vault/files/137ac7e1.md)). v3.6 amendment 2026-05-16 by Argus A68 (v1.35.0 ship — chain-progress-snapshot bakery per Mike-A68 directive). v3.5 body refactor 2026-05-11 by Argus A56 (v1.19.0 Stream C — 5-section pedagogy pattern; agent-read-not-human-read per Mike-A55 v1.18.0 walk Q3). Prior v1.0–v3.5 locks preserved in history. UID `b19e8d43` preserved.*
+### History
+
+The v2.0 supersession note + amendment-block prose at top of the original v3.4 body, the verbose inline YAML 4-entry `verification_artifacts:` worked example (~40 lines; full authoring reference for cold dispatchers), the Stage 3 paired-mode dispatcher rationale + DEFERRED-PENDING-CAPSULE edge cases (preserved fully because audit-load-bearing), the Known Enforcement Gaps table (15 rows), the full §Studio — Shop Signage authoring procedure (human-facing quick-ref preserved per Mike-A55 *"capsules are agent-read, not human-read"* directive), the Relationship-to-release-plan comparison table, the Extension-from-core section, and the full changelog are preserved in the companion [release.history.md (ff5653d5)](release.history.md) governed by `capsule-history.capsule` (5ec083a3). v3.13's §Template leg addition is logged in the same companion history's changelog table.
+
+---
+
+*release capsule definition | v3.13 amended 2026-07-13 by Talos T29 (Governed Autonomy S2 — §Template leg) | LOCKED v3.8 | history at [release.history.md](release.history.md) | v3.8 amendment 2026-05-27 by Argus A85 captain-mode (v1.56.0 cycle X.1 — Rule 14 + Check 26 RETIRED; Rule 12 1-hop derivation alone governs subsystems_touched post-Pillar-1-tools-migration; preserved as historical record for v1.54-v1.55 grandfathering per Mike-A85 standing architect-led-roadmap-optimization authority per stm-a85-001). v3.7 amendment 2026-05-25 by Argus A84 captain-mode (v1.54.0 ship - substrate_verify_twice_findings ledger + Rule 14 extended derivation per Mike-A84 walk-lock on [cycle brief 5d0c831f v0.2](../../vault/files/5d0c831f.md) + [dev-spec 137ac7e1 v1.0](../../vault/files/137ac7e1.md)). v3.6 amendment 2026-05-16 by Argus A68 (v1.35.0 ship — chain-progress-snapshot bakery per Mike-A68 directive). v3.5 body refactor 2026-05-11 by Argus A56 (v1.19.0 Stream C — 5-section pedagogy pattern; agent-read-not-human-read per Mike-A55 v1.18.0 walk Q3). Prior v1.0–v3.5 locks preserved in history. UID `b19e8d43` preserved.*
 *"The plan coordinates. The build packages. The release records. History stands; retrospective grows."*

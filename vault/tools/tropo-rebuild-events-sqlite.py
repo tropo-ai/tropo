@@ -23,7 +23,8 @@ output:
 write_scope: [vault/events/]
 created: 2026-05-26
 created_by: talos-t10
-version: "1.0"
+version: "1.1"
+v1_1_note: "Distributed Event Ledger projection: unions immutable legacy epoch + per-writer streams, keys by event_uid, derives display_seq, and carries writer/local/correlation/causation fields."
 governed_by: d5e1b4a3
 member_of: ["8dd772a0"]
 schema_version: 2
@@ -38,6 +39,8 @@ from __future__ import annotations
 import argparse, json, sqlite3, sys
 from pathlib import Path
 
+from lib import event_identity
+
 VAULT_ROOT = Path(__file__).resolve().parents[2]
 JSONL_PATH = VAULT_ROOT / "vault" / "events" / "00-events.jsonl"
 SQLITE_PATH = VAULT_ROOT / "vault" / "events" / "00-events-index.sqlite"
@@ -48,18 +51,15 @@ def rebuild(dry_run: bool = False) -> int:
         print("ERROR: 00-events.jsonl not found", file=sys.stderr)
         return 1
 
-    events = []
-    for line in JSONL_PATH.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError as e:
-            print(f"WARN: skipping malformed line: {e}", file=sys.stderr)
+    try:
+        records = event_identity.load_event_union_records(VAULT_ROOT)
+    except (json.JSONDecodeError, ValueError) as exc:
+        print(f"ERROR: event union invalid: {exc}", file=sys.stderr)
+        return 1
+    ordered = event_identity.derive_display_record_order(records)
 
     if dry_run:
-        print(f"DRY RUN: {len(events)} event(s) would be written to SQLite")
+        print(f"DRY RUN: {len(records)} unique event(s) would be written to SQLite")
         return 0
 
     if SQLITE_PATH.exists():
@@ -69,28 +69,39 @@ def rebuild(dry_run: bool = False) -> int:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("""
         CREATE TABLE events (
-            id TEXT PRIMARY KEY, specversion TEXT NOT NULL, type TEXT NOT NULL,
+            event_uid TEXT PRIMARY KEY, id TEXT NOT NULL,
+            display_seq INTEGER NOT NULL,
+            specversion TEXT NOT NULL, type TEXT NOT NULL,
             source TEXT NOT NULL, time TEXT NOT NULL, subject TEXT,
             source_uid TEXT NOT NULL, lifecycle TEXT NOT NULL,
-            correlationid TEXT, data TEXT, raw TEXT NOT NULL
+            correlationid TEXT, causationid TEXT,
+            writer_instance_uid TEXT, stream_uid TEXT, local_seq INTEGER,
+            data TEXT, raw TEXT NOT NULL
         )
     """)
+    conn.execute("CREATE UNIQUE INDEX idx_raw_id ON events(id)")
+    conn.execute("CREATE INDEX idx_display_seq ON events(display_seq)")
     conn.execute("CREATE INDEX idx_type ON events(type)")
     conn.execute("CREATE INDEX idx_source_uid ON events(source_uid)")
     conn.execute("CREATE INDEX idx_correlationid ON events(correlationid)")
+    conn.execute("CREATE INDEX idx_causationid ON events(causationid)")
 
-    for ev in events:
+    for display_seq, record in ordered:
+        ev = record["event"]
+        event_uid = record["event_uid"]
         conn.execute(
-            "INSERT OR IGNORE INTO events VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (ev.get("id"), ev.get("specversion"), ev.get("type"), ev.get("source"),
-             ev.get("time"), ev.get("subject"), ev.get("source_uid"), ev.get("lifecycle"),
-             ev.get("correlationid"),
+            "INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (event_uid, ev.get("id"), display_seq, ev.get("specversion"),
+             ev.get("type"), ev.get("source"), ev.get("time"), ev.get("subject"),
+             ev.get("source_uid"), ev.get("lifecycle"), ev.get("correlationid"),
+             ev.get("causationid"), ev.get("writer_instance_uid"),
+             ev.get("stream_uid"), ev.get("local_seq"),
              json.dumps(ev.get("data")) if ev.get("data") else None,
-             json.dumps(ev, ensure_ascii=False))
+             record["raw"])
         )
     conn.commit()
     conn.close()
-    print(f"Rebuilt: {len(events)} event(s) → {SQLITE_PATH.name}")
+    print(f"Rebuilt: {len(records)} unique event(s) → {SQLITE_PATH.name}")
     return 0
 
 

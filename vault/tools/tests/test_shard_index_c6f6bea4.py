@@ -373,11 +373,25 @@ class TestShardIndexC6f6bea4(unittest.TestCase):
         self.assertEqual(len(mounted_records), 0)
         self.assertEqual(statuses[0].action, "cannot-compose")
 
-        # A rebuild also does not crash and does not fabricate rows for this vault_uid.
+        # A pinned mount that cannot be verified blocks the rebuild. Refusal
+        # cannot create or shrink either composed surface.
+        surface_paths = (
+            studio / "vault" / "00-index.jsonl",
+            studio / "vault" / "00-archive-index.jsonl",
+        )
+        before = tuple(
+            path.read_bytes() if path.is_file() else None
+            for path in surface_paths
+        )
         rc = rebuild_index(studio, apply_writes=True)
-        self.assertEqual(rc, 0)
-        composed = _read_jsonl(studio / "vault" / "00-index.jsonl")
-        self.assertFalse(any(r["uid"] == "aaaa1111" for r in composed))
+        self.assertEqual(rc, 1)
+        self.assertEqual(
+            tuple(
+                path.read_bytes() if path.is_file() else None
+                for path in surface_paths
+            ),
+            before,
+        )
 
     def test_ac4_staleness_guard_fails_closed_stale_meta_and_unreachable_mount(self) -> None:
         """Argus's adversarial angle: a shard cache that IS present but is
@@ -415,15 +429,24 @@ class TestShardIndexC6f6bea4(unittest.TestCase):
         self.assertEqual(violations, 1, findings)
         self.assertTrue(any("stale" in f.lower() and "aaaa1111" in f for f in findings), findings)
 
-        # The rebuild's union must EXCLUDE this shard entirely — neither the stale
-        # v1 content NOR a phantom v2 may appear as if the index were complete.
+        # The rebuild must refuse and preserve both last-verified surfaces. A
+        # still-pinned unavailable mount is never retirement evidence.
+        surface_paths = (
+            studio / "vault" / "00-index.jsonl",
+            studio / "vault" / "00-archive-index.jsonl",
+        )
+        before = tuple(path.read_bytes() for path in surface_paths)
         rc = rebuild_index(studio, apply_writes=True)
-        self.assertEqual(rc, 0)
-        composed = _read_jsonl(studio / "vault" / "00-index.jsonl")
+        self.assertEqual(rc, 1)
+        self.assertEqual(
+            tuple(path.read_bytes() for path in surface_paths),
+            before,
+        )
+        composed = _read_jsonl(surface_paths[0])
         aaaa_rows = [r for r in composed if r["uid"] == "aaaa1111"]
         self.assertEqual(
-            len(aaaa_rows), 0,
-            f"a stale/unreachable shard was served into the composed index: {aaaa_rows}",
+            len(aaaa_rows), 1,
+            f"the last verified mounted row was lost after refusal: {aaaa_rows}",
         )
 
     # -----------------------------------------------------------------

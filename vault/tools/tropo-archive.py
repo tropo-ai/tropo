@@ -147,6 +147,35 @@ def _emit(event_type: str, uid: str, actor: str, reason: str, superseded_by=None
         pass  # event emission is best-effort; archival still succeeds
 
 
+# ── Index freshen (Governed Autonomy S2, bba40cd7) ─────────────────────────────
+
+def _freshen_index(uid: str):
+    """write-owns-its-update: freshen this entry's index rows in the same
+    gesture as the state flip, via the existing single-source `rebuild --only`
+    transform. Best-effort (never blocks the archive/unarchive that already
+    succeeded) but loud on failure -- "the write is not done until its row is";
+    a silent failure here would just resurface later as a check_mint_provenance
+    ERROR with a worse trail."""
+    rebuild_script = VAULT_ROOT / "vault" / "tools" / "tropo-rebuild-index.py"
+    if not rebuild_script.is_file():
+        return
+    try:
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(rebuild_script), "--only", uid],
+            cwd=str(VAULT_ROOT), capture_output=True, text=True, timeout=60,
+        )
+        if result.returncode != 0:
+            print(
+                f"ERROR: {uid}'s index freshen failed (exit {result.returncode}): "
+                f"{result.stderr.strip()}\nRun 'python3 vault/tools/tropo-rebuild-index.py "
+                f"--only {uid}' by hand.",
+                file=sys.stderr,
+            )
+    except Exception as e:
+        print(f"ERROR: {uid}'s index freshen crashed: {e}", file=sys.stderr)
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -198,6 +227,7 @@ def main() -> int:
         _write_entry(fp, fm, body or "")
         _emit("tropo.entry.unarchived", uid, args.actor,
               args.force_with_reason or "unarchive requested")
+        _freshen_index(uid)
         force_note = f" (forced: {args.force_with_reason!r})" if args.force_with_reason else ""
         print(f"[DONE] {uid} ({title!r}) — unarchived{force_note}")
         return 0
@@ -225,6 +255,7 @@ def main() -> int:
     fm["modified_by"] = args.actor
     _write_entry(fp, fm, body or "")
     _emit("tropo.entry.archived", uid, args.actor, args.reason, superseded_by)
+    _freshen_index(uid)
 
     sup_note = f" (superseded_by: {superseded_by})" if superseded_by else ""
     print(f"[DONE] {uid} ({title!r}) — archived{sup_note}: {args.reason!r}")

@@ -22,12 +22,6 @@ capsule_version: '2.5'
 
 # Working with Existing Files
 
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Governed by | [kb-article (4cb20382)](4cb20382.md) |
-
 *Your files don't change. The vault understands them.*
 
 ## The Short Version

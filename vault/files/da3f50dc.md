@@ -53,32 +53,7 @@ tags:
 
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-work](b8e5f3a2.md) → **test-pipeline**
-
-**🌳 Tropo-Nav Path** (VS Code): [../../00-tropo-nav/00-tropo-active/tropo-work/test-pipeline/da3f50dc — test-pipeline.md](../../00-tropo-nav/00-tropo-active/tropo-work/test-pipeline/da3f50dc%20%E2%80%94%20test-pipeline.md)
-
-**🌳 Tropo-Nav Path** (chat): [tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-work/test-pipeline/da3f50dc — test-pipeline.md](tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-work/test-pipeline/da3f50dc%20%E2%80%94%20test-pipeline.md)
-
-**🔗 This file** — UID `da3f50dc` · type `pipeline` · state `active` · status `active`
-
-**↓ Children (3):**
-  - **pipeline (3):** [execute — test-pipeline stage](2e097029.md) · [prepare — test-pipeline stage](69c291b7.md) · [verify-and-close — test-pipeline stage](92133de1.md)
-
-**↔ Siblings (7):**
-  - **under [tropo-work](b8e5f3a2.md):** [app-pipeline](2918e3b4.md) · [dev-pipeline](cd1fcd25.md) · [doc-pipeline](5a4337ff.md) · [Hello Tropo — 2026 Customer Event Plan](e8d1a4f6.md) · [publish-pipeline](e2f4a8c1.md) · [vault-ops-pipeline](9dab87a0.md) · + 1 more
-
-**📥 Cited by (2):**
-- [doc-pipeline](5a4337ff.md) — `5a4337ff` (type `pipeline`, via `composes_with`)
-- [Tropo-OS v1.51.0 — Three-Pipeline Substrate-Engineering (Six A...](b0435ff0.md) — `b0435ff0` (type `release`, via `capabilities_touched`)
 <!-- nav-block:end -->
-
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Governed by | [pipeline (e4c8a6b2)](e4c8a6b2.md) |
-| Composes with | [test-spec (621824df)](621824df.md) |
-| Composes with | [dev-pipeline (cd1fcd25)](cd1fcd25.md) |
-| Member of | [tropo-work (b8e5f3a2)](b8e5f3a2.md) |
 
 *v1.0 LOCKED 2026-05-23 by Vela V51 as Phase C of v1.51 Three-Pipeline Substrate-Engineering. Activation-input: test-spec.capsule v1.0 [621824df] entry. Coupling: triggered by dev-pipeline step 4.6; back-feeds dev-pipeline activation close gate.*
 

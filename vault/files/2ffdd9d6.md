@@ -71,16 +71,8 @@ acceptance_criteria:
 # Pipeline Activation Key — Dev-Spec v1.0
 
 <!-- nav-block:start -->
-**📍 Vault Path:** [6dff0111](6dff0111.md) → **Pipeline Activation Key — Dev-Spec (fingerprint-as-key re...**
-
-**🔗 This file** — UID `2ffdd9d6` · type `dev-spec` · state `active` · status `locked`
+**📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Agents](99ed55fd.md) → [Argus — Agent Root Project](6dff0111.md) → **Pipeline Activation Key — Dev-Spec (fingerprint-as-key re...**
 <!-- nav-block:end -->
-
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Governed by | [Tropo Governance (8dd772a0)](8dd772a0.md) |
 
 *The HOW for brief [f8cda3dd](f8cda3dd.md). Lean by intent — the key is simple by design. Realizes the principle: build the plain fingerprint now; it grows into signed provenance later without redesign.*
 

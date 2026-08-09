@@ -49,7 +49,7 @@ capsule_version: '2.5'
 schema_version: 2
 extraction_scope: ship
 member_of:
-- c7e4f9a2
+- 8dd772a0
 tags:
 - tool
 - cli
@@ -86,7 +86,11 @@ def _semver_key(v):
 
 
 def load_release_catalog(index_path):
-    """Load type:release, status:shipped entries from the vault index that are actual
+    """Load shipped releases from the ADR-047 current+archive index union.
+
+    Historical shipped releases are expected to live on the archive surface;
+    update-chain generation is an explicitly history-aware consumer.
+    Load actual
     Tropo-OS product releases — ascending by semver, deduped by version (last wins).
 
     Two discriminators exclude non-product release records that share the same
@@ -96,23 +100,28 @@ def load_release_catalog(index_path):
     be strict semver X.Y.Z (excludes non-OS version tags like 'mos-v13.0').
     """
     by_version = {}
-    if not os.path.exists(index_path):
+    index_path = Path(index_path)
+    archive_path = index_path.parent / '00-archive-index.jsonl'
+    if not index_path.exists() and not archive_path.exists():
         return []
-    with open(index_path, 'r') as f:
-        for line in f:
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            if row.get('type') != 'release':
-                continue
-            if row.get('status') != 'shipped':
-                continue
-            if row.get('extraction_scope') == 'argo-private':
-                continue
-            version = (row.get('release_version') or '').lstrip('v')
-            if _semver_key(version) == (-1, -1, -1):
-                continue
-            by_version[version] = row  # last one wins on duplicate version records
+    for surface in (index_path, archive_path):
+        if not surface.exists():
+            continue
+        with surface.open('r') as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if row.get('type') != 'release':
+                    continue
+                if row.get('status') != 'shipped':
+                    continue
+                if row.get('extraction_scope') == 'argo-private':
+                    continue
+                version = (row.get('release_version') or '').lstrip('v')
+                if _semver_key(version) == (-1, -1, -1):
+                    continue
+                by_version[version] = row  # last one wins on duplicate version records
     releases = list(by_version.values())
     releases.sort(key=lambda r: _semver_key(r.get('release_version', '').lstrip('v')))
     return releases

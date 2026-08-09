@@ -49,7 +49,7 @@ capsule_version: '2.5'
 schema_version: 2
 extraction_scope: ship
 member_of:
-- c7e4f9a2
+- 8dd772a0
 supersedes: f7e3d9a2
 tags:
 - tool
@@ -363,9 +363,11 @@ def main() -> int:
                 for line in tail_lines:
                     print(f'    {line}', file=sys.stderr)
         else:
-            # Summarize: count [updated] / [inserted] / [unchanged] / [skip] from stderr
+            # Summarize per-file status tags from stderr. [rendered]/[stripped] are
+            # the File Anatomy v2 renderer's tags (4506b6d4, metis-g92 2026-07-23);
+            # [updated]/[inserted] retained for legacy-path output.
             stderr_lines = result.stderr.split('\n')
-            counts = {'updated': 0, 'inserted': 0, 'unchanged': 0, 'skip': 0, 'error': 0}
+            counts = {'rendered': 0, 'stripped': 0, 'updated': 0, 'inserted': 0, 'unchanged': 0, 'skip': 0, 'error': 0}
             for line in stderr_lines:
                 for tag in counts:
                     if f'[{tag}]' in line:

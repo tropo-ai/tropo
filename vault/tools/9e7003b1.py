@@ -20,7 +20,7 @@ created: 2026-05-27
 created_by: talos-t10
 governed_by: d5e1b4a3
 member_of:
-  - c7e4f9a2
+  - 8dd772a0
 schema_version: 2
 ---
 """
@@ -103,6 +103,196 @@ EXIT_RUNTIME = 2
 EXIT_ARGS = 3
 EXIT_CONTRACT = 4
 EXIT_SKIP_AUTH = 5
+
+_PIPELINE_EMIT_UID_RE = re.compile(r"^[0-9a-f]{8}$")
+_PIPELINE_SANDBOX_ENV = "TROPO_PIPELINE_RUNTIME_SANDBOX"
+
+
+def _emit_pipeline_event(event_type: str, lifecycle: str, data: dict) -> None:
+    """Sandbox-aware, fail-loud pipeline event emission (closes 7627b589).
+
+    Root cause this replaces: every one of this engine's 3 auto_emit call sites
+    used to fire unconditionally at the real production log. Any test that
+    exercised this engine directly (not a mock) permanently wrote fixture-shaped
+    events (activation_uid: "act2", etc.) into vault/events/00-events.jsonl --
+    append-only, cannot be deleted; 43 such events accumulated before this fix.
+    Un-sandboxed tests and un-fakeable receipts are structurally incompatible
+    (Argus A130's framing, S1 verification) -- this closes that gap two ways:
+
+    1. Sandbox mode: set TROPO_PIPELINE_RUNTIME_SANDBOX to a run-local file path
+       and every pipeline event this engine would emit appends there as one JSON
+       line instead -- no production emission happens at all. Test harnesses set
+       this; production callers never do.
+    2. Fail-loud floor: with no sandbox var set (the production path), any
+       activation_uid/pipeline_run_uid in the payload that isn't real 8-hex
+       refuses the emission LOUDLY (stderr ERROR, event dropped) instead of
+       silently writing a fixture-shaped event to the real log. A test that
+       forgets to set the sandbox var now fails loud instead of polluting.
+    """
+    sandbox_path = os.environ.get(_PIPELINE_SANDBOX_ENV)
+    if sandbox_path:
+        try:
+            sandbox_file = Path(sandbox_path)
+            sandbox_file.parent.mkdir(parents=True, exist_ok=True)
+            record = {
+                "type": event_type,
+                "lifecycle": lifecycle,
+                "source": "/tools/pipeline-runtime",
+                "data": data,
+                "sandboxed": True,
+            }
+            with sandbox_file.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(record) + "\n")
+        except Exception as e:
+            print(f"WARN: sandboxed pipeline-event emit failed (non-blocking): {e}", file=sys.stderr)
+        return
+
+    for key in ("activation_uid", "pipeline_run_uid"):
+        value = data.get(key)
+        if value is not None and not _PIPELINE_EMIT_UID_RE.match(str(value)):
+            print(
+                f"ERROR: refusing to emit {event_type!r} to the production event log -- "
+                f"{key}={value!r} is not a real 8-hex UID (fixture-shaped). This is the "
+                f"7627b589 fail-loud floor: set {_PIPELINE_SANDBOX_ENV} for test runs. "
+                f"No event was written.",
+                file=sys.stderr,
+            )
+            return
+
+    try:
+        _sp = Path(__file__).resolve().parents[2] / ".tropo" / "scripts"
+        if str(_sp) not in sys.path:
+            sys.path.insert(0, str(_sp))
+        from lib.event_emitter import auto_emit
+        auto_emit(event_type, "/tools/pipeline-runtime", "123e12e7", lifecycle=lifecycle, data=data)
+    except Exception:
+        pass
+
+
+# ---------------------- durable-closure completion recording (Check 32 gap-fix) ----------------------
+# dev-spec c392d833 (activation 63988cfb; metis-g91 diagnosis 1d689277; Argus A136).
+# The durable-closure weld archives an activation root (state:archived). Check 32 —
+# Completion Recording Enforcement (2fe61817, tropo-validate.py check_completion_recording)
+# — reads the derived event surface and FAILs (ERROR) any state:done/archived work-item
+# whose uid has NO correlated completion event: a tropo.cycle.closed (or
+# tropo.message.replied) whose correlationid == that uid. So archiving a root WITHOUT
+# emitting its correlated completion event would make every real ship trip Check 32.
+# These helpers record that event through the canonical emitter and rebuild the derived
+# events-sqlite. Idempotent (no duplicate on re-close); fire only on the archive path.
+
+_TOOL_MODULE_CACHE: dict = {}
+
+
+def _load_tool_module(mod_name: str, filename: str):
+    """Load a sibling tool/lib module by file path (cached).
+
+    Loads the REAL tool logic from vault/tools/ while its data targets are pointed
+    (by the caller) at whatever vault this close operates on. vault/tools is made
+    import-visible so the loaded module's own `from lib import event_identity`
+    resolves against vault/tools/lib (the `lib` namespace package spans
+    .tropo/scripts/lib + vault/tools/lib)."""
+    cached = _TOOL_MODULE_CACHE.get(mod_name)
+    if cached is not None:
+        return cached
+    import importlib.util
+    if str(_TOOLS) not in sys.path:
+        sys.path.insert(0, str(_TOOLS))
+    spec = importlib.util.spec_from_file_location(mod_name, str(_TOOLS / filename))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    _TOOL_MODULE_CACHE[mod_name] = module
+    return module
+
+
+def _completion_event_exists(vault_root: Path, correlation_uid: str) -> bool:
+    """True iff a tropo.cycle.closed event correlated to this uid already exists
+    anywhere in the event union (legacy 00-events.jsonl + per-writer streams).
+
+    Basis for emit idempotency: a re-close of an already-recorded root — including
+    the SHA-less-then-ship fill-if-absent second call — must NOT emit a duplicate
+    completion event (dev-spec c392d833 Check-32 gap-fix)."""
+    try:
+        ei = _load_tool_module("pr_event_identity", "lib/event_identity.py")
+        for _src, raw in ei.iter_raw_event_lines(vault_root):
+            if "tropo.cycle.closed" not in raw:
+                continue
+            try:
+                ev = json.loads(raw)
+            except Exception:
+                continue
+            if (ev.get("type") == "tropo.cycle.closed"
+                    and ev.get("correlationid") == correlation_uid):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _rebuild_events_sqlite(vault_root: Path) -> None:
+    """Regenerate the derived events-sqlite (union of legacy + per-writer streams)
+    for vault_root. Check 32 reads a derived events surface, so a bare emit without
+    the rebuild leaves that projection stale."""
+    rb = _load_tool_module("pr_rebuild_events_sqlite", "tropo-rebuild-events-sqlite.py")
+    events_dir = vault_root / "vault" / "events"
+    rb.VAULT_ROOT = vault_root
+    rb.JSONL_PATH = events_dir / "00-events.jsonl"
+    rb.SQLITE_PATH = events_dir / "00-events-index.sqlite"
+    rb.rebuild()
+
+
+def _emit_cycle_closed(vault_root: Path, root_uid: str,
+                       activation_uid: str | None = None,
+                       final_commit: str | None = None) -> bool:
+    """Record the correlated completion event for a durable-closure archive.
+
+    Emits, via the canonical emitter (tropo-emit-event.py), the tropo.cycle.closed
+    event that Check 32 (2fe61817) accepts — correlationid == the activation-root
+    uid, matching the shape check_completion_recording parses — then rebuilds the
+    derived events-sqlite. Without this, a real ship archives its root and then
+    trips Check 32 as an ERROR (the gap this fix closes).
+
+    Contract (dev-spec c392d833 gap-fix):
+      - IDEMPOTENT: skips if a completion event already exists for this root, so a
+        re-close (or the SHA-less-then-ship fill-if-absent second call) emits no
+        duplicate.
+      - ARCHIVE-PATH ONLY: the caller gates on state:archived; a root that never
+        archived is never recorded closed (never mid-run).
+      - NON-BLOCKING: the archive already succeeded; an emit failure must not break
+        the close — it is logged, not raised (the tropo-sweep-stale-roots.py
+        backstop + the Rule-10 terminal-invariant check remain the safety net).
+
+    The emitter's data targets are pointed at vault_root so this records into the
+    real Studio in production and into the sandbox fixture under test. In a
+    legacy-mode Studio/fixture the event lands in 00-events.jsonl (what Check 32
+    scans); in a cutover/streams-mode Studio it lands in the per-writer stream +
+    the rebuilt sqlite union.
+
+    Returns True if it emitted, False if it skipped (already recorded) or failed.
+    """
+    if _completion_event_exists(vault_root, root_uid):
+        return False
+    try:
+        emit_mod = _load_tool_module("pr_emit_event", "tropo-emit-event.py")
+        events_dir = vault_root / "vault" / "events"
+        emit_mod.VAULT_ROOT = vault_root
+        emit_mod.EVENTS_DIR = events_dir
+        emit_mod.JSONL_PATH = events_dir / "00-events.jsonl"
+        emit_mod.SQLITE_PATH = events_dir / "00-events-index.sqlite"
+        emit_mod.AGENTS_DIR = vault_root / "vault" / "agents"
+        data: dict = {"work_uid": root_uid, "closed_by": "durable-closure-weld",
+                      "dev_cycle": "63988cfb", "final": True}
+        if activation_uid:
+            data["activation_uid"] = activation_uid
+        if final_commit:
+            data["final_commit"] = final_commit
+        emit_mod.emit("tropo.cycle.closed", "/tools/pipeline-runtime", "123e12e7",
+                      "evergreen", subject=root_uid, correlationid=root_uid, data=data)
+        _rebuild_events_sqlite(vault_root)
+        return True
+    except Exception as e:
+        print(f"WARN: durable-closure completion emit failed (non-blocking; the archive "
+              f"stands, sweep backstop covers it): {e}", file=sys.stderr)
+        return False
 
 
 # ---------------------- error types ----------------------
@@ -1326,17 +1516,9 @@ See `run.jsonl` in the run folder for the full event log; `run.state.json` for d
     write_run_state_json(run_folder_abs, pr_frontmatter, state, activation_uid)
 
     # C.5 — Stream C auto-emission: tropo.pipeline.bootstrapped (v1.58)
-    try:
-        _sp = Path(__file__).resolve().parents[2] / ".tropo" / "scripts"
-        import sys as _sys
-        if str(_sp) not in _sys.path:
-            _sys.path.insert(0, str(_sp))
-        from lib.event_emitter import auto_emit
-        auto_emit("tropo.pipeline.bootstrapped", "/tools/pipeline-runtime", "123e12e7",
-                  lifecycle="evergreen",
-                  data={"activation_uid": activation_uid, "pipeline_run_uid": pipeline_run_uid})
-    except Exception:
-        pass
+    # Sandbox-aware + fail-loud since 7627b589 -- see _emit_pipeline_event.
+    _emit_pipeline_event("tropo.pipeline.bootstrapped", "evergreen",
+                         {"activation_uid": activation_uid, "pipeline_run_uid": pipeline_run_uid})
 
     return pipeline_run_uid
 
@@ -1618,6 +1800,60 @@ def _dry_run_report(action: str, would_do: str) -> str:
 
 # ---------------------- per-action handlers ----------------------
 
+RUNTIME_VERSION = "v1.46.0"  # matches the argparse description string below (main())
+
+
+def _run_verification_command(command_str: str, cwd: str, timeout: int = 120) -> dict:
+    """Governed Autonomy S1 (ef65fccd) corollary 1 — receipts are products of execution.
+
+    Runs a verification_command and returns the canonical forensic shape the dev-spec's
+    body names: {command, exit_code, output_sha256, started_at, finished_at,
+    runtime_version, verdict, stdout_tail}. This is the ONE place a verification_command
+    actually executes for a receipt-bearing call site — action_step_complete and
+    action_verify_step both route through this now, so the forensic shape (and any future
+    hardening of it) lives in one place, not duplicated per call site.
+
+    output_sha256 hashes the combined stdout+stderr bytes — the auditor's spot
+    re-derivation (S1 acceptance criterion 5) re-runs the command and compares BOTH the
+    exit code and this hash, so a command that exits 0 but silently changed its output
+    is also caught, not just a changed exit code.
+
+    Never raises: timeout and any execution failure both resolve to verdict:'error' with
+    the exception recorded in stdout_tail, matching the existing call sites' prior
+    except-shape (this is a pure refactor of what each site did inline, not a behavior
+    change to the pass/fail/error trichotomy already in place).
+    """
+    import hashlib as _hashlib
+    import shlex as _shlex
+
+    started_at = now_iso()
+    cmd_str = str(command_str)
+    cmd_parts = _shlex.split(cmd_str)
+    argv = ([sys.executable] + cmd_parts) if cmd_parts and cmd_parts[0].endswith(".py") else cmd_parts
+    try:
+        result = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+        verdict = "pass" if result.returncode == 0 else "fail"
+        exit_code = result.returncode
+        combined_output = (result.stdout or "") + (result.stderr or "")
+        stdout_tail = (result.stdout or "")[-300:]
+    except subprocess.TimeoutExpired:
+        verdict, exit_code, combined_output, stdout_tail = "error", None, "", f"TIMEOUT after {timeout}s"
+    except Exception as e:
+        verdict, exit_code, combined_output, stdout_tail = "error", None, "", str(e)
+    finished_at = now_iso()
+    return {
+        "command": cmd_str,
+        "cwd": cwd,  # required for spot re-derivation to re-run faithfully (tropo-validate.py --thorough)
+        "exit_code": exit_code,
+        "output_sha256": _hashlib.sha256(combined_output.encode("utf-8", "replace")).hexdigest(),
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "runtime_version": RUNTIME_VERSION,
+        "verdict": verdict,
+        "stdout_tail": stdout_tail,
+    }
+
+
 def action_step_start(activation_uid: str, step_uid: str, actor: str, dry_run: bool = False) -> str:
     activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     decls = get_step_declarations(events)
@@ -1695,9 +1931,13 @@ def action_step_complete(activation_uid: str, step_uid: str, artifact_links: lis
             detail = "would record step_completed + auto-receipt verification_receipt (verification_class:false)"
         return _dry_run_report("step-complete", f"step {step_uid!r}: {detail}")
     if decl.get("verification_class") and verification_command:
-        # Run the verification command; derive verdict from exit code
-        # v1.66 S1 (ed04d931): named-handle substitution + per-step verdict_cwd
-        import shlex as _shlex
+        # Run the verification command; derive verdict from exit code.
+        # v1.66 S1 (ed04d931): named-handle substitution + per-step verdict_cwd.
+        # S1 Governed Autonomy (ef65fccd) corollary 1: the actual execution + forensic
+        # shape (command/exit_code/output_sha256/started_at/finished_at/runtime_version)
+        # now lives in the one shared _run_verification_command helper — this is a
+        # receipt-of-execution, never an agent-suppliable value (natural_verdict from a
+        # CLI caller is refused above, at the vc:true gate, before this branch is reached).
         _vc_str = str(verification_command)
         if "{" in _vc_str:
             _pr = find_pipeline_run_for(activation_uid)
@@ -1705,28 +1945,18 @@ def action_step_complete(activation_uid: str, step_uid: str, artifact_links: lis
             for _h, _v in _ctx.items():
                 if _v:
                     _vc_str = _vc_str.replace("{" + _h + "}", str(_v))
-        cmd_parts = _shlex.split(_vc_str)
         _verdict_cwd = str(decl.get("verdict_cwd") or VAULT_ROOT)
-        try:
-            cmd_result = subprocess.run(
-                [sys.executable] + cmd_parts if cmd_parts[0].endswith(".py") else cmd_parts,
-                capture_output=True, text=True, timeout=120,
-                cwd=_verdict_cwd,
-            )
-            cmd_verdict = "pass" if cmd_result.returncode == 0 else "fail"
-        except subprocess.TimeoutExpired:
-            cmd_verdict = "error"
-            cmd_result = None
-        except Exception as e:
-            cmd_verdict = "error"
-            cmd_result = None
+        _exec = _run_verification_command(_vc_str, _verdict_cwd)
+        cmd_verdict = _exec["verdict"]
         data["natural_verdict"] = cmd_verdict
-        data["verification_command_exit_code"] = getattr(cmd_result, "returncode", None)
-        data["verification_command_stdout_tail"] = (
-            (cmd_result.stdout or "")[-300:] if cmd_result else ""
-        )
+        data["verification_command_exit_code"] = _exec["exit_code"]
+        data["verification_command_stdout_tail"] = _exec["stdout_tail"]
+        data["verification_receipt_forensics"] = {
+            k: _exec[k] for k in ("command", "cwd", "output_sha256", "started_at",
+                                   "finished_at", "runtime_version")
+        }
         print(f"  [verification_command] {step_uid}: {cmd_verdict} "
-              f"(exit={getattr(cmd_result, 'returncode', '?')})", file=sys.stderr)
+              f"(exit={_exec['exit_code']})", file=sys.stderr)
         # d3a9c1f7 full fix: run behaviors_covered → per-behavior test_executed → real
         # test_aggregate with pass_count/fail_count. Replaces the degenerate total:1 emit
         # from the T13 partial fix. Two sources for behaviors_covered:
@@ -1869,17 +2099,9 @@ def action_step_complete(activation_uid: str, step_uid: str, artifact_links: lis
         append_event(run_folder, ev_receipt)
     write_run_state_json(run_folder, pr["frontmatter"], derive_state(read_events(run_folder)), activation_uid)
     # C.5 — Stream C auto-emission: tropo.pipeline.step_completed (v1.58)
-    try:
-        _sp = Path(__file__).resolve().parents[2] / ".tropo" / "scripts"
-        import sys as _sys
-        if str(_sp) not in _sys.path:
-            _sys.path.insert(0, str(_sp))
-        from lib.event_emitter import auto_emit
-        auto_emit("tropo.pipeline.step_completed", "/tools/pipeline-runtime", "123e12e7",
-                  lifecycle="ephemeral",
-                  data={"activation_uid": activation_uid, "step_uid": step_uid})
-    except Exception:
-        pass
+    # Sandbox-aware + fail-loud since 7627b589 -- see _emit_pipeline_event.
+    _emit_pipeline_event("tropo.pipeline.step_completed", "ephemeral",
+                         {"activation_uid": activation_uid, "step_uid": step_uid})
     return f"completed:{step_uid}"
 
 
@@ -1939,31 +2161,25 @@ def action_verify_step(activation_uid: str, step_uid: str, actor: str, dry_run: 
                 # (Vela V56 00000662 2026-06-01 — same dispatch as action_step_complete)
                 verification_command = decl.get("verification_command")
                 if verification_command:
-                    # v1.66 S1 (ed04d931): named-handle substitution + per-step verdict_cwd
-                    import shlex as _shlex
+                    # v1.66 S1 (ed04d931): named-handle substitution + per-step verdict_cwd.
+                    # S1 Governed Autonomy (ef65fccd) corollary 1: routes through the same
+                    # shared execution helper as action_step_complete, so a re-verify here
+                    # produces the identical forensic shape (spot re-derivation compares
+                    # command + exit_code + output_sha256 across BOTH call sites the same way).
                     _vc_str = str(verification_command)
                     if "{" in _vc_str:
                         _ctx2 = build_run_context_uids(pr, activation_uid)
                         for _h, _v in _ctx2.items():
                             if _v:
                                 _vc_str = _vc_str.replace("{" + _h + "}", str(_v))
-                    cmd_parts = _shlex.split(_vc_str)
                     _verdict_cwd2 = str(decl.get("verdict_cwd") or VAULT_ROOT)
-                    try:
-                        cmd_result = subprocess.run(
-                            [sys.executable] + cmd_parts if cmd_parts[0].endswith(".py") else cmd_parts,
-                            capture_output=True, text=True, timeout=120, cwd=_verdict_cwd2,
-                        )
-                        cmd_verdict = "pass" if cmd_result.returncode == 0 else "fail"
-                        per_criterion = [{
-                            "criterion": f"verification_command: {verification_command}",
-                            "verdict": cmd_verdict,
-                            "rationale": f"exit={cmd_result.returncode}; stdout={cmd_result.stdout[-200:] if cmd_result.stdout else ''}",
-                        }]
-                    except Exception as e:
-                        cmd_verdict = "error"
-                        per_criterion = [{"criterion": f"verification_command: {verification_command}",
-                                          "verdict": "error", "rationale": str(e)}]
+                    _exec = _run_verification_command(_vc_str, _verdict_cwd2)
+                    cmd_verdict = _exec["verdict"]
+                    per_criterion = [{
+                        "criterion": f"verification_command: {verification_command}",
+                        "verdict": cmd_verdict,
+                        "rationale": f"exit={_exec['exit_code']}; stdout={_exec['stdout_tail']}",
+                    }]
                     total = 1
                     passes = 1 if cmd_verdict == "pass" else 0
                     data = {
@@ -1972,6 +2188,10 @@ def action_verify_step(activation_uid: str, step_uid: str, actor: str, dry_run: 
                         "per_criterion": per_criterion,
                         "rubric_scores": {"exit_criteria_coverage": passes / total},
                         "overall_rationale": f"verification_command: {cmd_verdict}",
+                        "forensics": {
+                            k: _exec[k] for k in ("command", "cwd", "output_sha256", "started_at",
+                                                   "finished_at", "runtime_version")
+                        },
                     }
                 else:
                     ctx = build_run_context_uids(pr, activation_uid)
@@ -2649,23 +2869,29 @@ def action_trigger_step(
             existing = read_vault_entry(triggered_spec_uid)
             owner = existing["frontmatter"].get("triggered_by_dev_cycle") if existing else None
             if existing and owner == activation_uid:
-                print(f"[DRY-RUN] trigger-step idempotent: {triggered_spec_uid!r} already created "
-                      f"by this cycle", file=sys.stderr)
+                spec_banner = (f"trigger-step idempotent: {triggered_spec_uid!r} already created "
+                                f"by this cycle")
             elif owner is None:
-                print(f"[DRY-RUN] trigger-step would claim orphaned spec {triggered_spec_uid!r} "
-                      f"for cycle {activation_uid!r} (was unowned)", file=sys.stderr)
+                spec_banner = (f"trigger-step would claim orphaned spec {triggered_spec_uid!r} "
+                                f"for cycle {activation_uid!r} (was unowned)")
             else:
                 raise ContractError(
                     f"trigger-step collision: {triggered_spec_uid!r} owned by dev-cycle "
                     f"{owner!r}, not {activation_uid!r}")
         else:
-            print(f"[DRY-RUN] trigger-step would create spec {triggered_spec_uid!r} "
-                  f"({len(triggered_spec_body)} bytes)", file=sys.stderr)
-        print(f"[DRY-RUN] trigger-step would activate pipeline {triggered_pipeline_uid!r} "
-              f"(class={pipeline_class!r}) and update dev-spec {dev_spec_uid!r} — no writes performed",
-              file=sys.stderr)
+            spec_banner = (f"trigger-step would create spec {triggered_spec_uid!r} "
+                            f"({len(triggered_spec_body)} bytes)")
+        # Return value must itself carry the "[DRY-RUN]" marker (not just the stderr
+        # print), same discipline as _dry_run_report — a caller that only inspects the
+        # returned dict (e.g. via --json) previously saw a plain success shape
+        # indistinguishable from a real trigger, with no in-band preview signal.
+        banner = _dry_run_report(
+            "trigger-step",
+            f"{spec_banner}; would activate pipeline {triggered_pipeline_uid!r} "
+            f"(class={pipeline_class!r}) and update dev-spec {dev_spec_uid!r}",
+        )
         return {"dry_run": True, "triggered_spec_uid": triggered_spec_uid,
-                "triggered_activation_uid": "dry-run"}
+                "triggered_activation_uid": "dry-run", "banner": banner}
 
     # Race surface 1: O_EXCL atomic create — fail if another process beat us
     try:
@@ -2821,36 +3047,90 @@ def action_trigger_step(
             "triggered_activation_uid": triggered_activation_uid}
 
 
-def run_close_out_hook(activation: dict, dev_spec_uid: str | None, actor: str) -> list[str]:
-    """B6 (v1.62): Pipeline completion close-out hook.
+def run_close_out_hook(activation: dict, dev_spec_uid: str | None, actor: str,
+                       final_commit: str | None = None) -> list[str]:
+    """B6 (v1.62): Pipeline completion close-out hook — DURABLE CLOSURE (v1.90).
 
-    Auto-marks completed work items as done when workflow_complete fires:
-    - activation_root_project → state:done (the project that commissioned this run)
+    On close/ship, closes the work items a cycle produced AND archives its
+    activation root as a guaranteed side-effect (the symmetric mirror of the
+    ADR-052 lock→open weld):
+    - activation_root_project → status:done + state:archived + final_commit=<ship SHA>
     - triggered_doc/test activation entries → status:retired (cascade activations land here)
 
     Returns list of closed UIDs for the completion report.
     Per design-brief 81595822 (Mike-A88 directive 2026-05-29).
+
+    ── Option-A SUPERSESSION (dev-spec c392d833, activation 63988cfb; metis-g91
+       diagnosis 1d689277; Argus A136 spec, 2026-07-22) ────────────────────────
+    This hook now sets the root state:archived and stamps final_commit on close.
+    That SUPERSEDES "Option A" (99e52c18, 2026-06-09), which deliberately set
+    status:done but LEFT state:active so a completed root stayed visible on the
+    active board. Option A caused sprawl: 93 activation roots were found stuck
+    state:active studio-wide (dev 81% closed / test 17% / doc 9%) because closing
+    was coupled to nothing — the honor-system close step was the only writer and
+    nothing forced it to run. state IS visibility; a *shipped* cycle's root
+    belongs archived, not cluttering active views, and the board/list work-lens
+    (metis-g91) already separates real active work from scaffolding, so
+    archived-on-ship loses no signal. Reversible: state:archived is the canonical
+    tropo-archive.py discipline (archived_at/archived_by stamped the same way), so
+    `tropo-archive.py <root> --unarchive` cleanly reverses a mistaken close.
+
+    IDEMPOTENT: re-running on an already-archived + stamped root is a no-op — no
+    error, no re-stamp (dev-spec c392d833 AC2). The weld fires from BOTH the
+    pipeline complete-workflow path (no SHA) AND the build-release ship path
+    (with the ship SHA), so the second run must not overwrite or error. If an
+    earlier close archived the root without a SHA, a later ship-path close fills
+    final_commit in (fill-if-absent); an existing final_commit is never
+    overwritten (a hand-typed or earlier-stamped value stands).
+
+    final_commit: the ship SHA (build-release passes `git rev-parse HEAD` at
+    build time). None on the pipeline complete-workflow path, which still
+    archives; the ship-path close then stamps.
     """
     closed: list[str] = []
     afm = activation["frontmatter"]
 
-    # Close the activation root project
-    # 99e52c18 state-disambiguate fix (2026-06-09):
-    # (L2268) Re-key idempotency guard from state→status so a completed root
-    #         (status:done) is not re-closed on every subsequent run.
-    # (L2270) STOP writing state:done — state is visibility (active/archived),
-    #         not completion. Completion recorded in status; state stays active.
+    # Close + ARCHIVE the activation root project (durable-closure weld; supersedes Option A).
     root_uid = afm.get("activation_root_project")
     if root_uid:
         root = read_vault_entry(root_uid)
-        if root and root["frontmatter"].get("status") not in ("done", "retired", "archived"):
+        if root:
             rfm = root["frontmatter"]
-            rfm["status"] = "done"   # record completion in status, not state
-            # state intentionally NOT set to done — leave state:active (Option A)
-            rfm["modified"] = TODAY
-            rfm["modified_by"] = SCRIPT_NAME
-            write_vault_entry(root_uid, rfm, root["body"])
-            closed.append(root_uid)
+            already_archived = rfm.get("state") == "archived"
+            already_stamped = bool(rfm.get("final_commit"))
+            # Idempotency guard: a fully-closed root (archived AND stamped) is a
+            # no-op on re-run — no error, no re-stamp (dev-spec c392d833 AC2).
+            if not (already_archived and already_stamped):
+                changed = False
+                if rfm.get("status") not in ("done", "retired", "archived"):
+                    rfm["status"] = "done"      # completion recorded in status (kept as-is)
+                    changed = True
+                if not already_archived:
+                    rfm["state"] = "archived"   # SUPERSEDES Option A's leave-state:active
+                    # Mirror tropo-archive.py's provenance so --unarchive reverses cleanly.
+                    rfm["archived_at"] = TODAY
+                    rfm["archived_by"] = SCRIPT_NAME
+                    changed = True
+                if final_commit and not already_stamped:
+                    rfm["final_commit"] = final_commit  # stamp the ship SHA (fill-if-absent)
+                    changed = True
+                if changed:
+                    rfm["modified"] = TODAY
+                    rfm["modified_by"] = SCRIPT_NAME
+                    write_vault_entry(root_uid, rfm, root["body"])
+                    closed.append(root_uid)
+
+            # DURABLE-CLOSURE completion recording (dev-spec c392d833 Check-32 gap-fix).
+            # Once the root is archived, record the correlated tropo.cycle.closed
+            # completion event + rebuild the events-sqlite so Check 32 (2fe61817)
+            # sees the close — otherwise a real ship archives the root and then trips
+            # completion-recording as an ERROR. Gated on state:archived, so it fires
+            # ONLY on the archive/terminal path, never mid-run. Idempotent + non-
+            # blocking (see _emit_cycle_closed): re-close emits no duplicate.
+            if rfm.get("state") == "archived":
+                _emit_cycle_closed(VAULT_ROOT, root_uid,
+                                   activation_uid=afm.get("uid"),
+                                   final_commit=rfm.get("final_commit"))
 
     # Retire triggered cascade activations
     if dev_spec_uid:
@@ -2874,6 +3154,34 @@ def run_close_out_hook(activation: dict, dev_spec_uid: str | None, actor: str) -
                     closed.append(tuid)
 
     return closed
+
+
+def action_close_out(activation_uid: str, actor: str, final_commit: str | None = None,
+                     dry_run: bool = False) -> dict:
+    """Durable-closure weld entry point (dev-spec c392d833, activation 63988cfb).
+
+    Close + archive the activation root for a shipped cycle and stamp
+    final_commit=<ship SHA>. STANDALONE: it does not require a live pipeline-run /
+    run folder, so the release-ship path (tropo-build-release.py) can invoke it
+    directly as a guaranteed side-effect of shipping — no honor-system step to
+    forget. Idempotent + fill-if-absent per run_close_out_hook. Never adds a
+    global single-active-root lock; it closes exactly this one root at its ship.
+    """
+    activation = read_vault_entry(activation_uid)
+    if activation is None:
+        print(f"close-out: activation {activation_uid!r} not found — nothing to close",
+              file=sys.stderr)
+        return {"activation": activation_uid, "found": False, "closed": []}
+    dev_spec_uid = activation["frontmatter"].get("dev_spec_uid")
+    root_uid = activation["frontmatter"].get("activation_root_project")
+    if dry_run:
+        return {"activation": activation_uid, "found": True, "dry_run": True,
+                "would_archive_root": root_uid, "final_commit": final_commit,
+                "note": "would set root state:archived + final_commit + retire cascade activations"}
+    closed = run_close_out_hook(activation, dev_spec_uid, actor, final_commit=final_commit)
+    return {"activation": activation_uid, "found": True,
+            "activation_root_project": root_uid, "final_commit": final_commit,
+            "closed": closed}
 
 
 def action_complete_workflow(activation_uid: str, actor: str, dry_run: bool = False) -> str:
@@ -3032,18 +3340,10 @@ def action_complete_workflow(activation_uid: str, actor: str, dry_run: bool = Fa
         print(f"  [close-out] marked done: {_close_out_uids}", file=sys.stderr)
 
     # C.5 — Stream C auto-emission: tropo.pipeline.closed (v1.58)
-    try:
-        _sp = Path(__file__).resolve().parents[2] / ".tropo" / "scripts"
-        import sys as _sys
-        if str(_sp) not in _sys.path:
-            _sys.path.insert(0, str(_sp))
-        from lib.event_emitter import auto_emit
-        auto_emit("tropo.pipeline.closed", "/tools/pipeline-runtime", "123e12e7",
-                  lifecycle="evergreen",
-                  data={"activation_uid": activation_uid,
-                        "pipeline_run_uid": pr["frontmatter"].get("uid")})
-    except Exception:
-        pass
+    # Sandbox-aware + fail-loud since 7627b589 -- see _emit_pipeline_event.
+    _emit_pipeline_event("tropo.pipeline.closed", "evergreen",
+                         {"activation_uid": activation_uid,
+                          "pipeline_run_uid": pr["frontmatter"].get("uid")})
     return "workflow_complete"
 
 
@@ -3342,6 +3642,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help="path to file containing triggered-spec body (alternative to --triggered-spec-body-stdin)")
 
     sub.add_parser("complete-workflow")
+    # Durable-closure weld (dev-spec c392d833): standalone close+archive of a
+    # shipped cycle's activation root, invoked from the build-release ship path.
+    co = sub.add_parser("close-out",
+                        help="close + archive the activation root for a shipped cycle (stamp final_commit)")
+    co.add_argument("--final-commit", default=None,
+                    help="ship SHA to stamp on the activation root (e.g. git rev-parse HEAD)")
     sub.add_parser("resume-from-log")
 
     ms = sub.add_parser("mark-superseded")
@@ -3440,6 +3746,10 @@ def main() -> int:
         elif action == "complete-workflow":
             result = action_complete_workflow(args.activation_uid, actor, dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
+        elif action == "close-out":
+            result = action_close_out(args.activation_uid, actor,
+                                       final_commit=args.final_commit, dry_run=args.dry_run)
+            print(json.dumps(result))
         elif action == "resume-from-log":
             # Read-only action (no mutating call sites) — --dry-run is accepted but has no
             # effect since this action never writes; not a silent no-op class violation.

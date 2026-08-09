@@ -142,6 +142,8 @@ def _load_import_walker():
 
 IW = _load_import_walker()
 
+from lib import index_surfaces  # noqa: E402
+
 
 # ==========================================================================
 # Frontmatter parsing for projection lookups
@@ -901,39 +903,25 @@ schema_version: 2
 # ==========================================================================
 
 def _flip_index_row_state(studio_root, uid, new_state):
-    """Rewrite the index row for `uid` so its `state` field matches `new_state`.
+    """Route an updated index row after a source state transition.
 
     v1.26.0.1 P1-3 remediation: when `tropo-extract.py --force` archives a previous
     working-copy by flipping its frontmatter state, the inline-index-sync contract
     requires we also update the index row. Otherwise the index disagrees with the
     file and queries see a stale "active" state. Operates within the held reconciler
     lock per the caller's contract.
+
+    ADR-047 Layer 1 requires an active→archived flip to MOVE the row from the
+    default surface to the opt-in archive surface.  Delegate routing to the
+    same predicate used by full and incremental rebuilds.
     """
-    index_path = studio_root / 'vault' / '00-index.jsonl'
-    if not index_path.exists():
+    for row in index_surfaces.load_index_records(studio_root, include_archive=True):
+        if row.get('uid') != uid:
+            continue
+        row['state'] = new_state
+        row['modified'] = IW.now_date()
+        index_surfaces.route_record(studio_root, row)
         return
-
-    lines = index_path.read_text().splitlines()
-    updated = False
-    for i, line in enumerate(lines):
-        if not line.strip():
-            continue
-        try:
-            row = json.loads(line.rstrip(','))
-        except json.JSONDecodeError:
-            continue
-        if row.get('uid') == uid:
-            row['state'] = new_state
-            row['modified'] = IW.now_date()
-            lines[i] = json.dumps(row, separators=(',', ':'))
-            updated = True
-            break
-
-    if updated:
-        with index_path.open('w') as f:
-            f.write('\n'.join(lines) + '\n')
-            f.flush()
-            os.fsync(f.fileno())
 
 
 def append_index_row(studio_root, uid, title, owner, working_copy_path,

@@ -63,6 +63,18 @@ _MANIFEST_ROW_RE = re.compile(
 REPLACE = 'replace'
 PRESERVE = 'preserve'
 USER_MODIFIED_SHIPPED = 'user_modified_shipped'
+REGENERATED = 'regenerated'
+
+#: The derived index surfaces. EXACT paths, never a prefix or a glob (A146,
+#: 2026-08-08): `vault/00-` is a namespace a governed file could join tomorrow,
+#: and a carve-out that widens by accident is how PRESERVE-by-default gets
+#: quietly repealed for a whole directory.
+REGENERATED_PATHS = frozenset({
+    'vault/00-index.jsonl',
+    'vault/00-archive-index.jsonl',
+    'vault/00-index.sqlite',
+    'vault/00-project-tree.jsonl',
+})
 
 
 def _basename_no_ext(path):
@@ -134,8 +146,8 @@ def _hashes_match(manifest_hash, current_hash):
 
 
 def classify(rel_path, manifest_index=None, current_hash=None):
-    """The full four-category predicate. Returns REPLACE, PRESERVE, or
-    USER_MODIFIED_SHIPPED.
+    """The full predicate. Returns REPLACE, PRESERVE, USER_MODIFIED_SHIPPED,
+    or REGENERATED.
 
     manifest_index: optional {rel_path: sha256_hex_or_truncated_prefix} dict,
       typically from parse_manifest_md() against the studio's own shipped
@@ -149,6 +161,23 @@ def classify(rel_path, manifest_index=None, current_hash=None):
       drift check is needed — e.g. a fresh install with nothing to compare).
     """
     rel_path = rel_path.lstrip('/')
+
+    # Derived index surfaces, BEFORE every other branch.
+    #
+    # These are MANIFEST-LISTED and they never hash equal to what shipped,
+    # because a rebuild regenerates them on the way past. So category (d) read
+    # them as USER_MODIFIED_SHIPPED and Po asked the customer to approve
+    # overwriting a file they had never touched — a prompt with no honest
+    # answer, since "keep mine" and "take theirs" are both wrong for an
+    # artifact the next rebuild settles anyway.
+    #
+    # REGENERATED means: neither prompt nor write. The Step 4.4 rebuild is the
+    # SOLE writer of these four, in every branch (A146, 2026-08-08). This sits
+    # first so no later branch — including the apply engine's
+    # add-target-missing fast path — can reach a derived index by another
+    # route. (d220d43b D9.)
+    if rel_path in REGENERATED_PATHS:
+        return REGENERATED
 
     if is_os_component(rel_path):  # categories (a)/(b)
         return REPLACE

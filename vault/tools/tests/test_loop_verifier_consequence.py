@@ -6,7 +6,7 @@ vault_root = Path(__file__).resolve().parents[3]
 
 class TestLoopVerifierConsequence(unittest.TestCase):
     def setUp(self):
-        self.loop_capsule_path = vault_root / '.tropo' / 'capsules' / 'loop.capsule.md'
+        self.loop_capsule_path = vault_root / 'vault' / 'capsules' / 'tropo-loop.capsule.md'
 
     def test_verifier_declares_stack(self):
         content = self.loop_capsule_path.read_text(encoding='utf-8')

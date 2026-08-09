@@ -6,7 +6,7 @@ vault_tools_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(vault_tools_dir))
 
 import importlib.util
-spec = importlib.util.spec_from_file_location("f4b8a6e2", str(vault_tools_dir / "f4b8a6e2.py"))
+spec = importlib.util.spec_from_file_location("f4b8a6e2", str(vault_tools_dir / "tropo-rebuild-index.py"))
 index_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(index_module)
 

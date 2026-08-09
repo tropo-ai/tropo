@@ -5,13 +5,16 @@ uid: f7b9c4a2
 name: project-plan
 type: capsule-definition
 extends: core
-version: '1.4'
-supersedes_version: '1.3'
+version: '1.5'
+template_enforced_from: '2026-07-17'
+template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
+supersedes_version: '1.4'
+v1_5_amendment_note: "v1.4 → v1.5 amendment 2026-07-17 by Argus A133 under Mike's Gardener build authorization and Template-Leg Contract b933eafb. Adds only the generic project-plan §Template mint scaffold; no schema, lifecycle, validation, or tag semantics change. Birth is draft/active with three-instrument verification and required placeholders for real project/source/membership/deliverables."
 tier: os
 author: argus
 created: 2026-04-21
-modified: 2026-06-09
-modified_by: argus-a105
+modified: 2026-07-17
+modified_by: argus-a133
 meta_status_rollup_added: argus-a104 2026-06-08 — new meta_status_rollup per 4acf3f2d v0.4 DERIVE (Mike-signed 7-capsule lock-break batch); additive (type had no rollup); prior modified argus-a67 2026-05-16
 created_by: argus-a30
 status: active
@@ -49,7 +52,7 @@ tags:
   - v1.19.0-stream-c-refactored
 ---
 
-# project-plan — Capsule Definition v1.3
+# project-plan — Capsule Definition v1.5
 
 ## 1. Intent
 
@@ -189,9 +192,67 @@ The pattern follows release-plan.capsule v1.0's tag conventions (`tags: [stream]
 
 ### History
 
-Detailed v1.1 + v1.2 amendment-block prose, the extended Tag Conventions detail (slang convention, anti-application rule, why-a-tag, worked example YAML), the full §Studio — Shop Signage authoring procedure (human-facing quick-ref preserved per Mike-A55 *"capsules are agent-read, not human-read"* directive), the Relationship-to-release-plan comparison table, the Inheritance section, and the full changelog are preserved in the companion [project-plan.history.md (c4790782)](project-plan.history.md) governed by `capsule-history.capsule` (5ec083a3).
+Detailed v1.1 + v1.2 amendment-block prose, the extended Tag Conventions detail (slang convention, anti-application rule, why-a-tag, worked example YAML), the full §Studio — Shop Signage authoring procedure (human-facing quick-ref preserved per Mike-A55 *"capsules are agent-read, not human-read"* directive), the Relationship-to-release-plan comparison table, the Inheritance section, and the full changelog are preserved in the companion [project-plan.history.md (c4790782)](tropo-project-plan.history.md) governed by `capsule-history.capsule` (5ec083a3).
+
+## §Template (v1.5 — mint-stamped scaffold)
+
+*Stamped verbatim by `mint file --type project-plan` under the [Template-Leg Contract](../files/b933eafb.md). Mint substitutes only `<<MINT:*>>`; every surviving `<!-- REQUIRED: -->` is deterministic INCOMPLETE.*
+
+~~~markdown
+---
+uid: '<<MINT:uid>>'
+type: project-plan
+title: "<!-- REQUIRED: <Project name> — Project Plan -->"
+description: "<!-- REQUIRED: what the project will deliver, ≤160 chars -->"
+owner: <<MINT:author>>
+status: draft
+state: active
+plan_for: "<!-- REQUIRED: project UID this plan scopes -->"
+derived_from:
+  - "<!-- REQUIRED: design-brief UID or pipeline UID -->"
+member_of:
+  - "<!-- REQUIRED: owning project UID; MUST equal/include plan_for -->"
+created: '<<MINT:date>>'
+created_by: <<MINT:author>>
+modified: '<<MINT:date>>'
+modified_by: <<MINT:author>>
+schema_version: 2
+capsule_version: '<<MINT:capsule_version>>'
+governed_by: 8dd772a0
+verification_discipline: three-instrument
+---
+
+# <!-- REQUIRED: title (mirror frontmatter) -->
+
+## Objectives
+<!-- REQUIRED: 3–6 outcome bullets — why this project, why now -->
+
+## Scope
+<!-- REQUIRED: include ### In-scope and ### Out-of-scope -->
+
+## Deliverables
+<!-- REQUIRED: named deliverables with acceptance criteria, effort sizing, and blockers -->
+
+## Dependencies
+<!-- REQUIRED: blocking, reference, and external dependencies -->
+
+## Verification Plan
+<!-- REQUIRED: per-deliverable verification; three-instrument default -->
+
+## Timeline
+<!-- REQUIRED: phases and approximate hours; no hard calendar dates -->
+
+## Open Decisions
+<!-- REQUIRED: decision / owner / blocker / recommendation; close before lock -->
+
+<!-- OPTIONAL: ## Risk Register — add risk_level: medium|high when used (delete if unused) -->
+<!-- OPTIONAL: ## Lessons / Reflections — populate after status: done (delete if unused) -->
+<!-- OPTIONAL: ## Provenance — trigger/context note when commissioned mid-session (delete if unused) -->
+~~~
+
+**Leg rules:** `status: draft` is the only legal birth; `locked_by`/`locked_at` are never scaffolded; `verification_discipline: three-instrument` is the safe default; `derived_from` accepts design-brief or pipeline UIDs only; `member_of` MUST include `plan_for`; optional relationship/output/risk fields are added only when real; plant-test mint → consume placeholders → freshen → targeted `check-one` PASS.
 
 ---
 
-*project-plan capsule definition | LOCKED v1.3 | history at [project-plan.history.md](project-plan.history.md) | v1.3 body refactor 2026-05-11 by Argus A56 (v1.19.0 Stream C — 5-section pedagogy pattern; agent-read-not-human-read per Mike-A55 v1.18.0 walk Q3). Prior v1.0 / v1.1 / v1.2 locks preserved in history.*
+*project-plan capsule definition | ACTIVE v1.5 | history at [project-plan.history.md](tropo-project-plan.history.md) | v1.5 template leg 2026-07-17 by Argus A133; prior locks preserved in history.*
 *"The plan scopes the project. The project walks the pipeline. The release composes the work."*

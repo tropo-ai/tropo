@@ -9,8 +9,8 @@ domain: Memory curation — async index-time ranker for v3 memory substrate. Sco
 spawnable_by: all-executives
 commissioned: 2026-05-12
 commissioned_by: argus-a59
-modified: 2026-06-09
-modified_by: argus-a106
+modified: 2026-07-22
+modified_by: talos-t35
 governed_by: b4e2a718
 capsule_version: '1.4'
 extraction_scope: ship
@@ -19,8 +19,10 @@ archetype: dialogue-capable
 ships_in_v:
   - v1.26.0
   - v1.67.0
+  - v1.90.0
 trigger_description: 'Reach for this when an executive agent needs memory curation — at retirement (retirement-canonical fold: reads agent-memories.jsonl since last boundary → folds into agent-memory.md §Top-of-Mind, archives frozen history/ snapshot, advances boundary, NEVER clears the append-only jsonl per A3), at boot (additive fold + verification-before-use sweep; also fires F5 catch-up fold if ≥3 generations OR ≥50 unfolded memories since last_curated), or via explicit invocation (mid-session big-fold, multi-generation historical compaction). The agent reads its own domain (memory.capsule v1.1 + score formula doctrine + the target memory substrate) and produces scored frontmatter + bounded recommendations via live-channel ratification. Per v1.26.0 walk locks: per-spawn ephemeral; one definition per Studio; dispatched parametrically per agent per trigger; suggest-don''t-write contract; bounded action set {merge, archive, demote, flag-stale}. v3.0 (v1.67.0): retirement fold is canonical;
   F5 gate is the safety net; append-only-forever (A3); surface bodies curator-authored (A7).'
+v1_1_amendment_note: 'v1.1 → v1.2 amendment 2026-07-22 by talos-t35 under LOCKED memory-reinforcement dev-spec 47c26a60 (activation b233b7ac), Mike-endorsed + Mike-authorized memory.capsule v1.6 lock-break. One surgical concern: the recurrence signal. (1) MERGE REINFORCEMENT INCREMENT (Phase 6/7) — on a HUMAN-RATIFIED merge, the survivor gains reinforcement_count += (merged.reinforcement_count + 1) and the merged entry''s contributing generation(s) append (deduplicated) to the survivor''s reinforced_by; a rejected/deferred merge touches NEITHER field. Every +1 is a confirmed human thumbs-up — no auto-merge, no write-time similarity matching, no silent increment (NO RUNAWAY BY CONSTRUCTION). (2) SCORING (Phase 2) — the composite gains the reinforce_signal term (log-compressed, reinforce_cap=100) per score-formula-doctrine v1.1; the five weights sum to 1.0. reinforcement_count (re-learns) is KEPT STRICTLY SEPARATE from reference_count (reads). (3) Detection stays curator-time (async, off the critical path) — unchanged. Existing fold / F5 gate / surface-authorship / verification-before-use / tier-transition logic PRESERVED UNCHANGED.'
 v1_0_amendment_note: 'v1.0 → v1.1 amendment 2026-06-09 by Argus A106 — Memory v3.0 cycle (dev-spec c8f1e3b4, target 4 of 6). Three surgical additions per memory.capsule v1.1 (A3/A4/A5/A6/A7): (1) RETIREMENT-CANONICAL FOLD — reads agent-memories.jsonl since last boundary → folds into agent-memory.md §Top-of-Mind (priority-ordered, binding-doctrine/P0 first per A5) → archives frozen per-gen snapshot to history/ → advances boundary, NEVER clears the append-only jsonl (A3) → folds prior §Living-Transfer per A6 aging rule. (2) F5 BOOT-STALENESS GATE — catch-up fold fired when ≥3 generations OR ≥50 unfolded memories since last_curated (Mike-A90 thresholds, OR-logic); same additive-fold as retirement. (3) SURFACE AUTHORSHIP (A7) — curator authors agent-memory.md §Top-of-Mind (priority-ordered) and §Living-Transfer bodies at fold; this is the curator''s legitimate write lane, distinct from entry bodies which stay author-only. Existing scoring / score-formula / verification-before-use / tier-transition
   logic PRESERVED UNCHANGED.'
 closes:
@@ -107,12 +109,13 @@ For each dispatch, run the curator's pass in this order:
 ### Phase 2 — Compute scores
 
 For each entry (including STM entries being folded):
-- Read frontmatter fields needed for scoring: `subtype`, `created`, `last_referenced`, `reference_count`, `pinned_by`.
+- Read frontmatter fields needed for scoring: `subtype`, `created`, `last_referenced`, `reference_count`, `pinned_by`, `reinforcement_count` (v1.1; default 0 if absent).
 - Compute `age_decay(last_referenced)` per subtype half-life.
-- Compute `log10(max(reference_count, 1))` — Reddit Hot pattern.
+- Compute `usage_normalized = log10(max(reference_count, 1)) / log10(reference_count_cap)` — Reddit Hot pattern (**reads / citations**).
 - Compute `wilson_lower_bound` for explicit pin signal.
+- Compute `reinforce_signal = min(log10(max(reinforcement_count, 1)) / log10(reinforce_cap), 1.0)` — **v1.1 (dev-spec 47c26a60).** The recurrence signal (**re-learns**), log-compressed like usage but computed from `reinforcement_count`, which is KEPT STRICTLY SEPARATE from `reference_count` (reads != re-learns; never conflate the two counters). `reinforce_cap = 100`.
 - Compute `subtype_weight` per memory.capsule §Subtypes.
-- Compute composite `score = w_recency · age_decay + w_usage · log_count + w_pin · wilson + w_subtype · subtype_weight`.
+- Compute composite `score = w_recency · age_decay + w_usage · usage_normalized + w_pin · wilson + w_reinforce · reinforce_signal + w_subtype · subtype_weight` — the **five** v1.1 weights (0.20 / 0.30 / 0.25 / 0.15 / 0.10, sum 1.0) per score-formula-doctrine v1.1.
 - Normalize to [0.0, 1.0].
 
 ### Phase 3 — Update reference counts
@@ -158,7 +161,7 @@ ARCHIVE (topic → archival):
   - <uid> — score 0.22 (below 0.35); no references since N generations
 
 MERGE (proposed duplicate):
-  - <uid-a> + <uid-b> — both pin "lean-first on questions"; suggest consolidate as <uid-a> (higher reference_count)
+  - <uid-a> + <uid-b> — both pin "lean-first on questions"; suggest consolidate as <uid-a> (higher reference_count). On ratification: <uid-a>.reinforcement_count += (<uid-b>.reinforcement_count + 1); <uid-b>'s generation(s) append to <uid-a>.reinforced_by (recurrence +1 — v1.1).
 
 FLAG-STALE (citation resolution failure):
   - <uid> — refs cited entry <broken-uid> which no longer resolves in vault index
@@ -174,11 +177,29 @@ DEMOTE-TERMINAL (archival → demoted; requires principal ratification):
 Wait for spawning executive's `[RESPONSE]` block ratifying recommendations. Apply only the `ACCEPT` set:
 - File moves (entries demoted to archival are moved to `history/`)
 - Frontmatter updates (`tier` field flipped on accepted promotions/demotions)
-- Merges (proposed by curator; executed only if ratified)
+- Merges (proposed by curator; executed only if ratified) — **the reinforcement increment (v1.1) fires here; see below**
 - File deletions for `DEMOTE-TERMINAL` — but only if principal-level ratification, not just executive-level
 
 `DEFER` items stay in current state; surface again on next dispatch.
 `REJECT` items have their tier explicitly preserved + a note added to curator's run summary explaining the reject.
+
+#### MERGE reinforcement increment (v1.1 — dev-spec 47c26a60)
+
+**Only on a HUMAN-RATIFIED `MERGE`** (an `ACCEPT` in the `[RESPONSE]` block), and only then, apply the recurrence bump to the survivor:
+
+```
+# survivor S (the higher-reference_count entry kept), merged-away entry M (archived)
+S.reinforcement_count = (S.reinforcement_count or 0) + (M.reinforcement_count or 0) + 1
+S.reinforced_by = dedup( (S.reinforced_by or []) + (M.reinforced_by or []) + M.contributing_generation(s) )
+```
+
+- The `+ 1` records THIS consolidation (reality re-taught the lesson once more); `+ M.reinforcement_count` carries forward any recurrence M had already accumulated, so a chain of merges never loses count.
+- `M`'s contributing generation label(s) (and any it carried in its own `reinforced_by`) append to `S.reinforced_by`, **deduplicated** — the auditable lineage of which generations independently re-derived this lesson.
+- **`reinforcement_count` is written STRICTLY separately from `reference_count`.** The merge may also fold M's `reference_count` into S per existing usage semantics, but the two counters are never summed together or used as a proxy for each other (reads != re-learns).
+- **A `REJECT` or `DEFER` merge touches NEITHER field** — no `reinforcement_count` change, no `reinforced_by` append. Every `+1` is gated by an explicit human ratification (no auto-merge, no auto-increment).
+- The merged-away entry `M` follows the existing MERGE lifecycle — **archived, not destroyed** (recoverable) — so the recurrence recorded on S stays auditable against M's preserved lineage.
+
+**Detection stays at curator-time — NO write-time matching.** The duplicate detection that proposes a MERGE ("similar context + body") runs only during the curator's async pass (this Phase 6 surfacing), never on the write path. An agent jotting a memory never pays a search + similarity judgment; the curator remains off the critical path. This is the deliberate placement per dev-spec §Design.2 and the "curator is never on the critical path" principle.
 
 ### Phase 8 — Author `agent-memory.md` surface (curator write lane, A7)
 
@@ -354,6 +375,7 @@ The **retirement fold is the canonical fold** — the primary mechanism. It runs
 - **A7 exception — surface bodies ARE curator-authored.** The `agent-memory.md` §Top-of-Mind and §Living-Transfer section bodies are authored by the curator at fold. This is the curator's defined write lane — not a violation of suggest-don't-write. Validation that fires on curator entry-body writes (ERROR) MUST NOT fire on curator surface-body writes. The distinction: entry body = the author's recorded meaning; surface body = the curator's curated index and handoff notes.
 - **Modify `subtype` or `scope`.** Author-set, immutable post-creation. If a memory's classification is wrong, curator flags + executive amends; curator doesn't reclassify.
 - **Apply unratified recommendations.** The suggest-don't-write contract is absolute for entry lifecycle actions. Curator proposes; executive ratifies; curator applies the ratified subset only.
+- **Auto-increment `reinforcement_count` (v1.1).** The recurrence counter is bumped ONLY on a human-ratified `MERGE` (Phase 7). No write-time similarity matching, no auto-merge, no silent increment — every `+1` is a confirmed human thumbs-up (dev-spec 47c26a60 §Design "NO RUNAWAY BY CONSTRUCTION"). A rejected/deferred merge changes neither `reinforcement_count` nor `reinforced_by`. `reinforcement_count` is never conflated with `reference_count`.
 - **Clear `agent-memories.jsonl`.** The episodic log is append-only-forever (A3). The fold advances the boundary; it NEVER clears the file. Any dispatch that clears the jsonl is a protocol violation — it destroys the episodic arc that the append-only property preserves.
 - **Spawn sub-agents.** Curator runs to completion in its own session; no nested dispatch.
 - **Cross-target operate.** A dispatch with `--target-agent argus` operates only on Argus's memory, not on vault-level or other agents'. Cross-target work requires separate dispatch.
@@ -365,9 +387,9 @@ The **retirement fold is the canonical fold** — the primary mechanism. It runs
 
 This agent operationalizes the curator side of v3:
 
-- **memory.capsule v1.1 (a5b3c891)** — governs the schema this curator operates on; v1.1 adds A3 append-only-forever, A4 F5 gate, A5 Top-of-Mind ordering, A6 Living-Transfer aging, A7 surface authorship
-- **Score formula doctrine** at `.tropo-studio/score-formula-doctrine.md` (Stream 3) — declares the math
-- **Validator extension** at `vault/tools/tropo-validate.py` (Stream 4) — checks curator-mutable field discipline + citation resolution; A7 exempts `agent-memory.md` surface-body writes from the curator-body-write ERROR
+- **memory.capsule (a5b3c891)** — governs the schema this curator operates on; v1.1 adds A3 append-only-forever, A4 F5 gate, A5 Top-of-Mind ordering, A6 Living-Transfer aging, A7 surface authorship; **v1.6 adds the curator-mutable `reinforcement_count` + `reinforced_by` fields** this curator writes on a ratified MERGE
+- **Score formula doctrine** at `.tropo-studio/score-formula-doctrine.md` (Stream 3) — declares the math; **v1.1 adds the `reinforce_signal` term** (Phase 2 computes it; five weights sum 1.0)
+- **Validator extension** at `vault/tools/tropo-validate.py` (Stream 4) — checks curator-mutable field discipline (incl. v1.6 `reinforcement_count`/`reinforced_by`) + reinforcement-field well-formedness + citation resolution; A7 exempts `agent-memory.md` surface-body writes from the curator-body-write ERROR
 - **agent-activation.playbook** (99341618) (Stream 5) — Step 2.5 F5 gate: check unfolded state at boot, dispatch catch-up curator fold past threshold
 - **agent-retire.playbook** (Stream 5) — retirement fold is canonical: reads `agent-memories.jsonl` since boundary → §Top-of-Mind, archives frozen snapshot, advances boundary
 - **Migration** (Stream 0) — produces the substrate curator will groom; renames `short-term-memory.jsonl` → `agent-memories.jsonl`, `memory-current.md` → `agent-memory.md`
@@ -475,4 +497,5 @@ No agent ever waits on the curator (curator is never on critical path). No memor
 
 *sa.memory-curator v1.0 | UID 50c0bdce | Authored 2026-05-12 by Argus A59 captain-mode | Closes ADR-020 + ADR-021 | Ships in v1.26.0*
 *sa.memory-curator v1.1 | Amended 2026-06-09 by Argus A106 | Memory v3.0 cycle (dev-spec c8f1e3b4, target 4 of 6) | Adds retirement-canonical fold (A3) + F5 boot-staleness gate (A4) + surface authorship (A7) | Ships in v1.67.0*
-*"Author writes entry meaning; curator writes lifecycle + surface. Score, verify, fold, propose, terminate."*
+*sa.memory-curator v1.2 | Amended 2026-07-22 by talos-t35 | Memory reinforcement cycle (dev-spec 47c26a60, activation b233b7ac; Mike-endorsed) | MERGE reinforcement increment + reinforced_by lineage (Phase 6/7, human-ratified only) + reinforce_signal in Phase 2 scoring; detection stays curator-time | Ships in v1.90.0*
+*"Author writes entry meaning; curator writes lifecycle + surface. Score, verify, fold, propose, terminate. Recurrence re-teaches — count it on the ratified merge."*

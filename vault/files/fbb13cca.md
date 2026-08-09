@@ -47,23 +47,7 @@ capsule_version: '2.5'
 
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Governance](8dd772a0.md) → **The Studio — A Manifesto for Agentic Builders**
-
-**🔗 This file** — UID `fbb13cca` · type `document` · state `active` · status `locked`
-
-**📥 Cited by (5):**
-- [Tropo-OS v1.48.0 — Cycle B Extraction-and-Publish Engineering ...](1d25e142.md) — `1d25e142` (type `release`, via `capabilities_touched`)
-- [Tropo-OS v1.17.0 — First-User Experience Redesign + Permanent ...](9fc8a149.md) — `9fc8a149` (type `design-brief`, via `refs`)
-- [The Tropo Handbook](c92ae197.md) — `c92ae197` (type `document`, via `aligned_with`)
-- [Tropo-OS v1.18.0 — Capsule Library Phase 1 (kernel substrate q...](d95d75e5.md) — `d95d75e5` (type `design-brief`, via `refs`)
-- [Tropo Work — How Work and Agents Share the Same Substrate](db313f9c.md) — `db313f9c` (type `document`, via `aligned_with`)
 <!-- nav-block:end -->
-
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Governed by | [document (d0c00001)](d0c00001.md) |
-| Aligned with | [Tropo-OS — Architectural Principles v2 (5a766c42)](5a766c42.md) |
 
 *A Manifesto for Agentic Builders*
 

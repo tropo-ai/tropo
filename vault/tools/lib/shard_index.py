@@ -46,13 +46,20 @@ second studio.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
+import os
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, Callable, NamedTuple, Optional
 
 SHARDS_REL = Path('.tropo-studio') / 'shards'
 COMPOSE_LOCK_REL = Path('.tropo-studio') / 'compose.lock'
+
+
+class VerifiedCacheRefusal(RuntimeError):
+    """A present derived-cache artifact failed integrity verification."""
 
 
 class ShardStatus(NamedTuple):
@@ -64,20 +71,56 @@ class ShardStatus(NamedTuple):
     record_count: int
 
 
-def load_compose_lock_vaults(vault_root: Path) -> dict[str, dict]:
+def shard_derivation_identity(process_file: Callable[[Path], Optional[dict]]) -> dict:
+    """Fingerprint shard format code and the complete parser module."""
+    parser_path = inspect.getsourcefile(process_file)
+    try:
+        parser_raw = (
+            Path(parser_path).read_bytes()
+            if parser_path
+            else inspect.getsource(process_file).encode('utf-8')
+        )
+        implementation_raw = Path(__file__).read_bytes()
+    except (OSError, TypeError) as exc:
+        raise VerifiedCacheRefusal(
+            f'cannot prove mounted-shard derivation identity: {exc}'
+        ) from exc
+    return {
+        'shard_implementation_sha256': hashlib.sha256(
+            implementation_raw
+        ).hexdigest(),
+        'source_parser_module_sha256': hashlib.sha256(parser_raw).hexdigest(),
+    }
+
+
+def load_compose_lock_vaults(
+    vault_root: Path,
+    *,
+    strict: bool = False,
+) -> dict[str, dict]:
     """Read .tropo-studio/compose.lock; return its `vaults` dict, or {} if
-    absent/corrupt/malformed. Never raises — an absent or empty compose.lock
-    is the (today universal) "no mounted shards, local-only" case, which
-    must behave identically to the pre-shard-index rebuild."""
+    absent. In strict mode, a present unreadable/corrupt/malformed lock is a
+    refusal: only actual lock removal proves that every mount was retired."""
     lock_path = vault_root / COMPOSE_LOCK_REL
     if not lock_path.is_file():
         return {}
     try:
         data = json.loads(lock_path.read_text(encoding='utf-8'))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        if strict:
+            raise VerifiedCacheRefusal(
+                f'REFUSAL: active compose.lock {lock_path} is unreadable or '
+                f'corrupt: {exc}'
+            ) from exc
         return {}
     vaults = data.get('vaults') if isinstance(data, dict) else None
-    return vaults if isinstance(vaults, dict) else {}
+    if not isinstance(vaults, dict):
+        if strict:
+            raise VerifiedCacheRefusal(
+                f'REFUSAL: active compose.lock {lock_path} has no vaults map'
+            )
+        return {}
+    return vaults
 
 
 def shard_jsonl_path(vault_root: Path, vault_uid: str) -> Path:
@@ -121,23 +164,275 @@ def _hash_jsonl_bytes(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def _decode_jsonl_bytes_strict(raw: bytes, *, label: str) -> list[dict]:
+    """Decode a writer-produced JSONL byte stream without skipping damage."""
+    if raw and not raw.endswith(b'\n'):
+        raise VerifiedCacheRefusal(
+            f'REFUSAL: {label} is truncated (non-empty JSONL lacks final newline)'
+        )
+    try:
+        text = raw.decode('utf-8')
+    except UnicodeDecodeError as exc:
+        raise VerifiedCacheRefusal(
+            f'REFUSAL: {label} is not valid UTF-8: {exc}'
+        ) from exc
+
+    records: list[dict] = []
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise VerifiedCacheRefusal(
+                f'REFUSAL: {label} has corrupt JSON at line {line_number}: {exc.msg}'
+            ) from exc
+        if not isinstance(record, dict):
+            raise VerifiedCacheRefusal(
+                f'REFUSAL: {label} line {line_number} is not a JSON object'
+            )
+        records.append(record)
+    return records
+
+
+def read_verified_jsonl_cache(
+    jsonl_path: Path,
+    meta_path: Path,
+    *,
+    cache_kind: str,
+    surface_path: Optional[Path] = None,
+) -> Optional[tuple[list[dict], dict]]:
+    """Read a generic commit-keyed JSONL cache pair, failing closed.
+
+    Both files absent is a legitimate cache miss.  Any partial, unreadable,
+    truncated, malformed, count-mismatched, or hash-mismatched pair is a
+    refusal.  When ``surface_path`` is supplied, its bytes must also match the
+    hash recorded at cache creation; a damaged live projection is never
+    silently healed from another derived artifact.
+    """
+    jsonl_exists = jsonl_path.is_file()
+    meta_exists = meta_path.is_file()
+    if not jsonl_exists and not meta_exists:
+        return None
+    if jsonl_exists != meta_exists:
+        raise VerifiedCacheRefusal(
+            f'REFUSAL: {cache_kind} cache is incomplete '
+            f'(jsonl={jsonl_exists}, meta={meta_exists})'
+        )
+
+    try:
+        raw = jsonl_path.read_bytes()
+        meta_raw = meta_path.read_text(encoding='utf-8')
+    except (OSError, UnicodeError) as exc:
+        raise VerifiedCacheRefusal(
+            f'REFUSAL: {cache_kind} cache is unreadable: {exc}'
+        ) from exc
+    try:
+        meta = json.loads(meta_raw)
+    except json.JSONDecodeError as exc:
+        raise VerifiedCacheRefusal(
+            f'REFUSAL: {cache_kind} cache metadata is corrupt: {exc.msg}'
+        ) from exc
+    if not isinstance(meta, dict):
+        raise VerifiedCacheRefusal(
+            f'REFUSAL: {cache_kind} cache metadata is not a JSON object'
+        )
+    if meta.get('cache_kind') != cache_kind:
+        raise VerifiedCacheRefusal(
+            f'REFUSAL: cache kind mismatch: expected {cache_kind!r}, '
+            f'found {meta.get("cache_kind")!r}'
+        )
+
+    records = _decode_jsonl_bytes_strict(raw, label=str(jsonl_path))
+    actual_hash = _hash_jsonl_bytes(raw)
+    recorded_hash = meta.get('jsonl_sha256')
+    if not isinstance(recorded_hash, str) or actual_hash != recorded_hash:
+        raise VerifiedCacheRefusal(
+            f'REFUSAL: {cache_kind} cache hash mismatch '
+            f'(actual={actual_hash!r}, recorded={recorded_hash!r})'
+        )
+    if meta.get('record_count') != len(records):
+        raise VerifiedCacheRefusal(
+            f'REFUSAL: {cache_kind} cache row-count mismatch '
+            f'(actual={len(records)}, recorded={meta.get("record_count")!r})'
+        )
+
+    if surface_path is not None:
+        try:
+            surface_raw = surface_path.read_bytes()
+        except OSError as exc:
+            raise VerifiedCacheRefusal(
+                f'REFUSAL: live surface paired with {cache_kind} cache is '
+                f'unreadable: {exc}'
+            ) from exc
+        _decode_jsonl_bytes_strict(surface_raw, label=str(surface_path))
+        surface_hash = _hash_jsonl_bytes(surface_raw)
+        recorded_surface_hash = meta.get('surface_sha256')
+        if (
+            not isinstance(recorded_surface_hash, str)
+            or surface_hash != recorded_surface_hash
+            or surface_hash != actual_hash
+        ):
+            raise VerifiedCacheRefusal(
+                f'REFUSAL: {cache_kind} live-surface/cache hash mismatch '
+                f'(surface={surface_hash!r}, cache={actual_hash!r}, '
+                f'recorded_surface={recorded_surface_hash!r})'
+            )
+
+    return records, meta
+
+
+def write_verified_jsonl_cache(
+    jsonl_path: Path,
+    meta_path: Path,
+    records: list[dict],
+    *,
+    cache_kind: str,
+    resolved_commit: str,
+    derived_at: str,
+    source_paths: Optional[list[str]] = None,
+    surface_sha256: Optional[str] = None,
+    extra_meta: Optional[dict] = None,
+) -> dict:
+    """Write a generic verified JSONL cache pair through temp + swap."""
+    jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    raw = b''.join(
+        (json.dumps(record, separators=(',', ':')) + '\n').encode('utf-8')
+        for record in records
+    )
+    digest = _hash_jsonl_bytes(raw)
+    meta = {
+        'cache_kind': cache_kind,
+        'resolved_commit': resolved_commit,
+        'derived_at': derived_at,
+        'record_count': len(records),
+        'jsonl_sha256': digest,
+    }
+    if source_paths is not None:
+        meta['source_paths'] = sorted(source_paths)
+    if surface_sha256 is not None:
+        meta['surface_sha256'] = surface_sha256
+    if extra_meta:
+        meta.update(extra_meta)
+
+    jsonl_fd, jsonl_tmp_name = tempfile.mkstemp(
+        prefix=f'.{jsonl_path.name}.',
+        suffix='.tmp',
+        dir=str(jsonl_path.parent),
+    )
+    meta_fd, meta_tmp_name = tempfile.mkstemp(
+        prefix=f'.{meta_path.name}.',
+        suffix='.tmp',
+        dir=str(meta_path.parent),
+    )
+    jsonl_tmp = Path(jsonl_tmp_name)
+    meta_tmp = Path(meta_tmp_name)
+    try:
+        with os.fdopen(jsonl_fd, 'wb') as handle:
+            handle.write(raw)
+            handle.flush()
+            os.fsync(handle.fileno())
+        with os.fdopen(meta_fd, 'w', encoding='utf-8') as handle:
+            json.dump(meta, handle, indent=2, sort_keys=True)
+            handle.write('\n')
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(jsonl_tmp, jsonl_path)
+        os.replace(meta_tmp, meta_path)
+    finally:
+        if jsonl_tmp.exists():
+            jsonl_tmp.unlink()
+        if meta_tmp.exists():
+            meta_tmp.unlink()
+    return meta
+
+
+def git_commit_and_paths_unchanged(
+    vault_root: Path,
+    previous_commit: str,
+    source_paths: list[str],
+) -> tuple[bool, Optional[str], str]:
+    """Verify cached sources against Git commit history + working-tree state.
+
+    A cache remains reusable when HEAD advances only through commits that do
+    not touch its recorded source paths.  Dirty/staged/untracked changes to
+    those paths reject reuse immediately.  The returned HEAD becomes the next
+    commit key when the caller refreshes metadata.
+    """
+    if not previous_commit or not source_paths:
+        return False, None, 'cache metadata has no commit key or source paths'
+    normalized: list[str] = []
+    for raw_path in source_paths:
+        path = Path(raw_path)
+        if path.is_absolute() or '..' in path.parts:
+            raise VerifiedCacheRefusal(
+                f'REFUSAL: cache source path is outside the Studio: {raw_path!r}'
+            )
+        normalized.append(path.as_posix())
+
+    head_result = subprocess.run(
+        ['git', '-C', str(vault_root), 'rev-parse', 'HEAD'],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    if head_result.returncode != 0:
+        return False, None, f'cannot resolve Git HEAD: {head_result.stderr.strip()}'
+    head = head_result.stdout.strip()
+
+    object_result = subprocess.run(
+        ['git', '-C', str(vault_root), 'cat-file', '-e', f'{previous_commit}^{{commit}}'],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    if object_result.returncode != 0:
+        return False, head, f'cached commit {previous_commit!r} is unavailable'
+
+    status_result = subprocess.run(
+        ['git', '-C', str(vault_root), 'status', '--porcelain', '--', *normalized],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if status_result.returncode != 0:
+        raise VerifiedCacheRefusal(
+            f'REFUSAL: could not verify cache source working-tree state: '
+            f'{status_result.stderr.strip()}'
+        )
+    if status_result.stdout.strip():
+        return False, head, 'archive-relevant source has uncommitted/staged changes'
+
+    diff_result = subprocess.run(
+        [
+            'git', '-C', str(vault_root), 'diff', '--quiet',
+            previous_commit, head, '--', *normalized,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if diff_result.returncode == 0:
+        return True, head, 'archive-relevant source unchanged'
+    if diff_result.returncode == 1:
+        return False, head, 'archive-relevant source changed between commits'
+    raise VerifiedCacheRefusal(
+        f'REFUSAL: could not compare cache source commits: '
+        f'{diff_result.stderr.strip()}'
+    )
+
+
 def read_shard_jsonl(vault_root: Path, vault_uid: str) -> Optional[list[dict]]:
     """Return the cached shard's records, or None if the cache file is
     absent/unreadable. An empty-but-present file returns []."""
     p = shard_jsonl_path(vault_root, vault_uid)
     if not p.is_file():
         return None
-    records: list[dict] = []
     try:
-        with p.open(encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                records.append(json.loads(line))
-    except (OSError, json.JSONDecodeError):
+        return _decode_jsonl_bytes_strict(p.read_bytes(), label=str(p))
+    except (OSError, VerifiedCacheRefusal):
         return None
-    return records
 
 
 def _read_shard_jsonl_hash(vault_root: Path, vault_uid: str) -> Optional[str]:
@@ -152,39 +447,33 @@ def _read_shard_jsonl_hash(vault_root: Path, vault_uid: str) -> Optional[str]:
         return None
 
 
-def write_shard(vault_root: Path, vault_uid: str, resolved_commit: str, records: list[dict], derived_at: str) -> None:
+def write_shard(
+    vault_root: Path,
+    vault_uid: str,
+    resolved_commit: str,
+    records: list[dict],
+    derived_at: str,
+    *,
+    derivation_identity: Optional[dict] = None,
+) -> None:
     """Temp+swap write of both <vault_uid>.jsonl and <vault_uid>.meta — same
     house pattern as index_path / compose.lock (os.replace). The two
     os.replace calls are NOT one atomic transaction (see jsonl_sha256 below
     for how the crash-consistency window this leaves open is closed)."""
-    import os
-    shards_dir = vault_root / SHARDS_REL
-    shards_dir.mkdir(parents=True, exist_ok=True)
-
     jsonl_path = shard_jsonl_path(vault_root, vault_uid)
-    tmp_jsonl = jsonl_path.with_suffix('.jsonl.tmp')
-    jsonl_bytes = b''.join(
-        (json.dumps(rec, separators=(',', ':')) + '\n').encode('utf-8') for rec in records
-    )
-    tmp_jsonl.write_bytes(jsonl_bytes)
-    jsonl_hash = _hash_jsonl_bytes(jsonl_bytes)
-    os.replace(tmp_jsonl, jsonl_path)
-
-    # meta is written+swapped SECOND and carries jsonl_sha256 — a reader that
-    # sees this meta but a live .jsonl hash that DISAGREES with jsonl_sha256
-    # knows the pair desynchronized across a crash (§_hash_jsonl_bytes) and
-    # must treat the shard as cannot-compose, not silently trust it.
     meta_path = shard_meta_path(vault_root, vault_uid)
-    tmp_meta = meta_path.with_suffix('.meta.tmp')
-    meta = {
-        'vault_uid': vault_uid,
-        'resolved_commit': resolved_commit,
-        'derived_at': derived_at,
-        'record_count': len(records),
-        'jsonl_sha256': jsonl_hash,
-    }
-    tmp_meta.write_text(json.dumps(meta, indent=2, sort_keys=True) + '\n', encoding='utf-8')
-    os.replace(tmp_meta, meta_path)
+    write_verified_jsonl_cache(
+        jsonl_path,
+        meta_path,
+        records,
+        cache_kind='mounted-vault-shard',
+        resolved_commit=resolved_commit,
+        derived_at=derived_at,
+        extra_meta={
+            'vault_uid': vault_uid,
+            'derivation_identity': derivation_identity,
+        },
+    )
 
 
 def retire_shard(vault_root: Path, vault_uid: str) -> bool:
@@ -199,10 +488,36 @@ def retire_shard(vault_root: Path, vault_uid: str) -> bool:
 
 
 def list_cached_shard_uids(vault_root: Path) -> set[str]:
+    """Return only cache entries proven to be mounted-vault shards.
+
+    The shard directory is shared with reserved derived caches such as
+    ``local-archive-index``.  Cleanup must therefore classify a cache from its
+    parsed metadata, never from a ``*.meta`` filename alone.  Malformed,
+    unreadable, unknown-kind, or filename/metadata-mismatched entries are
+    retained conservatively rather than being handed to ``retire_shard``.
+    """
     shards_dir = vault_root / SHARDS_REL
     if not shards_dir.is_dir():
         return set()
-    return {p.stem for p in shards_dir.glob('*.meta')}
+    mounted_uids: set[str] = set()
+    for meta_path in shards_dir.glob('*.meta'):
+        try:
+            meta = json.loads(meta_path.read_text(encoding='utf-8'))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(meta, dict):
+            continue
+        if meta.get('cache_kind') != 'mounted-vault-shard':
+            continue
+        vault_uid = meta.get('vault_uid')
+        if (
+            not isinstance(vault_uid, str)
+            or not vault_uid
+            or vault_uid != meta_path.stem
+        ):
+            continue
+        mounted_uids.add(vault_uid)
+    return mounted_uids
 
 
 def mount_path_reachable(mount_path_str: Optional[str]) -> Optional[Path]:
@@ -397,6 +712,8 @@ def resolve_shards(
     process_file: Callable[[Path], Optional[dict[str, Any]]],
     now_iso: str,
     apply_writes: bool = True,
+    *,
+    force_rederive: bool = False,
 ) -> tuple[list[dict], list[ShardStatus]]:
     """The incremental-reuse reconciliation pass (dev-spec c6f6bea4 §3
     steps 2-3, minus the local shard which the caller derives separately).
@@ -409,7 +726,8 @@ def resolve_shards(
         mount_path IS reachable; otherwise CANNOT-COMPOSE (fail closed —
         never serve a stale/partial/desynchronized shard).
       - cache present AND .meta commit == pin AND jsonl_sha256 matches live
-        content -> REUSE (no re-derivation, no write).
+        content -> REUSE (no re-derivation, no write), unless the caller needs
+        a source-complete derivation proof and sets ``force_rederive``.
     Any cached shard whose vault_uid is no longer a compose.lock key is
     retired (removed from disk) — never unioned.
 
@@ -431,12 +749,29 @@ def resolve_shards(
     contribute ZERO rows, by construction — the exclusion IS the fail-closed
     behavior, not a separate filter step downstream).
     """
-    vaults = load_compose_lock_vaults(vault_root)
+    vaults = load_compose_lock_vaults(vault_root, strict=True)
     pinned_uids = set(vaults.keys())
     cached_uids = list_cached_shard_uids(vault_root)
 
     statuses: list[ShardStatus] = []
     mounted_records: list[dict] = []
+    try:
+        expected_derivation_identity = shard_derivation_identity(process_file)
+    except VerifiedCacheRefusal as exc:
+        return [], [
+            ShardStatus(
+                vault_uid,
+                'cannot-compose',
+                f'CACHE-IDENTITY REFUSAL: {exc}',
+                (
+                    record.get('resolved_commit')
+                    if isinstance(record, dict)
+                    else None
+                ),
+                0,
+            )
+            for vault_uid, record in sorted(vaults.items())
+        ]
 
     for vault_uid, record in sorted(vaults.items()):
         pin = record.get('resolved_commit') if isinstance(record, dict) else None
@@ -446,19 +781,55 @@ def resolve_shards(
             statuses.append(ShardStatus(vault_uid, 'cannot-compose', 'compose.lock record missing resolved_commit', None, 0))
             continue
 
+        meta_path_exists = shard_meta_path(vault_root, vault_uid).is_file()
+        jsonl_path_exists = shard_jsonl_path(vault_root, vault_uid).is_file()
         meta = read_shard_meta(vault_root, vault_uid)
         cached_records = read_shard_jsonl(vault_root, vault_uid)
         live_hash = _read_shard_jsonl_hash(vault_root, vault_uid) if meta is not None else None
         recorded_hash = meta.get('jsonl_sha256') if meta is not None else None
-        cache_valid = (
+        cache_integrity_reason: Optional[str] = None
+        if meta_path_exists != jsonl_path_exists:
+            cache_integrity_reason = (
+                'mounted cache pair is incomplete '
+                f'(jsonl={jsonl_path_exists}, meta={meta_path_exists})'
+            )
+        elif meta_path_exists and meta is None:
+            cache_integrity_reason = 'mounted cache metadata is corrupt'
+        elif jsonl_path_exists and cached_records is None:
+            cache_integrity_reason = (
+                'mounted cache JSONL is corrupt or truncated'
+            )
+        elif meta is not None and cached_records is not None and recorded_hash is None:
+            cache_integrity_reason = (
+                'mounted cache metadata has no JSONL content hash'
+            )
+        elif (
             meta is not None
+            and cached_records is not None
+            and recorded_hash is not None
+            and live_hash != recorded_hash
+        ):
+            cache_integrity_reason = (
+                'mounted cache JSONL hash does not match metadata'
+            )
+        elif (
+            meta is not None
+            and meta.get('derivation_identity')
+            != expected_derivation_identity
+        ):
+            cache_integrity_reason = (
+                'mounted cache derivation identity is missing or stale'
+            )
+        cache_valid = (
+            cache_integrity_reason is None
+            and meta is not None
             and cached_records is not None
             and meta.get('resolved_commit') == pin
             and recorded_hash is not None
             and live_hash == recorded_hash
         )
 
-        if cache_valid:
+        if cache_valid and not force_rederive:
             statuses.append(ShardStatus(vault_uid, 'reused', None, pin, len(cached_records)))
             mounted_records.extend(cached_records)
             continue
@@ -469,16 +840,17 @@ def resolve_shards(
         # and not a silent skip.
         resolved_mount = mount_path_reachable(mount_path_str)
         if resolved_mount is None:
-            desync_note = (
-                ' (cache present but jsonl content hash does not match recorded '
-                'jsonl_sha256 — a crash-desynchronized pair, treated as stale)'
-                if meta is not None and recorded_hash is not None and live_hash != recorded_hash
-                else ''
-            )
-            reason = (
-                f'shard cache missing/stale (meta={meta!r}){desync_note} and mount_path '
-                f'{mount_path_str!r} is unreachable — cannot re-derive'
-            )
+            if cache_integrity_reason is not None:
+                reason = (
+                    f'CACHE-INTEGRITY REFUSAL: {cache_integrity_reason}; '
+                    f'mount_path {mount_path_str!r} is unreachable — cannot '
+                    're-derive and must not shrink a composed surface'
+                )
+            else:
+                reason = (
+                    f'shard cache missing/stale (meta={meta!r}) and mount_path '
+                    f'{mount_path_str!r} is unreachable — cannot re-derive'
+                )
             statuses.append(ShardStatus(vault_uid, 'cannot-compose', reason, pin, 0))
             continue
 
@@ -497,7 +869,14 @@ def resolve_shards(
 
         derived = derive_mounted_shard_records(resolved_mount, process_file, vault_uid)
         if apply_writes:
-            write_shard(vault_root, vault_uid, pin, derived, now_iso)
+            write_shard(
+                vault_root,
+                vault_uid,
+                pin,
+                derived,
+                now_iso,
+                derivation_identity=expected_derivation_identity,
+            )
         statuses.append(ShardStatus(vault_uid, 'derived', None, pin, len(derived)))
         mounted_records.extend(derived)
 
@@ -518,7 +897,7 @@ def staleness_findings(vault_root: Path) -> list[ShardStatus]:
     'cannot-compose'); the caller filters for cannot-compose to raise
     findings.
     """
-    vaults = load_compose_lock_vaults(vault_root)
+    vaults = load_compose_lock_vaults(vault_root, strict=True)
     statuses: list[ShardStatus] = []
 
     for vault_uid, record in sorted(vaults.items()):
@@ -547,6 +926,28 @@ def staleness_findings(vault_root: Path) -> list[ShardStatus]:
             if resolved_mount is None:
                 reason += f'; mount_path {mount_path_str!r} also unreachable (cannot self-heal on next rebuild)'
             statuses.append(ShardStatus(vault_uid, 'cannot-compose', reason, pin, len(cached_records)))
+            continue
+
+        derivation_identity = meta.get('derivation_identity')
+        current_implementation_hash = hashlib.sha256(
+            Path(__file__).read_bytes()
+        ).hexdigest()
+        if (
+            not isinstance(derivation_identity, dict)
+            or derivation_identity.get('shard_implementation_sha256')
+            != current_implementation_hash
+            or not isinstance(
+                derivation_identity.get('source_parser_module_sha256'),
+                str,
+            )
+        ):
+            statuses.append(ShardStatus(
+                vault_uid,
+                'cannot-compose',
+                'shard cache derivation identity is missing or stale',
+                pin,
+                len(cached_records),
+            ))
             continue
 
         # SECURITY-REVIEW FIX (Talos T26, 2026-07-08): commit-string agreement

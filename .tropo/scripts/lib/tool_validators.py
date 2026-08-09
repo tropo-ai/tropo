@@ -15,7 +15,7 @@ Checks (WARN severity at v1.56; ERROR ratchet planned once migration stabilizes)
   8. member_of present (graph citizenship; empty list OK but field required)
   9. provenance pair present (created + created_by OR commissioned + commissioned_by)
  10. For status:active — body has at least 4 of 6 required section headings
- 11. uid format is valid 8-hex
+ 11. embedded uid format is valid 8-hex; UID-stem filenames agree with it
  12. name is present and non-empty
  13. governed_by present (tool.capsule UID d5e1b4a3)
  14. JSONL row count parity (tools in index == tools in vault/tools/ directory)
@@ -23,6 +23,9 @@ Checks (WARN severity at v1.56; ERROR ratchet planned once migration stabilizes)
 v1.7 additions (WARN at v1.64; ERROR-ratchet at v1.65 per dev-spec b7d4f1a9):
  v1.7-1. name != uid — a tool MUST carry a logical name, not just repeat its UID
  v1.7-2. cli_command non-empty for transport:cli (refines Check 5 field-presence to value-non-empty)
+
+Friendly-path amendment: shipped ``vault/tools/tropo-<name>.*`` entries resolve
+identity from embedded frontmatter UID and participate in every check/parity set.
 """
 
 
@@ -157,24 +160,32 @@ def run_all_tool_checks(vault: Path) -> tuple[list[str], int, int]:
     for path in sorted(tools_dir.iterdir()):
         if path.suffix.lower() not in (".py", ".md", ".json"):
             continue
-        if not UID_RE.match(path.stem):
+
+        fm, body = _parse_frontmatter_from_tool_file(path)
+        filename_is_uid = bool(UID_RE.fullmatch(path.stem))
+        fm_uid = _get_scalar(fm, "uid") if fm is not None else None
+        fm_type = _get_scalar(fm, "type") if fm is not None else None
+        # Shipped tools may keep a locked friendly filename.  Their embedded
+        # frontmatter UID is canonical; UID-stem files remain supported.
+        if not filename_is_uid and fm_uid is None and fm_type != "tool":
             continue
 
         tools_checked += 1
-        uid = path.stem
+        uid = fm_uid or path.stem
         label = f"vault/tools/{path.name}"
 
-        fm, body = _parse_frontmatter_from_tool_file(path)
         if fm is None:
             findings.append(f"  [WARN] {label}: no parseable frontmatter (Check 1)")
             continue
 
         # Check 11: uid format
-        fm_uid = _get_scalar(fm, "uid")
         if fm_uid and not UID_RE.match(fm_uid):
             findings.append(f"  [WARN] {label}: uid {fm_uid!r} not 8-hex (Check 11)")
-        if fm_uid and fm_uid != uid:
-            findings.append(f"  [WARN] {label}: frontmatter uid {fm_uid!r} != filename {uid!r} (Check 11)")
+        if filename_is_uid and fm_uid and fm_uid != path.stem:
+            findings.append(
+                f"  [WARN] {label}: frontmatter uid {fm_uid!r} "
+                f"!= filename {path.stem!r} (Check 11)"
+            )
 
         # Check 2: type == "tool"
         typ = _get_scalar(fm, "type")
@@ -290,28 +301,42 @@ def run_all_tool_checks(vault: Path) -> tuple[list[str], int, int]:
             )
 
     # Check 14: index parity — tools in directory vs tools in 00-index.jsonl
-    index_path = vault / "vault" / "00-index.jsonl"
-    if index_path.exists():
+    index_paths = (
+        vault / "vault" / "00-index.jsonl",
+        vault / "vault" / "00-archive-index.jsonl",
+    )
+    if any(path.exists() for path in index_paths):
         try:
             indexed_tool_uids: set[str] = set()
-            for line in index_path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line:
+            for index_path in index_paths:
+                if not index_path.exists():
                     continue
-                try:
-                    rec = json.loads(line)
-                    if rec.get("type") == "tool":
-                        indexed_tool_uids.add(rec["uid"])
-                except json.JSONDecodeError:
-                    pass
-            disk_tool_uids = {
-                f.stem for f in tools_dir.iterdir()
-                if f.suffix.lower() in (".py", ".md", ".json") and UID_RE.match(f.stem)
-            }
+                for line in index_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                        if rec.get("type") == "tool":
+                            indexed_tool_uids.add(rec["uid"])
+                    except json.JSONDecodeError:
+                        pass
+            disk_tool_uids: set[str] = set()
+            for tool_path in tools_dir.iterdir():
+                if tool_path.suffix.lower() not in (".py", ".md", ".json"):
+                    continue
+                tool_fm, _tool_body = _parse_frontmatter_from_tool_file(tool_path)
+                tool_fm_uid = (
+                    _get_scalar(tool_fm, "uid") if tool_fm is not None else None
+                )
+                if tool_fm_uid and UID_RE.fullmatch(tool_fm_uid):
+                    disk_tool_uids.add(tool_fm_uid)
+                elif UID_RE.fullmatch(tool_path.stem):
+                    disk_tool_uids.add(tool_path.stem)
             unindexed = disk_tool_uids - indexed_tool_uids
             if unindexed:
                 findings.append(
-                    f"  [WARN] {len(unindexed)} vault/tools/ file(s) not in 00-index.jsonl "
+                    f"  [WARN] {len(unindexed)} vault/tools/ file(s) not in current/archive index union "
                     f"— run rebuild-index --apply (Check 14): {sorted(unindexed)}"
                 )
         except Exception as e:

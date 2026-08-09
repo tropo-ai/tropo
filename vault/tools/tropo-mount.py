@@ -23,7 +23,7 @@ modified: '2026-07-08'
 modified_by: talos-t26
 governed_by: 8dd772a0
 member_of:
-  - cd1fcd25
+  - 44ba7c82
 schema_version: 2
 extraction_scope: argo-reference
 belt: false  # trimmed from belt by vela-v65 2026-07-10 — over the 15-entry cap; mount/publish are federation-specific, lock-dev-spec is ceremony-specific. Cataloged + functional; not in quick-ref.
@@ -156,6 +156,32 @@ _tv_spec = importlib.util.spec_from_file_location(
 _tropo_validate = importlib.util.module_from_spec(_tv_spec)
 _tv_spec.loader.exec_module(_tropo_validate)
 validate_vault_manifest_fields = _tropo_validate.validate_vault_manifest_fields
+
+
+def _b4a_audience_refusal(studio_root: Path, declared_audience) -> Optional[str]:
+    """Return a typed refusal string if B4a strict audience resolution refuses.
+
+    Returns ``None`` when the audience resolves to a live ``type: group`` (or when
+    the B4a cutover is not active for this Studio, or the runtime is absent —
+    fail to pre-cutover behaviour, never fail open to a synthesized authority).
+    The single :class:`~lib.audience_gate` adapter is the sole authority; mount
+    never re-implements group resolution.
+    """
+    try:
+        from lib.audience_gate import cutover_active, load_policy
+    except Exception:
+        return None
+    try:
+        if not cutover_active(studio_root):
+            return None
+        policy = load_policy(studio_root)
+    except Exception as exc:  # authority present but unloadable -> fail closed
+        return f"{type(exc).__name__}: {exc}"
+    outcome = policy.resolve_audience(declared_audience)
+    if outcome.ok:
+        return None
+    return str(outcome.error)
+
 
 # ---------------------------------------------------------------------------
 # Pull-side publish-boundary enforcement (44badb55 §4 — "B does NOT trust A").
@@ -666,6 +692,18 @@ def run_mount(mount_path: Path, consent: bool, force_remount: bool,
         raise MountRefused(
             "manifest failed schema validation (a1f7c750): " + "; ".join(manifest_errors)
         )
+
+    # B4a strict audience cutover (dev-spec 0bfa771d; brief 252534fe §1/§5): the
+    # production mount path used to fail open on ANY syntactically-valid 8-hex
+    # audience because it called the schema validator "without a type lookup".
+    # Once a group authority is installed for this Studio, the declared audience
+    # MUST resolve to a live `type: group` through the ONE verified AudiencePolicy
+    # adapter — an inline list, slug, unknown UID, `team`, `team-def`, or inactive
+    # group refuses with the typed code. Pre-cutover Studios are unaffected.
+    studio_root = compose_lock_path.resolve().parent.parent
+    audience_err = _b4a_audience_refusal(studio_root, manifest.get("audience"))
+    if audience_err is not None:
+        raise MountRefused(f"audience refused (B4a strict): {audience_err}")
 
     vault_uid = manifest.get("uid") or manifest.get("vault_uid")
     if not vault_uid or not re.match(r'^[0-9a-f]{8}$', str(vault_uid)):

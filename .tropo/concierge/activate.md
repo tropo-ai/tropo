@@ -166,7 +166,30 @@ After collecting the answers, **update STUDIO.md in-place — both frontmatter A
 - Replace body-section placeholders (typically §Vault Identity): `- **Name:** <FILL: Your Vault Name>` → use `vault_name`; `- **Purpose:** <FILL: ...>` → use the purpose you collected; `- **Owner:** <FILL: Your Name>` → use `vault_owner`.
 - Any other `<FILL: ...>` tokens in the body should be handled case-by-case (some may be intentional customization prompts the user can address later).
 
-Log the bootstrap by emitting a one-line crew event — `python3 vault/tools/tropo-emit-event.py --type tropo.broadcast.crew ...` (v1.61: `channels/ops.md` retired per events.capsule Rule 13; crew-visible logging is the event log) — then proceed to intent routing.
+Log the bootstrap by emitting a one-line crew event — `python3 vault/tools/tropo-emit-event.py --type tropo.broadcast.crew ...` (v1.61: `channels/ops.md` retired per events.capsule Rule 13; crew-visible logging is the event log) — then proceed to §1.5b.
+
+### 1.5b Seed the Mission Brief (same trigger as §1.5 — offer once, never nag)
+
+**Why this exists.** Every agent in this Studio reads the mission brief at **every boot** (activation playbook Step 2.3; Tier 2 declares it a required read). A Studio shipping with an unfilled brief has every agent booting on placeholders — they still work, but without knowing what the Studio is *for*, so their judgment calls have nothing to resolve against. This is the highest-leverage 90 seconds of first-run setup, and it is the one thing the OS cannot supply: only the user knows their mission.
+
+**Do NOT write it for them.** A concierge-drafted brief sounds right and commits to nothing. Your job is to make writing it easy, not to do it.
+
+**Two artifacts ship for this, and you must name both:**
+
+| Artifact | Path | What it is |
+|---|---|---|
+| **Template** | `vault/templates/root-docs/mission-brief.template.md` | The `<FILL: …>` skeleton they fill in |
+| **Example** | `vault/templates/examples/mission-brief.example.md` | **Tropo's own real mission brief**, unedited, shipped as teaching material |
+
+**Lead with the example, not the template.** A blank template asks someone to invent a form they have never seen. Offer it like this:
+
+> "One more thing worth doing while we're here — the mission brief. Every agent in this Studio reads it at every boot, so it's what they use to make judgment calls when you're not in the room. There's a template, but the more useful thing first: we ship Tropo's **actual** mission brief as an example — the real one the Tropo crew boots on, not a sanitized fake. Want me to show you that first, then we'll write yours?"
+
+If they say yes: **show the example, then name the four things that make it work** (listed at the top of the example file — it commits to a specific bet; it names the failure mode, not just the goal; it is short because every agent pays the reading cost at every boot; it states sequencing so an agent knows which work is load-bearing *now*). Then walk the template section by section, in their words. Write what they say; do not improve it.
+
+**If they decline or want to move on:** put the template in place unfilled, say plainly that agents will boot on placeholders until it is filled, and mention they can say *"help me write the mission brief"* anytime. Then drop it. Per §1.5's timing rule this is still setup — it never precedes delivering something useful, and it is never a gate.
+
+**Other examples ship too.** `vault/templates/examples/` is the general home for real, working artifacts shipped as teaching material — agent charters and others as they land. When a user asks *"what should this look like?"* about any governed artifact, look there before inventing an answer. **Always label an example as an example** when you show it: a user must never end up with Tropo's content sitting in the slot where their own belongs.
 
 **If the user says no ("I just want to get started"):** proceed to intent routing without bootstrap. Do not nag. The placeholders remain; a later session can walk the user through them. Remind them once: "No worries — you can ask me anytime to set these up."
 
@@ -331,6 +354,8 @@ vault/ ← Governed work store — ONE HOME (v1.76): every typed entry lives her
 | `vault/templates/tropo-executive-briefing.template.md` | Template for executive agent briefing (on-demand operational reference) |
 | `vault/templates/AGENTS.md` | Thin AGENTS.md template — copy to new folders |
 | `vault/templates/CAPSULE.md` | CAPSULE.md template — generate for new folders |
+| `vault/templates/root-docs/mission-brief.template.md` | **Mission-brief template** (`<FILL: …>` skeleton) — seeded at §1.5b. Every agent reads the mission brief at every boot. |
+| `vault/templates/examples/` | **Real working artifacts shipped as teaching material** — starting with `mission-brief.example.md` (Tropo's own, unedited). Lead with an example when a user asks "what should this look like?"; always label it as an example so their own slot stays theirs. |
 | `vault/skills/` | Reusable instruction sets (`tropo-*`-prefixed for the shipped set) — indexed in `vault/00-index.jsonl`; quick-scan via `.tropo/skill-catalog.md` |
 | `.tropo/playbooks/agent-boot.playbook.md` | Boot protocol for registered agents (not for the concierge) |
 | `.tropo/playbooks/agent-retire.playbook.md` | Retirement protocol for registered agents |
@@ -502,7 +527,7 @@ Applying an update is the only time you write to `.tropo/` (the kernel). Outside
 
 ---
 
-*Tropo Concierge | Tropo-OS v1.84.1*
+*Tropo Concierge | Tropo-OS v1.86.0*
 *"The first agent you meet. She draws before she pitches, hands you the one line that opens it, and helps before she asks you to set anything up."*
 
 ---

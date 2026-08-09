@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.86.0] - 2026-08-08
+### Added
+- **Working with real files:** point your studio at a folder of real work — SharePoint, OneDrive, iCloud — and it mounts in place: attach, adopt, and reconcile without copying. Word, PowerPoint, and PDF content becomes searchable (`tropo-extract-text`, cached on content identity), and mounted-binary text lands in the full-text index.
+- **The agent lifecycle, rebuilt:** birth, retirement, and an agent's whole history now live in one append-only file per agent (`tropo-lineage`), and nothing on that path can refuse an agent. Six generations were blocked at birth in the week before this existed.
+- **The studio tests itself:** a runner (`tropo-run-suites`) for the test corpus, a six-operation liveness probe (`tropo-smoke`) that runs a real agent birth rather than modeling one, and release preflight including a transitive import-closure gate so a shipped tool can never again arrive missing its libraries.
+- **Typed governed minting:** one call produces a complete governed file from its capsule binding (`tropo-mint-id --type`), for design-briefs, dev-specs, notes, and tasks.
+### Changed
+- **Publishing is now welded to verification:** the fire path refuses without credentials, treats every generator failure as a publish error, and will not declare a release LIVE until the public manifest is fetched back and names the fired version. The published manifest had been silently stale since 1.78.0; this class is now structurally closed.
+- The release build seals a genesis index for the shipped box (current + legitimately-empty archive + SQLite companion) with trusted shrink floors, and the box no longer ships studio-pinned boot derivations or the studio's event-cutover marker — absence is the designed state, and a fresh studio boots from canonical sources in legacy event mode.
+- The update-walk playbook (Apply a Tropo-OS Update) was made walkable end to end: eleven defects fixed, including a guaranteed false covenant violation and a one-word error that silently disabled shipped-file replacement.
+### Fixed
+- The covenant content-hash is now blind to every renderer-owned span via one shared stripping primitive used by both the renderer and the receipt — a clean update can no longer be reported as a covenant violation.
+- Derived index surfaces are classified REGENERATED during updates: never prompted for, never written by any discrete operation; the rebuild is the sole writer.
+- The in-box self-test no longer misreads capsule templates as unfilled instances (228 false findings eliminated), reads the box's version correctly, and resolves Python-hosted and numeric UIDs in the vendor-reference manifest.
+
+## [1.85.0] - 2026-07-15
+### Added
+- Governed file birth is now one operation: `mint file --type <type>` resolves the locked capsule, writes its stamped scaffold at the type’s canonical home, and makes it queryable immediately. Unknown or incompletely-governed types refuse with the governance path named.
+- Releases now follow one coupled flow: private build, guarded private stage, explicit Mike fire (or recorded defer), and live verification of the remote tag, main SHA, and GitHub release object.
+- Tropo Engine Phase 1 lands the current/archive index split, typed validator findings, canonical memory scopes, and safer path-scoped Git staging primitives.
+### Changed
+- Default Vault retrieval now carries current truth only; archived and superseded history remains preserved behind explicit `--include-archive`, while SQLite retains full-union resolution.
+- Memory uses one canonical `{agent, studio, doctrine}` scope vocabulary. The live corpus was migrated without changing any memory body bytes.
+- Incremental index freshening now uses the same Gardener transform as a full rebuild, making touched rows exactly coherent across both paths.
+### Fixed
+- Tool-class governed birth now routes to `vault/tools/<uid>.md` and has a deterministic draft template/verifier path instead of producing a deprecated sidecar or refusing for a missing template leg.
+- Validator findings carry typed severity, so misleading text prefixes and crashed check families cannot evade the failure tally.
+- Cleared the release-blocking structural backlog: verdict-less close steps, unexplained lifecycle rollups, hub/member conflation, and a terminal item stranded in an inbox.
+
 ## [1.84.1] - 2026-07-10
 ### Added
 - Multi-machine and team federation is complete: a studio can now mount another vault, keep cross-references correct across the boundary, and stay efficient as mounted vaults grow — all proven, under adversarial attack, to never leak a private byte across the wire in either direction.
@@ -117,7 +146,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Versions prior to 1.69.0 shipped before Tropo's public release; their detailed history is preserved in the project's internal records.
 
-[Unreleased]: https://github.com/tropo-ai/tropo/compare/v1.84.1...HEAD
+[Unreleased]: https://github.com/tropo-ai/tropo/compare/v1.85.0...HEAD
+[1.85.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.85.0
 [1.84.1]: https://github.com/tropo-ai/tropo/releases/tag/v1.84.1
 [1.84.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.84.0
 [1.82.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.82.0

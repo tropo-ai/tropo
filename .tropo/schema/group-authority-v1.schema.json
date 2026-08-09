@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tropo.local/schema/group-authority-v1.schema.json",
+  "title": "Tropo B4a Group Authority v1",
+  "description": "Closed schema (draft 2020-12) for the B4a authenticated authority layer: the portable principal directory row, the machine-local trust record {accepted_keys, high_water}, the canonical authority artifact set, and the signed compose-lock group_authority tuple. Object key order for the tuple and artifacts is fixed by the dev-spec (uid 0bfa771d) and is NOT lexical; rows and UID arrays sort as the dev-spec states. Every object is closed (additionalProperties:false); all numbers are schema-bounded integers and floats are forbidden.",
+  "oneOf": [
+    {"$ref": "#/$defs/principal_directory_row"},
+    {"$ref": "#/$defs/trust_record"},
+    {"$ref": "#/$defs/artifact_manifest"},
+    {"$ref": "#/$defs/group_authority"}
+  ],
+  "$defs": {
+    "uid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}$",
+      "description": "8-character lowercase hexadecimal UID (ADR-050 vault-code space overlaps; principals/authorities use 8-hex)."
+    },
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase SHA-256 hex digest."
+    },
+    "content_revision": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Immutable content address of the form sha256:<64 lowercase hex>."
+    },
+    "base64_pubkey": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/]{43}=$",
+      "description": "RFC 4648 padded base64 of a raw 32-byte Ed25519 public key (no whitespace, no alternate alphabet)."
+    },
+    "base64_signature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/]{86}==$",
+      "description": "RFC 4648 padded base64 of a raw 64-byte Ed25519 signature."
+    },
+    "principal_class": {
+      "type": "string",
+      "pattern": "^(human|agent-[a-z0-9]+(?:-[a-z0-9]+)*)$",
+      "description": "Portable principal class. B4a carries human and agent classes only; no role principals."
+    },
+    "principal_status": {
+      "type": "string",
+      "enum": ["active", "inactive", "superseded"]
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Monotonic positive authority generation. Bounded to the JSON-safe integer range; floats forbidden."
+    },
+    "byte_length": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "principal_directory_row": {
+      "type": "object",
+      "description": "One row of the portable principal directory. Contains exactly the identity claims required for resolution; no private body text is ever represented here. source_hash hashes compact JSON+LF of the first five ordered claim fields only.",
+      "additionalProperties": false,
+      "required": [
+        "principal_uid",
+        "principal_class",
+        "status",
+        "source_authority_uid",
+        "source_revision",
+        "source_hash"
+      ],
+      "properties": {
+        "principal_uid": {"$ref": "#/$defs/uid"},
+        "principal_class": {"$ref": "#/$defs/principal_class"},
+        "status": {"$ref": "#/$defs/principal_status"},
+        "source_authority_uid": {"$ref": "#/$defs/uid"},
+        "source_revision": {"type": "string", "minLength": 1},
+        "source_hash": {"$ref": "#/$defs/sha256_hex"}
+      }
+    },
+    "group_semantic_object": {
+      "type": "object",
+      "description": "A group semantic object as serialized into groups.jsonl (the locked v1 group key order). UID arrays sort lexicographically; rows in groups.jsonl sort by uid.",
+      "additionalProperties": false,
+      "required": [
+        "uid",
+        "type",
+        "slug",
+        "title",
+        "description",
+        "owner",
+        "members",
+        "includes_groups",
+        "status",
+        "version"
+      ],
+      "properties": {
+        "uid": {"$ref": "#/$defs/uid"},
+        "type": {"const": "group"},
+        "slug": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+        "title": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1},
+        "owner": {"$ref": "#/$defs/uid"},
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/uid"}
+        },
+        "includes_groups": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/uid"}
+        },
+        "status": {"type": "string", "enum": ["active", "draft"]},
+        "version": {"const": 1}
+      }
+    },
+    "audience_policy": {
+      "type": "object",
+      "description": "audience-policy.json: the explicit legacy alias binding private -> Mike group and the reserved os semantics. 'private' is never parsed as a vault UID.",
+      "additionalProperties": false,
+      "required": ["legacy_aliases", "reserved_os"],
+      "properties": {
+        "legacy_aliases": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["private"],
+          "properties": {
+            "private": {"$ref": "#/$defs/uid"}
+          }
+        },
+        "reserved_os": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["always_readable"],
+          "properties": {
+            "always_readable": {"type": "boolean"}
+          }
+        }
+      }
+    },
+    "artifact_row": {
+      "type": "object",
+      "description": "One artifact-manifest row. Key order is path,byte_length,sha256; rows sort by path. Lists exactly the corpus artifacts, never the manifest itself, envelope, trust, or projections.",
+      "additionalProperties": false,
+      "required": ["path", "byte_length", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "enum": ["audience-policy.json", "groups.jsonl", "principals.jsonl"]
+        },
+        "byte_length": {"$ref": "#/$defs/byte_length"},
+        "sha256": {"$ref": "#/$defs/sha256_hex"}
+      }
+    },
+    "artifact_manifest": {
+      "type": "object",
+      "description": "artifact-manifest.json: object keys schema_id,artifacts. artifact_identity is SHA-256 over the exact bytes of this completed manifest, so no self-referential digest exists.",
+      "additionalProperties": false,
+      "required": ["schema_id", "artifacts"],
+      "properties": {
+        "schema_id": {"const": "tropo.group-authority-artifacts/v1"},
+        "artifacts": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/artifact_row"}
+        }
+      }
+    },
+    "group_authority_signature_input": {
+      "type": "object",
+      "description": "The unsigned canonical authority tuple (11 fields) whose canonical bytes, domain-prefixed and LF-terminated, form the Ed25519 signature input. The key order shown is fixed and MUST NOT be sorted.",
+      "additionalProperties": false,
+      "required": [
+        "authority_uid",
+        "corpus_revision",
+        "corpus_sha256",
+        "principal_directory_revision",
+        "principal_directory_sha256",
+        "audience_policy_sha256",
+        "authority_generation",
+        "previous_envelope_sha256",
+        "canonicalization_version",
+        "artifact_identity",
+        "signing_key_uid"
+      ],
+      "properties": {
+        "authority_uid": {"$ref": "#/$defs/uid"},
+        "corpus_revision": {"$ref": "#/$defs/content_revision"},
+        "corpus_sha256": {"$ref": "#/$defs/sha256_hex"},
+        "principal_directory_revision": {"$ref": "#/$defs/content_revision"},
+        "principal_directory_sha256": {"$ref": "#/$defs/sha256_hex"},
+        "audience_policy_sha256": {"$ref": "#/$defs/sha256_hex"},
+        "authority_generation": {"$ref": "#/$defs/generation"},
+        "previous_envelope_sha256": {
+          "oneOf": [{"$ref": "#/$defs/sha256_hex"}, {"type": "null"}]
+        },
+        "canonicalization_version": {"const": 1},
+        "artifact_identity": {"$ref": "#/$defs/sha256_hex"},
+        "signing_key_uid": {"$ref": "#/$defs/uid"}
+      }
+    },
+    "group_authority": {
+      "type": "object",
+      "description": "The signed compose-lock group_authority tuple / signed-envelope object: the 11 tuple fields in the fixed order followed by signature. Serialized as compact UTF-8 JSON; the standalone envelope artifact adds one trailing LF.",
+      "additionalProperties": false,
+      "required": [
+        "authority_uid",
+        "corpus_revision",
+        "corpus_sha256",
+        "principal_directory_revision",
+        "principal_directory_sha256",
+        "audience_policy_sha256",
+        "authority_generation",
+        "previous_envelope_sha256",
+        "canonicalization_version",
+        "artifact_identity",
+        "signing_key_uid",
+        "signature"
+      ],
+      "properties": {
+        "authority_uid": {"$ref": "#/$defs/uid"},
+        "corpus_revision": {"$ref": "#/$defs/content_revision"},
+        "corpus_sha256": {"$ref": "#/$defs/sha256_hex"},
+        "principal_directory_revision": {"$ref": "#/$defs/content_revision"},
+        "principal_directory_sha256": {"$ref": "#/$defs/sha256_hex"},
+        "audience_policy_sha256": {"$ref": "#/$defs/sha256_hex"},
+        "authority_generation": {"$ref": "#/$defs/generation"},
+        "previous_envelope_sha256": {
+          "oneOf": [{"$ref": "#/$defs/sha256_hex"}, {"type": "null"}]
+        },
+        "canonicalization_version": {"const": 1},
+        "artifact_identity": {"$ref": "#/$defs/sha256_hex"},
+        "signing_key_uid": {"$ref": "#/$defs/uid"},
+        "signature": {"$ref": "#/$defs/base64_signature"}
+      }
+    },
+    "accepted_key": {
+      "type": "object",
+      "description": "One machine-local accepted authority key. Exactly the design-brief fields. acceptance is the sole human-fingerprint mode: no trust-on-first-use, --yes, wildcard, self-accept, or local-principal fallback is representable.",
+      "additionalProperties": false,
+      "required": [
+        "authority_uid",
+        "key_uid",
+        "algorithm",
+        "public_key",
+        "sha256_fingerprint",
+        "accepted_by",
+        "accepted_at",
+        "acceptance"
+      ],
+      "properties": {
+        "authority_uid": {"$ref": "#/$defs/uid"},
+        "key_uid": {"$ref": "#/$defs/uid"},
+        "algorithm": {"const": "ed25519"},
+        "public_key": {"$ref": "#/$defs/base64_pubkey"},
+        "sha256_fingerprint": {"$ref": "#/$defs/sha256_hex"},
+        "accepted_by": {"$ref": "#/$defs/uid"},
+        "accepted_at": {"type": "string", "minLength": 1},
+        "acceptance": {"const": "human-fingerprint"}
+      }
+    },
+    "high_water_entry": {
+      "type": "object",
+      "description": "high_water[authority_uid]: the highest accepted generation and its envelope digest. Anti-rollback / anti-replay state; never shipped or overwritten by updates.",
+      "additionalProperties": false,
+      "required": ["authority_generation", "envelope_sha256"],
+      "properties": {
+        "authority_generation": {"$ref": "#/$defs/generation"},
+        "envelope_sha256": {"$ref": "#/$defs/sha256_hex"}
+      }
+    },
+    "trust_record": {
+      "type": "object",
+      "description": "The machine-local trust file at .tropo-studio/trust/group-authorities.json. The closed object {accepted_keys, high_water}.",
+      "additionalProperties": false,
+      "required": ["accepted_keys", "high_water"],
+      "properties": {
+        "accepted_keys": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/accepted_key"}
+        },
+        "high_water": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/uid"},
+          "additionalProperties": {"$ref": "#/$defs/high_water_entry"}
+        }
+      }
+    }
+  }
+}

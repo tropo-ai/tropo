@@ -54,18 +54,29 @@ def _parse_version(v: str) -> tuple[int, ...]:
 
 
 def _read_index(vault: Path) -> list[dict]:
-    idx = vault / "vault" / "00-index.jsonl"
-    if not idx.exists():
-        return []
+    """Read the ADR-047 union; release-chain validation is history-aware."""
     rows = []
-    for line in idx.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
+    seen: set[str] = set()
+    for idx in (
+        vault / "vault" / "00-index.jsonl",
+        vault / "vault" / "00-archive-index.jsonl",
+    ):
+        if not idx.exists():
             continue
-        try:
-            rows.append(json.loads(line))
-        except json.JSONDecodeError:
-            pass
+        for line in idx.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            uid = row.get("uid")
+            if uid and uid in seen:
+                continue
+            if uid:
+                seen.add(uid)
+            rows.append(row)
     return rows
 
 

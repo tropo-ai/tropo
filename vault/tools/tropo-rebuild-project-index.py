@@ -45,7 +45,7 @@ capsule_version: '2.5'
 schema_version: 2
 extraction_scope: ship
 member_of:
-- c7e4f9a2
+- 8dd772a0
 tags:
 - tool
 - cli

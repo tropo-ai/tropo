@@ -72,7 +72,7 @@ Exit codes:
     0 — GREEN (validator passes; zero warnings)
     1 — YELLOW (validator passes; warnings present)
     2 — RED (validator failures; ship-blocker)
-    3 — precondition error (not in a Tropo Studio)
+    3 — precondition error (Python below 3.9 or not in a Tropo Studio)
     4 — substrate-degraded (validator subprocess timeout >VALIDATOR_TIMEOUT_SECONDS)
     5 — script-error (validator subprocess crashed; not a substrate-defect)
     6 — argparse / CLI usage error (REMAPPED from default 2 to avoid RED collision)
@@ -95,6 +95,20 @@ from typing import Optional
 
 TOOL_NAME = 'tropo-test'
 TOOL_VERSION = '1.0.2'  # v0.5 R3 RE-RUN cold-boot-182 D0-1 absorption: returncode-non-substrate-verdict reclassified as script-error
+MIN_PYTHON_VERSION = (3, 9)
+_VERSION_COMPONENT = r'(?:0|[1-9][0-9]*)'
+_SEMANTIC_VERSION = (
+    rf'{_VERSION_COMPONENT}\.{_VERSION_COMPONENT}\.{_VERSION_COMPONENT}'
+)
+BARE_VERSION_RE = re.compile(
+    rf'^v({_SEMANTIC_VERSION})$'
+)
+LEGACY_VERSION_RE = re.compile(
+    rf'^\*\*Current:\*\*[ \t]+v({_SEMANTIC_VERSION})$',
+    re.MULTILINE,
+)
+CURRENT_MARKER_RE = re.compile(r'\*\*Current\s*:\s*\*\*')
+VERSION_LIKE_RE = re.compile(r'(?<![A-Za-z0-9])v[^\s]*\.[^\s]*\.[^\s]*')
 
 # Absolute path to the validator (sibling script in .tropo/scripts/) — per spec
 # v0.2 §3.3 skeptic-075 P0-4 absorption (cwd-relative was fragile when invoked
@@ -129,7 +143,8 @@ def resolve_studio_root() -> Optional[Path]:
 def read_studio_version(studio_root: Path) -> str:
     """Read current Tropo-OS version from .tropo/version.md.
 
-    Returns "unknown" if the file is missing or the Current-line isn't parseable.
+    Accept the canonical bare ``vMAJOR.MINOR.PATCH`` stamp and the legacy
+    ``**Current:** vMAJOR.MINOR.PATCH`` line. Return "unknown" otherwise.
     """
     version_md = studio_root / '.tropo' / 'version.md'
     if not version_md.is_file():
@@ -138,8 +153,45 @@ def read_studio_version(studio_root: Path) -> str:
         text = version_md.read_text()
     except OSError:
         return 'unknown'
-    m = re.search(r'^\*\*Current:\*\*\s*v([\d.]+)', text, re.MULTILINE)
-    return m.group(1) if m else 'unknown'
+    content_lines = [line.strip() for line in text.splitlines() if line.strip()]
+    canonical = (
+        BARE_VERSION_RE.fullmatch(content_lines[0])
+        if len(content_lines) == 1
+        else None
+    )
+    if canonical:
+        return canonical.group(1)
+    legacy_matches = [
+        match
+        for line in content_lines
+        if (match := LEGACY_VERSION_RE.fullmatch(line)) is not None
+    ]
+    legacy = (
+        legacy_matches[0]
+        if len(legacy_matches) == 1
+        and len(CURRENT_MARKER_RE.findall(text)) == 1
+        and len(VERSION_LIKE_RE.findall(text)) == 1
+        else None
+    )
+    return legacy.group(1) if legacy else 'unknown'
+
+
+def python_version_preflight(
+    version_info=None,
+    executable: Optional[str] = None,
+) -> bool:
+    """Fail loudly before health work when the interpreter is below the L1 floor."""
+    actual_info = sys.version_info if version_info is None else version_info
+    actual_executable = sys.executable if executable is None else executable
+    if tuple(actual_info[:2]) >= MIN_PYTHON_VERSION:
+        return True
+    actual_version = '.'.join(str(part) for part in actual_info[:3])
+    print(
+        'ERROR: Tropo L1 tooling requires Python >= 3.9; '
+        f'actual interpreter: {actual_executable}; actual version: Python {actual_version}',
+        file=sys.stderr,
+    )
+    return False
 
 
 def run_validator(studio_root: Path) -> tuple[Optional[str], Optional[str], int]:
@@ -362,6 +414,9 @@ class _ArgparseRemap(argparse.ArgumentParser):
 
 
 def main() -> int:
+    if not python_version_preflight():
+        return 3
+
     parser = _ArgparseRemap(
         prog='tropo-test',
         description='Tropo-OS substrate-health check. One gesture. One verdict.',

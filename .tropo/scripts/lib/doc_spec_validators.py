@@ -93,23 +93,27 @@ def _iter_doc_specs(vault: Path):
 def _load_vault_index_uids(vault: Path) -> frozenset:
     import json
     uids: set[str] = set()
-    index = vault / 'vault' / '00-index.jsonl'
-    if not index.exists():
-        return frozenset(uids)
-    try:
-        with index.open() as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                    if isinstance(entry, dict) and 'uid' in entry:
-                        uids.add(entry['uid'])
-                except json.JSONDecodeError:
-                    continue
-    except OSError:
-        pass
+    # ADR-047: doc-spec cross-validation resolves through current + history.
+    for index in (
+        vault / 'vault' / '00-index.jsonl',
+        vault / 'vault' / '00-archive-index.jsonl',
+    ):
+        if not index.exists():
+            continue
+        try:
+            with index.open() as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                        if isinstance(entry, dict) and 'uid' in entry:
+                            uids.add(entry['uid'])
+                    except json.JSONDecodeError:
+                        continue
+        except OSError:
+            pass
     return frozenset(uids)
 
 

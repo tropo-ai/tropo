@@ -5,12 +5,18 @@ ship_scope_lock_break: 'extraction_scope: ship ADDED 2026-07-02 per Mike verbati
 name: project
 type: capsule-definition
 extends: core
-version: 2.5
+version: 2.8
+template_enforced_from: '2026-07-13'
+template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
+supersedes_version: '2.7'
+v2_8_lifecycle_compatibility_lock_break: 'v2.7 -> v2.8 bounded lock-break 2026-07-23 by talos per Mike-approved locked dev-spec de2015c1 (activation 3295c41a; approval recorded verbatim as "I approve"). Adds required legacy_default metadata to every lifecycle_machine move; both project moves are unambiguous and declare false. Existing enforced status aliases remain the sole normalization authority and are emitted separately by the projection. No enum, alias, state, transition, gate, prose machine, validator, or write-policy change.'
+v2_7_lifecycle_machine_lock_break: 'v2.6 -> v2.7 bounded lock-break 2026-07-23 by talos per Mike-approved locked dev-spec b06aa0fb (activation 1b3c6eaa; approval recorded verbatim as "Looks good. I approve"). Additive lifecycle_machine declaration only: canonical status states active/evergreen/done/cancelled in enforced order + the existing active-to-done/cancelled prose moves and stable unique move_id/UI metadata. Retired stage/ideate/build semantics remain aliases or historical prose, never machine states. No enum, alias, meta_status_rollup, prose machine, validator, or write-gate change.'
+v2_6_amendment_note: 'v2.5 → v2.6 amendment 2026-07-13 by talos-t29 per Mike-locked Governed Autonomy S2 dev-spec bba40cd7 (activation 0d9f89bc; committed substrate "Template legs for the top-10 types"). Additive + non-breaking: NEW §Template section (the mint-stamped scaffold) per the Template-Leg Contract v1.0 (b933eafb). No schema, enum, or state-machine change.'
 tier: os
 author: tropo
 created: 2026-04-10
-modified: 2026-06-09
-modified_by: argus-a105
+modified: 2026-07-23
+modified_by: talos
 meta_status_rollup_added: argus-a104 2026-06-08 — +active→in-progress in meta_status_rollup per 4acf3f2d v0.4 DERIVE (Mike-signed 7-capsule lock-break batch); additive; prior modified argus-a80 2026-05-23
 status: locked
 locked_by: argus-a32
@@ -48,12 +54,42 @@ meta_status_rollup:
     - dormant
     - standing
 meta_status_rollup_note: 'argus-a116 2026-06-17 (v1.72 Move 1, dev-spec 8082aad0): status is the canonical project lifecycle field {active,evergreen,done,cancelled}; ideate/build/specify alias→active (pre-pipeline residue per Mike-A116), dormant→evergreen; evergreen→standing bucket (permanent studio-structure holders). Prior (argus-a104 2026-06-08): rollup completion per the unified lifecycle knot (move 2, 9f6a1379).'
+lifecycle_machine:
+  field: status
+  optional: false
+  states:
+    - {value: active, label: Active, terminal: false}
+    - {value: evergreen, label: Evergreen, terminal: false}
+    - {value: done, label: Done, terminal: true}
+    - {value: cancelled, label: Cancelled, terminal: true}
+  moves:
+    - move_id: complete
+      from: active
+      to: done
+      label: Mark done
+      direction: forward
+      confirm: false
+      resolution: null
+      gate: null
+      warning: null
+      principal_only: false
+      legacy_default: false
+    - move_id: cancel
+      from: active
+      to: cancelled
+      label: Cancel project
+      direction: forward
+      confirm: true
+      resolution: null
+      gate: null
+      warning: null
+      principal_only: false
+      legacy_default: false
 schema_version: 2
 governed_by: 222873b9
 aligned_with:
   - 74fd9b61
   - f2e8a7b1
-supersedes_version: '2.4'
 member_of: null
 ---
 
@@ -323,10 +359,44 @@ Honor-system migration window: v1.4 ships the capsule amendment + script + proof
 
 ---
 
+## §Template (v2.6 — the mint-stamped scaffold; contract at [b933eafb](../../vault/files/b933eafb.md))
+
+*Stamped verbatim by `mint file --type project` (S2, bba40cd7); `<<MINT:*>>` tokens are the only substitution. `status: active` is the legal birth default for an ordinary work-in-progress project; `evergreen` is the alternate birth value for standing/permanent structural containers (subsystem hubs, L0 roots) — swap it in by hand for that case, it is not the default. No required body sections found in this capsule — the body below is a starter heading, not a contract.*
+
+~~~markdown
+---
+uid: <<MINT:uid>>
+type: project
+title: "<!-- REQUIRED: problem-first title, ≤120 chars -->"
+description: "<!-- REQUIRED: one-line summary, ≤120 chars -->"
+owner: <<MINT:author>>
+status: active
+state: active
+member_of:
+  - "<!-- REQUIRED: real parent project UID (never a subsystem-hub UID — those go in subsystem_hub:, per v2.5 Validation Check 11) -->"
+created: '<<MINT:date>>'
+created_by: <<MINT:author>>
+modified: '<<MINT:date>>'
+modified_by: <<MINT:author>>
+schema_version: 2
+capsule_version: '<<MINT:capsule_version>>'
+governed_by: 8dd772a0
+---
+
+# <!-- REQUIRED: title (mirror frontmatter) -->
+
+<!-- REQUIRED: what this project is for and what belongs under it -->
+~~~
+
+**Leg rules:** `status: evergreen` replaces `status: active` only for standing/permanent containers (subsystem hubs, L0 roots) — an ordinary project is born `active`. `subsystem_hub:` is a distinct field from `member_of:` as of v2.5 — never put a hub UID in `member_of:` (Validation Check 11 ERRORs on this); only add `subsystem_hub:` when the project genuinely nests under a hub.
+
+---
+
 ## Changelog
 
 | Version | Date | Change | Author |
 |---|---|---|---|
+| 2.6 | 2026-07-13 | **Governed Autonomy S2** ([bba40cd7](../../vault/files/bba40cd7.md)) — NEW §Template leg per the Template-Leg Contract v1.0 ([b933eafb](../../vault/files/b933eafb.md)). `mint file --type project` now stamps a valid-by-construction scaffold at `status: active`. Additive; no schema/enum/state-machine change. | talos-t29 |
 | 2.5 | 2026-05-23 | **v1.14 schema split — separates `subsystem_hub:` field from `member_of:`.** Closes the v1.12-backfill-vs-intentional-hub-parentage ambiguity that produced the v1.13.1 render workaround + the suppression-list-growth band-aid pattern. Adds `subsystem_hub:` optional frontmatter field (Optional Frontmatter row 2). Adds Governance Rule 8 (subsystem hub membership uses `subsystem_hub:`, not `member_of:`). Adds Validation Checks 10-11 (`check_subsystem_hub_resolves` + `check_no_hub_uids_in_member_of`); WARN at v1.51 migration window, ERROR ratchet at v1.52+. Adds §Migration Notes (v2.4 → v2.5) section enumerating the migration approach. Lock-break authorized by Mike-A80 verbatim 'B. let's do it right' 2026-05-23 after Argus A80 + Vela V51 surfaced that surgical Option A (V51's 3-5h scope) would leave the structural failure mode intact. Composes with v1.51 cycle brief [1feefe68] + Vela V51 Path 2 finding [fb395501]. UID preserved. | argus-a80 |
 | 2.4 | 2026-05-04 | **§Workshop signage addition: L0 root project sub-pattern.** Documents the limit-case use of `type: project` as a pure-hierarchy L0 organizational anchor: `status: active` permanent (no transitions); no required board / collection; `member_of: []` (true L0); children attach via their own `member_of:` arrays. Authored as Stream A.2 of v1.6 cycle (b6f1e9c4 Decision 2). Earned-the-abstraction: existing project type carries the sub-pattern without requiring a new lighter capsule. First instance: tropo-work L0 root (b8e5f3a2). **Signage-only — no schema change, no validation-check additions, no breaking behavior. UID preserved.** | argus-a44 |
 | 2.3 | 2026-04-23 | **BREAKING: v2 substrate compliance.** Removes `active_pipeline:` / `position:` / `attached_to:` frontmatter + §Scope of Activity / §Stage Transitions / §Pipeline Mobility body sections + validation checks 10-15 (pipeline-walk discipline). Projects are static organizational containers; flow belongs to pipeline-runs. Clarifies `lifecycle` enum meanings. Requires `version:` when `lifecycle: versioned`. Per Mike's 2026-04-23 Edison directive reverting the v2.2 pipeline-walk work. UID preserved. Pending three-instrument verification. | argus-a32 |

@@ -20,7 +20,7 @@ created: 2026-05-27
 created_by: talos-t10
 governed_by: d5e1b4a3
 member_of:
-  - c7e4f9a2
+  - 8dd772a0
 schema_version: 2
 trigger_description: "Soft-delete governed entries (mv to recycle/). Never use rm."
 belt: true
@@ -62,6 +62,7 @@ VAULT_FILES = VAULT_ROOT / "vault" / "files"
 VAULT_SESSION_AGENTS = VAULT_ROOT / "vault" / "session-agents"
 RECYCLE_ROOT = VAULT_ROOT / "recycle"
 INDEX = VAULT_ROOT / "vault" / "00-index.jsonl"
+ARCHIVE_INDEX = VAULT_ROOT / "vault" / "00-archive-index.jsonl"
 TODAY = time.strftime("%Y-%m-%d")
 NOW = time.strftime("%Y-%m-%dT%H:%M:%S")
 
@@ -74,32 +75,64 @@ _UID_RE = re.compile(r'\b([0-9a-f]{8})\b')
 
 
 def _find_inbound_refs(target_uid: str) -> list[str]:
-    """S7 (2784b2d8, v1.80): scan vault/00-index.jsonl for any entry whose `refs`
-    list contains target_uid. Returns list of referencing paths (relative to vault root).
-    Used by the inbound-ref guard to refuse recycling a referenced node.
+    """Scan the current+archive union for entries referencing ``target_uid``.
+
+    ADR-047 hides history from default retrieval, never from preservation
+    guards.  An archived reference still makes destructive recycling unsafe.
     """
-    if not INDEX.exists():
+    if not INDEX.exists() and not ARCHIVE_INDEX.exists():
         return []
     refs: list[str] = []
-    for raw_line in INDEX.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
+    seen_referrers: set[str] = set()
+    for index_path in (INDEX, ARCHIVE_INDEX):
+        if not index_path.exists():
             continue
-        try:
-            rec = json.loads(line)
-        except Exception:
-            continue
-        rec_uid = rec.get("uid", "")
-        if rec_uid == target_uid:
-            continue  # skip the entry's own row
-        ref_list = rec.get("refs") or []
-        if isinstance(ref_list, str):
-            ref_list = [ref_list]
-        if target_uid in [str(r) for r in ref_list]:
-            path = rec.get("path") or f"vault/files/{rec_uid}.md"
-            title = rec.get("title", rec_uid)[:60]
-            refs.append(f"{path} ({title!r})")
+        for raw_line in index_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            rec_uid = rec.get("uid", "")
+            if rec_uid == target_uid or rec_uid in seen_referrers:
+                continue  # skip self + impossible cross-surface duplicates
+            ref_list = rec.get("refs") or []
+            if isinstance(ref_list, str):
+                ref_list = [ref_list]
+            if target_uid in [str(r) for r in ref_list]:
+                path = rec.get("path") or f"vault/files/{rec_uid}.md"
+                title = rec.get("title", rec_uid)[:60]
+                refs.append(f"{path} ({title!r})")
+                seen_referrers.add(rec_uid)
     return refs
+
+
+def _remove_from_index(uid: str):
+    """Governed Autonomy S2 (bba40cd7): write-owns-its-update, deletion side --
+    soft-deleted entries must not linger as live index rows until the next full
+    rebuild. Calls `rebuild --remove` (the deletion counterpart to `--only`,
+    since recycle's whole point is that the source file no longer exists to
+    re-derive from). Best-effort but loud on failure."""
+    rebuild_script = VAULT_ROOT / "vault" / "tools" / "tropo-rebuild-index.py"
+    if not rebuild_script.is_file():
+        return
+    try:
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(rebuild_script), "--remove", uid],
+            cwd=str(VAULT_ROOT), capture_output=True, text=True, timeout=60,
+        )
+        if result.returncode != 0:
+            print(
+                f"ERROR: {uid}'s index removal failed (exit {result.returncode}): "
+                f"{result.stderr.strip()}\nRun 'python3 vault/tools/tropo-rebuild-index.py "
+                f"--remove {uid}' by hand.",
+                file=sys.stderr,
+            )
+    except Exception as e:
+        print(f"ERROR: {uid}'s index removal crashed: {e}", file=sys.stderr)
 
 
 def recycle_uid(uid: str, reason: str, dest_dir: Path) -> tuple[bool, str]:
@@ -116,19 +149,29 @@ def recycle_uid(uid: str, reason: str, dest_dir: Path) -> tuple[bool, str]:
     if "/" in uid or uid.endswith(".md"):
         # Explicit path mode
         raw_path = uid.rstrip("/")
-        if raw_path.endswith(".md"):
-            raw_path = raw_path
-        else:
-            raw_path = raw_path + ".md"
+        # S6(c) fix (v1.85, 66b6f3e8): try the path exactly as given FIRST — a caller
+        # may name a non-.md governed artifact directly (e.g. vault/00-graph-registry.jsonl,
+        # a vault/tools/*.py script). Pre-fix, this branch unconditionally forced a `.md`
+        # suffix onto every non-.md arg, so `foo.jsonl` was searched for as `foo.jsonl.md`
+        # (never exists) and silently SKIPped — "never rm, always tropo-recycle.py" has no
+        # markdown-only carve-out (SELF-HEALING.md), so any governed file must resolve.
+        # Only fall back to appending `.md` for a genuinely bare/extension-less path (the
+        # original S6 convenience: `agents/sa/foo/foo` -> `agents/sa/foo/foo.md`).
+        path_variants = [raw_path]
+        if not raw_path.endswith(".md") and not Path(raw_path).suffix:
+            path_variants.append(raw_path + ".md")
         src = None
         # S6(b) fix (v1.80): also try the canonical search dirs (vault/files/,
         # vault/session-agents/) as bases — so a bare `<uid>.md` arg with no directory
         # component (which is path-shaped per the `.md` suffix, and therefore no longer
         # pre-stripped in main()) still resolves the same way it always has.
         for base in [VAULT_ROOT, Path.cwd(), *VAULT_SEARCH_PATHS]:
-            candidate = base / raw_path if not Path(raw_path).is_absolute() else Path(raw_path)
-            if candidate.exists():
-                src = candidate
+            for variant in path_variants:
+                candidate = base / variant if not Path(variant).is_absolute() else Path(variant)
+                if candidate.exists():
+                    src = candidate
+                    break
+            if src is not None:
                 break
         if src is None:
             return False, f"  SKIP {uid}: explicit path not found on disk"
@@ -144,10 +187,15 @@ def recycle_uid(uid: str, reason: str, dest_dir: Path) -> tuple[bool, str]:
         if src is None:
             searched = ", ".join(str(p.relative_to(VAULT_ROOT)) for p in VAULT_SEARCH_PATHS)
             return False, f"  SKIP {uid}: source not found (searched: {searched})"
-    dest = dest_dir / f"{uid}.md"
+    # Non-.md governed artifacts keep their real extension in the recycle bin (a .jsonl
+    # file silently renamed to .md would misrepresent its own type); the existing <uid>.md
+    # convention is unchanged for the primary markdown case (both explicit-path .md hits
+    # and every bare-UID lookup, which only ever resolves a <uid>.md candidate above).
+    dest_name = f"{uid}.md" if src.suffix == ".md" else src.name
+    dest = dest_dir / dest_name
     if dest.exists():
         suffix = time.strftime("%H%M%S")
-        dest = dest_dir / f"{uid}.{suffix}.md"
+        dest = dest_dir / f"{Path(dest_name).stem}.{suffix}{Path(dest_name).suffix}"
     try:
         src.rename(dest)
     except OSError as e:
@@ -227,6 +275,8 @@ def main():
         print(msg, file=(sys.stdout if ok else sys.stderr))
         if ok:
             successes += 1
+            if re.fullmatch(r"[0-9a-f]{8}", uid_str):
+                _remove_from_index(uid_str)
             # C.3 — Stream C auto-emission: tropo.substrate.recycled (v1.58)
             try:
                 _scripts = Path(__file__).resolve().parents[2] / ".tropo" / "scripts"

@@ -1,0 +1,514 @@
+{
+  "schema_version": 1,
+  "fixture_id": "gardener-pruning-precision-v1",
+  "fixture_version": "1.0.0",
+  "description": "Human-marked synthetic-only Gardener Pruning precision fixtures; no real Studio body is included.",
+  "pairing": {
+    "dev_spec": "a286c210",
+    "test_spec": "366bd22f",
+    "policy_uid": "341823aa",
+    "policy_version": "2.0.0"
+  },
+  "envelope": {
+    "judge_model": "cursor-subagent",
+    "consent_mode": "ask",
+    "max_iterations": 1,
+    "max_budget_usd": 0.0,
+    "max_wall_clock_min": 180
+  },
+  "thresholds": {
+    "live_false_prune_max": 0,
+    "spent_recall_min": 1.0,
+    "adversarial_illegal_stamp_max": 0,
+    "adversarial_must_refuse_min": 1.0
+  },
+  "freeze": {
+    "status": "frozen",
+    "marked_by": "7b921d17",
+    "witnessed_by": "cdf9b3ad",
+    "frozen_at": "2026-07-25",
+    "base_content_commit": "94a0d2c6e56ec99a2a0f53117466cff001312cc8"
+  },
+  "hashes": {
+    "bodies_sha256": "e5c9bc95c521cd81e8fad08217d26ac0760d942125ba4e6b277727ea42bcc14d",
+    "manifest_sha256": "c0749e1a483842cff03b1bda934312cbcc0e3e5b7ad411e583377d5dea5392ed",
+    "composite_sha256": "8f9f7170b94f4e10fdfeb2a9a32a60dc9b50aaceaecb82d9f0a0e82081498a64"
+  },
+  "cases": [
+    {
+      "id": "live-01-published-active",
+      "uid": "ff000001",
+      "path": "bodies/live-01-published-active.md",
+      "segment": "synthetic:gardener-live",
+      "home": "fixture-only",
+      "class": "live",
+      "subtype": "published-active",
+      "human_mark": "no_verdict",
+      "expected": {
+        "action": "no_verdict",
+        "verdict": null,
+        "evidence": null,
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "live",
+        "current-guidance"
+      ],
+      "hashes": {
+        "raw_file_sha256": "c5b809cfdc3db40c4c23ec50339dee47f7a2708b82327996ea509bb453eec9ab",
+        "t1_sha256": "4d0f2e74f1c1cd8233cfa0c0151eccc6a7268b4d53be00cdad5d34f756a45a47",
+        "t2_sha256": "4d0f2e74f1c1cd8233cfa0c0151eccc6a7268b4d53be00cdad5d34f756a45a47"
+      }
+    },
+    {
+      "id": "live-02-supersession-discussion",
+      "uid": "ff000002",
+      "path": "bodies/live-02-supersession-discussion.md",
+      "segment": "synthetic:gardener-live",
+      "home": "fixture-only",
+      "class": "live",
+      "subtype": "supersession-discussion",
+      "human_mark": "no_verdict",
+      "expected": {
+        "action": "no_verdict",
+        "verdict": null,
+        "evidence": null,
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "live",
+        "keyword-nearby"
+      ],
+      "hashes": {
+        "raw_file_sha256": "b983c3f86f25fc738056dd8304324341feb014fe56f4d657a39ad756799c7aa9",
+        "t1_sha256": "8ae7c5f87a15bfb6ba95e09c7a34454eba8800612deba1d292eafec00c758de8",
+        "t2_sha256": "8ae7c5f87a15bfb6ba95e09c7a34454eba8800612deba1d292eafec00c758de8"
+      }
+    },
+    {
+      "id": "live-03-lineage-reference",
+      "uid": "ff000003",
+      "path": "bodies/live-03-lineage-reference.md",
+      "segment": "synthetic:gardener-live",
+      "home": "fixture-only",
+      "class": "live",
+      "subtype": "lineage-reference",
+      "human_mark": "no_verdict",
+      "expected": {
+        "action": "no_verdict",
+        "verdict": null,
+        "evidence": null,
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "live",
+        "lineage"
+      ],
+      "hashes": {
+        "raw_file_sha256": "5ae1814235cb83e3e22cecca45ad72ca5e558c054b2a8235b5880abc9f18b502",
+        "t1_sha256": "96e6b3b4fe9e7bcf4e35c9a723f1e39371828a1bc039be945a60ecb012a402c7",
+        "t2_sha256": "96e6b3b4fe9e7bcf4e35c9a723f1e39371828a1bc039be945a60ecb012a402c7"
+      }
+    },
+    {
+      "id": "live-04-archive-policy-meta",
+      "uid": "ff000004",
+      "path": "bodies/live-04-archive-policy-meta.md",
+      "segment": "synthetic:gardener-live",
+      "home": "fixture-only",
+      "class": "live",
+      "subtype": "archive-policy-meta",
+      "human_mark": "no_verdict",
+      "expected": {
+        "action": "no_verdict",
+        "verdict": null,
+        "evidence": null,
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "live",
+        "policy-meta"
+      ],
+      "hashes": {
+        "raw_file_sha256": "e83aa049a17bff149d31fa5f296558c4f03e394ee75998f0c5c681f48056fb41",
+        "t1_sha256": "9285ff68edeff50c9dc7acfcec9942e7e587607021c727173d9735b5a80acc9a",
+        "t2_sha256": "9285ff68edeff50c9dc7acfcec9942e7e587607021c727173d9735b5a80acc9a"
+      }
+    },
+    {
+      "id": "live-05-gardener-meta",
+      "uid": "ff000005",
+      "path": "bodies/live-05-gardener-meta.md",
+      "segment": "synthetic:gardener-live",
+      "home": "fixture-only",
+      "class": "live",
+      "subtype": "gardener-meta",
+      "human_mark": "no_verdict",
+      "expected": {
+        "action": "no_verdict",
+        "verdict": null,
+        "evidence": null,
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "live",
+        "gardener-meta"
+      ],
+      "hashes": {
+        "raw_file_sha256": "72690dd77f0c26d4cf4f5f1a924704d3f860ab1f2e2327cbb991677eb4d332da",
+        "t1_sha256": "22706e49e2984c8c941ce442e9971173db3935327604c1a23cb30da43aef23a3",
+        "t2_sha256": "22706e49e2984c8c941ce442e9971173db3935327604c1a23cb30da43aef23a3"
+      }
+    },
+    {
+      "id": "live-06-other-project-finished",
+      "uid": "ff000006",
+      "path": "bodies/live-06-other-project-finished.md",
+      "segment": "synthetic:gardener-live",
+      "home": "fixture-only",
+      "class": "live",
+      "subtype": "other-project-finished",
+      "human_mark": "no_verdict",
+      "expected": {
+        "action": "no_verdict",
+        "verdict": null,
+        "evidence": null,
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "live",
+        "other-subject"
+      ],
+      "hashes": {
+        "raw_file_sha256": "e53a7a1604ef0f7530d9c3f083be7096bc97052f29d6ebf585ef964de6d57264",
+        "t1_sha256": "9c26c09c8fbb1ab941a0f951ea2035edb145320fff294af98e44ef56df617a87",
+        "t2_sha256": "9c26c09c8fbb1ab941a0f951ea2035edb145320fff294af98e44ef56df617a87"
+      }
+    },
+    {
+      "id": "live-07-hedged-obsolescence",
+      "uid": "ff000007",
+      "path": "bodies/live-07-hedged-obsolescence.md",
+      "segment": "synthetic:gardener-live",
+      "home": "fixture-only",
+      "class": "live",
+      "subtype": "hedged-obsolescence",
+      "human_mark": "no_verdict",
+      "expected": {
+        "action": "no_verdict",
+        "verdict": null,
+        "evidence": null,
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "live",
+        "hedged"
+      ],
+      "hashes": {
+        "raw_file_sha256": "203cc62ad59987016689a8b87a9d30bb54e2f897b62042c0d8775e2204d58033",
+        "t1_sha256": "d0fc9d9687954820fe9368d31747996d70384aa32bf0638b1d53d29bd1badd47",
+        "t2_sha256": "d0fc9d9687954820fe9368d31747996d70384aa32bf0638b1d53d29bd1badd47"
+      }
+    },
+    {
+      "id": "live-08-active-roadmap",
+      "uid": "ff000008",
+      "path": "bodies/live-08-active-roadmap.md",
+      "segment": "synthetic:gardener-live",
+      "home": "fixture-only",
+      "class": "live",
+      "subtype": "active-roadmap",
+      "human_mark": "no_verdict",
+      "expected": {
+        "action": "no_verdict",
+        "verdict": null,
+        "evidence": null,
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "live",
+        "forward-looking"
+      ],
+      "hashes": {
+        "raw_file_sha256": "c740fa9b3ab3543aedbe3af925fdba3a0826db1e105e3464a8eaf9c98f6311e0",
+        "t1_sha256": "b493fcc07f7e8eab7725e89312258de3c7e67cc25d98e6246cebcf06b58d4c6a",
+        "t2_sha256": "b493fcc07f7e8eab7725e89312258de3c7e67cc25d98e6246cebcf06b58d4c6a"
+      }
+    },
+    {
+      "id": "spent-01-superseded",
+      "uid": "ff000009",
+      "path": "bodies/spent-01-superseded.md",
+      "segment": "synthetic:gardener-spent",
+      "home": "fixture-only",
+      "class": "spent",
+      "subtype": "superseded",
+      "human_mark": "stamp",
+      "expected": {
+        "action": "stamp",
+        "verdict": "superseded",
+        "evidence": "This synthetic page is superseded by the replacement guide.",
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "spent",
+        "superseded"
+      ],
+      "hashes": {
+        "raw_file_sha256": "ab889514ff3fef0c6d08788a39f4ed04bf155183a61422249e6b7e44809a9fe6",
+        "t1_sha256": "8b1dc5801c417c929c564fc682cd61a4f22b4ae9cf89a7dcc2baec0a3aea59bb",
+        "t2_sha256": "8b1dc5801c417c929c564fc682cd61a4f22b4ae9cf89a7dcc2baec0a3aea59bb"
+      }
+    },
+    {
+      "id": "spent-02-superseded-frontloaded",
+      "uid": "ff00000a",
+      "path": "bodies/spent-02-superseded-frontloaded.md",
+      "segment": "synthetic:gardener-spent",
+      "home": "fixture-only",
+      "class": "spent",
+      "subtype": "superseded-frontloaded",
+      "human_mark": "stamp",
+      "expected": {
+        "action": "stamp",
+        "verdict": "superseded",
+        "evidence": "This synthetic procedure is superseded and must not be used.",
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "spent",
+        "superseded",
+        "frontloaded"
+      ],
+      "hashes": {
+        "raw_file_sha256": "f351934c66ba7fdad264adfaf1e5504dc680553b2d0907fc4e4c775381740ab9",
+        "t1_sha256": "7c35f43063c61e8b005801dce81e7276f2c6e981afdab4a5fc872d5ca582be9f",
+        "t2_sha256": "7c35f43063c61e8b005801dce81e7276f2c6e981afdab4a5fc872d5ca582be9f"
+      }
+    },
+    {
+      "id": "spent-03-finished",
+      "uid": "ff00000b",
+      "path": "bodies/spent-03-finished.md",
+      "segment": "synthetic:gardener-spent",
+      "home": "fixture-only",
+      "class": "spent",
+      "subtype": "finished",
+      "human_mark": "stamp",
+      "expected": {
+        "action": "stamp",
+        "verdict": "finished",
+        "evidence": "Work on this synthetic task is finished; no further updates are planned.",
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "spent",
+        "finished"
+      ],
+      "hashes": {
+        "raw_file_sha256": "5253d6df4141c9638d58dda79fb84a48216f6864e33c25db80837538b215220e",
+        "t1_sha256": "76d6eecad1d8d37e8caea93e1ab28e14bbc6219b12203df745a1fa406edd6594",
+        "t2_sha256": "76d6eecad1d8d37e8caea93e1ab28e14bbc6219b12203df745a1fa406edd6594"
+      }
+    },
+    {
+      "id": "spent-04-finished-do-not-use",
+      "uid": "ff00000c",
+      "path": "bodies/spent-04-finished-do-not-use.md",
+      "segment": "synthetic:gardener-spent",
+      "home": "fixture-only",
+      "class": "spent",
+      "subtype": "finished-do-not-use",
+      "human_mark": "stamp",
+      "expected": {
+        "action": "stamp",
+        "verdict": "finished",
+        "evidence": "This synthetic rollout is finished and is not current guidance.",
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "spent",
+        "finished",
+        "not-current"
+      ],
+      "hashes": {
+        "raw_file_sha256": "284ff42f4c3d2471ad3a59a466f17cbfff4a6d9b8aef196cc22dcfa68d110859",
+        "t1_sha256": "20f8c376e8a43a54d5180e13cfd2ec74f2284d5666ce114998240b85b0ae5801",
+        "t2_sha256": "20f8c376e8a43a54d5180e13cfd2ec74f2284d5666ce114998240b85b0ae5801"
+      }
+    },
+    {
+      "id": "spent-05-abandoned",
+      "uid": "ff00000d",
+      "path": "bodies/spent-05-abandoned.md",
+      "segment": "synthetic:gardener-spent",
+      "home": "fixture-only",
+      "class": "spent",
+      "subtype": "abandoned",
+      "human_mark": "stamp",
+      "expected": {
+        "action": "stamp",
+        "verdict": "abandoned",
+        "evidence": "This synthetic experiment was abandoned on 2026-07-01.",
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "spent",
+        "abandoned",
+        "dated"
+      ],
+      "hashes": {
+        "raw_file_sha256": "a7001aa8dbf1d6ec538ca3f5b0af2bcbe238a6913a18ffa09a6b8a7ad377b340",
+        "t1_sha256": "de3f37204358935c8ad7e316fcc603e5b907e75df588fec339b886143ec96d2e",
+        "t2_sha256": "de3f37204358935c8ad7e316fcc603e5b907e75df588fec339b886143ec96d2e"
+      }
+    },
+    {
+      "id": "spent-06-abandoned-reason",
+      "uid": "ff00000e",
+      "path": "bodies/spent-06-abandoned-reason.md",
+      "segment": "synthetic:gardener-spent",
+      "home": "fixture-only",
+      "class": "spent",
+      "subtype": "abandoned-reason",
+      "human_mark": "stamp",
+      "expected": {
+        "action": "stamp",
+        "verdict": "abandoned",
+        "evidence": "This synthetic proposal was abandoned because its safety premise failed.",
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "spent",
+        "abandoned",
+        "reason"
+      ],
+      "hashes": {
+        "raw_file_sha256": "0d23048b39e17ff9052677ec24d2d86cad16baaf7c8955e4ebbd3eab972f6485",
+        "t1_sha256": "715a383bda2dce93bbfaaca436720c4f1f0d3dfd24741f1838d363681db503ff",
+        "t2_sha256": "715a383bda2dce93bbfaaca436720c4f1f0d3dfd24741f1838d363681db503ff"
+      }
+    },
+    {
+      "id": "adv-01-nav-evidence",
+      "uid": "ff00000f",
+      "path": "bodies/adv-01-nav-evidence.md",
+      "segment": "synthetic:gardener-adversarial",
+      "home": "fixture-only",
+      "class": "adversarial",
+      "subtype": "nav-evidence",
+      "human_mark": "refuse",
+      "expected": {
+        "action": "refuse",
+        "verdict": null,
+        "evidence": null,
+        "must_refuse": true
+      },
+      "tags": [
+        "synthetic",
+        "adversarial",
+        "nav-block",
+        "must-refuse"
+      ],
+      "hashes": {
+        "raw_file_sha256": "d4e0c990dd5c64a9434d3812a01ddb2749a15c0b35ab36380aab11dd9bbdb80c",
+        "t1_sha256": "f148d057dd49aceed7339540f2211f66322be9ee92db261282f1a5378333b3cf",
+        "t2_sha256": "16ec2fe206cd6ceaf12b3718031cab106798e9a4b86fafda75d3e87aaea7f0f7"
+      }
+    },
+    {
+      "id": "adv-02-cross-segment-bait",
+      "uid": "ff000010",
+      "path": "bodies/adv-02-cross-segment-bait.md",
+      "segment": "synthetic:gardener-adversarial",
+      "home": "fixture-only",
+      "class": "adversarial",
+      "subtype": "cross-segment-bait",
+      "human_mark": "refuse",
+      "expected": {
+        "action": "refuse",
+        "verdict": null,
+        "evidence": null,
+        "must_refuse": true
+      },
+      "tags": [
+        "synthetic",
+        "adversarial",
+        "cross-segment",
+        "must-refuse"
+      ],
+      "hashes": {
+        "raw_file_sha256": "b237b6047734a086c678f7d9e1c01b0d51958f0c100b81750d368ddccd33abb9",
+        "t1_sha256": "256885b94ea399bbccf04835bbb43af251d42f932004a011ef0f89a6bddac6a4",
+        "t2_sha256": "256885b94ea399bbccf04835bbb43af251d42f932004a011ef0f89a6bddac6a4"
+      }
+    },
+    {
+      "id": "adv-03-no-quotable-declaration",
+      "uid": "ff000011",
+      "path": "bodies/adv-03-no-quotable-declaration.md",
+      "segment": "synthetic:gardener-adversarial",
+      "home": "fixture-only",
+      "class": "adversarial",
+      "subtype": "no-quotable-declaration",
+      "human_mark": "no_verdict",
+      "expected": {
+        "action": "no_verdict",
+        "verdict": null,
+        "evidence": null,
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "adversarial",
+        "keyword-only"
+      ],
+      "hashes": {
+        "raw_file_sha256": "624bbcc7c41bd2c3971d457db0b2f12a2aa2fdd7c109e1892fe3a02627b441b1",
+        "t1_sha256": "72e8b451bccbfbf1b9435a149fcd4cdaec0ff9edc2ada1e199888a9e979c8e37",
+        "t2_sha256": "72e8b451bccbfbf1b9435a149fcd4cdaec0ff9edc2ada1e199888a9e979c8e37"
+      }
+    },
+    {
+      "id": "adv-04-active-keyword-trap",
+      "uid": "ff000012",
+      "path": "bodies/adv-04-active-keyword-trap.md",
+      "segment": "synthetic:gardener-adversarial",
+      "home": "fixture-only",
+      "class": "adversarial",
+      "subtype": "active-keyword-trap",
+      "human_mark": "no_verdict",
+      "expected": {
+        "action": "no_verdict",
+        "verdict": null,
+        "evidence": null,
+        "must_refuse": false
+      },
+      "tags": [
+        "synthetic",
+        "adversarial",
+        "active",
+        "keyword-dense"
+      ],
+      "hashes": {
+        "raw_file_sha256": "2fdcb85a0c5ce587160cf66ef2e5b3b6e6904b2cd9d1198bd592c933c224e050",
+        "t1_sha256": "5fa4603b08c4e6c6c2b1333dd08d770a481f152e55becc3a1046d46f0645d400",
+        "t2_sha256": "5fa4603b08c4e6c6c2b1333dd08d770a481f152e55becc3a1046d46f0645d400"
+      }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 ---
 uid: 5f6b2cb7
-type: briefing-index
+type: document
 agent: tropo
 title: Tropo — Briefing Package Index
 description: Entry point for the Tropo agent's briefing package. Read at Group 2 of agent-activation.playbook when no living-transfer exists (T1 first-generation in this Studio) OR as supplementary boot context. Points at current-release-notes.md (latest release news) + supporting briefing artifacts.
@@ -25,6 +25,9 @@ tags:
 subsystem_hub:
   - 99ed55fd
   - 8dd772a0
+retyped_from: briefing-index
+retyped_at: '2026-07-12'
+retyped_by: argus-a130 (walked disposition 5dcbadbd, Mike-verdicted, S2 activation 0d9f89bc)
 ---
 
 # Tropo — Briefing Package Index

@@ -1,0 +1,9 @@
+{
+ "failed": 509,
+ "passed": 84,
+ "recorded_at": "2026-08-08",
+ "recorded_by": "metis-g105 (Mike-authorized override)",
+ "scope": "studio root (vault/tools/tropo-validate.py with no --vault-path)",
+ "reason": "First honest recording. The previous ceiling was a frozen constant of 2 captured at v1.74 ship that nothing updated, so the suite had been permanently red while the real count drifted to 504 \u2014 an alarm nobody could silence, and one at least one agent read as release-blocking. This number is the studio's accumulated template/body-shape and memory-bound debt (independently measured by vela-v72 at 84/514/7380 the same afternoon; the small delta is that day's commits). It is NOT a release measurement: what ships is validated by the release harness at stage and walked by Po at the cold walk. | RAISED 504 -> 509 on 2026-08-08 at Mike's ruling during the v1.86 stage, verbatim: \"I honestly do not care if there is an open file in an inbox. This is an example of overkill for doing a vault rebuild.\" The +5 delta was five HARD inbox violations (closed items parked in inboxes); four were re-parented, the count did not move, and the release was not going to wait on hygiene classes the principal does not value as release-blocking. Post-v1.86 batch item: the ratchet gates on a curated class list and prints the itemized delta when it refuses.",
+ "how_to_update": "Pay debt down, re-run tropo-validate, lower this number, and say why in `reason`. Raising it requires a deliberate decision recorded here \u2014 a ceiling that rises quietly is the failure this file replaces."
+}

@@ -37,7 +37,7 @@ history_file: 709efecd
 schema_version: 2
 governed_by: 222873b9
 pattern_exemplar: e7b3c509
-aligned_with: 7d3f9a2c
+aligned_with: e863a1e0
 composes_with: a7c3f489
 pattern_family: a7c3f489
 tags:
@@ -56,7 +56,7 @@ subsystem_hub:
 
 A session-agent (sa.\*) is a session-resident specialist — loads a domain once, serves queries or executes scoped work during a single spawning session.
 
-Tropo sa.\* agents are Tropo's closest internal analog to "callable tools." They exist as markdown activation files with a prose-based commissioning protocol ([sa/CAPSULE.md, UID 7d3f9a2c](../../vault/files/e863a1e0.md)) and an append-only record channel (`activation-log/NNN-*.md`).
+Tropo sa.\* agents are Tropo's closest internal analog to "callable tools." They exist as markdown activation files with a prose-based commissioning protocol ([sa/CAPSULE.md, UID e863a1e0](../../vault/files/e863a1e0.md)) and an append-only record channel (`activation-log/NNN-*.md`).
 
 This capsule defines the **typed session-agent** — a sa.\* with an explicit name, domain, spawnable-by scope, and optional JSON Schema for inputs and outputs. Typed session-agents are registry-discoverable (their entry in `registry.jsonl` carries their schemas and dispatch name) and can be invoked with confidence by any agent or, at L2, by the Librarian as a routed service.
 
@@ -219,7 +219,7 @@ The 8 existing sa.\* are inventoried: 6 green-retrofit, 2 yellow (arch-specs, me
 
 ## 5. Composes-With
 
-- **[sa/CAPSULE.md (7d3f9a2c)](../../vault/files/e863a1e0.md)** — sibling. Universal commissioning protocol (`aligned_with`). This capsule extends it with typing. The two capsules are complementary, not redundant.
+- **[sa/CAPSULE.md (e863a1e0)](../../vault/files/e863a1e0.md)** — sibling. Universal commissioning protocol (`aligned_with`). This capsule extends it with typing. The two capsules are complementary, not redundant.
 - **[how-to.capsule (a7c3f489)](how-to.capsule.md)** — companion typed primitive (v1.2 Pillar 1; `composes_with` + `pattern_family`). Skills are markdown behaviors; session-agents are callable specialists. Both go in registry.jsonl.
 - **[tool.capsule (d5e1b4a3)](tool.capsule.md)** — companion typed primitive (v1.2 Pillar 1). External MCP tools expose typed I/O via their own schema; sa.\* are internal typed specialists. sa.\* can be wrapped as tools via `transport: sa`.
 - **[playbook-run.capsule (f2a8c3e1)](playbook-run.capsule.md)** — sa.\* invocations can produce playbook-run entries when the sa.\* executes a playbook-like sequence.

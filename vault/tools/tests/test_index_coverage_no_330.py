@@ -18,6 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 VAULT = ROOT / "vault"
 INDEX = VAULT / "00-index.jsonl"
+ARCHIVE_INDEX = VAULT / "00-archive-index.jsonl"
 
 # vault/ subdirs that should have all their .md files indexed
 CONTENT_DIRS = ["files", "skills", "actions", "playbooks"]
@@ -31,18 +32,23 @@ def load_indexed_uids() -> set[str]:
     uids = set()
     if not INDEX.exists():
         return uids
-    with open(INDEX) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                d = json.loads(line)
-                uid = d.get("uid")
-                if uid:
-                    uids.add(uid)
-            except Exception:
-                pass
+    # ADR-047 Layer 1: this is a coverage/resolution test, not default
+    # retrieval, so it deliberately checks the current+archive union.
+    for path in (INDEX, ARCHIVE_INDEX):
+        if not path.exists():
+            continue
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    d = json.loads(line)
+                    uid = d.get("uid")
+                    if uid:
+                        uids.add(uid)
+                except Exception:
+                    pass
     return uids
 
 

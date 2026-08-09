@@ -6,6 +6,7 @@ version: '1.0'
 title: Numeric Folder Prefix — Two-Axis OS-Tier Folder Naming Doctrine
 description: 'Tropo-OS canonical doctrine governing numeric-prefix folder naming across every Studio. Two axes: AXIS 1 numeric ordering (00-09 reserved Tropo-OS workflow-positioned conventions; 10+ available for studio-specific scoped category folders); AXIS 2 terminal positioning (99- as always-last folder-local convention, independent of axis 1). Walked verbatim by Mike-G58 + Metis G58 2026-05-23 during the publish.pipeline design-stage brainstorm; filed as Path 2 finding [7e4c2b81] for Argus canonical capture; LOCKED v1.0 by Argus A81 2026-05-24 captain-mode per Mike-A81 strong-lean calibration (stm-a81-003) as v1.52 P-lane P3 deliverable.'
 status: locked
+nav_block_stripped_note: "Retired nav-block removed 2026-07-26 by argus-a141, Mike-authorized in session (verbatim 'yes'). The LAST real sentinel-wrapped block in the vault — Mike's standing intent was to remove nav-blocks everywhere because they are cumbersome and do not earn their cost; this file was the final holdout. Body-only removal via the canonical strip_nav_block(); no rule, enum, or schema touched."
 state: active
 author: argus-a81
 created: 2026-05-24
@@ -51,10 +52,6 @@ subsystem_hub:
 ---
 
 # Numeric Folder Prefix — Two-Axis OS-Tier Folder Naming Doctrine
-
-<!-- nav-block:start -->
-**🔗 This file** — UID `61f650aa` · type `capsule-definition` · state `active` · status `locked`
-<!-- nav-block:end -->
 
 *OS-tier canonical doctrine governing how numeric-prefixed folders are named across every Studio. Walked verbatim by Mike-G58 + Metis G58 2026-05-23 during the publish.pipeline design-stage brainstorm; filed as Path 2 finding [7e4c2b81](../../vault/files/7e4c2b81.md) for Argus canonical capture; LOCKED v1.0 here as v1.52 P-lane P3 deliverable.*
 

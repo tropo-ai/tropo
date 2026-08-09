@@ -1,5 +1,5 @@
 {
-  "current": "1.84.1",
+  "current": "1.85.1",
   "minimum_supported": "1.2.0",
   "updates": [
     {
@@ -61,28 +61,28 @@
     {
       "version": "1.10.0",
       "type": "feature",
-      "description": "Pure Enforcement — the soft-gates v1.7-v1.9.x introduced as WARNING / honor-system become ERROR-level + hard-gated. Eighth dev-pipeline activation. Single-thesis cycle: validate-capability-membership.",
+      "description": "'Pure Enforcement — the soft-gates v1.7-v1.9.x introduced as WARNING / honor-system become ERROR-level + hard-gated. Eighth dev-pipeline activation. Single-thesis cycle: validate-capability-membership",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.10.0.zip",
       "min_compatible": "1.8.0"
     },
     {
       "version": "1.11.0",
       "type": "feature",
-      "description": "Agent Self-Description — the L1 canonical entry document lands. Ninth dev-pipeline activation. First cycle of the Mike-A50 Studio Quality Manifesto arc 2026-05-08 (Property 1: SELF-DESCRIBING BOOT). C",
+      "description": "'Agent Self-Description — the L1 canonical entry document lands. Ninth dev-pipeline activation. First cycle of the Mike-A50 Studio Quality Manifesto arc 2026-05-08 (Property 1: SELF-DESCRIBING BOOT). ",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.11.0.zip",
       "min_compatible": "1.10.0"
     },
     {
       "version": "1.12.0",
       "type": "feature",
-      "description": "Substrate-Membership Backfill — universalize hub `member_of:` across primitives that lacked it. Tenth dev-pipeline activation. Second cycle of the Mike-A50 Studio Quality Manifesto arc 2026-05-08 (Pro",
+      "description": "'Substrate-Membership Backfill — universalize hub `member_of:` across primitives that lacked it. Tenth dev-pipeline activation. Second cycle of the Mike-A50 Studio Quality Manifesto arc 2026-05-08 (Pr",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.12.0.zip",
       "min_compatible": "1.11.0"
     },
     {
       "version": "1.12.1",
       "type": "patch",
-      "description": "Phase E Completion + argo-os/starter/ Retirement. Eleventh dev-pipeline activation in Tropo history. First patch slot in the v1.12.x chain. Restores Mike-personally-locked Phase D project-plan promise",
+      "description": "'Phase E Completion + argo-os/starter/ Retirement. Eleventh dev-pipeline activation in Tropo history. First patch slot in the v1.12.x chain. Restores Mike-personally-locked Phase D project-plan promis",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.12.1.zip",
       "min_compatible": "1.12.0"
     },
@@ -96,7 +96,7 @@
     {
       "version": "1.13.0",
       "type": "feature",
-      "description": "publish-pipeline ship. Thirteenth dev-pipeline activation. Substantive product cycle (minor bump). Inputs locked: Metis G50",
+      "description": "'publish-pipeline ship. Thirteenth dev-pipeline activation. Substantive product cycle (minor bump). Inputs locked: Metis G50''s design brief d3a5f1b9 v0.2 (2026-05-07) + Metis G50''s pipeline instance",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.13.0.zip",
       "min_compatible": "1.12.2"
     },
@@ -117,7 +117,7 @@
     {
       "version": "1.15.0",
       "type": "feature",
-      "description": "Agent-canonical capability substrate at the Tropo kernel layer — three catalogs ship (.tropo/tool-catalog.md + .tropo/skill-catalog.md + .tropo/sa-agent-catalog.md) mirroring Claude Code",
+      "description": "'Agent-canonical capability substrate at the Tropo kernel layer — three catalogs ship (.tropo/tool-catalog.md + .tropo/skill-catalog.md + .tropo/sa-agent-catalog.md) mirroring Claude Code''s tool-cata",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.15.0.zip",
       "min_compatible": "1.14.0"
     },
@@ -166,7 +166,7 @@
     {
       "version": "1.18.0",
       "type": "feature",
-      "description": "Twenty-third dev-pipeline activation in Tropo history. Second A55-owned end-to-end. Substrate-amending cycle on KERNEL substrate per Mike-A55 ",
+      "description": "'Twenty-third dev-pipeline activation in Tropo history. Second A55-owned end-to-end. Substrate-amending cycle on KERNEL substrate per Mike-A55 ''kernel level work'' directive. NEW kb-article.capsule (",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.18.0.zip",
       "min_compatible": "1.17.0"
     },
@@ -201,7 +201,7 @@
     {
       "version": "1.27.0",
       "type": "feature",
-      "description": "Thirty-first dev-pipeline ship. Third A59-owned end-to-end in single session. Substrate-amending cycle: closes the post-v1.21.0 brief-based release pattern bypass that let v1.20.0 → v1.26.0 ship witho",
+      "description": "'Thirty-first dev-pipeline ship. Third A59-owned end-to-end in single session. Substrate-amending cycle: closes the post-v1.21.0 brief-based release pattern bypass that let v1.20.0 → v1.26.0 ship with",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.27.0.zip",
       "min_compatible": "1.26.0"
     },
@@ -222,28 +222,28 @@
     {
       "version": "1.30.0",
       "type": "feature",
-      "description": "Block 1 substrate-hardening cycle 2 of 5 per the v2.0.0 Captain",
+      "description": "Block 1 substrate-hardening cycle 2 of 5 per the v2.0.0 Captain's Read. Two coupled streams: Stream B amends rebuild-index.py to auto-invoke rehydrate.py at end of --apply (single-gesture Studio-tier ",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.30.0.zip",
       "min_compatible": "1.29.0"
     },
     {
       "version": "1.31.0",
       "type": "feature",
-      "description": "Block 1 substrate-hardening cycle 3 of 5 per v2.0.0 Captain",
+      "description": "'Block 1 substrate-hardening cycle 3 of 5 per v2.0.0 Captain''s Read. Single-stream: P2 reconstruction path proper implementation. NEW docx_styles_bundle.py shared module (build_styles_xml + write_sty",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.31.0.zip",
       "min_compatible": "1.30.0"
     },
     {
       "version": "1.32.0",
       "type": "feature",
-      "description": "Block 1 substrate-hardening cycle 4 of 5 per v2.0.0 Captain",
+      "description": "Block 1 substrate-hardening cycle 4 of 5 per v2.0.0 Captain's Read. Single-stream bundled-small-fix: four sa.skeptic-009 P1 closures (P1-1 tropo-export.py P1-path heading anti-collision degeneracy gua",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.32.0.zip",
       "min_compatible": "1.31.0"
     },
     {
       "version": "1.33.0",
       "type": "feature",
-      "description": "Block 1 substrate-hardening cycle 5 of 5 per v2.0.0 Captain",
+      "description": "'Block 1 substrate-hardening cycle 5 of 5 per v2.0.0 Captain''s Read — CLOSES Block 1. Substrate-introducing cycle: NEW `tropo-test.py` v1.0.2 thin-wrapper CLI + canonical `npm test` gesture + TWO NEW",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.33.0.zip",
       "min_compatible": "1.32.0"
     },
@@ -264,70 +264,70 @@
     {
       "version": "1.36.0",
       "type": "feature",
-      "description": "Block 2 funnel arc cycle 3 of 3 per v2.0.0 Captain",
+      "description": "Block 2 funnel arc cycle 3 of 3 per v2.0.0 Captain's Read [a5f4b26b] — CLOSES Block 2. The Substack-load-bearing tutorial cycle. Ships Hello Tropo #01 tutorial playbook (6 phases, ~30 min reader effor",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.36.0.zip",
       "min_compatible": "1.35.0"
     },
     {
       "version": "1.37.0",
       "type": "feature",
-      "description": "Block 3 pre-ship polish cycle 1 of ~4 per v2.0.0 Captain",
+      "description": "'Block 3 pre-ship polish cycle 1 of ~4 per v2.0.0 Captain''s Read [a5f4b26b] — OPENS Block 3. First block-OPENING moment under §Chain Progress Snapshot discipline (skill [135be96d]; v1.36.0 was first ",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.37.0.zip",
       "min_compatible": "1.36.0"
     },
     {
       "version": "1.38.0",
       "type": "feature",
-      "description": "Block 3 pre-ship polish cycle 2 of ~4 per v2.0.0 Captain",
+      "description": "'Block 3 pre-ship polish cycle 2 of ~4 per v2.0.0 Captain''s Read [a5f4b26b]. Substrate-wide audit of all 35 validator checks in tropo-validate.py against the 4-class parser/bug-risk rubric; classifie",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.38.0.zip",
       "min_compatible": "1.37.0"
     },
     {
       "version": "1.39.0",
       "type": "feature",
-      "description": "Block 3 pre-ship polish cycle 3 of ~4 per v2.0.0 Captain",
+      "description": "Block 3 pre-ship polish cycle 3 of ~4 per v2.0.0 Captain's Read [a5f4b26b]. Closes a 12-generation-deferred carry-forward: Argus's 11 STM entries from A52-A57 finally folded into the v3 memory substra",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.39.0.zip",
       "min_compatible": "1.38.0"
     },
     {
       "version": "1.40.0",
       "type": "feature",
-      "description": "Block 3 pre-ship polish cycle 4 of ~4 per v2.0.0 Captain",
+      "description": "Block 3 pre-ship polish cycle 4 of ~4 per v2.0.0 Captain's Read [a5f4b26b]. Codifies the ban-on-rm + use-tropo-recycle.py discipline at four substrate tiers (OS-tier + Studio-tier + folder-tier + memo",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.40.0.zip",
       "min_compatible": "1.39.0"
     },
     {
       "version": "1.41.0",
       "type": "feature",
-      "description": "First cycle of Block 4 — Hardening Through Test per Captain",
+      "description": "First cycle of Block 4 — Hardening Through Test per Captain's Read v1.1 [a5f4b26b]. Composed thesis: v1.40 didn't deliver what v1.40 codified — close the gaps surfaced by Vela V47's full build + Argus",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.41.0.zip",
       "min_compatible": "1.40.0"
     },
     {
       "version": "1.42.0",
       "type": "feature",
-      "description": "Block 4 — Hardening Through Test cycle 2 of N per Captain",
+      "description": "Block 4 — Hardening Through Test cycle 2 of N per Captain's Read v1.1 [a5f4b26b]. P0 cycle per Mike-A71 directive 2026-05-18 — unblocks Talos's web-deploy-3 (hosted-blog at /agentic-builders/). Substr",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.42.0.zip",
       "min_compatible": "1.41.0"
     },
     {
       "version": "1.43.0",
       "type": "feature",
-      "description": "Block 4 — Hardening Through Test cycle 3 of N per Captain",
+      "description": "Block 4 — Hardening Through Test cycle 3 of N per Captain's Read v1.1 [a5f4b26b]. First cycle scoped to MOVE the cold-boot walk needle (v1.41+v1.42 baseline 7.33/10; v1.43 target ≥ 8.0/10). Six substa",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.43.0.zip",
       "min_compatible": "1.42.0"
     },
     {
       "version": "1.44.0",
       "type": "feature",
-      "description": "Block 4 — Hardening Through Test cycle 4 of N per Captain",
+      "description": "'Block 4 — Hardening Through Test cycle 4 of N per Captain''s Read v1.1 [a5f4b26b]. First cycle scoped specifically to MOVE the cold-boot walk score (v1.41+v1.42 baseline both 7.33; v1.44 target ≥ 8.0",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.44.0.zip",
       "min_compatible": "1.43.0"
     },
     {
       "version": "1.45.0",
       "type": "feature",
-      "description": "Block 4 — Hardening Through Test cycle 5 of N per Captain",
+      "description": "'Block 4 — Hardening Through Test cycle 5 of N per Captain''s Read v1.1 [a5f4b26b]. THE close-criterion cycle — if R4 cold-boot walk holds 8.0/10 sustained (3rd consecutive cycle at the new floor), Bl",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.45.0.zip",
       "min_compatible": "1.44.0"
     },
@@ -341,7 +341,7 @@
     {
       "version": "1.47.0",
       "type": "feature",
-      "description": "Vela-authored substrate-discipline cycle. Interrupt cycle in Mike-A74-locked three-cycle extraction-and-publish-pipeline arc per chain-mutability doctrine (Mike 2026-05-05) + lane-per-release pin + Mi",
+      "description": "'Vela-authored substrate-discipline cycle. Interrupt cycle in Mike-A74-locked three-cycle extraction-and-publish-pipeline arc per chain-mutability doctrine (Mike 2026-05-05) + lane-per-release pin + M",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.47.0.zip",
       "min_compatible": "1.46.0"
     },
@@ -369,35 +369,35 @@
     {
       "version": "1.51.0",
       "type": "feature",
-      "description": "Tropo-OS v1.51.0 — Three-Pipeline Substrate-Engineering (Six Artifacts shipped; multi-agent single-d",
+      "description": "Tropo-OS v1.51.0 — Three-Pipeline Substrate-Engineering (Six Artifacts shipped; multi-agent single-day)",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.51.0.zip",
       "min_compatible": "1.50.0"
     },
     {
       "version": "1.52.0",
       "type": "feature",
-      "description": "Tropo-OS v1.52.0 — Phase 1 Grooming Continuation + publish.pipeline Class Substrate Amendment (Gate ",
+      "description": "Tropo-OS v1.52.0 — Phase 1 Grooming Continuation + publish.pipeline Class Substrate Amendment (Gate 2 Closure)",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.52.0.zip",
       "min_compatible": "1.51.0"
     },
     {
       "version": "1.53.0",
       "type": "feature",
-      "description": "Tropo-OS v1.53.0 — Three-Pipeline Discipline Compounding: Engine Hardening + Pristine Documentation ",
+      "description": "Tropo-OS v1.53.0 — Three-Pipeline Discipline Compounding: Engine Hardening + Pristine Documentation + Lane A Carryforward + ADR-040 Enforcement Gap",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.53.0.zip",
       "min_compatible": "1.52.0"
     },
     {
       "version": "1.54.0",
       "type": "feature",
-      "description": "Tropo-OS v1.54.0 — Engine-Discipline Hardening Triad: Substrate-Verify-Twice + Bootstrap-Replay + De",
+      "description": "Tropo-OS v1.54.0 — Engine-Discipline Hardening Triad: Substrate-Verify-Twice + Bootstrap-Replay + Derivation-Rule Extension",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.54.0.zip",
       "min_compatible": "1.53.0"
     },
     {
       "version": "1.55.0",
       "type": "feature",
-      "description": "Tropo-OS v1.55.0 — Messaging Foundation: Event-Stream-as-Canonical-Truth Architecture (Block 5 cycle",
+      "description": "Tropo-OS v1.55.0 — Messaging Foundation: Event-Stream-as-Canonical-Truth Architecture (Block 5 cycle 1 of 5)",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.55.0.zip",
       "min_compatible": "1.54.0"
     },
@@ -439,7 +439,7 @@
     {
       "version": "1.61.0",
       "type": "feature",
-      "description": "Tropo-OS v1.61.0 — Messaging-Substrate Completion + Po Executive Identity + Fleet-Ops Trigger-Wire (",
+      "description": "Tropo-OS v1.61.0 — Messaging-Substrate Completion + Po Executive Identity + Fleet-Ops Trigger-Wire (Block 5 cycle 7 of 7; closes Block 5)",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.61.0.zip",
       "min_compatible": "1.60.0"
     },
@@ -467,49 +467,49 @@
     {
       "version": "1.65.0",
       "type": "feature",
-      "description": "Tropo-OS v1.65.0 — Coherence + Enforcement Sweep (member_of DISAMBIGUATE · done→shipped terminal · A",
+      "description": "Tropo-OS v1.65.0 — Coherence + Enforcement Sweep (member_of DISAMBIGUATE · done→shipped terminal · ADR-044 · lifecycle status/stage migration)",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.65.0.zip",
       "min_compatible": "1.64.0"
     },
     {
       "version": "1.66.0",
       "type": "feature",
-      "description": "Tropo-OS v1.66.0 — Make Verification Real (verification spine airtight · lifecycle DERIVE · meta_sta",
+      "description": "Tropo-OS v1.66.0 — Make Verification Real (verification spine airtight · lifecycle DERIVE · meta_status · boot-split · pristine docs)",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.66.0.zip",
       "min_compatible": "1.65.0"
     },
     {
       "version": "1.67.0",
       "type": "feature",
-      "description": "Tropo-OS v1.67.0 — Memory v3.0 Cascade Close (single-surface boot-read · append-only episodic · cura",
+      "description": "Tropo-OS v1.67.0 — Memory v3.0 Cascade Close (single-surface boot-read · append-only episodic · curator retirement-fold · F5 gate)",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.67.0.zip",
       "min_compatible": "1.66.0"
     },
     {
       "version": "1.68.0",
       "type": "feature",
-      "description": "Tropo-OS v1.68.0 — Lifecycle Close + Inbox Cure (status-leak · M2-explained-zero · inbox HARD · ERRO",
+      "description": "Tropo-OS v1.68.0 — Lifecycle Close + Inbox Cure (status-leak · M2-explained-zero · inbox HARD · ERROR ratchets · Self-Healing v1.1.0)",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.68.0.zip",
       "min_compatible": "1.67.0"
     },
     {
       "version": "1.69.0",
       "type": "feature",
-      "description": "Tropo-OS v1.69.0 — Agent + Playbook Unification + Token-Performance Gate (unified type:agent · vault",
+      "description": "Tropo-OS v1.69.0 — Agent + Playbook Unification + Token-Performance Gate (unified type:agent · vault-native playbooks · budget enforcement · check-events)",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.69.0.zip",
       "min_compatible": "1.68.0"
     },
     {
       "version": "1.70.0",
       "type": "feature",
-      "description": "Tropo-OS v1.70.0 — Publish-Proven + Bulletproof Comms + The Toolbelt (Gate 3 GREEN · round-trip prov",
+      "description": "Tropo-OS v1.70.0 — Publish-Proven + Bulletproof Comms + The Toolbelt (Gate 3 GREEN · round-trip proven · check-events v1.1 · toolbelt)",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.70.0.zip",
       "min_compatible": "1.69.0"
     },
     {
       "version": "1.71.0",
       "type": "feature",
-      "description": "Tropo-OS v1.71.0 — The Loop Primitive + the Pipeline Activation Key (first release shipped THROUGH t",
+      "description": "Tropo-OS v1.71.0 — The Loop Primitive + the Pipeline Activation Key (first release shipped THROUGH the key)",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.71.0.zip",
       "min_compatible": "1.70.0"
     },
@@ -551,28 +551,28 @@
     {
       "version": "1.77.0",
       "type": "feature",
-      "description": "The release build now mirrors the studio",
+      "description": "The release build now mirrors the studio's real vault/<subdir>/ layout for every governed entry instead of flattening most categories into vault/files/. ADR-045 One Home made vault/skills/, vault/caps",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.77.0.zip",
       "min_compatible": "1.76.0"
     },
     {
       "version": "1.78.0",
       "type": "feature",
-      "description": "Tropo now updates itself without touching the user",
+      "description": "Tropo now updates itself without touching the user's work — contractually (ADR-049). The namespace predicate (four categories incl. manifest-listed with full-hash detection of user-modified shipped fi",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.78.0.zip",
       "min_compatible": "1.77.0"
     },
     {
       "version": "1.79.0",
       "type": "feature",
-      "description": "The v3 program",
+      "description": "The v3 program's first release. The studio maintains itself: routine upkeep (health checks, integrity audits, memory grooming) runs on a schedule via the maintenance registry on the Loop Primitive, in",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.79.0.zip",
       "min_compatible": "1.78.0"
     },
     {
       "version": "1.80.0",
       "type": "feature",
-      "description": "The v3 program",
+      "description": "The v3 program's truth-telling release. Fixes a Pipeline Activation Key fingerprint that had minted byte-identical across six consecutive releases (v1.74/v1.76/v1.77/v1.78/v1.79/Memory Sovereignty) by",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.80.0.zip",
       "min_compatible": "1.79.0"
     },
@@ -586,14 +586,14 @@
     {
       "version": "1.82.0",
       "type": "feature",
-      "description": "The v3 program",
+      "description": "The v3 program's knowledge-health release. The studio continuously flags stale or rotting content in its own graph by stamping decay signals on the derived index — it never moves, archives, or recycle",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.82.0.zip",
       "min_compatible": "1.81.0"
     },
     {
       "version": "1.84.0",
       "type": "feature",
-      "description": "The first foundation slice of the v3 program",
+      "description": "The first foundation slice of the v3 program's federation build (dd8df3bf, ADR-051 Vault-Node Primitive, ADR-050 Identity Minting Chokepoint). Ships five substrate primitives everything downstream dep",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.84.0.zip",
       "min_compatible": "1.82.0"
     },
@@ -603,6 +603,13 @@
       "description": "Completes the v1.84 federation build v1.84.0 started as a foundation slice. Ships the four remaining L1v3 substrate bricks: the mount-gate + compose-lockfile governed-write gate (409ef1cc), the cross-",
       "url": "https://api.tropo-ai.com/updates/tropo-update-v1.84.1.zip",
       "min_compatible": "1.84.0"
+    },
+    {
+      "version": "1.85.1",
+      "type": "feature",
+      "description": "Shipped update package tropo-update-v1.85.1-b4a; corrects the broken v1.85.0-b4a delta. Record authored after the fact — paperwork gaps disclosed.",
+      "url": "https://api.tropo-ai.com/updates/tropo-update-v1.85.1.zip",
+      "min_compatible": "1.84.1"
     }
   ]
 }

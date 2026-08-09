@@ -457,6 +457,20 @@ class TestItem2LockGestureIsolatedFixture(unittest.TestCase):
         self.assertIn("already status:locked", msg)
         self.assertEqual(path.read_bytes(), before)
 
+    def test_refuses_legacy_active_status_instead_of_rewriting_history(self) -> None:
+        path = self._write_dev_spec("11118888", status="active")
+        before = path.read_bytes()
+        stub = self._write_stub_activate_script(succeed=True)
+
+        code, msg = lock_dev_spec_mod.lock_dev_spec(
+            "11118888", "talos-test", files_dir=self.files_dir,
+            vault_root=self.tmp, activate_script=stub,
+        )
+        self.assertEqual(code, 1, msg)
+        self.assertIn("not in a lockable state", msg)
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(list(self.files_dir.glob("*.md")), [path])
+
     def test_refuses_non_dev_spec_type(self) -> None:
         path = self.files_dir / "22228888.md"
         path.write_text("---\nuid: 22228888\ntype: note\nstatus: draft\n---\n\nnot a dev-spec\n", encoding="utf-8")

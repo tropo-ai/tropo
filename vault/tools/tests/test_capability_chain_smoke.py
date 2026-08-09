@@ -2,7 +2,7 @@
 """Capability regression smoke test — RUNS the chain, not just the validator.
 
 Proves the One Home migration (ADR-045) didn't break:
-  (1) rebuild-index runs end-to-end (RB_EXIT=0) and indexes all vault/<type>/ content
+  (1) rebuild-index runs end-to-end (RB_EXIT=0) on a throwaway studio (never the live seal)
   (2) event_emitter.py loads tropo-emit-event.py (the choke-point auto-emission lib)
   (3) Key Path-constant / os.path.join / importlib refs in build-release + archive
       point to files that actually exist
@@ -14,71 +14,136 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 VAULT = ROOT / "vault"
 TOOLS = VAULT / "tools"
 INDEX = VAULT / "00-index.jsonl"
+ARCHIVE_INDEX = VAULT / "00-archive-index.jsonl"
 EVENT_EMITTER = ROOT / ".tropo" / "scripts" / "lib" / "event_emitter.py"
+LIVE_SEAL = ROOT / ".tropo-studio" / "locks" / "index-surfaces.meta.json"
 
 
 # ---------------------------------------------------------------------------
-# Check 1: rebuild-index runs clean and indexes all vault/<type> content
+# Check 1: rebuild-index runs clean and indexes vault/<type> content
 # ---------------------------------------------------------------------------
 
 def check_rebuild_index() -> list[str]:
+    """Prove --apply works WITHOUT touching the live studio seal.
+
+    Historical defect (metis-g103 → vela-v72, 2026-08-07): this check ran
+    ``tropo-rebuild-index.py --apply`` with cwd=live ROOT and re-sealed
+    ``.tropo-studio/locks/index-surfaces.meta.json`` ~3 minutes into every full
+    census. Confirmed: running this suite alone changed pair_sha256 while the
+    apply was still in flight. Pattern match for the fix: throwaway studio +
+    guard-the-guard assertion that the live seal bytes are unchanged.
+    """
     failures = []
-    result = subprocess.run(
-        [sys.executable, str(TOOLS / "tropo-rebuild-index.py"), "--apply"],
-        capture_output=True, text=True, cwd=str(ROOT),
-    )
-    if result.returncode != 0:
-        failures.append(f"rebuild-index exited {result.returncode}: {result.stderr[:300]}")
-        return failures
+    live_before = LIVE_SEAL.read_bytes() if LIVE_SEAL.exists() else None
 
-    # Verify vault/<type> coverage in the fresh index
-    if not INDEX.exists():
-        failures.append("vault/00-index.jsonl not written after rebuild")
-        return failures
+    with tempfile.TemporaryDirectory() as tmp:
+        studio = Path(tmp)
+        (studio / ".tropo").mkdir()
+        (studio / ".tropo-studio" / "locks").mkdir(parents=True)
+        (studio / "vault" / "files").mkdir(parents=True)
+        tools = studio / "vault" / "tools"
+        tools.mkdir()
+        # Rebuild looks under <vault-path>/vault/tools/ for helpers; the live
+        # script is invoked with --vault-path so its own code stays authoritative
+        # and the throwaway only needs the helpers + lib the apply path calls.
+        for name in (
+            "tropo-generate-relations-header.py",
+            "tropo-navblock-strip.py",
+        ):
+            shutil.copy2(TOOLS / name, tools / name)
+        shutil.copytree(TOOLS / "lib", tools / "lib")
 
-    indexed_uids: set[str] = set()
-    with open(INDEX) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                d = json.loads(line)
-                uid = d.get("uid")
-                if uid:
-                    indexed_uids.add(uid)
-            except Exception:
-                pass
+        seeded: dict[str, str] = {}
+        # Capsules are type-gated at index time; seed the three open type-dirs.
+        for subdir, uid in (
+            ("skills", "aa000001"),
+            ("actions", "aa000002"),
+            ("playbooks", "aa000003"),
+        ):
+            d = studio / "vault" / subdir
+            d.mkdir(parents=True)
+            body = (
+                "---\n"
+                f"uid: {uid}\n"
+                "type: note\n"
+                f"title: \"capability-chain-smoke fixture ({subdir})\"\n"
+                "status: active\n"
+                "state: active\n"
+                "owner: test\n"
+                "created: '2026-08-07'\n"
+                "modified: '2026-08-07'\n"
+                "description: throwaway fixture — never the live studio\n"
+                "tags: [fixture]\n"
+                "file_ext: md\n"
+                "schema_version: 1\n"
+                "member_of: [aa000000]\n"
+                "---\n\n# fixture\n"
+            )
+            (d / f"{uid}.md").write_text(body, encoding="utf-8")
+            seeded[subdir] = uid
 
-    uid_re = re.compile(r"^uid:\s*([0-9a-f]{8})\s*$", re.MULTILINE)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(TOOLS / "tropo-rebuild-index.py"),
+                "--apply",
+                "--skip-rehydrate",
+                "--vault-path",
+                str(studio),
+            ],
+            capture_output=True,
+            text=True,
+            cwd=str(studio),
+            timeout=120,
+        )
+        if result.returncode != 0:
+            failures.append(
+                f"rebuild-index exited {result.returncode} on throwaway studio: "
+                f"{(result.stderr or result.stdout)[:300]}"
+            )
+            return failures
 
-    for subdir in ("skills", "actions", "playbooks", "capsules"):
-        d = VAULT / subdir
-        if not d.exists():
-            continue
-        missing = []
-        for f in d.glob("*.md"):
-            try:
-                text = f.read_text(errors="ignore")
-            except Exception:
-                continue
-            m = uid_re.search(text[:2000])
-            if m and m.group(1) not in indexed_uids:
-                missing.append(f.name)
+        index_path = studio / "vault" / "00-index.jsonl"
+        if not index_path.exists():
+            failures.append("throwaway studio: vault/00-index.jsonl not written after rebuild")
+            return failures
+
+        indexed_uids: set[str] = set()
+        with open(index_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    uid = json.loads(line).get("uid")
+                    if uid:
+                        indexed_uids.add(uid)
+                except Exception:
+                    pass
+
+        missing = [f"{sub}:{uid}" for sub, uid in seeded.items() if uid not in indexed_uids]
         if missing:
             failures.append(
-                f"vault/{subdir}/: {len(missing)} file(s) unindexed after rebuild: "
-                + ", ".join(missing[:5])
+                "throwaway studio index missing seeded vault/<type> uids: "
+                + ", ".join(missing)
             )
 
+    live_after = LIVE_SEAL.read_bytes() if LIVE_SEAL.exists() else None
+    if live_before != live_after:
+        failures.append(
+            "LIVE studio seal changed during check_rebuild_index — rebuild escaped "
+            "the throwaway studio (the defect this check exists to prevent)"
+        )
     return failures
 
 
@@ -199,7 +264,21 @@ def check_no_two_homes_gate() -> list[str]:
         return failures
 
     import shutil
-    # Plant
+    # Never clobber a real file. This plant path used to be free; metis-g103
+    # landed a tracked tropo-mint-id.py at exactly it on 2026-08-06, after
+    # which copy2 overwrote a real governed tool and the unlink() below
+    # DELETED it — silently, on every census run. If the path is occupied that
+    # is itself the two-home violation this check exists to catch, so report
+    # it and refuse rather than destroying the evidence.
+    if planted.exists():
+        failures.append(
+            "no-two-homes adversarial: cannot plant — a real file already "
+            f"occupies {planted.relative_to(ROOT)}. That IS a two-home "
+            "duplicate of vault/tools/tropo-mint-id.py and needs resolving; "
+            "this check refuses to overwrite or delete it."
+        )
+        return failures
+
     shutil.copy2(victim, planted)
     try:
         result = subprocess.run(
@@ -392,7 +471,7 @@ def main() -> int:
             print(f"  FAIL: {f}")
         all_passed = False
     else:
-        print("  PASS — rebuild-index RB_EXIT=0; all vault/<type>/ files indexed")
+        print("  PASS — rebuild-index RB_EXIT=0 on throwaway studio; live seal unchanged")
 
     print("\n[2/6] event_emitter: loading tropo-emit-event.py...")
     emit_fails = check_event_emitter()

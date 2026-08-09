@@ -33,25 +33,7 @@ capsule_version: '2.5'
 
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Library](1aba710c.md) → **Packs**
-
-**🌳 Tropo-Nav Path** (VS Code): [../../00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Library/Packs/d9b8a9bb — Packs.md](../../00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo%20Library/Packs/d9b8a9bb%20%E2%80%94%20Packs.md)
-
-**🌳 Tropo-Nav Path** (chat): [tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Library/Packs/d9b8a9bb — Packs.md](tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo%20Library/Packs/d9b8a9bb%20%E2%80%94%20Packs.md)
-
-**🔗 This file** — UID `d9b8a9bb` · type `project` · state `active` · status `active`
-
-**↓ Children (2):**
-  - **project (2):** [Green City Energy — The Ridgewood Pilot](9b74ffe5.md) · [Lantern — Monthly Newsletter Planning (Toy Proj...](1a17e001.md)
-
-**↔ Siblings (1):**
-  - **under [b1e7a2c3](b1e7a2c3.md):** [Tropo Work — How Work and Agents Share the Same...](db313f9c.md)
 <!-- nav-block:end -->
-
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Governed by | [project (34e4cb0b)](34e4cb0b.md) |
 
 *Container for all shipping reference packs and worked-example projects under [Tropo Library (1aba710c)](1aba710c.md). Established 2026-04-24 by Vela V35 at Founder direction: "we let the workshop get messy. our tools and blueprints are just laying on the floor." This container is the drawer those tools go back into.*
 

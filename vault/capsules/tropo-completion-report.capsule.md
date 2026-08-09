@@ -10,7 +10,7 @@ created: 2026-05-31
 modified: 2026-05-31
 modified_by: argus-a89
 created_by: argus-a89
-status: active
+status: retired
 schema_version: 2
 extraction_scope: ship
 ships_in_v: v1.62.0
@@ -23,6 +23,9 @@ composes_with:
   - e4c8a6b2
 subsystem_hub:
   - 8dd772a0
+retired_at: '2026-07-12'
+retired_by: argus-a130
+retired_via: "Type Disposition walk 5dcbadbd (Mike-verdicted 2026-07-12, S2 activation 0d9f89bc) — zero instances ever authored; retired on the how-to precedent (v1.60, 'never earned itself empirically'). Verified no live convention references before retirement (grep 2026-07-12: historical mentions only). Tombstone-in-place per the how-to pattern; a future need re-enters via the closed registry (propose capsule → Mike locks)."
 ---
 
 # completion-report.capsule

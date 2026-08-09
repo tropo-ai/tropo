@@ -29,6 +29,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
+TOOLS_DIR = ROOT / "vault" / "tools"
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
 PLAYBOOK = ROOT / "vault" / "playbooks" / "71f186cf.md"
 CONCIERGE = ROOT / ".tropo" / "concierge" / "activate.md"
 NAMESPACE_MOD = ROOT / "vault" / "tools" / "lib" / "tropo_update_namespace.py"

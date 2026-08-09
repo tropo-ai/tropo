@@ -13,7 +13,7 @@ PROTOTYPE (Argus A115, 2026-06-17) — lock-ready for the v1.72 cycle, which wir
 Build-Release Phase 3 + the canonical playbook. Golden-output snapshots (diff actual-vs-expected
 per release) are the planned v1.1 hardening; this v0 checks structural + integrity invariants.
 """
-import sys, os, json, re, argparse
+import sys, os, json, re, argparse, ast
 from pathlib import Path
 
 # Files/dirs every Tropo release must contain for a stranger to cold-boot.
@@ -29,6 +29,70 @@ PRIVATE_SCOPES = ("argo-private", "reference-only")  # must NEVER ship
 
 def _check(name, ok, detail=""):
     return {"check": name, "ok": bool(ok), "detail": detail}
+
+
+def _lib_import_closure(root: Path):
+    """Return missing/syntax findings for shipped tools' transitive lib imports."""
+    module_files = {}
+    for lib_root in (root / "vault/tools/lib", root / ".tropo/scripts/lib"):
+        if not lib_root.is_dir():
+            continue
+        for path in lib_root.rglob("*.py"):
+            relative = path.relative_to(lib_root)
+            suffix = relative.parent.parts if path.name == "__init__.py" else relative.with_suffix("").parts
+            module = ".".join(("lib", *suffix))
+            module_files.setdefault(module, []).append((path, module, path.name == "__init__.py"))
+
+    tools_dir = root / "vault/tools"
+    starts = [(path, "", False) for path in sorted(tools_dir.glob("*.py"))] if tools_dir.is_dir() else []
+    queue = list(starts)
+    seen = set()
+    missing = set()
+    syntax_errors = set()
+    resolved_libs = set()
+
+    while queue:
+        path, current_module, is_package = queue.pop()
+        if path in seen:
+            continue
+        seen.add(path)
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (OSError, UnicodeDecodeError, SyntaxError) as exc:
+            syntax_errors.add(f"{path.relative_to(root)}: {exc}")
+            continue
+
+        required = set()
+        current_package = current_module if is_package else current_module.rpartition(".")[0]
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                required.update(alias.name for alias in node.names if alias.name.startswith("lib."))
+            elif isinstance(node, ast.ImportFrom):
+                if node.level and current_module.startswith("lib"):
+                    package_parts = current_package.split(".")
+                    trim = node.level - 1
+                    if trim >= len(package_parts):
+                        continue
+                    base_parts = package_parts[:len(package_parts) - trim]
+                    if node.module:
+                        required.add(".".join((*base_parts, *node.module.split("."))))
+                    else:
+                        required.update(".".join((*base_parts, alias.name))
+                                        for alias in node.names if alias.name != "*")
+                elif node.module == "lib":
+                    required.update(f"lib.{alias.name}" for alias in node.names if alias.name != "*")
+                elif node.module and node.module.startswith("lib."):
+                    required.add(node.module)
+
+        for module in sorted(required):
+            candidates = module_files.get(module)
+            if not candidates:
+                missing.add(f"{path.relative_to(root)} -> {module}")
+                continue
+            resolved_libs.add(module)
+            queue.extend(candidates)
+
+    return starts, resolved_libs, sorted(missing), sorted(syntax_errors)
 
 
 def run_checks(root: Path):
@@ -131,7 +195,18 @@ def run_checks(root: Path):
                   else ("ABSENT" if not validator.is_file() else "EMPTY (0 bytes) — not a real validator"))
     results.append(_check("tropo-validate.py present and non-empty", val_ok, val_detail))
 
-    # 9. H4 (258f5aa6) — golden-output snapshot (compare if expected-checks.json exists, else skip)
+    # 9. Shipped tool closure — every static lib import must resolve inside the package,
+    # including imports made by imported lib modules.
+    tools, resolved_libs, missing_libs, syntax_errors = _lib_import_closure(root)
+    import_findings = syntax_errors + missing_libs
+    import_detail = (
+        f"{len(tools)} tools, {len(resolved_libs)} lib modules resolved"
+        if not import_findings else
+        f"BROKEN: {import_findings[:5]}{'…' if len(import_findings) > 5 else ''}"
+    )
+    results.append(_check("shipped Python lib import closure", not import_findings, import_detail))
+
+    # 10. H4 (258f5aa6) — golden-output snapshot (compare if expected-checks.json exists, else skip)
     snapshot_f = root / "expected-checks.json"
     if snapshot_f.is_file():
         try:

@@ -122,10 +122,18 @@ def main(argv=None):
     # --release mode: outward-refs (UIDs not in the subset index) resolve to [INFO] not [FAIL];
     # safe because the pre-build full-studio pass (0 FAILED) guarantees no genuine broken refs.
     print('\nStep L2.3 — Validator in release-mode (dev-spec f8b51f4d D1):')
-    shipped_validator = extract_dir / 'vault' / 'tools' / 'd2b9c8e6.py'
-    if not shipped_validator.exists():
-        print(f'  ⚠ Shipped validator not found at {shipped_validator} — skipping L2.3', file=sys.stderr)
-        print('    (Release was built without vault/tools/tropo-validate.py; ship-scoped validator required)')
+    validator_candidates = (
+        extract_dir / 'vault' / 'tools' / 'tropo-validate.py',
+        extract_dir / 'vault' / 'tools' / 'd2b9c8e6.py',
+    )
+    shipped_validator = next(
+        (candidate for candidate in validator_candidates if candidate.exists()),
+        None,
+    )
+    if shipped_validator is None:
+        print('  ✗ Shipped validator not found — L2.3 cannot be skipped.', file=sys.stderr)
+        print('    Expected vault/tools/tropo-validate.py (or legacy UID filename d2b9c8e6.py).')
+        sys.exit(2)
     else:
         try:
             vresult = subprocess.run(

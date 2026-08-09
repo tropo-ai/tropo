@@ -43,6 +43,8 @@ cannot drift apart.
 import hashlib
 import re
 
+from lib import governed_body
+
 # Must mirror the sentinel pair `tropo-generate-relations-header.py`'s
 # `_NAV_BLOCK_RE` inserts/detects (`build_navigation_block` / `find_navigation_block`).
 # Duplicated here (rather than importing the hyphenated tool module) because this
@@ -68,14 +70,30 @@ class PostReceiptWriteError(RuntimeError):
 
 
 def canonicalize_for_content_hash(text):
-    """Strip nav-block spans so the CONTENT hash reflects the owner's words,
-    not the studio's navigation chrome. This is the covenant proof half of
-    the dual-hash receipt — it must return the same string whether or not
-    the nav renderer has run against this file, PROVIDED the renderer only
-    ever touches its own sentinel-wrapped span (true for
-    `tropo-generate-relations-header.py`'s insert_or_update_block, which is
-    idempotent-by-sentinel by design)."""
-    return _NAV_BLOCK_RE.sub("", text)
+    """Strip EVERY renderer-owned span so the CONTENT hash reflects the owner's
+    words, not the studio's chrome.
+
+    This is the covenant proof half of the dual-hash receipt: it must return the
+    same string whether or not the renderer has run against this file. The
+    proviso it used to rest on — that the renderer only ever touches its own
+    sentinel-wrapped span — stopped being true at the 2026-07-23 File Anatomy v2
+    retool, which also strips un-sentineled Relations/Members tables. This
+    function kept stripping only the sentinel span, so a clean apply over the
+    live customer studio would have produced 78 content_hash mismatches,
+    quarantined itself, and read the customer a covenant-violation banner for a
+    defect that was entirely ours.
+
+    It now calls the renderer's OWN primitive rather than approximating it with
+    a second regex. One definition, two importers: if the renderer ever learns
+    to strip something new, this hash goes blind to it in the same commit
+    instead of diverging silently until a customer sees the banner.
+    (d220d43b D1; Argus A145 concurrence, evt 9429.)
+
+    `byte_hash` is deliberately untouched — the renderer's write must still be
+    disclosed honestly; what changes is only whether it counts as the OWNER's
+    content changing.
+    """
+    return governed_body.strip_legacy_renders(text)
 
 
 def content_hash(text):

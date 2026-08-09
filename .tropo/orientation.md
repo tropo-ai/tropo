@@ -20,14 +20,14 @@ modified_by: argus-a120
 
 ## How Discovery Works (One Home — v1.76)
 
-Since the One Home migration (ADR-045), **every governed thing lives in one indexed home and the master index is complete** — discovery is now simple and uniform:
+Since One Home (ADR-045) + the truth-state split (ADR-047), **every governed thing lives in one indexed home and one lossless two-surface projection** — discovery is simple and truth-state is structural:
 
-- **The index (`vault/00-index.jsonl`) is the spine.** Grep it for *anything* — tools, skills, capsules, actions, playbooks, ADRs, work items — by `type`, `owner`, `status`, or `title`. It now holds the whole studio (it did **not** before One Home — skills/capsules were unindexed; that gap is closed).
+- **The current index (`vault/00-index.jsonl`) is the default spine.** Search it for current tools, skills, capsules, actions, playbooks, ADRs, and work items by `type`, `owner`, `status`, or `title`. `vault/00-archive-index.jsonl` is preserved history, reached deliberately with `tropo-vault-search.py "<query>" --include-archive`. Together they are complete; the default no longer carries the measured 37.9% archived/superseded noise floor.
 - **Names are readable; the UID is the address.** Shipped OS components carry a clean `tropo-<name>` filename (e.g. `vault/tools/tropo-validate.py`); your own content is `<slug>-<uid>.md`. The presence/absence of the `tropo-` prefix tells you OS-owned vs. your content at a glance. Cross-references resolve by **UID**, so a rename never breaks a link.
 - **The capability catalogs are the curated "what exists + when to reach for it" layer** (below), generated from the index. The **Toolbelt** ([`toolbelt.md`](toolbelt.md)) is the compact boot-known quick-reference over the same set.
-- **Lenses on the same data:** relationships → `vault/00-graph-index.json`; structured frontmatter queries → the SQLite layer; project hierarchy → `vault/00-project-tree.jsonl`.
+- **Lenses on the same data:** relationships + structured frontmatter queries → `vault/00-index.sqlite` (edges, FTS, JSON fields); project hierarchy → `vault/00-project-tree.jsonl`. The old `00-graph-index.json` family is retired.
 
-*If you can name what you're looking for, grep the index. If you want "what can I do here," read the catalogs. One home, one complete index, readable names.*
+*If you can name what is currently true, search the current index. If you need history, opt in to the archive. If you want "what can I do here," read the catalogs. One home, one lossless partition, readable names.*
 
 ---
 
@@ -49,8 +49,9 @@ Each catalog entry includes its hand-authored `trigger_description:` — the age
 
 | What you need | How to find it |
 |---|---|
-| Any governed artifact by type, status, owner, or title | Grep `vault/00-index.jsonl` |
-| Relationships between artifacts | `vault/00-graph-index.json` — O(1) traversal by UID |
+| Any current governed artifact by type, status, owner, or title | Search `vault/00-index.jsonl` or run `python3 vault/tools/tropo-vault-search.py "<query>"` |
+| Archived/superseded history | `python3 vault/tools/tropo-vault-search.py "<query>" --include-archive` (unions `vault/00-archive-index.jsonl`) |
+| Relationships between artifacts | `vault/00-index.sqlite` — query `edges` by UID (the old graph-JSON family is retired) |
 | Project hierarchy (all projects, parents, members) | `vault/00-project-tree.jsonl` |
 | UID for a named project, task, or artifact | Commission `sa.metis-nav` (Metis-only) or `sa.project-tree` (any executive) — faster than scanning the index |
 | All active projects browsable by name | `00-tropo-nav/00-tropo-active/` (rendered nav with composable graph; legacy `projects/` retired 2026-05-10 per Mike directive) |

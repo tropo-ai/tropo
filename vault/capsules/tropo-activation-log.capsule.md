@@ -30,7 +30,7 @@ meta_status_rollup:
     - complete-via-salvage
     - blocked
 last_body_refactor: 2026-05-11
-aligned_with: 7d3f9a2c
+aligned_with: e863a1e0
 composes_with: b4e2a718
 member_of:
   - 8e4a2c1f
@@ -50,7 +50,7 @@ subsystem_hub:
 | Relation | Target |
 |---|---|
 | Governed by | [capsule-definition meta (222873b9)](../../vault/files/222873b9.md) |
-| Aligned with | [sa/CAPSULE.md (7d3f9a2c)](../../vault/files/e863a1e0.md) (universal commissioning protocol) |
+| Aligned with | [sa/CAPSULE.md (e863a1e0)](../../vault/files/e863a1e0.md) (universal commissioning protocol) |
 | Composes with | [session-agent.capsule (b4e2a718)](session-agent.capsule.md) (governs sa.\* activation files) |
 | Extends | `core` |
 
@@ -60,7 +60,7 @@ subsystem_hub:
 
 An activation-log record (`agents/sa/<name>/activation-log/<NNN>-*.md`) is the per-spawn record of a sa.\* commission — both the live IPC channel during the spawn AND the permanent historical record after termination. This capsule governs the shape of every record: required frontmatter, body conventions, state machine, validation checks.
 
-Sibling to [session-agent.capsule (b4e2a718)](session-agent.capsule.md) (governs the activation FILE) and complementary to [sa/CAPSULE.md (7d3f9a2c)](../../vault/files/e863a1e0.md) (governs the commissioning PROTOCOL). This capsule governs the per-commission RECORD shape.
+Sibling to [session-agent.capsule (b4e2a718)](session-agent.capsule.md) (governs the activation FILE) and complementary to [sa/CAPSULE.md (e863a1e0)](../../vault/files/e863a1e0.md) (governs the commissioning PROTOCOL). This capsule governs the per-commission RECORD shape.
 
 Failure mode prevented: heterogeneous record shapes that cannot be cited cross-document (V36's records had YAML frontmatter; A39's didn't; the `verification_artifacts:` array in release.capsule can't resolve UIDs that don't exist).
 
@@ -95,7 +95,7 @@ Activation-log records live at `agents/sa/<name>/activation-log/<NNN>-*.md` and 
 | `uid` | string (8-hex) | Stable identifier; required for cross-document citation (e.g., release.capsule v3.1's `verification_artifacts:` array). |
 | `record` | integer | Sequential per-agent number. MUST equal `<NNN>` prefix in filename (zero-padded compare). |
 | `agent` | string | sa.\* agent class — full `sa.<slug>` form. MUST match parent folder name. |
-| `mode` | enum | `A-LIVE` / `B-BATCH`. Per [sa/CAPSULE.md (7d3f9a2c)](../../vault/files/e863a1e0.md) §Spawn Modes. |
+| `mode` | enum | `A-LIVE` / `B-BATCH`. Per [sa/CAPSULE.md (e863a1e0)](../../vault/files/e863a1e0.md) §Spawn Modes. |
 | `commissioned_by` | string | Spawner's identifier (e.g., `argus-a41`, `vela-v37`, `metis-g48`, `mike`, `fleet-ops`). MUST match `Spawned by:` line in body header. |
 | `commissioned_at` | string | YYYY-MM-DD or ISO8601. MUST match (or precede, by date) `Date:` line in body header. |
 | `target` | string | Path, UID, or descriptor identifying what the sa.\* was tested against. |
@@ -146,7 +146,7 @@ Per-agent activation files MAY declare additional extensions specific to their d
 
 ### Required Body Sections
 
-Records inherit body shape from [sa/CAPSULE.md §Record File Format (7d3f9a2c)](../../vault/files/e863a1e0.md). Structural requirements:
+Records inherit body shape from [sa/CAPSULE.md §Record File Format (e863a1e0)](../../vault/files/e863a1e0.md). Structural requirements:
 
 | Section | Required when | Author |
 |---|---|---|
@@ -196,7 +196,7 @@ dispatched ──→ complete                  (agent writes [DONE] cleanly)
 
 **Transitions are one-way.** A blocked record stays blocked; a stalled record stays complete-via-salvage; a complete record is not re-opened. Re-dispatch creates a NEW record at the next NNN — never overwrites or transitions the prior record.
 
-**Archival:** records are NEVER archived. They persist permanently as audit trail. No archival trigger; no archival authority delegated. Aligns with [sa/CAPSULE.md (7d3f9a2c)](../../vault/files/e863a1e0.md): *"The record file is permanent. Do not delete it."* Ban on deletion is structural, not policy-overridable.
+**Archival:** records are NEVER archived. They persist permanently as audit trail. No archival trigger; no archival authority delegated. Aligns with [sa/CAPSULE.md (e863a1e0)](../../vault/files/e863a1e0.md): *"The record file is permanent. Do not delete it."* Ban on deletion is structural, not policy-overridable.
 
 ---
 
@@ -261,7 +261,7 @@ Full limitations + companion-limitations detail in [history §Limitations](activ
 ### Composes With
 
 - **[session-agent.capsule (b4e2a718)](session-agent.capsule.md)** — sibling. Session-agent.capsule governs the sa.\* activation FILE; this capsule governs the per-commission RECORD. The two compose: activation file declares per-agent contract; records satisfy the contract.
-- **[sa/CAPSULE.md (7d3f9a2c)](../../vault/files/e863a1e0.md)** — universal commissioning protocol. Governs the 6-step ceremony + spawn modes + prose record body format. This capsule formalizes structural requirements that sa/CAPSULE.md leaves as prose convention.
+- **[sa/CAPSULE.md (e863a1e0)](../../vault/files/e863a1e0.md)** — universal commissioning protocol. Governs the 6-step ceremony + spawn modes + prose record body format. This capsule formalizes structural requirements that sa/CAPSULE.md leaves as prose convention.
 - **[release.capsule v3.1 (b19e8d43)](release.capsule.md)** — `verification_artifacts:` array cites this capsule's records by UID. Rule 12 + Check 24 cite-eligibility gate ensures cited records carry verdict integrity.
 - **[playbook.capsule v2.5 (e7b3c509)](playbook.capsule.md) §Test-Harness subtype** — playbooks that dispatch sa.\* reference activation-log records as their evidence section.
 - **[dispatch-walker.playbook v0.2 (`7579f894`)](../playbooks/dispatch-walker.playbook.md)** — Rule 7 (verdict literal-copy) generalizes universally to all sa.\* via this capsule's Rule 9 + Check 21.

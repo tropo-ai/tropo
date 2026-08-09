@@ -2,6 +2,23 @@
 
 ---
 
+## v1.85.0 — Governed Birth, Coupled Releases, and the First Tropo Engine Slab
+
+**The Studio gets stricter where it matters and quieter where history used to crowd out current truth.**
+
+- **Governed birth becomes effortless.** `mint file --type <type>` now creates the capsule-stamped file at its canonical home and indexes it immediately. Unknown types and missing template legs refuse with an actionable governance path.
+- **Build and publish become one honest flow.** Builds end privately. Staging stays private and physically disables accidental pushes. Mike alone fires (or defers), and Tropo claims LIVE only after checking the actual remote tag, main commit, and release object.
+- **Current truth becomes the default.** Archived/superseded records move off the normal retrieval surface without losing a byte; explicit archive search and full-union SQLite resolution preserve history.
+- **Validator errors become unmissable.** Severity is typed rather than inferred from message text, and a crashed check is itself a counted error.
+- **Memory sovereignty is schema-honest.** All 224 memory entries now conform to the canonical agent/studio/doctrine vocabulary; the migration changed zero memory body bytes.
+- **Git and indexes harden for concurrent agents.** Incremental and full index rows now converge exactly, stale commit flags self-clear, and explicit path staging can avoid sweeping another agent’s work.
+
+Independent verification: Engine Phase 1 passed AC1–AC5 under Metis G89; S2 remediation has a separate independent verification gate before the release-producing step. The integrated scope was explicitly authorized by Mike rather than reconstructing an older pre-Engine branch.
+
+*Tropo-OS v1.85.0 | current integrated main | nothing public until Mike fires*
+
+---
+
 ## Git Beat 1 — Local History-of-Record (2026-07-05 by talos-t25; dev-spec 98b9610a Mike-LOCKED)
 
 **The studio becomes its own standalone private git repo — local history-of-record, no push.**

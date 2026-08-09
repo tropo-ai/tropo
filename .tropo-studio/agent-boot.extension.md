@@ -54,7 +54,7 @@ Add your own identity checks here if your vault has conventions beyond the OS fl
 - All files in [`.tropo-studio/directives/`](directives/) — standing instructions to all crew.
 
 **Mission brief — required (default):**
-- `context/mission-brief.md` (create this file when you know your vault's mission).
+- `.tropo-studio/mission-brief.md` (create this file when you know your vault's mission).
 
 ---
 

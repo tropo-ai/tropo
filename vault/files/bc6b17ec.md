@@ -45,11 +45,6 @@ capsule_version: '2.5'
 
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Playbooks](76bab75f.md) → **external-test — dev-pipeline step 6**
-
-**🔗 This file** — UID `bc6b17ec` · type `pipeline` · state `active` · status `draft`
-
-**📥 Cited by (1):**
-- [Tropo-OS v1.48.0 — Cycle B Extraction-and-Publish Engineering ...](1d25e142.md) — `1d25e142` (type `release`, via `capabilities_touched`)
 <!-- nav-block:end -->
 
 ## Purpose

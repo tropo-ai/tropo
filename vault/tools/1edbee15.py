@@ -22,7 +22,7 @@ modified: 2026-06-16
 modified_by: talos-t20 (v1.71 build delta)
 governed_by: d5e1b4a3
 member_of:
-  - c7e4f9a2
+  - 8dd772a0
 realizes_dev_spec: 9da979b2
 schema_version: 2
 belt: false
@@ -32,10 +32,35 @@ trigger_description: "Launchd-fired watchdog that kills runaway loop-runs and en
 """
 
 import json
+import math
+import numbers
 import os
 import sys
 import time
 from pathlib import Path
+
+
+def _parse_nonnegative_number(value, field_name):
+    """Return one finite nonnegative runtime number or fail closed."""
+    if isinstance(value, bool) or not isinstance(value, numbers.Real):
+        raise ValueError(
+            f"{field_name} must be a finite nonnegative JSON number"
+        )
+    try:
+        numeric = float(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{field_name} must be a finite nonnegative JSON number"
+        ) from exc
+    if not math.isfinite(numeric) or numeric < 0:
+        raise ValueError(
+            f"{field_name} must be a finite nonnegative JSON number"
+        )
+    return numeric
+
+
+def _parse_persisted_spend(value):
+    return _parse_nonnegative_number(value, "spent_usd")
 
 def check_loop_run_start_preconditions(run_dir: Path) -> bool:
     """LOOP-RUN ENGINE FAIL-CLOSE: Refuse to start if contract is missing or invalid."""
@@ -65,7 +90,19 @@ def check_loop_run_start_preconditions(run_dir: Path) -> bool:
                         return False
                         
                     # P0(4): Check gateway route if spend brake is declared
-                    if brakes.get("max_budget_usd"):
+                    budget = brakes.get("max_budget_usd")
+                    if "max_budget_usd" in brakes and budget is not None:
+                        try:
+                            _parse_nonnegative_number(
+                                budget,
+                                "max_budget_usd",
+                            )
+                        except ValueError as exc:
+                            print(
+                                f"FAIL-CLOSE: {run_dir} invalid "
+                                f"max_budget_usd: {exc}"
+                            )
+                            return False
                         if os.environ.get("ANTHROPIC_BASE_URL", "") != "http://127.0.0.1:8080":
                             print(f"FAIL-CLOSE: {run_dir} max_budget_usd declared but gateway route not configured")
                             return False
@@ -196,12 +233,30 @@ def watchdog_scan(vault_root: Path):
                 
         # 2. Spend (HARD BRAKE - gateway ground-truth)
         max_spend = brakes.get("max_budget_usd")
-        if max_spend:
+        if max_spend is not None:
+            try:
+                max_spend = _parse_nonnegative_number(
+                    max_spend,
+                    "max_budget_usd",
+                )
+            except ValueError as exc:
+                trip_brake(
+                    run_dir,
+                    "max_budget_usd",
+                    "INVALID_LIMIT",
+                    "watchdog",
+                    f"run.jsonl_contract_error:{exc}",
+                )
+                continue
             spend_file = run_dir / "gateway_spend.json"
             if spend_file.exists():
                 try:
                     spend_data = json.loads(spend_file.read_text())
-                    spent = spend_data.get("spent_usd", 0.0)
+                    if not isinstance(spend_data, dict) or "spent_usd" not in spend_data:
+                        raise ValueError(
+                            "gateway_spend.json must contain spent_usd"
+                        )
+                    spent = _parse_persisted_spend(spend_data["spent_usd"])
                     if spent >= max_spend:
                         trip_brake(run_dir, "max_budget_usd", f"${spent:.2f}", "watchdog", "gateway_spend.json")
                         continue

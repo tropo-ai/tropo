@@ -1,10 +1,10 @@
 ---
 uid: f6a967fd
-type: release-notes
+type: release
 agent: tropo
 title: Tropo Release Notes — v1.17.0
 description: Current Tropo release notes for delivery via Tropo's release-liaison role. Refreshed each release by the update pipeline. v1.17.0 introduces the permanent Tropo agent + first-user experience redesign + new tropo-link subsystem.
-release_version: v1.84.1
+release_version: v1.85.0
 release_date: '2026-05-10'
 last_delivered_version: null
 audience: Studio user (whoever opened this Studio)
@@ -29,6 +29,9 @@ tags:
 subsystem_hub:
   - 99ed55fd
   - 8dd772a0
+retyped_from: release-notes
+retyped_at: '2026-07-12'
+retyped_by: argus-a130 (walked disposition 5dcbadbd, Mike-verdicted, S2 activation 0d9f89bc)
 ---
 
 # Tropo v1.17.0 — Release Notes

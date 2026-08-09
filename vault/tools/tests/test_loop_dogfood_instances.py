@@ -18,12 +18,12 @@ class TestLoopDogfoodInstances(unittest.TestCase):
         # 1. Dispatcher
         dispatcher = {
             "uid": "66f7b892", "type": "loop", "name": "Dispatcher", "version": "1.0",
-            "author": "argus-a114", "state": "active", "status": "draft",
-            "goal": {"exit_criteria": ["booted"], "authored_by": "argus"},
+            "author": "aaaaaaaa", "state": "active", "status": "draft",
+            "goal": {"exit_criteria": ["booted"], "authored_by": "bbbbbbbb"},
             "trigger": {"kind": "event", "spec": "tropo.cycle"},
             "policy": {"kind": "executive", "ref": "talos"},
             "tools": ["2471edc0"],
-            "verifier": {"kind": "validator", "independent": True, "lenses": 1, "attestation": "aspirational"},
+            "verifier": {"kind": "validator", "independent": True, "lenses": 2, "attestation": "aspirational"},
             "brakes": {"max_iterations": 5, "max_budget_usd": 0.1, "max_wall_clock_min": 30},
             "consequence": "medium"
         }
@@ -31,12 +31,12 @@ class TestLoopDogfoodInstances(unittest.TestCase):
         # 2. Continuous-listen
         listen = {
             "uid": "91c4e2a7", "type": "loop", "name": "Continuous Listen", "version": "1.0",
-            "author": "argus-a114", "state": "active", "status": "draft",
-            "goal": {"exit_criteria": ["drained"], "authored_by": "argus"},
+            "author": "aaaaaaaa", "state": "active", "status": "draft",
+            "goal": {"exit_criteria": ["drained"], "authored_by": "bbbbbbbb"},
             "trigger": {"kind": "schedule", "spec": "every 60s"},
             "policy": {"kind": "executive", "ref": "vela"},
             "tools": ["2471edc0"],
-            "verifier": {"kind": "validator", "independent": True, "lenses": 1, "attestation": "aspirational"},
+            "verifier": {"kind": "validator", "independent": True, "lenses": 2, "attestation": "aspirational"},
             "brakes": {"max_iterations": 100, "max_budget_usd": 1.0, "max_wall_clock_min": 600},
             "consequence": "low"
         }
@@ -44,8 +44,8 @@ class TestLoopDogfoodInstances(unittest.TestCase):
         # 3. Fleet-ops
         fleet = {
             "uid": "cb7d713a", "type": "loop", "name": "Fleet Ops", "version": "1.0",
-            "author": "argus-a114", "state": "active", "status": "draft",
-            "goal": {"exit_criteria": ["deployed"], "authored_by": "mike"},
+            "author": "aaaaaaaa", "state": "active", "status": "draft",
+            "goal": {"exit_criteria": ["deployed"], "authored_by": "bbbbbbbb"},
             "trigger": {"kind": "manual", "spec": "operator"},
             "policy": {"kind": "executive", "ref": "argus"},
             "tools": ["1545ac97", "2471edc0", "ca90f098"],
@@ -75,9 +75,25 @@ class TestLoopDogfoodInstances(unittest.TestCase):
         # actually let's just override the functions in the module for this test
         original_iter = loop_validators._iter_loops
         original_load_tools = loop_validators._load_tools
+        original_load_index = loop_validators._load_index_records
         
         loop_validators._iter_loops = mock_iter_loops
         loop_validators._load_tools = mock_load_tools
+        loop_validators._load_index_records = lambda vault_path, include_archive=False: [
+            {
+                "uid": "aaaaaaaa",
+                "type": "agent",
+                "status": "active",
+                "state": "active",
+            },
+            {
+                "uid": "bbbbbbbb",
+                "type": "principal",
+                "principal_class": "human",
+                "status": "active",
+                "state": "active",
+            },
+        ]
         
         try:
             findings, total, defects = loop_validators.check_loop_has_brakes(vault_root)
@@ -96,6 +112,7 @@ class TestLoopDogfoodInstances(unittest.TestCase):
         finally:
             loop_validators._iter_loops = original_iter
             loop_validators._load_tools = original_load_tools
+            loop_validators._load_index_records = original_load_index
 
 if __name__ == '__main__':
     unittest.main()

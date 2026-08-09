@@ -15,8 +15,10 @@ status: active
 owner: talos
 created: 2026-07-03
 created_by: talos-t24
+modified: 2026-07-15
+modified_by: argus-a132
 governed_by: a5b3c891
-capsule_version: '1.3'
+capsule_version: '1.5'
 extraction_scope: ship
 schema_version: 2
 trigger_description: 'Reach for this whenever you want to pin a memory. One call with (scope, content) routes to the correct Tropo tier, authors valid memory.capsule frontmatter, appends the episodic log entry, and registers the file. Replaces the impulse to write to .claude/ or any harness-private store. Closes the authoring-friction gap that makes .claude/ the path of least resistance.'
@@ -90,11 +92,13 @@ Use this whenever you want to pin a memory. One call routes to the right Tropo t
    <content body — clear, direct, lead with the rule/fact>
    ```
 
-5. **Append to the episodic log** (`agents/<agent_slug>/.tropo-capsule/memory/agent-memories.jsonl` for agent scope; `.tropo-studio/memory/agent-memories.jsonl` for studio scope). Append one JSONL line:
+5. **Append to the episodic log** (`agents/<agent_slug>/.tropo-capsule/memory/agent-memories.jsonl` for agent scope; `.tropo-studio/memory/agent-memories.jsonl` for studio scope). Append one JSONL line using the v1.5 envelope:
 
    ```json
    {"ts": "YYYY-MM-DD", "generation": "<T-or-G-or-V-N>", "kind": "<subtype>", "uid": "<uid>", "note": "<brief statement of the learning; lead with the rule>"}
    ```
+
+   `kind` uses the same five values as `subtype`. The log is append-only forever: do **not** rewrite historical `date/generation/type/content/expires` rows or `event: fold-boundary` rows. Readers normalize those legacy dialects; new writes use only the envelope above.
 
 6. **Register in the vault index.** Run `python3 vault/tools/tropo-rebuild-index.py --apply` (or the full `python3 vault/tools/tropo-rebuild-vault.py --apply` for a comprehensive refresh). The rebuild automatically scans `.tropo-studio/memory/entries/` (studio scope) and `agents/*/.tropo-capsule/memory/entries/` (agent scope) since v1.79 — no manual index entry required.
 
@@ -149,6 +153,6 @@ Write to: `.tropo-studio/memory/entries/b7c1d293.md`
 
 - Entry file exists at the correct path for the chosen scope
 - Frontmatter has all required fields (`uid`, `type: memory`, `subtype`, `scope`, `context`, `created`, `state`)
-- Episodic log has a new JSONL entry timestamped today
+- Episodic log has a new `ts/generation/kind/uid/note` JSONL entry timestamped today (historical dialects untouched)
 - Vault index has a registration for the new UID
 - ZERO new files written to `~/.claude/` or any harness-private location

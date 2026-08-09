@@ -8,8 +8,8 @@ uid: c7ea9e01
 owner: argus
 created: 2026-04-21
 created_by: argus-a31
-modified: 2026-05-09
-modified_by: argus-a53
+modified: 2026-07-19
+modified_by: argus-a135
 aligned_with: e7b3c509
 status: active
 governed_by: a7c3f489
@@ -95,8 +95,8 @@ These rules are the covenant. Every agent creation satisfies them.
 7. Every agent MUST have a `memory.md` file created from `vault/templates/tropo-memory.template.md`.
 8. Every agent MUST have a `sessions.md` file created from `vault/templates/tropo-sessions.template.md`.
 9. Every agent MUST be registered in `.tropo-studio/registries/agent-registry.yaml`.
-10. Every agent creation MUST be logged in `channels/ops.md`.
-11. Every agent creation MUST update `agents/00-index.md`.
+10. Every agent creation MUST be logged to the crew event log via `tropo-emit-event.py --type tropo.broadcast.crew` (`channels/ops.md` was retired v1.61 — the event log is the crew-communication surface).
+11. Every agent creation MUST be reflected in the vault index (`vault/00-index.jsonl`) via `tropo-rebuild-vault.py` (`agents/00-index.md` was retired v1.74 — the JSONL index is the discovery surface).
 12. Agent creation requires the founder's confirmation BEFORE writing files. Show the slate: "Here's what I'll create — [agent name], [role], three files + workspace + memory + session log. OK to proceed?" Wait for yes.
 
 ---
@@ -171,34 +171,40 @@ Path: `agents/<name>/sessions.md`. Copy from `vault/templates/tropo-sessions.tem
 - Copy `vault/templates/AGENTS.md` to `agents/<name>/AGENTS.md` (identical in every folder — do not modify)
 - Generate a `CAPSULE.md` for `agents/<name>/` with `folder_type: workspace`, `owner: <agent-name>`, `write_access: [<agent-name>, <founder>]`
 
-(If the [create-governed-folder skill (b2c3d4e5)](create-governed-folder.skill.md) is available, call it instead of doing this by hand — same result, less duplication.)
+(If the [tropo-create-governed-folder](tropo-create-governed-folder.md) skill is available, call it instead of doing this by hand — same result, less duplication.)
 
 ### 11. Register in the vault registry (Rule 9)
 
-Append an entry for `<name>-charter.md` to `.tropo-studio/registries/agent-registry.yaml`:
+Add an entry under the `agents:` map in `.tropo-studio/registries/agent-registry.yaml`. The registry is a **map keyed by UID** (not a list) — the key is the agent's 8-hex UID, the value is an indented block:
 ```yaml
-- uid: <uid-from-step-3>
- path: agents/<name>/<name>-charter.md
- title: "<Agent Name> — Charter"
- type: agent-charter
- owner: <founder-name>
- created: <today>
+agents:
+  <uid-from-step-3>:
+    class: personal            # end-user founder agent (crew/personal/worker/service)
+    name: "<Agent Name>"
+    role: "<role (human-readable)>"
+    status: active
+    activation-file: agents/<name>/<name>-activation.md
+    owner: <founder-name>
+    commissioned: <today>
 ```
 
-Include entries for the briefing and activation if the registry convention requires them (check `.tropo-studio/registries/CAPSULE.md` or existing entries for the pattern — some vaults register all three files, some only the charter).
+One entry per agent (the agent is one entity across its three files — do not add separate rows for the briefing/activation). Check existing `agents:` entries for the exact field set your vault uses.
 
-### 12. Update agents/00-index.md (Rule 11)
+### 12. Refresh the vault index (Rule 11)
 
-Append a row to the agents index:
-```markdown
-| <name> | <role (human-readable)> | <uid> | agents/<name>/ |
+Rebuild the JSONL discovery index so the new agent resolves (`agents/00-index.md` was retired v1.74):
+```bash
+python3 vault/tools/tropo-rebuild-vault.py --only <uid>   # or a full rebuild
 ```
+Confirm the agent is present in `vault/00-index.jsonl`.
 
-### 13. Log to ops (Rule 10)
+### 13. Log the creation to the crew event log (Rule 10)
 
-Append to `channels/ops.md`:
-```
-[YYYY-MM-DD HH:MM] <concierge-id> — Created executive agent <name> at agents/<name>/. UID: <uid>. Owner: <founder-name>. Role: <role>.
+Emit a crew broadcast (`channels/ops.md` was retired v1.61 — the event log is the crew surface):
+```bash
+python3 vault/tools/tropo-emit-event.py --type tropo.broadcast.crew \
+  --source /skills/create-executive-agent --source-uid c7ea9e01 --lifecycle ephemeral \
+  --data '{"headline": "Created executive agent <name>", "body": "agents/<name>/ · UID <uid> · owner <founder-name> · role <role>"}'
 ```
 
 ---
@@ -216,8 +222,8 @@ After creating the agent, before reporting success, verify:
 7. `agents/<name>/sessions.md` exists with agent name
 8. `agents/<name>/AGENTS.md` and `agents/<name>/CAPSULE.md` exist
 9. `.tropo-studio/registries/agent-registry.yaml` has at least one entry for this agent
-10. `agents/00-index.md` has a new row for this agent
-11. `channels/ops.md` has a creation log entry with the correct UID
+10. `vault/00-index.jsonl` contains the new agent's entry (after `tropo-rebuild-vault.py`) — the current discovery surface (`agents/00-index.md` retired v1.74)
+11. A `tropo.broadcast.crew` creation event was emitted (verify with `tropo-query-events.py`) carrying the correct UID (`channels/ops.md` retired v1.61)
 12. Zero `[FILL:...]` or `[agent-name]` placeholders survive in any authored file
 13. **`agents/<name>/<name>-activation.md` contains a non-empty `## Routing` section** (D4.9 / [playbook.capsule v2.3 §Subtypes §Concierge-Paths](../capsules/playbook.capsule.md)). The section MUST list at minimum the four bounce intents (project creation / team setup / new standalone agent / system updates) and one inline-handling clause. Validation: grep the activation file for `^## Routing$` heading + ≥ 4 bounce-bullets in the section body. If missing or partial, the template was not copied correctly or was edited away — halt and re-copy from `vault/templates/tropo-executive-activation.template.md`.
 
@@ -229,8 +235,8 @@ If any check fails, halt and report the specific check number to the calling pla
 
 - Three-file agent exists at `agents/<name>/` with valid charter, briefing, activation
 - Workspace, memory.md, sessions.md, AGENTS.md, CAPSULE.md all present
-- Registered in agent-registry.yaml; indexed in agents/00-index.md; logged in channels/ops.md
-- All 12 validation checks pass (see §Validation Checks above)
+- Registered in agent-registry.yaml; present in vault/00-index.jsonl; creation event emitted to the crew log
+- All 13 validation checks pass (see §Validation Checks above)
 - Every one of the 10 agent-creation Rules (3–12) is satisfied
 
 The calling playbook then resumes with post-creation work (memory-moment narration, launch handoff, etc.) — that's playbook scope, not skill scope.
@@ -262,7 +268,7 @@ The templates referenced above (`executive-charter.template.md`, `executive-brie
 ## Known Gaps (v1.3 — resolved in v1.4)
 
 - **End-user-specific template variants not yet shipped.** Templates are crew-oriented by default; concierge-paths consumers adapt per §Template Adaptation Notes above. v1.4 Pillar 2 or Stream B Phase 2 delivers `executive-charter-enduser.template.md`, `executive-briefing-enduser.template.md`, `executive-activation-enduser.template.md` with end-user-appropriate content.
-- **Mechanical validation of the 12 Validation Checks not shipped.** Validation is honor-system for v1.3; v1.4 ships `agent-creation-validator.ts` running the 12 checks mechanically at check-in.
+- **Mechanical validation of the 13 Validation Checks not shipped.** Validation is honor-system for v1.3; a later cycle ships a validator running the 13 checks mechanically at check-in.
 - **Registry convention — all-three-files vs charter-only.** This skill's Step 11 leaves the choice to the vault's registry CAPSULE. v1.4 standardizes on registering all three files (charter, briefing, activation) per agent.
 
 ---
@@ -290,8 +296,8 @@ If a caller asks which pattern to use for their agent, default to this skill (en
 - [first-vault-setup.playbook.md v4.0](../playbooks/first-vault-setup.playbook.md) — the source this skill was extracted from (currently active; superseded by concierge-paths library at v1.3 ship close)
 - [agent-configurator.capsule v2.1 (3210818a)](../capsules/agent-configurator.capsule.md) — the crew-side counterpart (do not mix)
 - [charter-schema.md](../schema/charter-schema.md) — the required charter frontmatter
-- [create-governed-folder.skill.md (b2c3d4e5)](create-governed-folder.skill.md) — reusable sub-skill for folder+CAPSULE+AGENTS.md creation
-- [register-file.skill.md](register-file.skill.md) — reusable sub-skill for agent-registry.yaml updates
+- [tropo-create-governed-folder.md](tropo-create-governed-folder.md) — reusable sub-skill for folder+CAPSULE+AGENTS.md creation
+- [tropo-register-file.md](tropo-register-file.md) — reusable sub-skill for agent-registry.yaml updates
 
 ---
 

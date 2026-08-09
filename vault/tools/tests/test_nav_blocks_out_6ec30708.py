@@ -96,52 +96,66 @@ class GitInitFixture:
 
 
 class GitFilterLiveFixture:
-    """Exercises the REAL, already-installed clean filter against THIS repo's real
-    `.git` (no `git init` needed) via a disposable scratch path OUTSIDE
-    `vault/files/`. Scoping uses a PER-DIRECTORY `.gitattributes` file placed INSIDE
-    the scratch dir (a normal working-tree file git reads regardless of whether it is
-    tracked/staged/committed — standard git attribute-cascade behavior) rather than
-    `.git/info/attributes`: this sandbox blocks writes to paths under `.git/` even
-    from a plain Python `open()`/`write_text()` (confirmed empirically — the same
-    "Operation not permitted" this build hit installing `filter.navblockstrip.clean`
-    itself, worked around there via the privileged file-edit tool, not available to a
-    test process). A scratch-local `.gitattributes` needs no such workaround."""
+    """The real clean filter, exercised in a DISPOSABLE repo of its own.
 
-    SCRATCH_DIRNAME = '.tmp-navblock-git-filter-test'
+    REWRITTEN 2026-08-06 by metis-g103, and the reason is the whole point of the
+    change. This fixture used to run `git add` against THIS repo's real `.git`,
+    inside a scratch directory at the repo root. Two consequences, both hit on
+    2026-08-06 during a full-corpus run:
+
+      * It takes `.git/index.lock` on the live checkout. When the class errored
+        part-way (it was RED in the census), the lock was LEFT BEHIND. Every
+        later git operation in this working copy failed with "Unable to create
+        '.git/index.lock'", and five commits that afternoon had to go through
+        GIT_INDEX_FILE plumbing. The desynced index then made the mint refuse a
+        governed write, because git reported a tracked source as deleted.
+      * `.tmp-navblock-git-filter-test/no_block.md` was left staged in the live
+        index and RODE INTO A COMMIT on main.
+
+    The original justification was that `git init` was blocked in this sandbox
+    ("Operation not permitted" on `.git/hooks`). That claim is STALE: `git init`
+    plus `git add` were both verified working in a plain `tempfile` directory on
+    2026-08-06. The fixture was reaching into the live repo to work around an
+    environmental limit that no longer exists.
+
+    A throwaway repo proves the identical claim -- staged blob stripped, working
+    tree untouched -- and additionally proves the filter works on a FRESH CLONE,
+    which the live-repo version could never show. Nothing here can touch the
+    studio's own `.git`.
+
+    The live checkout's WIRING is still asserted, read-only, in setUp: that is a
+    legitimate question ("is this checkout configured?") and answering it needs
+    no writes.
+    """
 
     def __init__(self):
-        self.root = ROOT
-        self.scratch_dir = self.root / self.SCRATCH_DIRNAME
-        self.scratch_dir.mkdir(exist_ok=True)
-        self.scoped_gitattributes = self.scratch_dir / '.gitattributes'
-        self._staged_paths: list[Path] = []
+        self._temp = tempfile.TemporaryDirectory(prefix='navblock_gitfilter_')
+        self.repo = Path(self._temp.name).resolve()
+        _git(self.repo, 'init', '-q', '.')
+        _git(self.repo, 'config', 'user.email', 'fixture@tropo.test')
+        _git(self.repo, 'config', 'user.name', 'navblock fixture')
+        # The REAL strip script, by absolute path -- same code the studio wires,
+        # so a divergence between fixture and production is impossible.
+        strip = ROOT / 'vault' / 'tools' / 'tropo-navblock-strip.py'
+        _git(self.repo, 'config', 'filter.navblockstrip.clean',
+             f'{sys.executable} {strip} --clean')
 
     def scoped_file(self, name: str) -> Path:
-        return self.scratch_dir / name
+        return self.repo / name
 
     def install_scoped_attribute(self):
-        self.scoped_gitattributes.write_text('*.md filter=navblockstrip\n', encoding='utf-8')
+        (self.repo / '.gitattributes').write_text(
+            '*.md filter=navblockstrip\n', encoding='utf-8')
 
     def git_add(self, path: Path) -> subprocess.CompletedProcess:
-        self._staged_paths.append(path)
-        return _git(self.root, 'add', '--', str(path))
+        return _git(self.repo, 'add', '--', str(path.relative_to(self.repo)))
 
     def staged_blob(self, path: Path) -> str:
-        rel = path.relative_to(self.root)
-        r = _git(self.root, 'show', f':{rel.as_posix()}')
-        return r.stdout
+        rel = path.relative_to(self.repo)
+        return _git(self.repo, 'show', f':{rel.as_posix()}').stdout
 
     def cleanup(self):
-        for p in self._staged_paths:
-            _git(self.root, 'reset', '--', str(p))
-            if p.exists():
-                p.unlink()
-        if self.scoped_gitattributes.exists():
-            self.scoped_gitattributes.unlink()
-        try:
-            self.scratch_dir.rmdir()
-        except OSError:
-            pass
+        self._temp.cleanup()
 
 
 class TestStripNavBlockPrimitive(unittest.TestCase):
@@ -427,15 +441,175 @@ class TestVerifyInstallDiagnostic(unittest.TestCase):
         attempt from within THIS test therefore fails the SAME way — expected in this
         sandbox, not a defect. Skip gracefully on that specific permission error;
         assert idempotency for real whenever the environment allows the write."""
-        r = _git(ROOT, 'config', '--get', 'filter.navblockstrip.clean')
+        r = _git(ROOT, 'config', '--get', 'filter.navblockstrip.process')
         if r.returncode != 0:
             self.skipTest('filter not installed yet in this checkout')
         before = r.stdout
         rc = STRIP_TOOL.cmd_install(ROOT)
         if rc != 0:
             self.skipTest('git config write to .git/config blocked in this sandbox (pre-existing, environment-wide restriction)')
-        after = _git(ROOT, 'config', '--get', 'filter.navblockstrip.clean').stdout
+        after = _git(ROOT, 'config', '--get', 'filter.navblockstrip.process').stdout
         self.assertEqual(before, after)
+
+
+class TestLongRunningProcessFilterIsTheWiredDriver(unittest.TestCase):
+    """6ec30708 line 113, which the build did not follow.
+
+    The spec said, verbatim: "Use git's long-running `filter.<driver>.process`
+    protocol (not the spawn-per-file `clean` shell-out) to bound the cost of
+    `git add`/`status`/`diff` at 2,410 files." The build shipped the shell-out.
+
+    Measured cost of that gap, 1,000 files each carrying a nav-block, same repo,
+    same content, only the wiring different:
+
+        filter.navblockstrip.clean      38.834 s
+        filter.navblockstrip.process     0.183 s
+
+    ~212x, because `clean` pays a fresh python interpreter start per file and
+    `process` pays one per git command. On the live studio's 4,532 governed
+    files that is ~3 minutes on every `git add`/`status`/`diff` after a rebuild
+    dirties them -- by every agent, on every machine (metis-g104, 2026-08-07).
+
+    A timing assertion here would be flaky, so these are config-shape and
+    protocol-behaviour assertions instead. They are what goes red if anyone
+    re-wires the shell-out.
+    """
+
+    def _conversation(self, payloads):
+        """Drive a real protocol conversation against cmd_process in-process."""
+        import io
+
+        def pkt(text_or_bytes):
+            b = (text_or_bytes.encode('utf-8')
+                 if isinstance(text_or_bytes, str) else text_or_bytes)
+            return b'%04x' % (len(b) + 4) + b
+
+        wire = b''.join([
+            pkt('git-filter-client\n'), pkt('version=2\n'), b'0000',
+            pkt('capability=clean\n'), pkt('capability=smudge\n'), b'0000',
+        ])
+        for pathname, content in payloads:
+            wire += pkt('command=clean\n') + pkt(f'pathname={pathname}\n') + b'0000'
+            wire += pkt(content) + b'0000'
+        out = io.BytesIO()
+        rc = STRIP_TOOL.cmd_process(stdin=io.BytesIO(wire), stdout=out)
+        return rc, out.getvalue()
+
+    def _decode(self, blob):
+        """Minimal pkt-line reader, written independently of the tool's own."""
+        items, i = [], 0
+        while i < len(blob):
+            head = blob[i:i + 4]
+            if head == b'0000':
+                items.append(None)
+                i += 4
+                continue
+            n = int(head, 16)
+            items.append(blob[i + 4:i + n])
+            i += n
+        return items
+
+    def test_the_installer_wires_process_and_not_the_shell_out(self):
+        self.assertIn('--process', STRIP_TOOL.PROCESS_COMMAND)
+        self.assertNotIn('--clean', STRIP_TOOL.PROCESS_COMMAND)
+
+    def test_verify_install_fails_when_the_superseded_clean_is_still_wired(self):
+        """Metis's second half, and the one that actually finds stale clones.
+
+        git prefers `process` when both are set, so a leftover `.clean` changes
+        nothing observable -- it just sits in every clone that ever ran the old
+        installer, looking correct. `.git/config` is per-clone and never
+        committed, so nothing propagates the fix. This check has to be the thing
+        that finds them, which means it must FAIL rather than warn.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _git(root, 'init', '-q', '.')
+            (root / '.gitattributes').write_text(
+                'vault/files/*.md filter=navblockstrip\n', encoding='utf-8')
+            _git(root, 'config', 'filter.navblockstrip.process',
+                 STRIP_TOOL.PROCESS_COMMAND)
+
+            ok, findings = STRIP_TOOL.verify_install(root)
+            self.assertTrue(ok, f'process-only clone should pass: {findings}')
+
+            # The mutation: re-introduce the shell-out beside it.
+            _git(root, 'config', 'filter.navblockstrip.clean',
+                 STRIP_TOOL.CLEAN_COMMAND)
+            ok, findings = STRIP_TOOL.verify_install(root)
+            self.assertFalse(
+                ok, 'a stale .clean wiring must FAIL verify-install, not warn — '
+                    'it is invisible from behaviour and only this check finds it')
+            self.assertTrue(
+                any('.clean' in f for f in findings),
+                f'the finding must name the stale wiring: {findings}')
+
+    def test_install_removes_the_superseded_clean_in_the_same_gesture(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _git(root, 'init', '-q', '.')
+            _git(root, 'config', 'filter.navblockstrip.clean',
+                 STRIP_TOOL.CLEAN_COMMAND)
+            self.assertEqual(
+                STRIP_TOOL.cmd_install(root), 0, 'install must succeed')
+            self.assertEqual(
+                _git(root, 'config', '--get', 'filter.navblockstrip.process')
+                .stdout.strip(),
+                STRIP_TOOL.PROCESS_COMMAND)
+            self.assertNotEqual(
+                _git(root, 'config', '--get', 'filter.navblockstrip.clean')
+                .returncode, 0,
+                'the superseded .clean must be gone after --install, or every '
+                'existing clone keeps it forever')
+
+    def test_the_protocol_handshake_and_a_real_strip_over_the_wire(self):
+        body = (
+            '---\nuid: aaaa0001\n---\n\n'
+            '<!-- nav-block:start -->\nderived\n<!-- nav-block:end -->\n\n'
+            'authored content\n'
+        )
+        rc, blob = self._conversation([('vault/files/aaaa0001.md', body)])
+        self.assertEqual(rc, 0)
+        items = self._decode(blob)
+        text = [i.decode('utf-8') for i in items if i is not None]
+        self.assertIn('git-filter-server\n', text)
+        self.assertIn('version=2\n', text)
+        self.assertIn('capability=clean\n', text)
+        self.assertIn('status=success\n', text)
+        self.assertNotIn(
+            'capability=smudge\n', text,
+            "6ec30708 rules smudge out by name: regeneration is the batch Step-5 "
+            "render on pull, never a per-file smudge on checkout")
+        payload = ''.join(
+            t for t in text if not t.endswith('=success\n') and '=' not in t.split('\n')[0]
+        )
+        self.assertIn('authored content', payload)
+        self.assertNotIn('nav-block:start', payload)
+
+    def test_one_process_serves_many_files_which_is_the_whole_point(self):
+        """The mechanism assertion behind the 212x. A shell-out cannot do this:
+        three files, one handshake, one interpreter."""
+        files = [
+            (f'vault/files/bbbb{i:04d}.md',
+             f'---\nuid: bbbb{i:04d}\n---\n\n'
+             f'<!-- nav-block:start -->\nd{i}\n<!-- nav-block:end -->\n\nkeep{i}\n')
+            for i in range(3)
+        ]
+        rc, blob = self._conversation(files)
+        self.assertEqual(rc, 0)
+        text = ''.join(
+            i.decode('utf-8', 'replace') for i in self._decode(blob) if i is not None
+        )
+        self.assertEqual(
+            text.count('status=success'), 3,
+            'all three files must be served by the single process')
+        for i in range(3):
+            self.assertIn(f'keep{i}', text)
+        self.assertNotIn('nav-block:start', text)
+        self.assertEqual(
+            text.count('git-filter-server'), 1,
+            'one handshake for three files — that is the cost model that makes '
+            'this ~212x faster than the shell-out')
 
 
 class TestValidatorMissingMechanismDetection(unittest.TestCase):

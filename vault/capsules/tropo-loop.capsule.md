@@ -3,13 +3,18 @@ uid: 1248583d
 name: loop
 type: capsule-definition
 extends: core
-version: '1.3'
+version: '1.6'
+template_enforced_from: '2026-07-17'
+template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
+v1_6_amendment_note: "v1.5 → v1.6 amendment 2026-08-04 by Argus A145. Aligns cadence runner validation with the existing agentic-tool policy contract: a runner may be boot-inline, an sa.<slug>, or the exact name of one current active registered tool when policy.kind is agentic-tool, policy.ref resolves to that tool, and the UID is present in tools. This closes the Gardener v2.1 runner-shape false rejection without widening arbitrary runner slugs; consent, brakes, provider spend, and write authority are unchanged."
+v1_5_amendment_note: "v1.4 → v1.5 amendment 2026-07-17 by Argus A133 under Mike's Gardener build authorization. Schema-only hardening, separate from the v1.4 template gesture: freezes the six pre-v1.5 loop UIDs as a legacy WARN cohort; every new UID is strict. Requires every strict loop goal author to resolve to an active principal (human for high/critical), rejects shared policy/verifier identity regardless kind labels, and keeps cadence runner/consent enforcement strict for new entries. No state-machine or template change."
+v1_4_amendment_note: "v1.3 → v1.4 amendment 2026-07-17 by Argus A133 under Mike's 'proceed' authorization for the Gardener body-judge build and the Governed Autonomy S2 Template-Leg Contract b933eafb. Adds only the generic loop §Template mint scaffold; no loop schema, state machine, brake, verifier, or maintenance-registry semantics change. Birth is draft/active, manual, high-consequence, zero-dollar, one-iteration, one-minute, with required placeholders for real goal/policy/tools."
 tier: os
 author: argus
 created: 2026-06-14
 created_by: argus-a112
-modified: 2026-07-04
-modified_by: argus-a124
+modified: 2026-08-04
+modified_by: argus-a145
 v1_3_amendment_note: 'v1.2→v1.3 (Argus A124 2026-07-04, inside the v1.80 activation ea6983be per Mike-locked dev-spec be1979b6 S11 — Mike walked decision Q2 2026-07-03: loop-cost rides v1.80 so Po quotes MEASUREMENTS at the consent moment; origin flag Orpheus 00005419): (1) codifies the MAINTENANCE-REGISTRY field set the v1.79 S7 build put live on four loop entries without a capsule declaration (cadence / last_run / runner / consent_mode — schema drift now closed); (2) adds last_run_cost — per-run cost capture stamped by the dispatching agent in the same gesture as last_run (the boot-fast-path v0.5 stamp rule), all members null-honest; the Po voice-template reads the measured figure when present and falls back to the provenance-marked estimate when absent; (3) cures the last_run typing contract explicitly: date or bare YAML null, never the string "null". Talos wires the recording hook (his S11 piece). In-place amendment to a locked capsule authorized by the Mike-locked dev-spec stream, per the agent.capsule v2.1 precedent.'
 v1_2_amendment_note: 'v1.1→v1.2 (Argus A114 2026-06-14, Mike-A114 ''human launch gate'' direction): (1) adds the ACTIVATION GATE (§3.1) — before a loop-run starts, a human sets/confirms the brake ceilings via a launch prompt with easy defaults; (2) reintroduces max_iterations as a COOPERATIVE human-set HARD STOP (default 5: run at most N, then STOP and return to the human), distinct from the un-forgeable auto-kill that stays deferred — the human-set stop + the $/time hard floor cover the practical case (un-forgeable OTEL iteration needed only for fully-autonomous-no-human); (3) fixes §7 check #3, which still required the deferred max_iterations-as-auto-kill, leaving the validator demanding a field v1.1 had removed — now requires (max_iterations OR human_checkpoint_every) AND (max_budget_usd OR max_wall_clock_min). Realizes the Mike-A114 walk; locks with dev-spec v0.6. Build (Talos): the launch prompt + terminal hard-stop-at-N runtime; brake fields + fail-closed contract exist today.'
 v1_1_amendment_note: 'v1.0→v1.1 (Argus A113 2026-06-14, Mike-directed ''practical not industrial''): the iteration brake is reframed from an un-forgeable hard auto-kill (the OTEL ground-truth machinery — overkill for L1) to a HUMAN-IN-THE-LOOP checkpoint: after human_checkpoint_every iterations (configurable, default 5) the loop HALTS for explicit human confirmation. The HARD auto-kill brakes remain spend (gateway 429) + wall-clock (run-folder ctime) — they bound any runaway by money + time, so cooperative iteration counting is SAFE (a mis-count costs a few iterations before $/time catch it). max_iterations hard-auto-kill + the OTEL un-forgeable iteration source + the no_progress auto-trip are DEFERRED (only needed for fully-autonomous-no-human; revisit if that becomes a requirement). no-progress is reviewed by the human at the checkpoint.'
@@ -51,7 +56,7 @@ tags:
   - v1.71-s1
 ---
 
-# loop — Capsule Definition v1.3
+# loop — Capsule Definition v1.6
 
 ## 1. Intent
 
@@ -101,7 +106,7 @@ Before creating a loop: is this work actually a loop? See §6 (When-to-loop). If
 |---|---|---|
 | `cadence` | string | Dispatch period (`daily` / `weekly` / `monthly`). Declaring it makes the loop registry-dispatchable at boot step 5.1.7. |
 | `last_run` | date **or bare YAML null** | Stamped by the DISPATCHING agent when the dispatched runner completes (boot-fast-path v0.5 stamp rule). **Never the string `"null"`** — the typing contract is date-or-null. Ask-loops that surface-but-don't-run are NOT stamped. |
-| `runner` | string | The registered executor: an `sa.<slug>` class (dispatched as a background sub-agent) or the literal `boot-inline` (executed by a named boot step, never dispatched). |
+| `runner` | string | The registered executor: an `sa.<slug>` class (dispatched as a background sub-agent), the literal `boot-inline` (executed by a named boot step), or the exact `name` of a current active registered tool when `policy.kind: agentic-tool`, `policy.ref` resolves to that tool, and the same UID is present in `tools`. Arbitrary non-`sa.*` slugs are invalid. |
 | `consent_mode` | enum | `ask` / `auto` / `disabled`. Factory default `ask`; flipped only by the owner's consent conversation (54db04b5 bindings) or explicit owner direction. |
 | `last_run_cost` | object | **v1.3 — per-run cost capture (dev-spec be1979b6 S11).** `{ tokens: <int\|null>, wall_min: <number\|null>, usd_est: <number\|null>, recorded_by: <agent-gen>, recorded_at: <ISO date> }` — stamped by the dispatching agent in the same gesture as `last_run`. **Null-honest:** record what the harness exposes; never fabricate. Consumers (the Po voice-template `8b1d4f9a`, the consent conversation) read the measured figure when present and fall back to the provenance-marked estimate when absent. |
 
@@ -197,6 +202,10 @@ Fail any → one-shot or pipeline instead.
 4. **`consequence` is not freely self-declared.** A loop whose `tools` include vault writes, external API calls, or multi-agent dispatch may not declare `consequence: low` without a human-signed classification.
 5. **`version` increments on any structural edit.** Loop-runs pin at start; the pinned version does not drift.
 6. **Amendments via supersession once `status: locked`.**
+7. **Frozen legacy cohort (v1.5).** The six loops present at cutover—`03f9a721`, `be2296f9`, `c3b9e1a5`, `d1a4f8e2`, `f2a7d3c8`, `f8a2c91d`—retain WARN-grade historical drift. Every other UID is strict v1.5+ regardless self-declared date/version; missing or back-level `capsule_version` cannot claim legacy treatment.
+8. **Every strict goal author is a principal.** `goal.authored_by` resolves to an active `type: principal` distinct from the policy executor. High/critical additionally requires `principal_class: human`.
+9. **Verifier identity is distinct.** Policy and verifier may not resolve to the same `ref` even when their `kind` labels differ. Independence is identity-level, not vocabulary-level.
+10. **Cadence tool runners are identity-bound.** A non-`sa.*`, non-`boot-inline` cadence runner is valid only when it exactly names the current active tool bound by `policy.ref`, and that UID is also present in `tools`. Tool-backed dispatch does not imply write or stamping authority; the tool's own invocation and write-scope contracts remain controlling.
 
 ### Validation Checks (WARN at v1.0; ERROR-ratchet after the v1.71 build lands the runtime)
 
@@ -208,6 +217,7 @@ Fail any → one-shot or pipeline instead.
 6. **`check_loop_consequence_scope`** — write-scope/dispatch tools + `consequence: low` → ERROR unless a human-signed classification is referenced.
 7. Body contains §Purpose, §Goal & Verifier, §Brakes, §Cold-Boot Walk-Through, §Known Enforcement Gaps in order.
 8. **`check_loop_registry_fields` (v1.3; WARN at v1.3 → ERROR ratchet when the S11 recording hook lands):** if `cadence:` is declared → `consent_mode` + `runner` required; `last_run` must parse as a date or bare YAML null (the string `"null"` is a finding); `last_run_cost` when present must be an object whose `tokens`/`wall_min`/`usd_est` members are numeric or null (fabricated-looking values — cost present with `recorded_by` absent — are a finding).
+9. **`check_loop_contract_identity` (v1.5; runner alignment v1.6):** strict entries enforce UID-shaped author, active-principal goal author, human goal author at high/critical, verifier/policy ref inequality, lens floor, numeric finite nonnegative brakes, and cadence-scoped runner/consent enums. Tool-backed cadence runners additionally require exact active tool-source identity, `policy.ref` binding, and `tools` membership. Frozen-cohort findings remain WARN; strict findings ERROR.
 
 ---
 
@@ -223,10 +233,85 @@ The dispatcher (66f7b892), continuous-listen (91c4e2a7), and fleet-ops (cb7d713a
 
 ---
 
+## §Template (v1.4 — mint-stamped scaffold)
+
+*Stamped verbatim by `mint file --type loop` under the [Template-Leg Contract](../files/b933eafb.md). Mint substitutes only `<<MINT:*>>`; every surviving `<!-- REQUIRED: -->` is deterministic INCOMPLETE.*
+
+~~~markdown
+---
+uid: '<<MINT:uid>>'
+type: loop
+title: "<!-- REQUIRED: human-readable loop title -->"
+description: "<!-- REQUIRED: one-line loop contract summary -->"
+name: "<!-- REQUIRED: stable loop name -->"
+version: "0.1.0"
+author: "<!-- REQUIRED: author entity UID -->"
+owner: <<MINT:author>>
+status: draft
+state: active
+created: '<<MINT:date>>'
+created_by: <<MINT:author>>
+modified: '<<MINT:date>>'
+modified_by: <<MINT:author>>
+schema_version: 2
+capsule_version: '<<MINT:capsule_version>>'
+governed_by: 8dd772a0
+subsystem_hub: [8dd772a0]
+goal:
+  description: "<!-- REQUIRED: frozen done-condition summary -->"
+  exit_criteria:
+    - "<!-- REQUIRED: deterministic exit criterion -->"
+  authored_by: "<!-- REQUIRED: non-executor principal UID; human for high/critical -->"
+trigger:
+  kind: manual
+  spec: "<!-- REQUIRED: exact manual launch condition -->"
+policy:
+  kind: agentic-tool
+  ref: "<!-- REQUIRED: active tool UID -->"
+tools:
+  - "<!-- REQUIRED: allowed tool UID -->"
+verifier:
+  kind: validator
+  independent: true
+  lenses: 2
+  attestation: aspirational
+brakes:
+  max_iterations: 1
+  max_budget_usd: 0.0
+  max_wall_clock_min: 1
+consequence: high
+---
+
+# <!-- REQUIRED: title (mirror frontmatter) -->
+
+## Purpose
+<!-- REQUIRED: what this loop does and explicitly does not do -->
+
+## Goal & Verifier
+<!-- REQUIRED: frozen goal, non-executor author, and independent verification path -->
+
+## Brakes
+<!-- REQUIRED: ceilings and their ground-truth enforcers -->
+
+## Cold-Boot Walk-Through
+<!-- REQUIRED: one stranger-readable run from trigger to goal/brake stop -->
+
+## Known Enforcement Gaps
+<!-- REQUIRED: gap / closure / target / owner; write None only when verified -->
+
+## Changelog
+<!-- REQUIRED: initial version row -->
+~~~
+
+**Leg rules:** `status: draft` is the only legal birth; high consequence + zero-dollar/manual defaults fail safe; the author MUST replace every required placeholder, set real principal/tool identities, and tune brakes before lock; template changes never alter loop schema in the same gesture; plant-test mint → consume placeholders → targeted `check-one` PASS.
+
 ## Changelog
 
 | Version | Date | Change | By |
 |---|---|---|---|
+| 1.6 | 2026-08-04 | Added identity-bound registered tools as a third cadence-runner shape; arbitrary non-sa slugs remain invalid. No consent, brake, spend, or write-authority change. | argus-a145 |
+| 1.5 | 2026-07-17 | Frozen six-loop legacy cohort + strict identity/brake/independence contract for new loops; schema-only amendment after v1.4 template. | argus-a133 |
+| 1.4 | 2026-07-17 | Added the generic loop §Template mint scaffold under [Template-Leg Contract](../files/b933eafb.md); no loop schema/state/brake/verifier change. | argus-a133 |
 | 1.0 | 2026-06-14 | Initial draft. Declares the `loop` type realizing dev-spec 9da979b2 (Mike-A112 walk: Q1 out-of-band metering-gateway brakes, Q2 consequence-scaled defense-in-depth verifier, Q3/Q4 when-to-loop). Reuses pipeline.capsule §4/§6. Authored at the v1.71 S1 build; locks with its dev-spec + the brakes runtime. | argus-a112 |
 | 1.1 | 2026-06-14 | "Practical not industrial" (Mike-directed): iteration brake reframed from an un-forgeable auto-kill to a human checkpoint; `max_iterations` auto-kill + OTEL iteration source + no-progress auto-trip deferred. Hard $/time auto-kills stand. | argus-a113 |
 | 1.2 | 2026-06-14 | Activation gate (§3.1): the human sets brake ceilings at launch with easy defaults. `max_iterations` reintroduced as a cooperative human-set HARD STOP (default 5), backed by the $/time floor — distinct from the deferred un-forgeable auto-kill. §7 check #3 fixed (no longer requires the deferred field). Mike-A114 walk; locks with dev-spec v0.6. | argus-a114 |
@@ -234,5 +319,5 @@ The dispatcher (66f7b892), continuous-listen (91c4e2a7), and fleet-ops (cb7d713a
 
 ---
 
-*loop capsule definition | v1.3 (v1.2 LOCKED Mike-A114 2026-06-14; v1.3 amendment 2026-07-04 per Mike-locked be1979b6 S11) | sibling to pipeline.capsule | realizes dev-spec 9da979b2 | UID `1248583d`*
+*loop capsule definition | v1.6 (v1.2 LOCKED Mike-A114 2026-06-14; v1.3 maintenance fields; v1.4 template; v1.5 strict contract; v1.6 tool-runner alignment) | sibling to pipeline.capsule | realizes dev-spec 9da979b2 | UID `1248583d`*
 *"The loop is not the product. The exit condition is — and that's bounded verification."*

@@ -21,7 +21,7 @@ created: '2026-07-08'
 created_by: talos-t27
 governed_by: 8dd772a0
 member_of:
-  - cd1fcd25
+  - 44ba7c82
 schema_version: 2
 extraction_scope: argo-reference
 belt: false  # trimmed from belt by vela-v65 2026-07-10 — over the 15-entry cap; mount/publish are federation-specific, lock-dev-spec is ceremony-specific. Cataloged + functional; not in quick-ref.

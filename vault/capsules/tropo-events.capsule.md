@@ -4,17 +4,20 @@ name: events
 title: events — Canonical Event Log Primitive
 type: capsule-definition
 extends: core
-version: '1.7'
+version: '1.10'
+supersedes_version: '1.9'
+v1_10_amendment_note: 'v1.9 → v1.10 bounded one-type lock-break authored 2026-07-23 by Talos under Mike-approved locked dev-spec 8078657b (activation 95355ef7; approval verbatim: "I approve the bounded events"). Registers only tropo.distill.usage.recorded. Its top-level segment is mandatory, internally attested from the exact ranked chunk partition, and viewer-filtered; segment remains forbidden on every pre-v1.10 type. CLI usage emission is forbidden. No model/provider/spend/pricing/metering/consent/egress/learning event or behavior is authorized.'
+v1_9_amendment_note: 'v1.8 → v1.9 amendment authored 2026-07-15 by Argus A132 under Mike-approved Event Ledger Distributed Identity dev-spec f15a9b85 (activation 57470c10). Identity/order split: event_uid becomes immutable CloudEvents identity; writer_instance_uid + stream_uid + local_seq identify one per-writer append stream; causationid joins correlationid; display_seq is a disposable projection. New canonical writes target vault/events/streams/<writer>.jsonl after cutover; the existing numeric global log is preserved byte-for-byte as legacy epoch 1 and dual-read during migration. Capsule remains locked; the dev-spec lock is the amendment authority.'
+v1_8_amendment_note: 'v1.7 → v1.8 amendment 2026-07-13 by talos-t29 per Mike-locked Release Coupling dev-spec fbe50871 (activation 807144d1). This spec''s lock IS the lock-break authority (per composition law 3 in the spec body). Registers tropo.release.published — emitted by tropo-publish-release.py --fire on full green (tag + main sha + release object all verified live); never on a partial/unverified outcome. Added to both REGISTERED_TYPES surfaces (.tropo/scripts/lib/event_validators.py + vault/tools/tropo-emit-event.py) in the same gesture. Additive; no schema change to the event envelope itself.'
 v1_7_amendment_note: 'v1.6 → v1.7 amendment 2026-06-13 by Talos T19 per the Mike-locked v1.70 MindBridge MUST-set (dev-spec c036dd4b §S2.3). Registers the receipt-ledger contract: delivered→read→answered three-state. Composes with the recently shipped check-events v1.1 and its per-reader receipt at vault/events/receipts/<party-uid>.jsonl. This is a documentation catch-up in the locked capsule; functional state already matches the contract. Space freed by folding v1.6 + history_split frontmatter into the history companion 63bf7487 (recreated this session).'
 v1_4_amendment_note: 'v1.3 → v1.4 amendment 2026-06-03 by Argus A95 captain-mode per Mike-A95 ''fix the root cause'' directive (closes 05ab4861 failure mode 1, send-side). Adds the AGENT IDENTITY GUARD (Rule 4): an AGENT messaging/broadcast emit (tropo.message.* / tropo.broadcast.crew from an /agents/ or // source) MUST use the agent''s PARTY UID as its source_uid — emits from the agent-root UID are now REJECTED. Closes the addressing incoherence (the Talos-invisible-queue). Composes with emit-event v1.2 tool-guard + validator Check 22 (ratchet to ERROR planned v1.66). v1.3 Po-exception generalized to the whole crew.'
-supersedes_version: '1.6'
 history_companion: 63bf7487
 tier: os
 author: argus-a84
 created: 2026-05-26
-modified: 2026-06-13
+modified: 2026-07-15
 created_by: argus-a84
-modified_by: talos-t19
+modified_by: talos
 status: locked
 locked_by: mike-maziarz
 locked_at: 2026-06-14
@@ -33,6 +36,7 @@ aligned_with:
   - a5f4b26b
   - 3c02f3b7
   - 7cac6473
+  - 8078657b
 tags:
   - capsule-definition
   - events
@@ -49,7 +53,7 @@ subsystem_hub:
   - 8dd772a0
 ---
 
-# events — Capsule Definition v1.7 (LOCKED)
+# events — Capsule Definition v1.10 (LOCKED)
 
 **Relations**
 
@@ -62,9 +66,9 @@ subsystem_hub:
 | Aligned with | [channels/CAPSULE.md (8a46cb6f)](../../channels/CAPSULE.md) — substrate that becomes regenerated projection per Stream B |
 | Extends | `core` |
 
-*A typed-primitive capsule definition for messaging events. Specifies the schema, governance, and validation discipline for entries in `vault/events/00-events.jsonl` (the canonical append-only event log) plus derived projections (channels, status cards, crew brief, ops bulletins, activity feeds).*
+*A typed-primitive capsule definition for messaging events. The logical Event Ledger is the lossless union of immutable legacy epoch 1 (`vault/events/00-events.jsonl`) and canonical per-writer streams (`vault/events/streams/*.jsonl` after cutover), plus disposable projections (SQLite, channels, status cards, crew brief, ops bulletins, activity feeds).*
 
-*One canonical event log. Every agent action, every substrate write, every status transition, every pipeline-runtime event emits one row. The log is immutable; events are never edited or deleted, only appended. Channels + status cards + crew brief + ops bulletins become regenerated projections.*
+*One logical ledger, N append-only streams. Every agent action, substrate write, status transition, and pipeline event emits one immutable identity. Streams are never edited or deleted; global display order is derived. Channels + status cards + crew brief + ops bulletins are regenerated projections.*
 
 ---
 
@@ -72,7 +76,7 @@ subsystem_hub:
 
 Tropo's messaging substrate today is fragmented across four authoring surfaces (channels, status cards, activation entries, crew brief) that each claim authority over "what happened in this Studio and when." They drift silently. The visible failures (agents missing messages; cross-substrate state contradictions; ScheduleWakeup invisibility; coordination cycles that should be substrate-visible) are all symptoms of one disease: there is no single source of truth.
 
-The events capsule defines the typed-primitive substrate for a single canonical append-only event log at `vault/events/00-events.jsonl` from which every messaging surface is projected. The envelope aligns with CloudEvents v1.0 (W3C / CNCF industry standard) per Mike's "check vendor + industry standards" discipline. Five primitive event types plus the `correlationid` extension cover messaging, request-response, acknowledgment, and polling-cycle patterns.
+The events capsule defines a logical append-only ledger over per-writer canonical streams, with the pre-v1.9 numeric file preserved as legacy epoch 1. The envelope aligns with CloudEvents v1.0 (W3C / CNCF industry standard). Primitive event types plus `correlationid` + `causationid` cover messaging, request-response, acknowledgment, and causal chains.
 
 **Coherence by construction.** There is only one source of truth. Projections cannot lie because they are derived, not authored. Drift becomes structurally impossible.
 
@@ -90,7 +94,12 @@ Every event entry has a CloudEvents-compliant envelope. Sparse on disk per Cloud
 
 | Field | Required | Source | Constraint / Purpose |
 |---|---|---|---|
-| `id` | yes | CloudEvents core | Sequential numeric ID within Studio (`00000001`, `00000002`, ...). At L3 federation, Studio-prefix prepends. |
+| `id` | yes | CloudEvents core | Immutable globally-unique event UID for v1.9+ events. Legacy epoch-1 rows retain their original sequential numeric IDs unchanged. |
+| `event_uid` | v1.9+ | Tropo extension | Same immutable value as `id`; join key for correlations, receipts, signatures, and deduplication. Legacy rows receive deterministic synthetic identity only in projections. |
+| `writer_instance_uid` | v1.9+ | emitter | Concrete clone/run writer identity, distinct from registered actor `source_uid`; prevents same-agent multi-clone collisions. |
+| `stream_uid` | v1.9+ | emitter | Per-writer canonical stream identifier; maps to `vault/events/streams/<stream_uid>.jsonl`. |
+| `local_seq` | v1.9+ | emitter | Positive integer monotonic only inside `stream_uid`; never a global-order claim. |
+| `display_seq` | derived only | projection | Human-friendly global number assigned by rebuild/query. Disposable; never canonical identity. |
 | `specversion` | yes | CloudEvents core | Literal `"1.0"`. v1.x of CloudEvents spec; if upstream amends, this capsule amends in tandem. |
 | `type` | yes | CloudEvents core | Event type identifier in dotted-namespace shape (e.g., `tropo.message.sent`, `tropo.agent.activated`, `tropo.substrate.modified`). Per-type schema for `data` field declared in §3 Event Type Registry. |
 | `source` | yes | CloudEvents core | URI-shaped source identifier (e.g., `/agents/vela`, `/scripts/build-release`, `/pipeline-runtime`). Identifies the emitting tool or agent path. |
@@ -119,12 +128,14 @@ Each per-type schema in §3 Event Type Registry declares which extensions the ty
 | `author_display` | optional | Author's display name. |
 | `recipients` | per-type (directed-message types) | Array of recipient UIDs. One-to-many native; single-recipient is a one-element array. Project UIDs valid as recipients (inbox semantics per Stream C). |
 | `correlationid` | per-type (chain-participating) | CloudEvents Correlation extension (W3C draft adopted directly per Decision I; no prefix; no underscore). Ties related events into a chain (request-reply pairs; polling cycles awaiting correlated response). |
+| `causationid` | optional chain edge | Immutable event UID of the direct causal predecessor. Correlation groups a conversation/run; causation records the immediate edge. New writes use event_uid, never display sequence. |
 | `subsystem_hub` | optional | Subsystem hub UIDs for the event **(v1.5 member_of DISAMBIGUATE: hub membership moved here from `member_of`)**. |
 | `member_of` | optional | Project / true-parent UIDs (non-hub). |
 | `vault_refs` | optional | Array of vault UIDs the event references. |
 | `generation` | per-type (agent-sourced) | Generation marker (V52, A84, T10, O11, G61, C6, etc.). Not present on script-sourced events. |
 | `severity` | per-type (alert/flag types) | Enum: `info` / `warn` / `error` / `fatal` / `flash`. `flash` (v1.3) is the highest-urgency tier — replaces the retired alerts.md FLASH-channel pattern; L.3 `trigger_detection.py` auto-fires the continuous-listen polling curve on receipt of any event carrying `severity: flash` (per v1.61 Lane D'2). |
 | `session_id` | per-type (chat-session) | Ties events in one chat-session chain. |
+| `segment` | `tropo.distill.usage.recorded` only | Required top-level derived most-restricted segment. Never caller authority. Forbidden on every event type registered before v1.10. |
 
 ### Polymorphic `data` schema per event type
 
@@ -350,6 +361,70 @@ data:
   validator_state: {passed: 45, failed: 0, warnings: 348}
 required_extensions: [vault_refs, severity (info)]
 ```
+
+**`tropo.release.published`** (Release Coupling, fbe50871, Mike-locked 2026-07-13 — this spec's lock IS the lock-break authority for this registration) - auto-emitted by `tropo-publish-release.py --fire` ONLY on full green: the tag exists on the remote, `refs/heads/main` matches the staged sha, AND the GitHub release object exists (verify-live, all three). Never emitted on PUSHED-NO-RELEASE or POSTED-UNVERIFIED — a partial or unverifiable outcome writes no event and claims no LIVE state.
+
+```yaml
+type: tropo.release.published
+data:
+  version: "v1.85.0"
+  release_uid: "<8-hex>"
+  tag: "v1.85.0"
+  staged_sha: "<40-hex git sha>"
+  fired_by: "mike-maziarz"
+  published_at: "2026-07-13T00:00:00Z"
+required_extensions: [vault_refs, severity (info)]
+```
+
+### Distillation Usage Capture (v1.10 bounded lock-break)
+
+**`tropo.distill.usage.recorded`** — one append-only capture-now/learn-later
+record. This is the sole event type authorized by Mike's bounded approval in
+[the locked Cut 4 R4/Q5 dev-spec (8078657b)](../files/8078657b.md). It records
+evidence only; it creates no model/provider, spend/pricing/metering,
+consent/egress, or learning surface.
+
+```yaml
+type: tropo.distill.usage.recorded
+lifecycle: evergreen
+subject: "<8-hex task UID; exactly equals data.task_uid>"
+segment: "<internally attested unique most-restricted segment>"
+data:
+  task_uid: "<8-hex task UID>"
+  viewer_principal_uid: "<8-hex role/writer principal UID>"
+  index_as_of: "<non-empty opaque snapshot token>"
+  operation: "distill"
+  used_chunk_uids: ["<stable ranked chunk UID>", "..."]
+  unused_chunk_uids: ["<stable ranked chunk UID>", "..."]
+required_extensions: [subject, segment]
+```
+
+`data` has exactly those six keys; no seventh key is legal. `operation` is the
+literal `distill`. The two chunk lists are disjoint, duplicate-free,
+relative-rank-preserving, and together form one non-empty exact partition of
+the ranked UID sequence attested before append.
+
+The canonical emitter accepts `segment` only with a frozen internal
+attestation issued by the shared most-restricted derivation. The attestation
+binds the exact ordered ranked chunk UID sequence and derived segment; a
+segment mismatch, partition mismatch, missing attestation, or forged value
+refuses before storage. The public CLI exposes neither segment nor attestation
+and refuses this type. Every pre-v1.10 event type refuses both keywords.
+
+Public generic queries are viewerless. They derive canonical display order on
+the full Event Ledger union first, then omit every segmented usage event while
+preserving each retained event's original `display_seq`; `since-id`, address
+filters, limit, result cardinality, and cursor update apply afterward. Hidden
+usage therefore never renumbers an unsegmented event or becomes visible even
+under an explicit `--type tropo.distill.usage.recorded` query.
+
+The public CLI exposes no viewer-principal or private-segment argument: neither
+would prove a caller's identity or ownership, and `--party` remains only an
+address/cursor filter. Trusted in-process consumers may pass a prevalidated
+role/writer `Viewer` plus the existing production `ViewerProjection`; that path
+resolves `visible_segments(viewer)` once and retains a segmented event only
+when its exact segment is visible. Authority failure refuses with no permissive
+fallback. This cut adds no identity resolver.
 
 ### Cycle Coordination Family (v1.2)
 
@@ -602,11 +677,11 @@ JSONL is canonical because it's machine-portable across L1 (filesystem) → L2 (
 
 ### Bulletproof recovery via canonical-JSONL (Rule 11; Decision E)
 
-JSONL is the substrate of truth. SQLite is derived; regenerable via `rebuild-events-sqlite.py` if corrupted. No mechanism deletes JSONL rows; backup discipline preserves JSONL files; SQLite is rebuildable from JSONL alone.
+The legacy epoch plus per-writer JSONL streams are the substrate of truth. SQLite and display order are derived; regenerable via `rebuild-events-sqlite.py`. No mechanism deletes canonical stream rows; SQLite is rebuildable from the stream forest alone.
 
 ### Studio sovereignty composes with events (Rule 12; aligns with Mike-A83 stm-a83-004)
 
-Event substrate stays Studio-bounded at L1. Cross-Studio events require explicit federation handshake at L3 (per [federation foundation (7cac6473)](../../vault/files/7cac6473.md)). Studio identity prefixes carry through to event IDs at L3; agent references include their home Studio. Studio Sovereignty doctrine binds: container-level (Studio) bounds federation/portability, not substrate-level.
+Event substrate stays Studio-bounded at L1. Cross-Studio events require explicit federation handshake at L3 (per [federation foundation (7cac6473)](../../vault/files/7cac6473.md)). Immutable event identity includes writer-instance entropy inside the Studio boundary; agent references include their home Studio. Studio Sovereignty doctrine binds: container-level (Studio) bounds federation/portability, not substrate-level.
 
 ### Crew channels become queries; user-facing surfaces stay as projections (Rule 13; v1.3 + Mike-A88 keep-the-two-surfaces lock)
 
@@ -615,6 +690,16 @@ Event substrate stays Studio-bounded at L1. Cross-Studio events require explicit
 **Two user-facing surfaces are KEPT** because their audience is the human principal, who does not run `query-events`: `channels/tropo.md` (Studio-activity feed) + `channels/releases.md` (release/news). They survive as **user-facing projections of the event log** — rendered, auto-updated, never stale. The user-facing projection renderer (distinct from the retired crew-channel renderer) is a booked follow-on; until it ships, the two files are maintained as-is.
 
 One canonical event log; crew channels become queries (zero intermediary); user surfaces become projections (rendered intermediary, because users read, not query). Drift is structurally impossible either way. *(The rule's original "all channels gone" over-claim + same-day Mike-A88 correction, and the v1.61 per-lane retirement inventory, are preserved in the [history companion (63bf7487)](events.history.md) v1_3 note.)*
+
+### Bounded one-type segment lock-break (Rule 14; v1.10)
+
+Mike's approval — *"I approve the bounded events"* — and
+[locked dev-spec 8078657b](../files/8078657b.md) authorize only
+`tropo.distill.usage.recorded`. That type requires an internally attested
+top-level segment and exact six-key payload. Segment is forbidden on every
+older type; the CLI cannot emit usage. Extending segment to another type or
+adding model/provider, spend/pricing/metering, consent/egress, or learning
+events requires a new explicit capsule amendment.
 
 ---
 
@@ -626,7 +711,7 @@ In addition to core checks, the events.capsule §8 declares the following valida
 
 1. **`check_event_envelope_required`** — `id` + `specversion` + `type` + `source` + `time` + `data` (if non-empty) present. FAIL severity.
 2. **`check_event_specversion_literal`** — `specversion == "1.0"` literal. FAIL severity (CloudEvents spec amendment requires capsule amendment in tandem).
-3. **`check_event_id_sequential`** — `id` is sequential integer; no gaps in current shard; no duplicates. FAIL severity. (Shard boundary tolerance: gap at shard rotation boundary is acceptable + documented in shard manifest.)
+3. **`check_event_identity_and_sequence`** — legacy epoch IDs remain globally sequential; v1.9 event_uid is globally unique; each writer stream local_seq is gap-free from 1..N. Global numeric order is not asserted for disconnected writers. FAIL severity.
 4. **`check_event_time_iso8601`** — `time` is ISO 8601 with timezone offset (UTC or local). WARN severity.
 5. **`check_event_type_registered`** — `type` value is registered in §3 Event Type Registry. WARN at v1.0 (registry-extension cycles add types); ERROR ratchet v1.1+ once registry stabilizes.
 
@@ -658,8 +743,9 @@ In addition to core checks, the events.capsule §8 declares the following valida
 
 ### Storage primitive consistency checks
 
-16. **`check_jsonl_sqlite_consistency`** — SQLite event count matches JSONL row count + every JSONL row has a corresponding SQLite row. INFO severity at v1.0 (rebuilds frequent during stabilization); WARN ratchet v1.X+ once stable.
-17. **`check_jsonl_append_only_invariant`** — no `id` collision; no row mutation; no row deletion. FAIL severity (Rule 1 load-bearing structural invariant).
+16. **`check_jsonl_sqlite_consistency`** — SQLite unique-event count matches the union of legacy epoch + writer streams; every immutable event identity has one SQLite row. INFO severity at v1.0; WARN ratchet once stable.
+17. **`check_jsonl_append_only_invariant`** — no event_uid/content conflict; no canonical stream row mutation or deletion; duplicate identical copies may deduplicate only at projection. FAIL severity.
+24. **`check_distill_usage_contract` (v1.10)** — only `tropo.distill.usage.recorded` may carry `segment`; usage requires evergreen lifecycle, task-subject equality, a non-empty segment, and exactly the six registered data keys with literal `distill` plus a non-empty disjoint duplicate-free chunk partition. ERROR severity. Historical validators cannot re-derive an opaque retired `index_as_of`; forged-segment rejection is therefore an emit-time attestation check, not a retrospective claim.
 
 ### Validation Check authoring lane
 
@@ -736,6 +822,6 @@ Full changelog (v1.0 → v1.4 rows verbatim) lives in the [history companion (63
 
 ---
 
-*events capsule definition | UID `72ef5ffe` | v1.7 LOCKED | v1.7 amendment 2026-06-13 by Talos T19 (receipt-ledger contract). History → companion `63bf7487`.*
+*events capsule definition | UID `72ef5ffe` | v1.10 LOCKED | bounded one-type amendment 2026-07-23 by Talos under Mike-approved dev-spec `8078657b`. History → companion `63bf7487`.*
 
 *"One canonical event log. Drift becomes structurally impossible."*

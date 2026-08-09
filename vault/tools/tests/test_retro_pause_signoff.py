@@ -41,7 +41,47 @@ def _make_temp_run(tmp: Path) -> Path:
     dest_runs.mkdir(parents=True, exist_ok=True)
     dest_folder = dest_runs / _REAL_RUN_FOLDER.name
     shutil.copytree(_REAL_RUN_FOLDER, dest_folder)
+    _freeze_pre_ceremony_state(dest_folder)
     return dest_folder
+
+
+def _freeze_pre_ceremony_state(run_folder: Path) -> None:
+    """Rewind the copied run.jsonl to just before c6b61fb9's retro-signoff ceremony.
+
+    dev-pipeline-896e6c9b-2026-07-02 is a REAL, still-active pipeline run — this
+    fixture points at its live history rather than a synthetic one so principal
+    resolution + load_run exercise real substrate (see module docstring). c6b61fb9's
+    retro-signoff ceremony (pause_started -> human_signoff -> pause_resumed ->
+    verification_receipt:pass) already happened for real on 2026-07-03 (that's the
+    actual historical event this gauntlet was written to regression-guard). Copying
+    the run folder as-is therefore starts every test AFTER that ceremony already
+    completed: c6b61fb9 reads back as 'verified' (not 'completed') and a signoff for
+    it already exists — both preconditions this suite's G1/G2 cases need false. Left
+    unfrozen, this suite silently stops testing anything the moment the real run
+    passes that point (exactly what happened: it sat green for weeks, then broke the
+    instant something else advanced state.json, not because the ceremony logic
+    regressed). Truncating to just before the first pause_started(step=c6b61fb9)
+    restores the documented baseline ('vc:true, exit_criteria:["human: c6b61fb9"],
+    completed, no signoff yet') regardless of how much further the live run
+    progresses in the future.
+    """
+    run_jsonl = run_folder / "run.jsonl"
+    lines = run_jsonl.read_text().splitlines()
+    cut = None
+    for i, line in enumerate(lines):
+        if not line.strip():
+            continue
+        ev = json.loads(line)
+        if ev.get("event") == "pause_started" and (ev.get("data") or {}).get("step") == _STEP_UID:
+            cut = i
+            break
+    if cut is None:
+        raise AssertionError(
+            f"fixture assumption broken: no pause_started(step={_STEP_UID!r}) event found in "
+            f"{run_jsonl} — the real run's history changed shape; this freeze helper needs "
+            f"re-anchoring, not a silent no-op."
+        )
+    run_jsonl.write_text("\n".join(lines[:cut]) + "\n")
 
 
 def _copy_vault_files(tmp: Path) -> None:

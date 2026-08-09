@@ -21,12 +21,6 @@ capsule_version: '2.5'
 
 # Glossary
 
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Governed by | [kb-article (4cb20382)](4cb20382.md) |
-
 *Key terms used in Tropo, defined plainly. Aliases section at the bottom for shorthand and cross-references.*
 
 ---

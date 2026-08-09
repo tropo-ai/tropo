@@ -1,0 +1,595 @@
+{
+  "schema_version": 1,
+  "note": "The single behavioural source for governed filename slugging, shared by vault/tools/lib/governed_path.py and tropo-app/lib/governed-path.ts. Neither implementation is the other's oracle; both execute THIS. Dev-spec 74f85939. Rules: lowercase; spaces/underscores to '-'; drop anything outside [a-z0-9-]; collapse and trim hyphens; truncate to 60 chars at a word boundary, hard-truncating if no boundary exists at or before 60 and trimming any trailing hyphen; empty output is null.",
+  "slug_from_title": [
+    {
+      "name": "plain words",
+      "title": "Weekly Status Update",
+      "slug": "weekly-status-update"
+    },
+    {
+      "name": "already lowercase",
+      "title": "quarterly report",
+      "slug": "quarterly-report"
+    },
+    {
+      "name": "underscores become hyphens",
+      "title": "weekly_status_update",
+      "slug": "weekly-status-update"
+    },
+    {
+      "name": "mixed spaces and underscores",
+      "title": "Weekly _ Status  Update",
+      "slug": "weekly-status-update"
+    },
+    {
+      "name": "punctuation is dropped",
+      "title": "Q3: Revenue (Final!) — v2",
+      "slug": "q3-revenue-final-v2"
+    },
+    {
+      "name": "slashes are dropped not path separators",
+      "title": "a/b/c",
+      "slug": "abc"
+    },
+    {
+      "name": "repeated hyphens collapse",
+      "title": "a---b",
+      "slug": "a-b"
+    },
+    {
+      "name": "leading and trailing hyphens trimmed",
+      "title": "---edge---",
+      "slug": "edge"
+    },
+    {
+      "name": "leading and trailing whitespace trimmed",
+      "title": "   spaced   ",
+      "slug": "spaced"
+    },
+    {
+      "name": "digits survive",
+      "title": "2026 Q3 Plan",
+      "slug": "2026-q3-plan"
+    },
+    {
+      "name": "uppercase folded",
+      "title": "ALL CAPS TITLE",
+      "slug": "all-caps-title"
+    },
+    {
+      "name": "null title",
+      "title": null,
+      "slug": null
+    },
+    {
+      "name": "empty title",
+      "title": "",
+      "slug": null
+    },
+    {
+      "name": "whitespace only",
+      "title": "   ",
+      "slug": null
+    },
+    {
+      "name": "punctuation only",
+      "title": "!!!",
+      "slug": null
+    },
+    {
+      "name": "hyphens only",
+      "title": "---",
+      "slug": null
+    },
+    {
+      "name": "non-latin only is dropped to empty",
+      "title": "日本語のタイトル",
+      "slug": null
+    },
+    {
+      "name": "non-latin mixed keeps the latin part",
+      "title": "日本語 Report 2026",
+      "slug": "report-2026"
+    },
+    {
+      "name": "accents are not transliterated, they are dropped",
+      "title": "Café Münchén",
+      "slug": "caf-mnchn"
+    },
+    {
+      "name": "emoji dropped",
+      "title": "Ship it 🚀 now",
+      "slug": "ship-it-now"
+    },
+    {
+      "name": "exactly 60 chars, no truncation needed",
+      "title": "aaaaaaaaa bbbbbbbbb ccccccccc ddddddddd eeeeeeeee ffffffffff",
+      "slug": "aaaaaaaaa-bbbbbbbbb-ccccccccc-ddddddddd-eeeeeeeee-ffffffffff"
+    },
+    {
+      "name": "61 chars truncates at the word boundary",
+      "title": "aaaaaaaaa bbbbbbbbb ccccccccc ddddddddd eeeeeeeee fffffffff ggg",
+      "slug": "aaaaaaaaa-bbbbbbbbb-ccccccccc-ddddddddd-eeeeeeeee-fffffffff"
+    },
+    {
+      "name": "long with a boundary just under 60",
+      "title": "the quick brown fox jumps over the lazy dog and then keeps running onward",
+      "slug": "the-quick-brown-fox-jumps-over-the-lazy-dog-and-then-keeps"
+    },
+    {
+      "name": "no boundary at or before 60 hard-truncates to 60",
+      "title": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeeffffffffffgggggggggg",
+      "slug": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeeffffffffff"
+    },
+    {
+      "name": "hard truncation trims a trailing hyphen",
+      "title": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeefffffffff ggggg",
+      "slug": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeefffffffff"
+    },
+    {
+      "name": "U+0085 NEL is whitespace in Python's \\s but not JS's",
+      "title": "alphabeta",
+      "slug": "alpha-beta"
+    },
+    {
+      "name": "U+FEFF ZWNBSP is whitespace in JS's \\s but not Python's",
+      "title": "alpha﻿beta",
+      "slug": "alpha-beta"
+    },
+    {
+      "name": "U+00A0 NBSP",
+      "title": "alpha beta",
+      "slug": "alpha-beta"
+    },
+    {
+      "name": "U+2028 line separator",
+      "title": "alpha beta",
+      "slug": "alpha-beta"
+    },
+    {
+      "name": "U+3000 ideographic space",
+      "title": "alpha　beta",
+      "slug": "alpha-beta"
+    },
+    {
+      "name": "leading/trailing exotic whitespace trims like ASCII",
+      "title": "﻿ padded   ",
+      "slug": "padded"
+    }
+  ],
+  "governed_filename": [
+    {
+      "name": "title and uid",
+      "uid": "b7c2d491",
+      "title": "Weekly Status Update",
+      "filename": "weekly-status-update-b7c2d491.md"
+    },
+    {
+      "name": "unsluggable title falls back to bare uid",
+      "uid": "b7c2d491",
+      "title": "!!!",
+      "filename": "b7c2d491.md"
+    },
+    {
+      "name": "null title falls back to bare uid",
+      "uid": "b7c2d491",
+      "title": null,
+      "filename": "b7c2d491.md"
+    },
+    {
+      "name": "federated uid keeps its whole shape as the suffix",
+      "uid": "mbaz-b7c2d491",
+      "title": "Weekly Status Update",
+      "filename": "weekly-status-update-mbaz-b7c2d491.md"
+    },
+    {
+      "name": "federated uid with no title",
+      "uid": "mbaz-b7c2d491",
+      "title": null,
+      "filename": "mbaz-b7c2d491.md"
+    },
+    {
+      "name": "title that is already the slug",
+      "uid": "aa11bb22",
+      "title": "already-slugged-title",
+      "filename": "already-slugged-title-aa11bb22.md"
+    }
+  ],
+  "resolve": [
+    {
+      "name": "bare uid file resolves",
+      "files": {
+        "vault/files/aa000001.md": "---\nuid: aa000001\n---\nbody\n"
+      },
+      "uid": "aa000001",
+      "expect": "vault/files/aa000001.md"
+    },
+    {
+      "name": "readable file resolves by anchored suffix",
+      "files": {
+        "vault/files/weekly-status-aa000002.md": "---\nuid: aa000002\n---\nbody\n"
+      },
+      "uid": "aa000002",
+      "expect": "vault/files/weekly-status-aa000002.md"
+    },
+    {
+      "name": "a rename still resolves — the whole point of the fallback",
+      "files": {
+        "vault/files/friday-status-aa000003.md": "---\nuid: aa000003\n---\nbody\n"
+      },
+      "uid": "aa000003",
+      "expect": "vault/files/friday-status-aa000003.md"
+    },
+    {
+      "name": "exact and slugged both claiming one uid is AMBIGUOUS, bare does not win",
+      "files": {
+        "vault/files/aa000004.md": "---\nuid: aa000004\n---\nexact\n",
+        "vault/files/some-title-aa000004.md": "---\nuid: aa000004\n---\nreadable\n"
+      },
+      "uid": "aa000004",
+      "expect": "AMBIGUOUS",
+      "note": "Argus A145: letting the bare name win is a silent choice wearing a rule."
+    },
+    {
+      "name": "resolves in a non-files governed home",
+      "files": {
+        "vault/agents/talos-aa000005.md": "---\nuid: aa000005\n---\nbody\n"
+      },
+      "uid": "aa000005",
+      "expect": "vault/agents/talos-aa000005.md"
+    },
+    {
+      "name": "unanchored suffix must NOT match — xxxx<uid>.md is a different file",
+      "files": {
+        "vault/files/xxxxaa000006.md": "---\nuid: xxxxaa000006\n---\nbody\n"
+      },
+      "uid": "aa000006",
+      "expect": null
+    },
+    {
+      "name": "a uid that is a substring of another uid does not match it",
+      "files": {
+        "vault/files/prefix-bbaa000007.md": "---\nuid: bbaa000007\n---\nbody\n"
+      },
+      "uid": "aa000007",
+      "expect": null
+    },
+    {
+      "name": "absent uid returns null",
+      "files": {
+        "vault/files/aa000008.md": "---\nuid: aa000008\n---\nbody\n"
+      },
+      "uid": "ffffffff",
+      "expect": null
+    },
+    {
+      "name": "federated uid resolves as a whole anchored suffix",
+      "files": {
+        "vault/files/weekly-mbaz-aa000009.md": "---\nuid: mbaz-aa000009\n---\nbody\n"
+      },
+      "uid": "mbaz-aa000009",
+      "expect": "vault/files/weekly-mbaz-aa000009.md"
+    },
+    {
+      "name": "a federated uid is not matched by its bare tail",
+      "files": {
+        "vault/files/weekly-mbaz-aa000010.md": "---\nuid: mbaz-aa000010\n---\nbody\n"
+      },
+      "uid": "aa000010",
+      "expect": null
+    },
+    {
+      "name": "two readable files claiming one uid is ambiguous and fails loudly",
+      "files": {
+        "vault/files/first-aa000011.md": "---\nuid: aa000011\n---\none\n",
+        "vault/files/second-aa000011.md": "---\nuid: aa000011\n---\ntwo\n"
+      },
+      "uid": "aa000011",
+      "expect": "AMBIGUOUS"
+    },
+    {
+      "name": "literal path is used when it exists and its frontmatter uid matches",
+      "files": {
+        "vault/files/renamed-aa000012.md": "---\nuid: aa000012\n---\nbody\n"
+      },
+      "uid": "aa000012",
+      "literal": "vault/files/renamed-aa000012.md",
+      "expect": "vault/files/renamed-aa000012.md"
+    },
+    {
+      "name": "a literal path whose frontmatter uid disagrees is ignored, not trusted",
+      "files": {
+        "vault/files/wrong-aa000013.md": "---\nuid: bbbbbbbb\n---\nnot it\n",
+        "vault/files/right-aa000013.md": "---\nuid: aa000013\n---\nbody\n"
+      },
+      "uid": "aa000013",
+      "literal": "vault/files/wrong-aa000013.md",
+      "expect": "vault/files/right-aa000013.md"
+    },
+    {
+      "name": "a literal path that does not exist falls through to the scan",
+      "files": {
+        "vault/files/actual-aa000014.md": "---\nuid: aa000014\n---\nbody\n"
+      },
+      "uid": "aa000014",
+      "literal": "vault/files/aa000014.md",
+      "expect": "vault/files/actual-aa000014.md"
+    },
+    {
+      "name": "home restricts the search",
+      "files": {
+        "vault/files/only-here-aa000015.md": "---\nuid: aa000015\n---\nbody\n"
+      },
+      "uid": "aa000015",
+      "home": "vault/agents",
+      "expect": null
+    },
+    {
+      "name": "non-markdown files with a matching stem are ignored",
+      "files": {
+        "vault/files/report-aa000016.txt": "uid: aa000016\n"
+      },
+      "uid": "aa000016",
+      "expect": null
+    },
+    {
+      "name": "unanchored stem whose frontmatter DOES claim the uid must still not match",
+      "note": "The discriminating case for anchoring. Every other negative is also refused by the frontmatter check, so an unanchored glob passes them. Here the frontmatter agrees and only the missing hyphen anchor can reject it.",
+      "files": {
+        "vault/files/xxxxee000001.md": "---\nuid: ee000001\n---\nbody\n"
+      },
+      "uid": "ee000001",
+      "expect": null
+    },
+    {
+      "name": "exact <uid>.md whose frontmatter declares a DIFFERENT uid is not a match",
+      "note": "P0-1. The exact path skipped frontmatter verification entirely.",
+      "files": {
+        "vault/files/gg000001.md": "---\nuid: something-else\n---\nbody\n"
+      },
+      "uid": "gg000001",
+      "expect": null
+    },
+    {
+      "name": "exact <uid>.md with UNCLOSED frontmatter is not a match",
+      "note": "An unterminated --- block is a truncated file, not frontmatter.",
+      "files": {
+        "vault/files/gg000002.md": "---\nuid: gg000002\nbody with no closing fence\n"
+      },
+      "uid": "gg000002",
+      "expect": null
+    },
+    {
+      "name": "slugged file with UNCLOSED frontmatter is not a match",
+      "files": {
+        "vault/files/report-gg000003.md": "---\nuid: gg000003\nno closing fence\n"
+      },
+      "uid": "gg000003",
+      "expect": null
+    },
+    {
+      "name": "file with no frontmatter at all is not a match",
+      "files": {
+        "vault/files/gg000004.md": "just a body, no frontmatter\n"
+      },
+      "uid": "gg000004",
+      "expect": null
+    },
+    {
+      "name": "cross-home collision is AMBIGUOUS, first home does not win",
+      "note": "P1-1. vault/files is searched before vault/agents; both must count.",
+      "files": {
+        "vault/files/one-gg000005.md": "---\nuid: gg000005\n---\na\n",
+        "vault/agents/two-gg000005.md": "---\nuid: gg000005\n---\nb\n"
+      },
+      "uid": "gg000005",
+      "expect": "AMBIGUOUS"
+    },
+    {
+      "name": "an absolute literal outside every governed home is refused, not read",
+      "note": "P0-2 local-file-disclosure. The literal is the caller-controlled input.",
+      "files": {
+        "outside/secret-gg000006.md": "---\nuid: gg000006\n---\nsecret\n"
+      },
+      "uid": "gg000006",
+      "literal_absolute_outside": "outside/secret-gg000006.md",
+      "expect": null
+    },
+    {
+      "name": "a four-hyphen opening line does not open frontmatter",
+      "files": {
+        "vault/files/ii000001.md": "----\nuid: ii000001\n---\nbody\n"
+      },
+      "uid": "ii000001",
+      "expect": null
+    },
+    {
+      "name": "a closing line with trailing junk does not close frontmatter",
+      "files": {
+        "vault/files/ii000002.md": "---\nuid: ii000002\n---junk\nbody\n"
+      },
+      "uid": "ii000002",
+      "expect": null
+    },
+    {
+      "name": "a proper closed fence resolves (the control for the two above)",
+      "files": {
+        "vault/files/ii000003.md": "---\nuid: ii000003\n---\nbody\n"
+      },
+      "uid": "ii000003",
+      "expect": "vault/files/ii000003.md"
+    },
+    {
+      "name": "literal joins the candidate set — a literal plus a colliding scan hit is AMBIGUOUS",
+      "note": "The literal must not short-circuit collision detection.",
+      "files": {
+        "vault/files/first-ii000004.md": "---\nuid: ii000004\n---\na\n",
+        "vault/files/second-ii000004.md": "---\nuid: ii000004\n---\nb\n"
+      },
+      "uid": "ii000004",
+      "literal": "vault/files/first-ii000004.md",
+      "expect": "AMBIGUOUS"
+    }
+  ],
+  "guards": [
+    {
+      "name": "a uid containing a path separator is refused",
+      "uid": "../../etc/passwd",
+      "raises": "UNSAFE"
+    },
+    {
+      "name": "a uid of .. is refused",
+      "uid": "..",
+      "raises": "UNSAFE"
+    },
+    {
+      "name": "a uid with a dot is refused",
+      "uid": "aa00.0001",
+      "raises": "UNSAFE"
+    },
+    {
+      "name": "an empty uid is refused",
+      "uid": "",
+      "raises": "UNSAFE"
+    },
+    {
+      "name": "an over-long uid is refused",
+      "uid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "raises": "UNSAFE"
+    },
+    {
+      "name": "a home outside the governed allowlist is refused",
+      "uid": "aa000001",
+      "home": "../../etc",
+      "raises": "UNSAFE"
+    },
+    {
+      "name": "an arbitrary directory as home is refused even if it exists",
+      "uid": "aa000001",
+      "home": "vault/tools",
+      "raises": "UNSAFE"
+    },
+    {
+      "name": "a valid bare uid and a declared home do not raise",
+      "uid": "aa000001",
+      "home": "vault/files",
+      "raises": null
+    },
+    {
+      "name": "a valid federated uid does not raise",
+      "uid": "mbaz-aa000001",
+      "raises": null
+    }
+  ],
+  "filename_guards": [
+    {
+      "name": "traversal uid must not become a filename",
+      "uid": "../../secret",
+      "raises": "UNSAFE"
+    },
+    {
+      "name": "uid with a slash must not become a filename",
+      "uid": "a/b",
+      "raises": "UNSAFE"
+    },
+    {
+      "name": "dotdot uid must not become a filename",
+      "uid": "..",
+      "raises": "UNSAFE"
+    },
+    {
+      "name": "empty uid must not become a filename",
+      "uid": "",
+      "raises": "UNSAFE"
+    },
+    {
+      "name": "valid bare uid is fine",
+      "uid": "b7c2d491",
+      "raises": null
+    },
+    {
+      "name": "valid federated uid is fine",
+      "uid": "mbaz-b7c2d491",
+      "raises": null
+    }
+  ],
+  "flag": [
+    {
+      "name": "missing file",
+      "content": null,
+      "enabled": false
+    },
+    {
+      "name": "empty file",
+      "content": "",
+      "enabled": false
+    },
+    {
+      "name": "malformed json",
+      "content": "{not json",
+      "enabled": false
+    },
+    {
+      "name": "array not object",
+      "content": "[]",
+      "enabled": false
+    },
+    {
+      "name": "enabled as string",
+      "content": "{\"enabled\": \"true\", \"schema_version\": 1}",
+      "enabled": false
+    },
+    {
+      "name": "enabled as 1",
+      "content": "{\"enabled\": 1, \"schema_version\": 1}",
+      "enabled": false
+    },
+    {
+      "name": "no enabled key",
+      "content": "{\"schema_version\": 1}",
+      "enabled": false
+    },
+    {
+      "name": "missing schema_version",
+      "content": "{\"enabled\": true}",
+      "enabled": false
+    },
+    {
+      "name": "wrong schema_version",
+      "content": "{\"enabled\": true, \"schema_version\": 2}",
+      "enabled": false
+    },
+    {
+      "name": "schema_version as string",
+      "content": "{\"enabled\": true, \"schema_version\": \"1\"}",
+      "enabled": false
+    },
+    {
+      "name": "non-standard NaN must be rejected identically in both languages",
+      "content": "{\"enabled\": true, \"schema_version\": NaN}",
+      "enabled": false
+    },
+    {
+      "name": "non-standard Infinity",
+      "content": "{\"enabled\": Infinity, \"schema_version\": 1}",
+      "enabled": false
+    },
+    {
+      "name": "the only shape that enables",
+      "content": "{\"enabled\": true, \"schema_version\": 1}",
+      "enabled": true
+    },
+    {
+      "name": "schema_version true must NOT enable (Python bool==1 divergence)",
+      "content": "{\"enabled\": true, \"schema_version\": true}",
+      "enabled": false
+    },
+    {
+      "name": "schema_version 1.0 enables — JSON has one number type, so both languages must agree",
+      "content": "{\"enabled\": true, \"schema_version\": 1.0}",
+      "enabled": true,
+      "note": "Python can distinguish 1.0 from 1; JavaScript cannot. The strictest implementable shared rule is: numeric 1, never boolean."
+    }
+  ]
+}

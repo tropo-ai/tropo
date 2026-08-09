@@ -12,17 +12,17 @@ spawnable_by:
 - all-executives
 transport: cli
 implementation_kind: python-script
-cli_command: "python3 vault/tools/tropo-navblock-strip.py [--clean | --install | --verify-install | --check [PATH...] | --migrate PATH...]"
+cli_command: "python3 vault/tools/tropo-navblock-strip.py [--process | --clean | --install | --verify-install | --check [PATH...] | --migrate PATH...]"
 script_path: vault/tools/tropo-navblock-strip.py
 input:
   type: object
   properties:
     clean:
       type: boolean
-      description: "git clean-filter entry point: read a file's content from stdin, write the nav-block-stripped content to stdout. Registered via `git config filter.navblockstrip.clean`; never invoke by hand for real files."
+      description: "SUPERSEDED spawn-per-file filter entry point (stdin -> stdout). No longer registered: it cost ~53ms of interpreter startup PER FILE, ~3.1 min per git add/status after a rebuild. Kept as the byte-level strip primitive and for --migrate. The wired driver is --process."
     install:
       type: boolean
-      description: "Bootstrap: register this script as filter.navblockstrip.clean in the LOCAL repo's git config. .git/config is never committed, so every fresh clone/studio must re-run this once — same class of gap as the D2 merge driver (vault/tools/federation/README.md)."
+      description: "Bootstrap: register this script as filter.navblockstrip.process in the LOCAL repo's git config, and remove any superseded .clean wiring. .git/config is never committed, so every fresh clone/studio must re-run this once — same class of gap as the D2 merge driver (vault/tools/federation/README.md)."
     verify-install:
       type: boolean
       description: "Diagnostic: confirm BOTH .gitattributes declares the filter over vault/files/*.md AND the local git config has the clean command wired. Exit 0 if fully wired, 1 otherwise. No-argument default."
@@ -67,7 +67,7 @@ capsule_version: '2.5'
 schema_version: 2
 extraction_scope: ship
 member_of:
-- c7e4f9a2
+- 8dd772a0
 refs:
 - 6ec30708
 - dd16c90c
@@ -101,9 +101,12 @@ with the file's content on stdin and stages whatever it writes to stdout. The wo
 tree is never touched by the filter — `insert_or_update_block()` in the renderer keeps
 regenerating the region locally on every render pass, exactly as before this spec.
 
-Four entry points:
-  --clean            the filter itself (stdin -> stdout); registered, never hand-invoked
-  --install           bootstrap: `git config filter.navblockstrip.clean "..."` locally
+Five entry points:
+  --process          THE FILTER: git long-running filter process (packet-line, one
+                     process per git command instead of one per file)
+  --clean            superseded spawn-per-file mode; strip primitive + --migrate only
+  --install           bootstrap: `git config filter.navblockstrip.process "..."` locally
+                     (also removes any superseded .clean wiring)
   --verify-install     confirm .gitattributes + git config are BOTH wired (default action)
   --check [PATH...]   audit: any nav-block still in HEAD's object store? (or given paths)
   --migrate PATH...   direct body rewrite for the deferred Option-B/Phase-F cutover
@@ -123,6 +126,21 @@ HEADER_SCRIPT = TOOLS_DIR / 'tropo-generate-relations-header.py'
 FILTER_NAME = 'navblockstrip'
 GITATTRIBUTES_PATH_PATTERN = 'vault/files/*.md'
 CLEAN_COMMAND = 'python3 vault/tools/tropo-navblock-strip.py --clean'
+PROCESS_COMMAND = 'python3 vault/tools/tropo-navblock-strip.py --process'
+
+#: git's long-running filter protocol. Payload ceiling is git's
+#: LARGE_PACKET_DATA_MAX (65520 - 4 bytes of length header).
+_PKT_FLUSH = b'0000'
+_PKT_MAX_PAYLOAD = 65516
+
+
+class _Flush:
+    """Sentinel for a `0000` flush packet, distinct from both EOF and an empty
+    payload. Collapsing those three into `b''` is how a filter process hangs
+    forever on a stream git has already closed."""
+
+
+FLUSH = _Flush()
 
 _HEADER_MODULE = None
 
@@ -163,18 +181,203 @@ def cmd_clean() -> int:
     return 0
 
 
+# --------------------------------------------------------------------------
+# Long-running filter process (`filter.<driver>.process`)
+#
+# WHY THIS EXISTS AND WHY --clean IS NOT THE FILTER ANY MORE.
+#
+# `--clean` is a spawn-per-file shell-out: git starts a fresh python for every
+# file it needs the clean form of. The interpreter start dominates completely
+# -- ~53ms of process startup to run a regex over one small file. One full
+# `rebuild-vault` re-renders the nav region into ~93% of the vault, so the next
+# `git add`/`status`/`diff` pays that 53ms 3,561 times: ~3.1 MINUTES, against
+# 6.4 SECONDS for the same command with the filter stubbed out to `cat`. About
+# 29x the cost of the operation it wraps, on every git gesture, by every agent,
+# on every machine.
+#
+# Dev-spec 6ec30708 line 113 called this exactly, in advance, verbatim: "Use
+# git's long-running `filter.<driver>.process` protocol (not the spawn-per-file
+# `clean` shell-out) to bound the cost of `git add`/`status`/`diff` at 2,410
+# files." The spec named the failure and the remedy; the build shipped the
+# shell-out anyway and nobody measured it. Measured by metis-g104 2026-08-07
+# after git hung on her.
+#
+# This is the remedy as specified: ONE process handles every file over
+# packet-line on stdin/stdout, so the interpreter starts once per git command
+# instead of once per file.
+# --------------------------------------------------------------------------
+
+
+def _read_exactly(stream, count: int) -> bytes:
+    buf = b''
+    while len(buf) < count:
+        chunk = stream.read(count - len(buf))
+        if not chunk:
+            return b''  # EOF mid-packet; caller treats as shutdown
+        buf += chunk
+    return buf
+
+
+def _pkt_read(stream):
+    """One packet. Returns bytes, FLUSH, or None at EOF."""
+    header = _read_exactly(stream, 4)
+    if len(header) < 4:
+        return None
+    if header == _PKT_FLUSH:
+        return FLUSH
+    try:
+        length = int(header, 16)
+    except ValueError:
+        return None
+    if length <= 4:
+        return b''
+    return _read_exactly(stream, length - 4)
+
+
+def _pkt_read_until_flush(stream) -> Optional[List[bytes]]:
+    """Packets up to the next flush. None at EOF -- git has closed us down."""
+    items: List[bytes] = []
+    while True:
+        pkt = _pkt_read(stream)
+        if pkt is None:
+            return None
+        if pkt is FLUSH:
+            return items
+        items.append(pkt)
+
+
+def _pkt_write(stream, payload: bytes) -> None:
+    stream.write(b'%04x' % (len(payload) + 4) + payload)
+
+
+def _pkt_write_text(stream, text: str) -> None:
+    _pkt_write(stream, text.encode('utf-8') + b'\n')
+
+
+def _pkt_write_flush(stream) -> None:
+    stream.write(_PKT_FLUSH)
+
+
+def _pkt_write_content(stream, content: bytes) -> None:
+    for start in range(0, len(content), _PKT_MAX_PAYLOAD):
+        _pkt_write(stream, content[start:start + _PKT_MAX_PAYLOAD])
+    _pkt_write_flush(stream)
+
+
+def _parse_kv(items: List[bytes]) -> dict:
+    out = {}
+    for raw in items:
+        line = raw.decode('utf-8', errors='replace').rstrip('\n')
+        if '=' in line:
+            key, _, value = line.partition('=')
+            out[key] = value
+    return out
+
+
+def cmd_process(stdin=None, stdout=None) -> int:
+    """git long-running filter, protocol version 2.
+
+    Streams are injectable so the suite can drive a full conversation in-process
+    without spawning git.
+    """
+    stdin = stdin if stdin is not None else sys.stdin.buffer
+    stdout = stdout if stdout is not None else sys.stdout.buffer
+
+    handshake = _pkt_read_until_flush(stdin)
+    if handshake is None:
+        return 0
+    intro = _parse_kv(handshake)
+    welcome = [
+        raw.decode('utf-8', errors='replace').strip() for raw in handshake
+    ]
+    if 'git-filter-client' not in welcome:
+        print('[FAIL] not speaking git filter protocol on stdin', file=sys.stderr)
+        return 1
+    if intro.get('version') != '2':
+        print(
+            f"[FAIL] unsupported filter protocol version {intro.get('version')!r}; "
+            f"this filter speaks version 2",
+            file=sys.stderr,
+        )
+        return 1
+    _pkt_write_text(stdout, 'git-filter-server')
+    _pkt_write_text(stdout, 'version=2')
+    _pkt_write_flush(stdout)
+    stdout.flush()
+
+    # Announce only what we do. `smudge` is deliberately absent: 6ec30708's
+    # implementation note rules it out by name -- regeneration is the batch
+    # Step-5 render on pull, never a per-file smudge on checkout.
+    if _pkt_read_until_flush(stdin) is None:
+        return 0
+    _pkt_write_text(stdout, 'capability=clean')
+    _pkt_write_flush(stdout)
+    stdout.flush()
+
+    while True:
+        meta = _pkt_read_until_flush(stdin)
+        if meta is None:
+            return 0  # git closed the stream: normal shutdown
+        request = _parse_kv(meta)
+        command = request.get('command')
+        payload = _pkt_read_until_flush(stdin)
+        if payload is None:
+            return 0
+        content = b''.join(payload)
+
+        if command != 'clean':
+            _pkt_write_text(stdout, 'status=error')
+            _pkt_write_flush(stdout)
+            stdout.flush()
+            continue
+
+        try:
+            cleaned = run_clean(content)
+        except Exception as exc:  # a bad file must not take the whole run down
+            print(
+                f"[FAIL] nav-block strip failed for "
+                f"{request.get('pathname', '<unknown>')}: {exc}",
+                file=sys.stderr,
+            )
+            _pkt_write_text(stdout, 'status=error')
+            _pkt_write_flush(stdout)
+            stdout.flush()
+            continue
+
+        _pkt_write_text(stdout, 'status=success')
+        _pkt_write_flush(stdout)
+        _pkt_write_content(stdout, cleaned)
+        _pkt_write_flush(stdout)  # empty list terminates the response
+        stdout.flush()
+
+
 def cmd_install(vault_root: Path) -> int:
     r = subprocess.run(
-        ['git', 'config', f'filter.{FILTER_NAME}.clean', CLEAN_COMMAND],
+        ['git', 'config', f'filter.{FILTER_NAME}.process', PROCESS_COMMAND],
         cwd=str(vault_root), capture_output=True, text=True,
     )
     if r.returncode != 0:
         print(f'[FAIL] git config install failed: {r.stderr.strip()}', file=sys.stderr)
         return 1
-    print(
-        f'[OK] filter.{FILTER_NAME}.clean installed in {vault_root}/.git/config (LOCAL only; '
-        f'.git/config is never committed — re-run this on every fresh clone/studio).'
+    # Retire the slow wiring in the same gesture. git prefers `process` when
+    # both are present, so a leftover `.clean` would not change behaviour --
+    # but it would sit in every existing clone looking correct, and the next
+    # reader would have no way to tell a migrated clone from a stale one.
+    # Every clone that ran the old --install has this line right now.
+    removed = subprocess.run(
+        ['git', 'config', '--unset-all', f'filter.{FILTER_NAME}.clean'],
+        cwd=str(vault_root), capture_output=True, text=True,
     )
+    print(
+        f'[OK] filter.{FILTER_NAME}.process installed in {vault_root}/.git/config '
+        f'(LOCAL only; .git/config is never committed — re-run this on every fresh '
+        f'clone/studio).'
+    )
+    if removed.returncode == 0:
+        print(
+            f'[OK] removed the superseded filter.{FILTER_NAME}.clean wiring '
+            f'(spawn-per-file; ~53ms of interpreter startup per file).'
+        )
     return 0
 
 
@@ -192,12 +395,20 @@ def _gitattributes_declares_filter(vault_root: Path) -> bool:
     return False
 
 
-def _git_config_has_clean(vault_root: Path) -> bool:
+def _git_config_value(vault_root: Path, key: str) -> str:
     r = subprocess.run(
-        ['git', 'config', '--get', f'filter.{FILTER_NAME}.clean'],
+        ['git', 'config', '--get', key],
         cwd=str(vault_root), capture_output=True, text=True,
     )
-    return r.returncode == 0 and bool(r.stdout.strip())
+    return r.stdout.strip() if r.returncode == 0 else ''
+
+
+def _git_config_has_clean(vault_root: Path) -> bool:
+    return bool(_git_config_value(vault_root, f'filter.{FILTER_NAME}.clean'))
+
+
+def _git_config_has_process(vault_root: Path) -> bool:
+    return bool(_git_config_value(vault_root, f'filter.{FILTER_NAME}.process'))
 
 
 def verify_install(vault_root: Path) -> Tuple[bool, List[str]]:
@@ -207,20 +418,37 @@ def verify_install(vault_root: Path) -> Tuple[bool, List[str]]:
     Returns (fully_wired, findings)."""
     findings: List[str] = []
     ga_ok = _gitattributes_declares_filter(vault_root)
-    cfg_ok = _git_config_has_clean(vault_root)
+    process_ok = _git_config_has_process(vault_root)
+    stale_clean = _git_config_has_clean(vault_root)
     if not ga_ok:
         findings.append(
             f"[FAIL] .gitattributes does not declare '{GITATTRIBUTES_PATH_PATTERN} filter={FILTER_NAME}' "
             f"— the I5 (dd16c90c) clean-strip is not declared at all in this vault root."
         )
-    if not cfg_ok:
+    if not process_ok:
         findings.append(
-            f"[FAIL] git config filter.{FILTER_NAME}.clean is not set in this clone's LOCAL "
+            f"[FAIL] git config filter.{FILTER_NAME}.process is not set in this clone's LOCAL "
             f".git/config (never committed) — run `python3 vault/tools/tropo-navblock-strip.py "
             f"--install`. A studio without this cannot silently commit nav-blocks into a shared "
             f"segment (6ec30708 AC5) — same failure class as a missing D2 merge driver."
         )
-    return (ga_ok and cfg_ok), findings
+    # A stale `.clean` FAILS rather than warns, and that is the point of this
+    # half. git prefers `process` when both are set, so the slow wiring is
+    # invisible from behaviour alone -- it just sits there being correct-looking
+    # in every clone that ever ran the old installer. The tool half of this fix
+    # is worthless on its own: .git/config is per-clone and never committed, so
+    # nothing propagates it. The check has to be the thing that finds them.
+    # (metis-g104 found 143 committed nav-blocks in the MindBridge studio from
+    # exactly this gap in the ORIGINAL install, one layer down.)
+    if stale_clean:
+        findings.append(
+            f"[FAIL] git config filter.{FILTER_NAME}.clean is still wired in this clone — "
+            f"the superseded spawn-per-file shell-out (~53ms of interpreter startup per "
+            f"file; ~3.1 min per git add/status after a full rebuild, vs 6.4s). Re-run "
+            f"`python3 vault/tools/tropo-navblock-strip.py --install`, which installs the "
+            f"long-running process protocol and removes this line (6ec30708 line 113)."
+        )
+    return (ga_ok and process_ok and not stale_clean), findings
 
 
 def cmd_verify_install(vault_root: Path) -> int:
@@ -246,7 +474,28 @@ def cmd_check(paths: Optional[List[str]], vault_root: Path) -> int:
         if r.returncode not in (0, 1):
             print(f'[ERROR] git grep failed: {r.stderr.strip()}', file=sys.stderr)
             return 2
-        hits = [l for l in r.stdout.splitlines() if l.strip()]
+        # git grep finds the SENTINEL STRING; the filter strips a line-anchored
+        # REGION. Those are different questions, and the audit was asking the
+        # wrong one — it reported 11 "committed nav-blocks" in a vault that has
+        # zero, because eleven governed files DISCUSS nav-blocks and one of them
+        # is the nav-block dev-spec itself. An instrument aimed one gate off from
+        # the mechanism it measures. Confirm each candidate against the canonical
+        # regex, which is the same one the filter uses.
+        # (Found via Metis G105's Stream A loose-ends list, 2026-08-08.)
+        hits = []
+        for line in r.stdout.splitlines():
+            if not line.strip():
+                continue
+            ref = line.split(':', 1)[0] if ':' in line else line
+            rel = line.split(':', 1)[1] if ':' in line else line
+            blob = subprocess.run(
+                ['git', 'show', f'{ref}:{rel}'],
+                cwd=str(vault_root), capture_output=True, text=True,
+            )
+            if blob.returncode != 0:
+                continue
+            if strip_nav_block(blob.stdout) != blob.stdout:
+                hits.append(line)
         if not hits:
             print(f'[PASS] 0 committed {GITATTRIBUTES_PATH_PATTERN} blobs carry a nav-block (HEAD).')
             return 0
@@ -262,7 +511,8 @@ def cmd_check(paths: Optional[List[str]], vault_root: Path) -> int:
         fp = Path(p)
         if not fp.is_file():
             continue
-        if 'nav-block:start' in fp.read_text(encoding='utf-8', errors='replace'):
+        text = fp.read_text(encoding='utf-8', errors='replace')
+        if strip_nav_block(text) != text:  # the region, not the mention
             hits.append(p)
     if hits:
         print(f'[INFO] {len(hits)} of {len(paths)} given path(s) carry a nav-block (working-tree check).')
@@ -301,8 +551,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description='Nav-block strip: git clean filter + migration primitive (dev-spec 6ec30708).'
     )
-    parser.add_argument('--clean', action='store_true', help='git clean-filter mode: stdin -> stdout')
-    parser.add_argument('--install', action='store_true', help='register filter.navblockstrip.clean in local git config')
+    parser.add_argument('--clean', action='store_true', help='SUPERSEDED spawn-per-file filter mode: stdin -> stdout (kept as the strip primitive and for --migrate; --install no longer wires it)')
+    parser.add_argument('--process', action='store_true', help='git long-running filter process (packet-line); the wired filter')
+    parser.add_argument('--install', action='store_true', help='register filter.navblockstrip.process in local git config and remove any superseded .clean wiring')
     parser.add_argument('--verify-install', action='store_true', help='confirm .gitattributes + git config are both wired')
     parser.add_argument('--check', nargs='*', default=None, metavar='PATH',
                          help='report nav-block presence (default with no PATH: HEAD object store via git grep)')
@@ -316,6 +567,8 @@ def main() -> int:
     args = build_arg_parser().parse_args()
     vault_root = Path(args.vault_root).resolve() if args.vault_root else VAULT_ROOT
 
+    if args.process:
+        return cmd_process()
     if args.clean:
         return cmd_clean()
     if args.install:

@@ -5,13 +5,29 @@ uid: 3289712a
 name: task
 type: capsule-definition
 extends: core
-version: '4.3'
-supersedes_version: '4.2'
+version: '4.7'
+mint_mode: human
+mint_template: vault/capsules/templates/task.template.md
+mint_template_version: '1.0'
+mint_template_sha256: a0084736a74e36d7fc071b5f8cfa08a9e8bfa574815590c12552dbb0f3611d75
+mint_output_home: vault/files
+core_field_specializations:
+  owner:
+    optional_until_status: accepted
+  title:
+    max_chars: 120
+template_enforced_from: '2026-07-13'
+template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
+supersedes_version: '4.6'
+v4_7_companion_template_amendment: "Mike-approved typed-mint pilot, 2026-08-03. Moves the single mint/verifier scaffold to a hash-bound visible companion and declares the existing owner/title core specializations explicitly. No task lifecycle or instance migration."
+v4_6_lifecycle_compatibility_lock_break: 'v4.5 -> v4.6 bounded lock-break 2026-07-23 by talos per Mike-approved locked dev-spec de2015c1 (activation 3295c41a; approval recorded verbatim as "I approve"). Adds required legacy_default metadata to every lifecycle_machine move; close-done is the sole default for the ambiguous active-to-closed compatibility group. No enum, alias, state, transition, gate, prose machine, validator, or write-policy change.'
+v4_5_lifecycle_machine_lock_break: 'v4.4 -> v4.5 bounded lock-break 2026-07-23 by talos per Mike-approved locked dev-spec b06aa0fb (activation 1b3c6eaa; approval recorded verbatim as "Looks good. I approve"). Additive lifecycle_machine declaration only: canonical status enum/order + every existing legal prose transition, stable unique move_id command identities, distinct done/rejected/cancelled close moves, and resolution/gate/UI metadata. No enum, alias, meta_status_rollup, prose machine, validator, or write-gate change.'
+v4_4_amendment_note: 'v4.3 -> v4.4 amendment 2026-07-13 by talos-t29 per Mike-locked Governed Autonomy S2 dev-spec bba40cd7 (activation 0d9f89bc; committed substrate "Template legs for the top-10 types"). Additive + non-breaking: NEW §Template section (the mint-stamped scaffold) per the Template-Leg Contract v1.0 (b933eafb). No schema, enum, or state-machine change. Changelog row appended to companion task.history.md per that file''s own established convention.'
 tier: os
 author: tropo
 created: 2026-04-10
-modified: 2026-06-09
-modified_by: argus-a106
+modified: 2026-08-03
+modified_by: argus-a144
 status: locked
 locked_by: argus-a98
 locked_at: 2026-06-04
@@ -34,6 +50,103 @@ meta_status_rollup:
   done:
     - closed
     - archived
+lifecycle_machine:
+  field: status
+  optional: false
+  states:
+    - {value: new, label: New, terminal: false}
+    - {value: accepted, label: Accepted, terminal: false}
+    - {value: active, label: Active, terminal: false}
+    - {value: closed, label: Closed, terminal: true}
+  moves:
+    - move_id: accept
+      from: new
+      to: accepted
+      label: Accept
+      direction: forward
+      confirm: false
+      resolution: null
+      gate: acceptance-record
+      warning: null
+      principal_only: false
+      legacy_default: false
+    - move_id: close-rejected
+      from: new
+      to: closed
+      label: Reject request
+      direction: forward
+      confirm: true
+      resolution: rejected
+      gate: requester-close
+      warning: null
+      principal_only: false
+      legacy_default: false
+    - move_id: start
+      from: accepted
+      to: active
+      label: Start work
+      direction: forward
+      confirm: false
+      resolution: null
+      gate: processor-start
+      warning: null
+      principal_only: false
+      legacy_default: false
+    - move_id: reroute
+      from: accepted
+      to: new
+      label: Return for rerouting
+      direction: back
+      confirm: false
+      resolution: null
+      gate: all-acceptances-rejected
+      warning: null
+      principal_only: false
+      legacy_default: false
+    - move_id: cancel-before-start
+      from: accepted
+      to: closed
+      label: Cancel before work starts
+      direction: forward
+      confirm: true
+      resolution: cancelled
+      gate: requester-cancel
+      warning: null
+      principal_only: false
+      legacy_default: false
+    - move_id: close-done
+      from: active
+      to: closed
+      label: Close as done
+      direction: forward
+      confirm: true
+      resolution: done
+      gate: verifier-and-conditional-approver
+      warning: null
+      principal_only: false
+      legacy_default: true
+    - move_id: close-cancelled
+      from: active
+      to: closed
+      label: Close as cancelled
+      direction: forward
+      confirm: true
+      resolution: cancelled
+      gate: requester-cancel
+      warning: null
+      principal_only: false
+      legacy_default: false
+    - move_id: reopen-regression
+      from: closed
+      to: active
+      label: Reopen regression
+      direction: back
+      confirm: true
+      resolution: null
+      gate: closed-done-regression-audit
+      warning: Prior resolution must be done; clear it and use a different verifier on re-close.
+      principal_only: false
+      legacy_default: false
 v4_3_lock_break: 'v4.2 -> v4.3 lock-break Mike-A106-signed 2026-06-09 (approved via gate-package: ''Sign the lock-break''). Adds task-level VERIFIER-INDEPENDENCE for approvers: NEW Governance Rule 14 (approver independence enforced — resolved approver MUST differ from resolved executor [owner ∪ accepted_by uids] UNLESS principal_class:human) + NEW Validation Check 22 (check_task_approver_distinct_from_executor, WARN→ERROR ratchet, forward-looking — 0 current matching tasks). Implements Metis''s proposal 9a8c9adc via dev-spec d996b941 (2 gauntlet rounds) under ADR-044 (no new ADR; enforce at L1). The check rides on the shared identity resolver .tropo/scripts/lib/_identity.py (L0c — Talos engine lane, extracted from 9e7003b1.py, hard-fail-on-import per AC-L0c-fail) + the principal_class human-discriminant backfilled crew-wide this session (L0a, Mike-A106-blessed). Verifier independence (Rule 1) stays recommended-not-enforced; this is the APPROVER-side counterpart only. Additive — no existing
   field/rule/check changed.'
 v4_2_lock_break: 'v4.1 -> v4.2 lock-break Mike-A98-signed 2026-06-04 (verbatim ''go''). Populates the enforced_enums block (the slot core.capsule v1.3 added): status [new,accepted,active,closed] agrees with Validation Check 1 (:203) + state [active,archived] agrees with Check 2 (:204). Purely additive -- no existing field, rule, or check changed. Makes task the enforced single source for its own status/state vocabulary; the validator d2b9c8e6.py reads this block directly and WARNs the 35 live status-drift values (done 27/open 8); state is clean. ENFORCE step of the Field-Semantics Map (476fef2e) per addc4490 v0.5 -- task is the first type piloted.'
@@ -55,7 +168,7 @@ tags:
   - v1.19.0-stream-c-refactored
 ---
 
-# task — Capsule Definition v4.1
+# task — Capsule Definition v4.7
 
 ## 1. Intent
 
@@ -85,7 +198,7 @@ Failure mode prevented: silent driver/accountable conflation in v3.0 (`owner:` d
 
 | Field | Type | Constraint |
 |---|---|---|
-| `title` | string | ≤120 chars |
+| `title` | string | ≤120 chars. Explicit specialization of core's 100-character default; declared in `core_field_specializations`. |
 | `status` | enum | `new` / `accepted` / `active` / `closed` (v4.0 — 4 states) |
 | `requested_by` | UID | Required from `new` onward; persists through entire lifecycle. Immutable after first-author. Resolves to an entity. |
 | `member_of` | UID array | Projects this task belongs to. At least one required; at least one must resolve to a vault-entity-owned project (D7 invariant — enforced via vault-inbox fallback). |
@@ -99,7 +212,7 @@ Failure mode prevented: silent driver/accountable conflation in v3.0 (`owner:` d
 | Field | Type | Purpose |
 |---|---|---|
 | `requested_of` | UID | Required from `new` through `accepted`; optional at `active`/`closed`. Resolves to an entity. Changes legally on re-request after rejection. |
-| `owner` | UID | **v4.0 refined.** Singular accountable entity. Distinct from `processor:` and `requested_by:`. Set on `new → accepted`; defaults to first entry in `accepted_by:` **materialized at accept-time** (frozen — NOT continuously re-evaluated; Rule 12). Mutable by explicit reassignment. NOT a driver field — that's `processor:`. |
+| `owner` | UID | **v4.0 refined.** Explicit specialization of core: optional until acceptance, as declared in `core_field_specializations`. Singular accountable entity. Distinct from `processor:` and `requested_by:`. Set on `new → accepted`; defaults to first entry in `accepted_by:` **materialized at accept-time** (frozen — NOT continuously re-evaluated; Rule 12). Mutable by explicit reassignment. NOT a driver field — that's `processor:`. |
 | `accepted_by` | record array | **v4.0.** Acceptance records — agents and/or pipeline-runs that have committed to processing. Each record: `{accepted_by_uid, date_accepted, date_completed, date_rejected, notes}`. Multi-acceptor / multi-pipeline-run is first-class. |
 | `processor` | UID array | **v4.0.** Derived view over `accepted_by:` records that have `date_accepted:` set and no `date_completed:`/`date_rejected:` — the currently-active acceptors. Computed-on-read by default; materialization is query-cache implementation detail. |
 | `verifier` | UID | Required when `status: closed` AND `resolution: done` (unless verification explicitly skipped per capsule policy). Verification independence recommended but not enforced (Rule 1). |
@@ -264,11 +377,21 @@ Core checks inherited: UID uniqueness + immutability, type immutability, owner/c
 - **[note.capsule (db3a8e51)](note.capsule.md)**, **[design-brief.capsule (de5181b0)](design-brief.capsule.md)**, **[decision.capsule](decision.capsule.md)** — sibling typed-artifact capsules sharing universal work-item primitives (`status:`, `accepted_by:`, `processor:`). The v1.4.4 sibling-cascade aligned note v3.2 + design-brief v3.1 + task v4.0 with textually identical work-item primitives.
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — governs this capsule.
 
-### History
+## §Template (v4.7 — companion scaffold; contract at [b933eafb](../../vault/files/b933eafb.md))
 
-The v3.0/v4.0/v4.0.1 amendment-block opener prose, Migration Notes v3.0 → v4.0 (status enum mapping, owner field migration, new v4.0 fields default, migration script), Migration Notes v2.0 → v3.0 (historical lineage), Inheritance + sibling-cascade narrative, Relationship-to-Other-Capsules narrative, Extension from core, §Studio — Shop Signage authoring procedure (human-facing quick-ref with tools, skills, procedures, pitfalls, worked examples, argo-reference examples), and full changelog (v1.0 through v4.1) are preserved in the companion [task.history.md (e71e654b)](task.history.md) governed by `capsule-history.capsule` (5ec083a3).
+The single mint and verifier scaffold is the visible companion
+[task.template.md](templates/task.template.md), hash-bound in this capsule's
+frontmatter. It births at legal `status: new`, requires both request parties,
+uses the capsule's 120-character title limit, and requires a verification
+method. Rationale is optional; close-only fields are not scaffolded.
 
 ---
 
-*task capsule definition | LOCKED v4.1 | history at [task.history.md](task.history.md) | v4.1 body refactor 2026-05-11 by Argus A56 (v1.19.0 Stream C — 5-section pedagogy pattern; agent-read-not-human-read per Mike-A55). Prior v1.0–v4.0.1 locks preserved in history. UID `3289712a` preserved.*
+### History
+
+The v3.0/v4.0/v4.0.1 amendment-block opener prose, Migration Notes v3.0 → v4.0 (status enum mapping, owner field migration, new v4.0 fields default, migration script), Migration Notes v2.0 → v3.0 (historical lineage), Inheritance + sibling-cascade narrative, Relationship-to-Other-Capsules narrative, Extension from core, §Studio — Shop Signage authoring procedure (human-facing quick-ref with tools, skills, procedures, pitfalls, worked examples, argo-reference examples), and full changelog (v1.0 through v4.1) are preserved in the companion [task.history.md (e71e654b)](task.history.md) governed by `capsule-history.capsule` (5ec083a3). v4.4's embedded template addition and v4.7's companion-template replacement are recorded in capsule history.
+
+---
+
+*task capsule definition | LOCKED v4.7 | companion-template amendment 2026-08-03 by Argus A144 under Mike's typed-mint approval | history at [task.history.md](task.history.md) | UID 3289712a*
 *"Status is the work. Position is the run. Acceptors are the agreement. Processors are the drivers. Owner is accountable. Verifier checks the work. Approver signs off on the ship."*

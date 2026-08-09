@@ -33,7 +33,7 @@ destructive: false
 audit_required: false
 writes_scope: []
 governance_category: query
-description: 'Read-only structural validator for a Tropo vault. Six check classes: (1) Registry integrity — every file in agent-registry.yaml exists on disk; every agent file on disk is registered. (2) UID consistency — uid: frontmatter matches filename. (3) Orphan detection — files in governed scan-dirs without uid: (excludes README/CURATOR/AGENTS skip-list). (4) AGENTS.md coverage — every directory under requiredDirs has AGENTS.md. (5) Cross-reference resolution — every UID referenced in frontmatter resolves to a registry entry. (6) NEW v1.5: 00-integrity.json blocked_tasks count↔uids parity check.'
+description: 'Read-only structural validator for a Tropo vault. Six check classes: (1) Registry integrity — every file in agent-registry.yaml exists on disk; every agent file on disk is registered. (2) UID consistency — uid: frontmatter matches filename. (3) Orphan detection — files in governed scan-dirs without uid: (excludes README/CURATOR/AGENTS skip-list). (4) AGENTS.md coverage — every directory under requiredDirs has AGENTS.md. (5) Cross-reference resolution — every UID referenced in frontmatter resolves to a registry entry. (6) v1.5, re-pointed 2026-07-14 (66b6f3e8): blocked-task parity check, now cross-checking live vault/00-index.jsonl against vault/00-index.sqlite (retired 00-integrity.json had no writer since 2026-06-04; Argus A130 ruling, event 00006330).'
 domain_tags:
 - validator
 - structural-shape
@@ -44,14 +44,14 @@ domain_tags:
 trigger_description: "Comprehensive read-only audit of vault structural health."
 created: 2026-05-09
 created_by: argus-a53
-modified: 2026-07-07
-modified_by: talos-t25
+modified: 2026-07-26
+modified_by: argus-a142
 governed_by: d5e1b4a3
 capsule_version: '2.5'
 schema_version: 2
 extraction_scope: ship
 member_of:
-- c7e4f9a2
+- 8dd772a0
 tags:
 - tool
 - cli
@@ -94,10 +94,14 @@ Checks performed:
        operating-agreement/AGENTS.md; v1.4.4 closed those structurally.
     5. Cross-reference resolution — every UID referenced in any frontmatter
        field resolves to a real entry in the registry/index.
-    6. NEW v1.5 (inbox 656c26d0): 00-integrity.json blocked_tasks count↔uids
-       parity check. The earlier TS script reported a count that didn't match
-       the listed uids array; this Python port detects that drift and surfaces
-       it as a finding.
+    6. v1.5 (inbox 656c26d0), re-pointed 2026-07-14 (vault/files/66b6f3e8.md;
+       Argus A130 ruling, event 00006330): blocked-task parity check. Formerly
+       compared 00-integrity.json's self-reported blocked_tasks count against
+       its own uids array (written by a now-dead TS rebuilder with no writer
+       since 2026-06-04). Now independently derives the set of
+       type:task status:blocked UIDs from each of the two live truth
+       surfaces — vault/00-index.jsonl and vault/00-index.sqlite — and
+       flags any mismatch between them.
 
 Usage:
     python3 vault/tools/tropo-validate.py            # against current vault
@@ -126,13 +130,16 @@ Domain: vault-validation; v1.5 Truthful Ship vault-maintenance toolchain.
 """
 
 import argparse
+import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 # v1.56 Lane S: script relocated to vault/tools/; lib/ is under .tropo/scripts/
 _TROPO_SCRIPTS = Path(__file__).resolve().parents[2] / '.tropo' / 'scripts'
@@ -144,10 +151,128 @@ import yaml  # v1.33.0 Stream H §3.1 PyYAML AST walk (R3 sa.skeptic-078 + sa.co
 # d996b941 L0c: shared identity resolver — must hard-fail on import (AC-L0c-fail)
 from lib._identity import _resolve_principal_uid, _get_principal_class  # noqa: E402
 
+# ADR-047 helper lives under vault/tools/lib/.  Load by path instead of
+# ``from lib`` because several regression harnesses pre-import the separate
+# namespace package at .tropo/scripts/lib before importing this module.
+import importlib.util as _importlib_util
+_mounted_projection_trust_spec = _importlib_util.spec_from_file_location(
+    "tropo_mounted_projection_trust",
+    Path(__file__).resolve().parent / "lib" / "mounted_projection_trust.py",
+)
+if (
+    _mounted_projection_trust_spec is None
+    or _mounted_projection_trust_spec.loader is None
+):
+    raise ImportError("mounted projection trust helper could not be loaded")
+mounted_projection_trust = _importlib_util.module_from_spec(
+    _mounted_projection_trust_spec
+)
+_mounted_projection_trust_spec.loader.exec_module(mounted_projection_trust)
+
+_index_surfaces_spec = _importlib_util.spec_from_file_location(
+    "tropo_index_surfaces",
+    Path(__file__).resolve().parent / "lib" / "index_surfaces.py",
+)
+if _index_surfaces_spec is None or _index_surfaces_spec.loader is None:
+    raise ImportError("ADR-047 index_surfaces helper could not be loaded")
+index_surfaces = _importlib_util.module_from_spec(_index_surfaces_spec)
+_index_surfaces_spec.loader.exec_module(index_surfaces)
+
+_EVENT_IDENTITY_MODULE_NAME = "tropo_event_identity"
+if _EVENT_IDENTITY_MODULE_NAME in sys.modules:
+    event_identity = sys.modules[_EVENT_IDENTITY_MODULE_NAME]
+else:
+    _event_identity_spec = _importlib_util.spec_from_file_location(
+        _EVENT_IDENTITY_MODULE_NAME,
+        Path(__file__).resolve().parent / "lib" / "event_identity.py",
+    )
+    if _event_identity_spec is None or _event_identity_spec.loader is None:
+        raise ImportError("shared event_identity helper could not be loaded")
+    event_identity = _importlib_util.module_from_spec(_event_identity_spec)
+    sys.modules[_EVENT_IDENTITY_MODULE_NAME] = event_identity
+    _event_identity_spec.loader.exec_module(event_identity)
+
+_PRUNING_CONTRACT_MODULE_NAME = "tropo_pruning_contract"
+if _PRUNING_CONTRACT_MODULE_NAME in sys.modules:
+    pruning_contract = sys.modules[_PRUNING_CONTRACT_MODULE_NAME]
+else:
+    _pruning_contract_spec = _importlib_util.spec_from_file_location(
+        _PRUNING_CONTRACT_MODULE_NAME,
+        Path(__file__).resolve().parent / "lib" / "pruning_contract.py",
+    )
+    if _pruning_contract_spec is None or _pruning_contract_spec.loader is None:
+        raise ImportError("shared pruning contract helper could not be loaded")
+    pruning_contract = _importlib_util.module_from_spec(_pruning_contract_spec)
+    sys.modules[_PRUNING_CONTRACT_MODULE_NAME] = pruning_contract
+    _pruning_contract_spec.loader.exec_module(pruning_contract)
+
+_FINDINGS_MODULE_NAME = "tropo_engine_findings"
+if _FINDINGS_MODULE_NAME in sys.modules:
+    typed_findings = sys.modules[_FINDINGS_MODULE_NAME]
+else:
+    _findings_spec = _importlib_util.spec_from_file_location(
+        _FINDINGS_MODULE_NAME,
+        Path(__file__).resolve().parent / "lib" / "findings.py",
+    )
+    if _findings_spec is None or _findings_spec.loader is None:
+        raise ImportError("typed findings primitive could not be loaded")
+    typed_findings = _importlib_util.module_from_spec(_findings_spec)
+    sys.modules[_FINDINGS_MODULE_NAME] = typed_findings
+    _findings_spec.loader.exec_module(typed_findings)
+
+Finding = typed_findings.Finding
+FindingTally = typed_findings.FindingTally
+Severity = typed_findings.Severity
+
+
+def _load_public_snapshot_contract():
+    """Load the co-located Phase 0.6 contract logic without ``lib`` ambiguity."""
+    module_name = "tropo_public_snapshot_contract"
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
+    spec = _importlib_util.spec_from_file_location(
+        module_name,
+        Path(__file__).resolve().parent / "lib" / "public_snapshot.py",
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError("public snapshot contract helper could not be loaded")
+    module = _importlib_util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
 UID_RE = re.compile(r'^[0-9a-f]{8}$')
 UID_REF_RE = re.compile(r'\b([0-9a-f]{8})\b')
+
+
+def _index_union(vault: Path) -> list[dict]:
+    """Resolution/validation view across ADR-047 current + archive surfaces.
+
+    The default index is intentionally current-only.  Validators preserve
+    history and cross-reference resolution by opting into the archive surface.
+    General diagnostics retain tolerant compatibility semantics; checks that
+    prove union completeness or govern mutation call ``read_jsonl_strict``
+    directly and fail closed when either surface is absent.
+    """
+    return index_surfaces.load_index_records(vault, include_archive=True)
+
+
+def _index_union_uids(vault: Path) -> set[str]:
+    return {
+        str(record["uid"])
+        for record in _index_union(vault)
+        if record.get("uid")
+    }
+
+
+def _canonical_event_union(vault: Path) -> list[dict]:
+    """Load canonical legacy-plus-stream history for event-backed checks."""
+    studio_root = vault.parent if (vault / "files").is_dir() else vault
+    return event_identity.load_event_union(studio_root)
+
 
 # Skip filenames in orphan detection (these legitimately have no uid:)
 ORPHAN_SKIP_NAMES = {
@@ -449,6 +574,24 @@ def check_uid_consistency(vault: Path) -> tuple[list[str], int]:
     return findings, checked
 
 
+def check_pruning_contract(vault: Path) -> tuple[list[str], int, int]:
+    """Validate every present pruning block through the shared core-v1.7 checker.
+
+    The scan is read-only and closed to the same four Markdown homes as the
+    canonical writer. ``checked`` counts present pruning blocks; absent blocks
+    are silent PASS. ``defects`` counts FAIL findings only, while WARN findings
+    remain visible to the caller's warning tally.
+    """
+    results = pruning_contract.check_pruning_vault(vault)
+    findings = [
+        line
+        for result in results
+        for line in result.formatted_findings()
+    ]
+    defects = sum(result.defects for result in results)
+    return findings, len(results), defects
+
+
 def check_uid_refs_are_strings(vault: Path) -> tuple[list[str], int, int]:
     """d3a58cdf item 1 — UID-reference fields must contain string values, not integers.
 
@@ -547,35 +690,532 @@ def check_uid_collision(vault: Path) -> tuple[list[str], int, int]:
                 )
                 int_uid_count += 1
 
-    # (b) index duplicate UIDs
-    index_path = vault / "vault" / "00-index.jsonl"
-    if index_path.exists():
+    # (b) index duplicate UIDs — ADR-047 requires zero overlap both within
+    # and ACROSS the current/archive surfaces.
+    index_paths = (
+        vault / "vault" / index_surfaces.CURRENT_INDEX_NAME,
+        vault / "vault" / index_surfaces.ARCHIVE_INDEX_NAME,
+    )
+    for index_path in index_paths:
+        if not index_path.is_file():
+            raise index_surfaces.IndexSurfaceRefusal(
+                f"REFUSAL: UID collision union requires {index_path}"
+            )
         seen: dict[str, str] = {}
-        for raw in index_path.read_text(errors="replace").splitlines():
-            raw = raw.strip()
-            if not raw:
-                continue
-            try:
-                entry = _json.loads(raw)
-            except Exception:
-                continue
-            if not isinstance(entry, dict):
-                continue
+        for entry in index_surfaces.read_jsonl_strict(index_path):
             uid = entry.get("uid")
             if not uid:
                 continue
             if uid in seen:
                 if uid not in {f.split()[1] for f in findings if f.startswith("[WARN] index")}:
                     findings.append(
-                        f"[WARN] index duplicate: uid {uid!r} appears multiple times "
+                        f"[WARN] index duplicate: uid {uid!r} appears multiple times in "
+                        f"{index_path.name} "
                         f"(stale rebuild artifact — rebuild-vault.py --apply resolves)"
                     )
                     dup_uid_count += 1
             else:
                 seen[uid] = entry.get("type", "?")
 
+    current_uids = {
+        rec.get("uid")
+        for rec in index_surfaces.read_jsonl_strict(index_paths[0])
+        if rec.get("uid")
+    }
+    archive_uids = {
+        rec.get("uid")
+        for rec in index_surfaces.read_jsonl_strict(index_paths[1])
+        if rec.get("uid")
+    }
+    for uid in sorted(current_uids & archive_uids):
+        findings.append(
+            f"[WARN] index duplicate: uid {uid!r} appears in BOTH "
+            f"{index_surfaces.CURRENT_INDEX_NAME} and {index_surfaces.ARCHIVE_INDEX_NAME} "
+            f"(ADR-047 partition overlap — rebuild-vault.py --apply resolves)"
+        )
+        dup_uid_count += 1
+
     checked = int_uid_count + dup_uid_count
     return findings, int_uid_count, dup_uid_count
+
+
+def _resolve_index_record_path(vault: Path, record: dict) -> Optional[Path]:
+    """Resolve an index row to canonical local or mounted source."""
+    relative = record.get('path')
+    if isinstance(relative, str) and relative:
+        if relative.startswith('mounted/'):
+            parts = Path(relative).parts
+            if len(parts) >= 4:
+                vault_uid = parts[1]
+                lock_path = vault / '.tropo-studio' / 'compose.lock'
+                try:
+                    lock = json.loads(lock_path.read_text(encoding='utf-8'))
+                    mount_record = lock.get('vaults', {}).get(vault_uid, {})
+                    mount_path = mount_record.get('mount_path')
+                    if mount_path:
+                        candidate = Path(mount_path).joinpath(*parts[2:])
+                        if candidate.is_file():
+                            return candidate
+                except (OSError, json.JSONDecodeError, AttributeError):
+                    return None
+        else:
+            candidate = vault / relative
+            if candidate.is_file():
+                return candidate
+
+    uid = record.get('uid')
+    if not isinstance(uid, str) or not uid:
+        return None
+    candidates = (
+        vault / 'vault' / 'files' / f'{uid}.md',
+        vault / 'vault' / 'agents' / f'{uid}.md',
+        vault / 'vault' / 'playbooks' / f'{uid}.md',
+        vault / 'vault' / 'skills' / f'{uid}.md',
+        vault / 'vault' / 'session-agents' / f'{uid}.md',
+        vault / 'vault' / 'actions' / f'{uid}.md',
+        vault / 'vault' / 'tools' / f'{uid}.py',
+        vault / 'vault' / 'tools' / f'{uid}.md',
+        vault / 'vault' / 'tools' / f'{uid}.json',
+    )
+    return next((candidate for candidate in candidates if candidate.is_file()), None)
+
+
+def check_index_union_integrity(vault: Path) -> tuple[list[str], int, int]:
+    """ERROR invariant over the explicit current + archive union.
+
+    Unlike ``load_index_records(..., include_archive=True)``, this check must
+    preserve duplicate rows so it can prove uniqueness rather than hide an
+    impossible overlap through consumer-side deduplication.
+    """
+    findings: list[str] = []
+    rows: list[tuple[str, dict]] = []
+    try:
+        with index_surfaces.index_write_lock(vault, recover=False):
+            for surface_name in (
+                index_surfaces.CURRENT_INDEX_NAME,
+                index_surfaces.ARCHIVE_INDEX_NAME,
+            ):
+                path = vault / 'vault' / surface_name
+                if not path.is_file():
+                    findings.append(
+                        f'[ERROR] INDEX-UNION (current + archive): required '
+                        f'surface {surface_name} is missing'
+                    )
+                    continue
+                rows.extend(
+                    (surface_name, record)
+                    for record in index_surfaces.read_jsonl_strict(path)
+                )
+    except (
+        index_surfaces.IndexSurfaceRefusal,
+        index_surfaces.IndexLockTimeout,
+    ) as exc:
+        findings.append(
+            f'[ERROR] INDEX-UNION (current + archive): {exc}'
+        )
+
+    seen: dict[str, str] = {}
+    for surface_name, record in rows:
+        uid = record.get('uid')
+        if not isinstance(uid, str) or not uid:
+            findings.append(
+                f'[ERROR] INDEX-UNION (current + archive): row in '
+                f'{surface_name} has no string uid'
+            )
+            continue
+        if uid in seen:
+            findings.append(
+                f'[ERROR] INDEX-UNION UID uniqueness: {uid!r} appears in '
+                f'{seen[uid]} and {surface_name}; full union requires one row '
+                'per UID'
+            )
+        else:
+            seen[uid] = surface_name
+        if _resolve_index_record_path(vault, record) is None:
+            findings.append(
+                f'[ERROR] INDEX-UNION row resolution: {uid!r} from '
+                f'{surface_name} has no backing canonical file '
+                '(checked across current + archive union)'
+            )
+
+    return findings, len(rows), len(findings)
+
+
+def _load_template_leg_module():
+    module_name = 'tropo_live_template_leg'
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
+    spec = _importlib_util.spec_from_file_location(
+        module_name,
+        Path(__file__).resolve().parent / 'lib' / 'template_leg.py',
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError('template-leg helper could not be loaded')
+    module = _importlib_util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _folder_mount_registry(vault: Path) -> dict[str, dict]:
+    registry_path = vault / '.tropo-studio' / 'folder-mounts.json'
+    try:
+        registry = json.loads(registry_path.read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {}
+    mounts = registry.get('mounts') if isinstance(registry, dict) else None
+    if not isinstance(mounts, dict):
+        return {}
+    return {
+        str(uid): value
+        for uid, value in mounts.items()
+        if UID_RE.fullmatch(str(uid)) and isinstance(value, dict)
+    }
+
+
+def _template_projection_file_matches(vault: Path, record: dict) -> bool:
+    uid = str(record.get('uid') or '')
+    mount_uid = str(record.get('mount_uid') or '')
+    availability = str(record.get('availability') or '')
+    projection = vault / 'vault' / 'files' / f'{uid}.md'
+    try:
+        if projection.is_symlink():
+            return False
+        text = projection.read_text(encoding='utf-8')
+    except (OSError, UnicodeError):
+        return False
+    frontmatter = split_frontmatter(text)
+    if frontmatter is None:
+        return False
+    if not (
+        get_scalar(frontmatter, 'uid') == uid
+        and get_scalar(frontmatter, 'type') == 'external-artifact'
+        and get_scalar(frontmatter, 'mount_uid') == mount_uid
+        and get_scalar(frontmatter, 'projection_authority') == 'derived-only'
+        and get_scalar(frontmatter, 'availability') == availability
+    ):
+        return False
+    if availability in {'unavailable', 'ambiguous'}:
+        return not any(
+            get_scalar(frontmatter, field)
+            for field in (
+                'source_path',
+                'source_sidecar',
+                'original_path',
+                'mount_relpath',
+            )
+        ) and not any(
+            get_list(frontmatter, field)
+            for field in ('member_of', 'relations')
+        )
+    return True
+
+
+def _available_projection_binding_decision(
+    record: dict,
+    mount: dict,
+) -> dict:
+    mount_uid = str(record.get('mount_uid') or '')
+    if mount.get('availability') != 'available':
+        return {
+            'status': 'untrusted',
+            'reason': 'mount-unavailable',
+            'relpath': None,
+            'sidecar_input': None,
+        }
+    raw_root = mount.get('path')
+    if not isinstance(raw_root, str) or not raw_root.strip():
+        return {
+            'status': 'untrusted',
+            'reason': 'mount-root-missing',
+            'relpath': None,
+            'sidecar_input': None,
+        }
+    root = Path(os.path.abspath(Path(raw_root).expanduser()))
+    try:
+        if root.is_symlink() or not root.is_dir():
+            raise OSError('mount root is not a regular directory')
+    except OSError:
+        return {
+            'status': 'untrusted',
+            'reason': 'mount-root-unavailable',
+            'relpath': None,
+            'sidecar_input': None,
+        }
+    sidecars, sidecars_by_path = (
+        mounted_projection_trust.load_sidecar_catalog(
+            root,
+            max_bytes=4 * 1024 * 1024,
+        )
+    )
+    return mounted_projection_trust.verify_available_projection_binding(
+        record,
+        mount_uid=mount_uid,
+        mount=mount,
+        mount_root=root,
+        sidecars=sidecars,
+        sidecars_by_path=sidecars_by_path,
+    )
+
+
+def _template_body_shape_exemption_decision(
+    record: dict,
+    *,
+    vault: Path,
+    mounts: dict[str, dict],
+) -> tuple[bool, Optional[str]]:
+    """Whether this row is a source-shaped projection, not a minted body.
+
+    The exemption is intentionally limited to this validator leg. UID,
+    duplicate, provenance, capsule, index-union, and structural checks run in
+    their own passes and continue to see the row.
+    """
+    uid = str(record.get('uid') or '')
+    mount_uid = str(record.get('mount_uid') or '')
+    availability = str(record.get('availability') or '')
+    mount = mounts.get(mount_uid)
+    if not bool(
+        record.get('type') == 'external-artifact'
+        and record.get('projection_authority') == 'derived-only'
+        and UID_RE.fullmatch(uid)
+        and UID_RE.fullmatch(mount_uid)
+        and isinstance(mount, dict)
+        and mount.get('state') == 'adopted'
+        and record.get('path') == f'vault/files/{uid}.md'
+        and availability in {'available', 'unavailable', 'ambiguous'}
+    ):
+        return False, 'projection-ownership-fields-invalid'
+    if not _template_projection_file_matches(vault, record):
+        return False, 'projection-stub-mismatch'
+    if availability == 'available':
+        binding = _available_projection_binding_decision(record, mount)
+        return (
+            binding.get('status') == 'verified',
+            (
+                None
+                if binding.get('status') == 'verified'
+                else str(binding.get('reason') or 'unknown')
+            ),
+        )
+    projection_uids = mount.get('projection_uids')
+    projection_hashes = mount.get('projection_hashes')
+    expected_hash = (
+        projection_hashes.get(uid)
+        if isinstance(projection_hashes, dict)
+        else None
+    )
+    try:
+        actual_hash = hashlib.sha256(
+            (vault / 'vault' / 'files' / f'{uid}.md').read_bytes()
+        ).hexdigest()
+    except OSError:
+        return False
+    exempt = (
+        mount.get('availability') == availability
+        and isinstance(projection_uids, list)
+        and uid in {str(candidate) for candidate in projection_uids}
+        and isinstance(expected_hash, str)
+        and actual_hash == expected_hash
+    )
+    return (
+        exempt,
+        None if exempt else 'registry-tombstone-ownership-invalid',
+    )
+
+
+def _template_body_shape_exempt(
+    record: dict,
+    *,
+    vault: Path,
+    mounts: dict[str, dict],
+) -> bool:
+    exempt, _reason = _template_body_shape_exemption_decision(
+        record,
+        vault=vault,
+        mounts=mounts,
+    )
+    return exempt
+
+
+def check_live_template_body_shape(vault: Path) -> tuple[list[str], int, int]:
+    """Validate template/body shape for CURRENT rows only.
+
+    Archived/superseded entries remain available to union integrity and
+    resolution checks, but they are frozen history rather than live authoring
+    work.  This is deliberately index-scoped instead of a ``vault/files`` walk.
+
+    Two scoping rules the §Template leg's own governing text already carries, and
+    that this check originally dropped:
+
+    * **The leg is a MINT-TIME contract.**  It describes what ``mint file``
+      stamps, so it can only bind instances that were minted from it.  Every leg
+      in this vault was authored 2026-07-12..07-18 while the corpus goes back
+      months, and the Mike-walked program brief (b600698e §6) puts that corpus on
+      the protect list -- "they gain template/verifier legs, nothing migrates" --
+      with S2 (bba40cd7) naming historical migration explicitly OUT of scope.
+      Each capsule declares ``template_enforced_from`` and may refine a revised
+      body contract with ``template_enforced_from_version``; older instances are
+      grandfathered for section presence. Judged against 1,089 findings across
+      363 entries that were retroactive by construction.
+    * **Severity is the capsule's to declare, not this function's.**  The grades
+      come from the capsule-of-capsules §Generic Instance-Verifier Checks.  A
+      hardcoded grade here would be the second source of truth that drifts.
+
+    Grandfathering is deliberately narrow: it suppresses MISSING-SECTION only.
+    A pre-leg entry stays subject to every other check in this function and in
+    the rest of the validator.
+    """
+    current_path = vault / 'vault' / index_surfaces.CURRENT_INDEX_NAME
+    if not current_path.exists():
+        return [], 0, 0
+    try:
+        current_records = index_surfaces.read_jsonl_strict(current_path)
+    except index_surfaces.IndexSurfaceRefusal as exc:
+        return [f'[ERROR] LIVE-TEMPLATE current surface unreadable: {exc}'], 0, 1
+
+    template_leg = _load_template_leg_module()
+    severities = template_leg.load_instance_verifier_severities(vault)
+    mounts = _folder_mount_registry(vault)
+    findings: list[str] = []
+    undeclared_grades: set[str] = set()
+
+    def grade(check_name: str) -> Optional[str]:
+        """The capsule-declared grade, or None when the capsule is silent.
+
+        None is not "use a default" -- there is no default.  The caller drops the
+        finding and the run reports the undeclared check as an ERROR, so an
+        ungraded check fails loudly instead of silently picking a severity that
+        nothing governs.
+        """
+        severity = severities.get(check_name)
+        if severity is None:
+            undeclared_grades.add(check_name)
+        return severity
+
+    checked = 0
+    undeclared_enforcement: dict[str, str] = {}
+    verifier_legs: dict[str, object] = {}
+    unavailable_legs: set[str] = set()
+    for record in current_records:
+        uid = record.get('uid')
+        entry_type = record.get('type')
+        if not isinstance(uid, str) or not isinstance(entry_type, str):
+            continue
+        record_path = record.get('path')
+        if (
+            isinstance(record_path, str)
+            and Path(record_path).suffix.lower() in {'.py', '.json'}
+        ):
+            # Template/body-shape is a Markdown contract. Tool source and JSON
+            # metadata remain outside this leg even if their rows carry fields
+            # that resemble a mounted projection.
+            continue
+        exempt, provenance_reason = _template_body_shape_exemption_decision(
+            record,
+            vault=vault,
+            mounts=mounts,
+        )
+        if exempt:
+            continue
+        if (
+            provenance_reason
+            and entry_type == 'external-artifact'
+            and record.get('mount_uid')
+        ):
+            findings.append(
+                f'[WARN] {uid} ({entry_type}): '
+                'MOUNTED-PROJECTION-PROVENANCE-INVALID — '
+                f'{provenance_reason}; template/body-shape exemption denied'
+            )
+        if entry_type in unavailable_legs:
+            continue
+        leg = verifier_legs.get(entry_type)
+        if leg is None:
+            try:
+                leg = template_leg.load_verifier_template(vault, entry_type)
+            except template_leg.TemplateLegError:
+                unavailable_legs.add(entry_type)
+                continue
+            verifier_legs[entry_type] = leg
+        instance_path = _resolve_index_record_path(vault, record)
+        if instance_path is None:
+            # The union integrity check owns the ERROR to avoid double-counting.
+            continue
+        try:
+            instance_text = instance_path.read_text(encoding='utf-8')
+        except (OSError, UnicodeError) as exc:
+            severity = grade('body-unreadable')
+            if severity:
+                findings.append(
+                    f'[{severity}] {uid} ({entry_type}): LIVE-BODY unreadable — {exc}'
+                )
+            checked += 1
+            continue
+        checked += 1
+
+        if leg.enforced_from is None:
+            undeclared_enforcement[entry_type] = leg.capsule_path.name
+
+        instance_fm = split_frontmatter(instance_text) or ''
+        created = get_scalar(instance_fm, 'created') or record.get('created')
+        capsule_version = (
+            get_scalar(instance_fm, 'capsule_version')
+            or record.get('capsule_version')
+        )
+        if not leg.grandfathers(
+            created if isinstance(created, str) else None,
+            capsule_version,
+        ):
+            severity = grade('sections-present')
+            if severity:
+                found_sections = template_leg.find_sections(instance_text)
+                for title in leg.required_sections():
+                    if title not in found_sections:
+                        findings.append(
+                            f'[{severity}] {uid} ({entry_type}): MISSING-SECTION — '
+                            f"required section '{title}' not found (CURRENT surface "
+                            f'only; template: {leg.capsule_path.name}, enforced from '
+                            f'{leg.enforced_from}; entry created {created})'
+                        )
+
+        severity = grade('placeholder-survival')
+        if severity:
+            for placeholder_text in template_leg.find_required_placeholders(instance_text, entry_type):
+                findings.append(
+                    f'[{severity}] {uid} ({entry_type}): INCOMPLETE — required '
+                    f'placeholder survived: "{placeholder_text}" '
+                    '(CURRENT surface only)'
+                )
+        severity = grade('stray-mint-token')
+        if severity:
+            for stray in template_leg.find_stray_mint_tokens(instance_text, entry_type):
+                findings.append(
+                    f'[{severity}] {uid} ({entry_type}): MALFORMED-MINT — stray '
+                    f'{stray} token survived (CURRENT surface only)'
+                )
+
+    for entry_type, capsule_name in sorted(undeclared_enforcement.items()):
+        findings.append(
+            f'[WARN] {capsule_name} ({entry_type}): TEMPLATE-ENFORCEMENT-UNDECLARED '
+            '— capsule carries a §Template leg but no template_enforced_from; '
+            'section-presence enforcement is inert for this type until the date '
+            "the leg was authored is declared (core.capsule §Optional Frontmatter)"
+        )
+    if undeclared_grades:
+        findings.append(
+            '[ERROR] INSTANCE-VERIFIER-SEVERITY: no declared grade for '
+            f'{", ".join(sorted(undeclared_grades))} in vault/capsules/'
+            f'{template_leg.CAPSULE_DEFINITION_CAPSULE} §Generic Instance-Verifier '
+            'Checks — those findings were withheld rather than graded against a '
+            'severity nothing governs'
+        )
+
+    defects = sum(
+        1 for finding in findings
+        if finding.startswith('[FAIL]') or finding.startswith('[ERROR]')
+    )
+    return findings, checked, defects
 
 
 def check_mint_id_chokepoint(vault: Path) -> tuple[list[str], int, int]:
@@ -990,44 +1630,36 @@ def check_version_consistency(vault: Path) -> tuple[list[str], int, int]:
     # release_version allows optional leading 'v' (e.g. `v1.73.0` or `1.73.0`).
     semver_re = re.compile(r'^v?(\d+)\.(\d+)\.(\d+)$')
 
-    with index_path.open() as fp:
-        for raw in fp:
-            raw = raw.strip()
-            if not raw:
-                continue
-            try:
-                row = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
-            if row.get('type') != 'release':
-                continue
-            # Filter to shipped releases only. state:active is set on ALL releases
-            # (rolling-window not enforced in data), so using state:active as the
-            # discriminator picks the in-flight pre-ship entry as "highest active"
-            # and masks genuine drift. status:shipped = genuinely landed.
-            if row.get('status') != 'shipped':
-                continue
-            member_of = row.get('member_of') or []
-            # Type-guard (R3 RE-RUN cold-boot-182 D1-NEW-2 absorption): Python's
-            # `in` operator does substring match on strings. A malformed
-            # member_of (string instead of list) would substring-match
-            # 'cd1fcd25' and false-pass the dev-pipeline discriminator.
-            # rebuild-vault.py builds list-typed member_of by construction;
-            # this guard is defense-in-depth for adversarial / hand-edited input.
-            if not isinstance(member_of, list) or 'cd1fcd25' not in member_of:
-                # Not a Tropo-OS dev-pipeline release; skip
-                continue
-            uid = row.get('uid')
-            release_version = row.get('release_version')
-            if not isinstance(release_version, str):
-                malformed.append(f'{uid}: release_version "{release_version}" non-conforming (expected MAJOR.MINOR.PATCH)')
-                continue
-            rv_m = semver_re.match(release_version)
-            if not rv_m:
-                malformed.append(f'{uid}: release_version "{release_version}" non-conforming (expected MAJOR.MINOR.PATCH)')
-                continue
-            # Normalise: strip leading 'v' so sort/compare work on plain semver strings.
-            conforming.append((uid, f'{rv_m.group(1)}.{rv_m.group(2)}.{rv_m.group(3)}'))
+    for row in _index_union(vault):
+        if row.get('type') != 'release':
+            continue
+        # Filter to shipped releases only. state:active is set on ALL releases
+        # (rolling-window not enforced in data), so using state:active as the
+        # discriminator picks the in-flight pre-ship entry as "highest active"
+        # and masks genuine drift. status:shipped = genuinely landed.
+        if row.get('status') != 'shipped':
+            continue
+        member_of = row.get('member_of') or []
+        # Type-guard (R3 RE-RUN cold-boot-182 D1-NEW-2 absorption): Python's
+        # `in` operator does substring match on strings. A malformed
+        # member_of (string instead of list) would substring-match
+        # 'cd1fcd25' and false-pass the dev-pipeline discriminator.
+        # rebuild-vault.py builds list-typed member_of by construction;
+        # this guard is defense-in-depth for adversarial / hand-edited input.
+        if not isinstance(member_of, list) or 'cd1fcd25' not in member_of:
+            # Not a Tropo-OS dev-pipeline release; skip
+            continue
+        uid = row.get('uid')
+        release_version = row.get('release_version')
+        if not isinstance(release_version, str):
+            malformed.append(f'{uid}: release_version "{release_version}" non-conforming (expected MAJOR.MINOR.PATCH)')
+            continue
+        rv_m = semver_re.match(release_version)
+        if not rv_m:
+            malformed.append(f'{uid}: release_version "{release_version}" non-conforming (expected MAJOR.MINOR.PATCH)')
+            continue
+        # Normalise: strip leading 'v' so sort/compare work on plain semver strings.
+        conforming.append((uid, f'{rv_m.group(1)}.{rv_m.group(2)}.{rv_m.group(3)}'))
 
     if not conforming:
         findings.append('[WARN] no shipped Tropo-OS release entry in vault (first cycle OR substrate-staleness)')
@@ -1077,35 +1709,75 @@ def check_version_consistency(vault: Path) -> tuple[list[str], int, int]:
 
 
 def check_integrity_parity(vault: Path) -> tuple[list[str], bool]:
-    """v1.5 inbox 656c26d0 — 00-integrity.json blocked_tasks count↔uids parity check.
+    """v1.5 inbox 656c26d0 — blocked-task parity check.
 
-    The TS rebuilder writes a 00-integrity.json with a `blocked_tasks` object
-    that has both a `count` field and an array of UIDs. These can drift
-    (sa.daily-vault-health surfaced this on 2026-05-03: count 62 vs 42 UIDs).
-    Surface drift as a finding.
+    Re-pointed 2026-07-14 (vault/files/66b6f3e8.md; Argus A130 ruling, event
+    00006330). `vault/00-integrity.json` was retired: frozen since 2026-06-04
+    with no writer anywhere in the repo. This check originally compared that
+    file's self-reported `blocked_tasks.count` against the length of its own
+    `blocked_tasks.uids` array — both fields written by the same dead TS
+    rebuilder, so they could silently drift from each other
+    (sa.daily-vault-health surfaced exactly that on 2026-05-03: count 62 vs
+    42 UIDs).
+
+    The live truth surfaces (per the same ruling) are `vault/00-index.jsonl`
+    and `vault/00-index.sqlite` — both written in the same pass by
+    tropo-rebuild-index.py (build_sqlite_index / freshen_one share one
+    row-computation path), so they should never structurally disagree.
+    Re-pointed check: independently derive the set of type:task
+    status:blocked UIDs from each surface and flag any mismatch. Same
+    drift-detection intent as the original (two representations of one fact
+    falling out of sync), now checked against live data instead of an
+    orphaned cached report — and a real defect (a rebuild that only
+    half-completed) rather than a tautology, since jsonl and sqlite are
+    independently queried here, not cross-derived from each other.
     """
     findings: list[str] = []
-    integrity_path = vault / 'vault' / '00-integrity.json'
-    if not integrity_path.is_file():
-        return [f'[INFO] vault/00-integrity.json — not present (skip parity check)'], True
+    index_path = vault / 'vault' / '00-index.jsonl'
+    sqlite_path = vault / 'vault' / '00-index.sqlite'
+
+    if not index_path.is_file():
+        return [f'[INFO] vault/00-index.jsonl — not present (skip blocked-task parity check)'], True
+    if not sqlite_path.is_file():
+        return [f'[INFO] vault/00-index.sqlite — not present (skip blocked-task parity check)'], True
+
+    jsonl_blocked: set[str] = {
+        rec['uid']
+        for rec in _index_union(vault)
+        if rec.get('type') == 'task'
+        and rec.get('status') == 'blocked'
+        and rec.get('uid')
+    }
+
+    import sqlite3 as _sq3
     try:
-        data = json.loads(integrity_path.read_text())
-    except json.JSONDecodeError as e:
-        return [f'[WARN] vault/00-integrity.json — JSON parse failed: {e}'], False
+        conn = _sq3.connect(str(sqlite_path))
+        try:
+            rows = conn.execute(
+                "SELECT uid FROM entries WHERE type = 'task' AND status = 'blocked'"
+            ).fetchall()
+        finally:
+            conn.close()
+    except _sq3.Error as e:
+        return [f'[WARN] vault/00-index.sqlite — query failed: {e}'], False
+    sqlite_blocked = {row[0] for row in rows}
 
-    blocked = data.get('blocked_tasks') or data.get('blocked', {})
-    if not isinstance(blocked, dict):
-        return [], True
-
-    count = blocked.get('count')
-    uids = blocked.get('uids')
-    if isinstance(count, int) and isinstance(uids, list):
-        if count != len(uids):
-            findings.append(
-                f'[WARN] vault/00-integrity.json — blocked_tasks count={count} but uids array has {len(uids)} entries; '
-                f'parity drift (v1.5 inbox 656c26d0)'
-            )
-            return findings, False
+    if jsonl_blocked != sqlite_blocked:
+        only_jsonl = sorted(jsonl_blocked - sqlite_blocked)
+        only_sqlite = sorted(sqlite_blocked - jsonl_blocked)
+        detail_bits = []
+        if only_jsonl:
+            preview = ', '.join(only_jsonl[:5]) + ('…' if len(only_jsonl) > 5 else '')
+            detail_bits.append(f'{len(only_jsonl)} only in jsonl ({preview})')
+        if only_sqlite:
+            preview = ', '.join(only_sqlite[:5]) + ('…' if len(only_sqlite) > 5 else '')
+            detail_bits.append(f'{len(only_sqlite)} only in sqlite ({preview})')
+        findings.append(
+            f'[WARN] blocked-task parity — current+archive JSONL union has {len(jsonl_blocked)} status:blocked '
+            f'task(s), vault/00-index.sqlite has {len(sqlite_blocked)}; drift: {"; ".join(detail_bits)} '
+            f'(run npm run vault:rebuild to resync; v1.5 inbox 656c26d0, re-pointed per 66b6f3e8)'
+        )
+        return findings, False
 
     return findings, True
 
@@ -1811,6 +2483,70 @@ def check_activation_stale_sweep(vault: Path) -> tuple[list[str], int, int]:
     return findings, total_active, stale_candidates
 
 
+def check_pipeline_root_terminal_closure(vault: Path) -> tuple[list[str], int, int]:
+    """v3.4 / v1.90 pipeline.capsule Rule 12 terminal-invariant check (dev-spec c392d833).
+
+    The CLOSING mirror of Rule 10's step-0 authoring invariant: every pipeline
+    activation root MUST reach state:archived + final_commit at ship/close. This
+    check flags a SHIPPED/COMPLETED cycle whose activation root is still
+    state:active — the exact defect metis-g91 diagnosed (task 1d689277: 93 roots
+    stuck state:active studio-wide; dev 81% closed / test 17% / doc 9%).
+
+    An activation root is a type:project entry whose title contains 'Activation
+    Root' OR which carries activated_by_pipeline: (the pipeline-activate.py marker
+    written by e337f1dd.py author_activation_root_project). A root is TERMINAL
+    when status ∈ {done, retired, closed, complete, cancelled}. An in-flight root
+    (status:active) is NOT flagged — parallel cycles stay legal (Mike-A94
+    concurrency_model:independent); closing is per-root at its own ship, never a
+    global gate.
+
+    WARN-severity at v1.90 (ratchets to ERROR later, the Check 19/20 WARN→ERROR
+    lifecycle): shipped WARN so it cannot red-light a concurrent cycle's validate
+    while the weld (run_close_out_hook + build-release ship path) remediates the
+    field forward. tropo-sweep-stale-roots.py (metis-g91) is the backstop.
+
+    Returns (findings, total_roots, violations).
+    """
+    findings: list[str] = []
+    files_dir = vault / 'vault' / 'files'
+    if not files_dir.is_dir():
+        return findings, 0, 0
+
+    TERMINAL = {"done", "retired", "closed", "complete", "cancelled"}
+    total_roots = 0
+    violations = 0
+
+    for f in files_dir.glob('*.md'):
+        try:
+            text = f.read_text(errors='replace')
+        except Exception:
+            continue
+        fm = split_frontmatter(text)
+        if fm is None:
+            continue
+        if get_scalar(fm, 'type') != 'project':
+            continue
+        title = get_scalar(fm, 'title') or ''
+        is_root = ('Activation Root' in title) or (get_scalar(fm, 'activated_by_pipeline') is not None)
+        if not is_root:
+            continue
+        total_roots += 1
+        status = (get_scalar(fm, 'status') or '').lower()
+        state = (get_scalar(fm, 'state') or '').lower()
+        if status in TERMINAL and state == 'active':
+            final_commit = get_scalar(fm, 'final_commit')
+            missing = 'state:active' + ('' if final_commit else ' + no final_commit')
+            findings.append(
+                f'[WARN] vault/files/{f.name} — activation root status:{status} but {missing} '
+                f'(pipeline.capsule Rule 12 terminal-closure: a shipped/completed cycle MUST reach '
+                f'state:archived + final_commit). Primary writer: run_close_out_hook on the '
+                f'tropo-build-release.py ship path; backstop: tropo-sweep-stale-roots.py.'
+            )
+            violations += 1
+
+    return findings, total_roots, violations
+
+
 def check_governance_contract_typing(vault: Path) -> tuple[list[str], int, int]:
     """v1.20.0 Stream A — Verify governance-contract instances at vault/files/ are well-formed.
 
@@ -1869,7 +2605,7 @@ def check_governance_contract_typing(vault: Path) -> tuple[list[str], int, int]:
 
 
 def check_memory_typing(vault: Path) -> tuple[list[str], int, int]:
-    """v1.26.0 Stream 4 — Verify memory entries declare valid frontmatter per memory.capsule v1.0.
+    """Verify discrete v3 memory entries per memory.capsule v1.6.
 
     Sweeps:
       agents/<slug>/.tropo-capsule/memory/entries/*.md   (per-agent memory)
@@ -1880,28 +2616,32 @@ def check_memory_typing(vault: Path) -> tuple[list[str], int, int]:
     in later cycle once substrate has settled per Stream 0 migration).
 
     Checks per entry:
-      1. Required-field presence: subtype, scope, context, body, created
+      1. Required-field presence: subtype, scope, context + markdown body
       2. Enum compliance: subtype ∈ {semantic,episodic,procedural,reference,feedback};
-         scope ∈ {agent,vault,project}; tier ∈ {stm,current,topic,archival,demoted}
+         scope ∈ {agent,studio,doctrine}; tier ∈ {stm,current,topic,archival,demoted}
       3. score: float in [0.0, 1.0] if set
       4. context: ≤ 120 chars if set
+      5. (v1.6, dev-spec 47c26a60) reinforcement_count is a non-negative integer if set;
+         reinforced_by is a list of well-formed generation labels if set (Check 8)
+      6. (v1.6) curator-mutable-field discipline: a memory entry carrying any of
+         last_referenced/reference_count/score/tier/reinforcement_count/reinforced_by
+         whose modified_by is a non-curator writer (not sa.memory-curator/argus) surfaces
+         a WARN — the same finding class for all curator-mutable fields (Check 7)
 
     Citation resolution (refs:) deferred to sa.memory-curator's verification-before-use
-    pass at boot — not the validator's job. Curator-mutable field discipline (only
-    sa.memory-curator can write last_referenced/reference_count/score/tier) is enforced
-    at curator dispatch time, not validation time.
+    pass at boot — not the validator's job.
 
     Silently skips entries directories that don't exist yet (Stream 0 may not have
     populated them at validator run-time; absence is not failure).
 
-    Returns (findings, total_checked, defects). Capsule: memory v1.0 (UID a5b3c891).
+    Returns (findings, total_checked, defects). Capsule UID a5b3c891.
     """
     findings: list[str] = []
     total_checked = 0
     defects = 0
 
     valid_subtypes = {'semantic', 'episodic', 'procedural', 'reference', 'feedback'}
-    valid_scopes = {'agent', 'vault', 'project'}
+    valid_scopes = {'agent', 'studio', 'doctrine'}
     valid_tiers = {'stm', 'current', 'topic', 'archival', 'demoted'}
 
     candidate_dirs: list[Path] = []
@@ -1934,11 +2674,10 @@ def check_memory_typing(vault: Path) -> tuple[list[str], int, int]:
             continue
         total_checked += 1
         _validate_memory_frontmatter(
-            f, fm, valid_subtypes, valid_scopes, valid_tiers, findings,
+            vault, f, fm, valid_subtypes, valid_scopes, valid_tiers, findings,
         )
-        # body presence — markdown after frontmatter end
-        if '---' not in text[3:]:
-            findings.append(f'[WARN] {f.relative_to(vault)} — memory entry has no body content after frontmatter (memory.capsule v1.0 §Required)')
+        if not _memory_markdown_body(text):
+            findings.append(f'[WARN] {f.relative_to(vault)} — memory entry has no markdown body content (memory.capsule v1.5 §Entry Shape)')
             defects += 1
 
     # Memory entries in per-agent/vault-level directories
@@ -1951,12 +2690,14 @@ def check_memory_typing(vault: Path) -> tuple[list[str], int, int]:
                 continue
             fm = split_frontmatter(text)
             if fm is None:
-                findings.append(f'[WARN] {f.relative_to(vault)} — memory entry missing frontmatter (memory.capsule v1.0 §Required)')
+                findings.append(f'[WARN] {f.relative_to(vault)} — memory entry missing frontmatter (memory.capsule v1.5 §Entry Shape)')
                 defects += 1
                 continue
             _validate_memory_frontmatter(
-                f, fm, valid_subtypes, valid_scopes, valid_tiers, findings,
+                vault, f, fm, valid_subtypes, valid_scopes, valid_tiers, findings,
             )
+            if not _memory_markdown_body(text):
+                findings.append(f'[WARN] {f.relative_to(vault)} — memory entry has no markdown body content (memory.capsule v1.5 §Entry Shape)')
 
     # Count defects from findings list
     defects = sum(1 for line in findings if line.startswith('[WARN]') or line.startswith('[FAIL]'))
@@ -1964,7 +2705,13 @@ def check_memory_typing(vault: Path) -> tuple[list[str], int, int]:
     return findings, total_checked, defects
 
 
+def _memory_markdown_body(text: str) -> str:
+    match = FRONTMATTER_RE.match(text)
+    return text[match.end():].strip() if match else ""
+
+
 def _validate_memory_frontmatter(
+    vault: Path,
     path: Path,
     fm: dict,
     valid_subtypes: set,
@@ -1972,30 +2719,30 @@ def _validate_memory_frontmatter(
     valid_tiers: set,
     findings: list,
 ) -> None:
-    """Helper for check_memory_typing — validates a single memory entry's frontmatter.
+    """Validate one memory entry's v1.5 frontmatter.
 
-    Mutates findings in place per memory.capsule v1.0 §Validation Checks.
+    Mutates findings in place per memory.capsule v1.5 §Validation Checks.
     All violations are WARN at v1.26.0 (grace period).
     """
-    rel = path.relative_to(path.parents[3]) if len(path.parents) >= 4 else path.name
+    rel = path.relative_to(vault)
 
     # Required fields
     for required in ('subtype', 'scope', 'context'):
         if not get_scalar(fm, required):
-            findings.append(f'[WARN] {rel} — memory entry missing required field {required!r} (memory.capsule v1.0 §Required)')
+            findings.append(f'[WARN] {rel} — memory entry missing required field {required!r} (memory.capsule v1.5 §Entry Shape)')
 
     # Enum compliance
     subtype = get_scalar(fm, 'subtype')
     if subtype and subtype not in valid_subtypes:
-        findings.append(f'[WARN] {rel} — subtype {subtype!r} not in {sorted(valid_subtypes)} (memory.capsule v1.0 §Subtypes)')
+        findings.append(f'[WARN] {rel} — subtype {subtype!r} not in {sorted(valid_subtypes)} (memory.capsule v1.5 §Subtypes)')
 
     scope = get_scalar(fm, 'scope')
     if scope and scope not in valid_scopes:
-        findings.append(f'[WARN] {rel} — scope {scope!r} not in {sorted(valid_scopes)} (memory.capsule v1.0 §Scope)')
+        findings.append(f'[WARN] {rel} — scope {scope!r} not in {sorted(valid_scopes)} (memory.capsule v1.5 §Scope)')
 
     retention = get_scalar(fm, 'retention')
     if retention and retention not in valid_tiers:
-        findings.append(f'[WARN] {rel} — retention {retention!r} not in {sorted(valid_tiers)} (memory.capsule v1.0 §State Machine)')
+        findings.append(f'[WARN] {rel} — retention {retention!r} not in {sorted(valid_tiers)} (memory.capsule v1.5 §State Machine)')
 
     # Score range
     score_raw = get_scalar(fm, 'score')
@@ -2003,14 +2750,66 @@ def _validate_memory_frontmatter(
         try:
             score_val = float(score_raw)
             if score_val < 0.0 or score_val > 1.0:
-                findings.append(f'[WARN] {rel} — score {score_val} outside [0.0, 1.0] range (memory.capsule v1.0 §Validation Check 4)')
+                findings.append(f'[WARN] {rel} — score {score_val} outside [0.0, 1.0] range (memory.capsule v1.5 §Validation Check 4)')
         except (TypeError, ValueError):
-            findings.append(f'[WARN] {rel} — score {score_raw!r} not a valid float (memory.capsule v1.0 §Validation Check 4)')
+            findings.append(f'[WARN] {rel} — score {score_raw!r} not a valid float (memory.capsule v1.5 §Validation Check 4)')
 
     # Context length
     context = get_scalar(fm, 'context')
     if context and len(context) > 120:
-        findings.append(f'[WARN] {rel} — context length {len(context)} > 120 chars (memory.capsule v1.0 §Validation Check 5)')
+        findings.append(f'[WARN] {rel} — context length {len(context)} > 120 chars (memory.capsule v1.5 §Validation Check 5)')
+
+    # Reinforcement fields well-formedness (memory.capsule v1.6 §Validation Check 8; dev-spec 47c26a60)
+    rc_raw = get_scalar(fm, 'reinforcement_count')
+    if rc_raw is not None and rc_raw.strip() != '':
+        # Non-negative integer only: reject signs, decimals, and non-digits.
+        if not re.fullmatch(r'\d+', rc_raw.strip()):
+            findings.append(
+                f'[WARN] {rel} — reinforcement_count {rc_raw!r} must be a non-negative integer '
+                f'(memory.capsule v1.6 §Validation Check 8)'
+            )
+
+    reinforced_by = get_list(fm, 'reinforced_by')
+    if reinforced_by is not None:
+        if any(isinstance(e, str) and e.startswith('__scalar__:') for e in reinforced_by):
+            findings.append(
+                f'[WARN] {rel} — reinforced_by must be a list of generation labels, not a scalar '
+                f'(memory.capsule v1.6 §Validation Check 8)'
+            )
+        else:
+            malformed = [
+                e for e in reinforced_by
+                if (not isinstance(e, str))
+                or (not e.strip())
+                or (not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', e.strip()))
+            ]
+            if malformed:
+                findings.append(
+                    f'[WARN] {rel} — reinforced_by contains malformed generation label(s) {malformed!r} '
+                    f'(memory.capsule v1.6 §Validation Check 8 — expect non-empty tokens like A115)'
+                )
+
+    # Curator-mutable field discipline (memory.capsule v1.6 §Validation Check 7).
+    # reinforcement_count + reinforced_by join score/tier/reference_count/last_referenced:
+    # a non-curator write surfaces the same WARN finding class (dev-spec 47c26a60 §Design.4).
+    curator_mutable_fields = (
+        'last_referenced', 'reference_count', 'score', 'tier',
+        'reinforcement_count', 'reinforced_by',
+    )
+    present_curator_fields = [
+        name for name in curator_mutable_fields if get_scalar(fm, name) is not None
+    ]
+    modified_by = get_scalar(fm, 'modified_by')
+    if (
+        present_curator_fields
+        and modified_by
+        and not any(writer in modified_by for writer in ('sa.memory-curator', 'argus'))
+    ):
+        findings.append(
+            f'[WARN] {rel} — curator-mutable field(s) {present_curator_fields} present but '
+            f'modified_by={modified_by!r} is not sa.memory-curator/argus '
+            f'(memory.capsule v1.6 §Validation Check 7 curator-mutable-field discipline)'
+        )
 
 
 def check_article_source_required_fields(vault: Path) -> tuple[list[str], int, int]:
@@ -2975,7 +3774,7 @@ def check_pipeline_runtime_has_jsonl(vault: Path) -> tuple[list[str], int, int]:
     return findings, total_checked, defects
 
 
-def check_step_completion_has_verification(vault: Path) -> tuple[list[str], int, int]:
+def check_step_completion_has_verification(vault: Path, thorough: bool = False) -> tuple[list[str], int, int]:
     """v1.46.0 — pipeline-run.capsule v2.0 §Validation Check 14 (MUST-SHIP).
 
     For every step_completed event in a v2.0-shape run.jsonl, a matching
@@ -2988,6 +3787,37 @@ def check_step_completion_has_verification(vault: Path) -> tuple[list[str], int,
 
     Only fires on v2.0-shape runs (those whose run.jsonl contains an
     activation_contract_locked event). Pre-v2.0 runs are skipped.
+
+    Governed Autonomy S1 (ef65fccd) rewrite — provenance + spot re-derivation:
+    presence of a verification_receipt:verdict:pass event was ALWAYS the whole check;
+    a receipt is just a JSONL line, and nothing here distinguished one the engine wrote
+    from executing a real command from one hand-appended to the file by anything with
+    write access. This is the exact class Argus A129 exploited on his own retirement
+    close-gate (f67fe144) and the general shape the dev-spec names: "check
+    check_step_completion_has_verification passes on an agent-authored verdict:pass
+    receipt." Two additions, both fail-closed, neither weakens the baseline check above:
+
+    1. PROVENANCE (always-on, no flag): a passing receipt that carries a `command` in
+       its forensics (engine-written per 9e7003b1.py's _run_verification_command, S1)
+       is a genuine engine-executed receipt. A receipt with NO forensics at all is only
+       legitimate for the narrow set of steps that never had a command to run in the
+       first place (verification_class:false auto-receipts, trigger-step's own
+       substrate-write receipt) — those are distinguishable by verifier_role_resolved
+       ('same-as-executor' with empty per_criterion, or a hardcoded trigger-step shape),
+       not by absence alone. A receipt claiming verifier_role_resolved:
+       'verification_command' WITHOUT forensics is flagged — that combination should be
+       structurally impossible post-S1 and its presence means either a pre-S1 legacy
+       receipt (INFO, grandfathered) or a forged one (FAIL).
+    2. SPOT RE-DERIVATION (--thorough only, per S1 acceptance criterion 5): for a
+       passing receipt that DOES carry forensics, re-run the recorded `command` in the
+       recorded `cwd` and compare the resulting exit_code AND output_sha256 against
+       what's recorded. A mismatch means either genuine drift (the underlying substrate
+       changed since the receipt was minted — worth knowing) or a tampered receipt
+       (worth knowing more urgently) — this check cannot tell the two apart and does not
+       try to; it reports the mismatch and lets a human classify it, same posture as
+       release_authorization.py's own re-run comparison for the pipeline-activation key.
+       Off by default (real command re-execution is not something a routine validator
+       pass should do silently) — pass thorough=True / --thorough explicitly.
 
     Returns (findings, total_checked, defects).
     """
@@ -3065,12 +3895,12 @@ def check_step_completion_has_verification(vault: Path) -> tuple[list[str], int,
             has_completed = any(e.get('event') == 'step_completed' for e in step_evs)
             if not has_completed:
                 continue
-            has_passed = any(
-                e.get('event') == 'verification_receipt'
+            passing_receipts = [
+                e for e in step_evs
+                if e.get('event') == 'verification_receipt'
                 and (e.get('data') or {}).get('verdict') == 'pass'
-                for e in step_evs
-            )
-            if not has_passed:
+            ]
+            if not passing_receipts:
                 try:
                     rel_jsonl = jsonl_path.relative_to(vault)
                 except ValueError:
@@ -3080,6 +3910,67 @@ def check_step_completion_has_verification(vault: Path) -> tuple[list[str], int,
                     f'verification_receipt:verdict:pass; pipeline-run.capsule v2.0 §Check 14.'
                 )
                 defects += 1
+                continue
+
+            # S1 provenance + spot re-derivation (both operate on the LATEST passing
+            # receipt — a step may accumulate several across re-verify cycles).
+            try:
+                rel_jsonl = jsonl_path.relative_to(vault)
+            except ValueError:
+                rel_jsonl = jsonl_path
+            receipt_data = passing_receipts[-1].get('data') or {}
+            forensics = receipt_data.get('forensics') or {}
+            verifier_role = receipt_data.get('verifier_role_resolved')
+
+            if not forensics:
+                if verifier_role == 'verification_command':
+                    findings.append(
+                        f'[FAIL] {rel_jsonl} — step {step_uid!r} receipt claims '
+                        f"verifier_role_resolved:'verification_command' but carries no forensics "
+                        f'(command/exit_code/output_sha256) — structurally impossible post-S1; '
+                        f'either a pre-S1 legacy receipt masquerading as command-verified, or a '
+                        f'forged receipt (ef65fccd provenance check).'
+                    )
+                    defects += 1
+                # else: no forensics + no verification_command claim — a legitimate
+                # no-command receipt shape (verification_class:false auto-receipt,
+                # trigger-step's substrate-write receipt). Nothing to flag.
+                continue
+
+            if thorough:
+                command = forensics.get('command')
+                cwd = forensics.get('cwd') or str(vault)
+                recorded_exit = forensics.get('exit_code')
+                recorded_hash = forensics.get('output_sha256')
+                if command:
+                    try:
+                        import shlex as _shlex_tv
+                        import hashlib as _hashlib_tv
+                        _parts = _shlex_tv.split(str(command))
+                        _argv = ([sys.executable] + _parts) if _parts and _parts[0].endswith('.py') else _parts
+                        _result = subprocess.run(_argv, capture_output=True, text=True,
+                                                 timeout=120, cwd=cwd)
+                        _live_output = (_result.stdout or '') + (_result.stderr or '')
+                        _live_hash = _hashlib_tv.sha256(_live_output.encode('utf-8', 'replace')).hexdigest()
+                        _mismatch = []
+                        if _result.returncode != recorded_exit:
+                            _mismatch.append(f'exit_code recorded={recorded_exit!r} live={_result.returncode!r}')
+                        if _live_hash != recorded_hash:
+                            _mismatch.append('output_sha256 mismatch (output changed since receipt was minted)')
+                        if _mismatch:
+                            findings.append(
+                                f'[FAIL] {rel_jsonl} — step {step_uid!r} SPOT RE-DERIVATION mismatch: '
+                                f'{"; ".join(_mismatch)} — command {command!r} no longer reproduces its '
+                                f'recorded receipt (drift or tamper; ef65fccd acceptance criterion 5).'
+                            )
+                            defects += 1
+                    except Exception as _e:
+                        findings.append(
+                            f'[FAIL] {rel_jsonl} — step {step_uid!r} SPOT RE-DERIVATION could not re-run '
+                            f'recorded command {command!r}: {_e} — a receipt whose command can no longer '
+                            f'even execute is not re-derivable evidence.'
+                        )
+                        defects += 1
 
     return findings, total_checked, defects
 
@@ -3609,20 +4500,9 @@ def check_working_copy_index_sync(vault: Path) -> tuple[list[str], int, int]:
     if not index_path.exists():
         return findings, checked, defects
 
-    # Build a set of UIDs present in the index
-    index_uids: set[str] = set()
-    try:
-        for line in index_path.read_text().splitlines():
-            if not line.strip():
-                continue
-            try:
-                row = json.loads(line.rstrip(','))
-                if 'uid' in row:
-                    index_uids.add(row['uid'])
-            except json.JSONDecodeError:
-                continue
-    except (OSError, UnicodeDecodeError):
-        return findings, checked, defects
+    # Inline-sync applies to the union: an archived working copy remains
+    # indexed on the opt-in ADR-047 history surface.
+    index_uids = _index_union_uids(vault)
 
     for path, fm in _walk_working_copies(vault):
         checked += 1
@@ -3631,7 +4511,7 @@ def check_working_copy_index_sync(vault: Path) -> tuple[list[str], int, int]:
             continue  # check_working_copy_schema already flagged
         if wc_uid not in index_uids:
             findings.append(
-                f'[FAIL] {path.relative_to(vault)} — working-copy uid={wc_uid!r} not in vault/00-index.jsonl; '
+                f'[FAIL] {path.relative_to(vault)} — working-copy uid={wc_uid!r} not in current/archive index union; '
                 f'tropo-extract.py MUST sync inline (closes fa026415 family of defects)'
             )
             defects += 1
@@ -3979,19 +4859,7 @@ def check_projection_index_sync(vault: Path) -> tuple[list[str], int, int]:
     if not index_path.exists():
         return findings, checked, defects
 
-    index_uids: set[str] = set()
-    try:
-        for line in index_path.read_text().splitlines():
-            if not line.strip():
-                continue
-            try:
-                row = json.loads(line.rstrip(','))
-                if 'uid' in row:
-                    index_uids.add(row['uid'])
-            except json.JSONDecodeError:
-                continue
-    except (OSError, UnicodeDecodeError):
-        return findings, checked, defects
+    index_uids = _index_union_uids(vault)
 
     for path, fm in _walk_external_artifacts(vault):
         checked += 1
@@ -4000,7 +4868,7 @@ def check_projection_index_sync(vault: Path) -> tuple[list[str], int, int]:
             continue
         if proj_uid not in index_uids:
             findings.append(
-                f'[FAIL] {path.relative_to(vault)} — external-artifact projection uid={proj_uid!r} not in vault/00-index.jsonl; '
+                f'[FAIL] {path.relative_to(vault)} — external-artifact projection uid={proj_uid!r} not in current/archive index union; '
                 f'create-sidecar MUST sync inline per v0.5.1 (closes fa026415 carry-forward at v1.28.0)'
             )
             defects += 1
@@ -4023,19 +4891,7 @@ def check_folder_mirror_index_sync(vault: Path) -> tuple[list[str], int, int]:
     if not index_path.exists():
         return findings, checked, defects
 
-    index_uids: set[str] = set()
-    try:
-        for line in index_path.read_text().splitlines():
-            if not line.strip():
-                continue
-            try:
-                row = json.loads(line.rstrip(','))
-                if 'uid' in row:
-                    index_uids.add(row['uid'])
-            except json.JSONDecodeError:
-                continue
-    except (OSError, UnicodeDecodeError):
-        return findings, checked, defects
+    index_uids = _index_union_uids(vault)
 
     for path, fm in _walk_folder_mirrors(vault):
         checked += 1
@@ -4044,7 +4900,7 @@ def check_folder_mirror_index_sync(vault: Path) -> tuple[list[str], int, int]:
             continue
         if uid not in index_uids:
             findings.append(
-                f'[FAIL] {path.relative_to(vault)} — folder mirror uid={uid!r} not in vault/00-index.jsonl; '
+                f'[FAIL] {path.relative_to(vault)} — folder mirror uid={uid!r} not in current/archive index union; '
                 f'create-sidecar MUST sync inline per spec §3.5.5 Amendment 1 v0.5'
             )
             defects += 1
@@ -4142,7 +4998,8 @@ def check_navblock_git_filter_installed(vault: Path) -> tuple[list[str], int, in
 
     Two independent halves, BOTH required to pass:
       1. `.gitattributes` declares `vault/files/*.md filter=navblockstrip`.
-      2. This clone's local `git config --get filter.navblockstrip.clean` is set.
+      2. This clone's local `git config --get filter.navblockstrip.process` is set,
+         and the superseded `.clean` spawn-per-file wiring is NOT.
 
     A vault with no `.git` at all (not yet on Git Beat 1, 98b9610a) is a skip-class,
     not a defect — there is nothing to install a filter INTO yet.
@@ -4173,15 +5030,18 @@ def check_navblock_git_filter_installed(vault: Path) -> tuple[list[str], int, in
         except OSError:
             pass
 
-    cfg_ok = False
-    try:
-        r = subprocess.run(
-            ['git', 'config', '--get', 'filter.navblockstrip.clean'],
-            cwd=str(vault), capture_output=True, text=True, timeout=10,
-        )
-        cfg_ok = r.returncode == 0 and bool(r.stdout.strip())
-    except (OSError, subprocess.SubprocessError):
-        cfg_ok = False
+    def _cfg(key: str) -> bool:
+        try:
+            r = subprocess.run(
+                ['git', 'config', '--get', key],
+                cwd=str(vault), capture_output=True, text=True, timeout=10,
+            )
+            return r.returncode == 0 and bool(r.stdout.strip())
+        except (OSError, subprocess.SubprocessError):
+            return False
+
+    cfg_ok = _cfg('filter.navblockstrip.process')
+    stale_clean = _cfg('filter.navblockstrip.clean')
 
     if not ga_ok:
         findings.append(
@@ -4191,10 +5051,20 @@ def check_navblock_git_filter_installed(vault: Path) -> tuple[list[str], int, in
         defects += 1
     if not cfg_ok:
         findings.append(
-            "  git config filter.navblockstrip.clean is not set in this clone's LOCAL "
+            "  git config filter.navblockstrip.process is not set in this clone's LOCAL "
             ".git/config (never committed) — run `python3 vault/tools/tropo-navblock-strip.py "
             "--install`. A studio without this can silently commit nav-blocks into a shared "
             "segment and reintroduce the merge-storm (6ec30708 AC5)."
+        )
+        defects += 1
+    if stale_clean:
+        findings.append(
+            "  git config filter.navblockstrip.clean is STILL wired in this clone — the "
+            "superseded spawn-per-file shell-out (~53ms of interpreter startup per file; "
+            "~3.1 min per git add/status after a full rebuild, vs 6.4s). git prefers "
+            "`process` when both are set, so this changes nothing observable and will sit "
+            "here looking correct — re-run `python3 vault/tools/tropo-navblock-strip.py "
+            "--install`, which wires `process` and removes it (6ec30708 line 113)."
         )
         defects += 1
 
@@ -6206,29 +7076,22 @@ def check_inbox_transition(vault: Path) -> tuple[list[str], int, int, int]:
     if not index_path.exists():
         return findings, 0, 0, 0
 
-    # Step 1: resolve inbox set (entries whose title/name matches '01-inbox' convention)
+    # Step 1: resolve inbox set (entries whose title/name matches '01-inbox'
+    # convention) across both ADR-047 surfaces.  Archived members are excluded
+    # below exactly as before; loading the union preserves historical parent
+    # resolution without polluting the default retrieval surface.
     inbox_uids: set[str] = set()
     all_entries: dict[str, dict] = {}
-    with index_path.open(encoding='utf-8', errors='replace') as f:
-        for raw in f:
-            raw = raw.strip()
-            if not raw:
-                continue
-            try:
-                entry = _json.loads(raw)
-            except Exception:
-                continue
-            if not isinstance(entry, dict):
-                continue
-            uid = entry.get('uid') or ''
-            if not uid:
-                continue
-            all_entries[uid] = entry
-            title = str(entry.get('title') or entry.get('name') or '').lower()
-            # v1.68 S2: use '%inbox%' matching (catches 01-vault-inbox, 01-inbox, etc.)
-            # equivalent to SQL LIKE '%inbox%' — A108 drain confirmed this is the right rule
-            if 'inbox' in title:
-                inbox_uids.add(uid)
+    for entry in _index_union(vault):
+        uid = entry.get('uid') or ''
+        if not uid:
+            continue
+        all_entries[uid] = entry
+        title = str(entry.get('title') or entry.get('name') or '').lower()
+        # v1.68 S2: use '%inbox%' matching (catches 01-vault-inbox, 01-inbox, etc.)
+        # equivalent to SQL LIKE '%inbox%' — A108 drain confirmed this is the right rule
+        if 'inbox' in title:
+            inbox_uids.add(uid)
 
     # Step 2: for each inbox, scan members
     by_inbox: dict[str, dict] = {uid: {'hard': 0, 'soft': 0} for uid in inbox_uids}
@@ -6630,158 +7493,36 @@ def check_boot_derivation_fresh(vault: Path) -> tuple[list[str], int, int]:
 
 
 def check_spec_coverage_pairing(vault: Path) -> tuple[list[str], int, int]:
-    """v1.70 S3.5.2 — Verify pairing between test-spec behaviors and dev-spec ACs.
+    """Use the test-spec family's single Rule 3.a/3.b implementation."""
 
-    Rule 3.b (dev-spec.capsule v1.1 / test-spec.capsule v1.1):
-    1. Resolve triggered_by_dev_cycle -> dev-spec UID.
-    2. Every behavior in test-spec must map to a valid 1-based index in dev-spec ACs.
-    3. Every dev-spec AC must be covered by at least one behavior in the test-spec.
+    from lib.test_spec_validators import (  # local import preserves startup cost
+        check_test_spec_cross_validation_against_dev_spec,
+    )
 
-    Returns (findings, total_checked, defects).
-    """
-    findings: list[str] = []
-    total_checked = 0
-    defects = 0
-
-    files_dir = vault / 'vault' / 'files'
-    if not files_dir.is_dir():
-        return findings, 0, 0
-
-    # 1. Map all dev-specs AND activations for fast lookup
-    dev_specs: dict[str, dict] = {}
-    activations: dict[str, dict] = {}  # uid → frontmatter for activation entries
-    for f in files_dir.glob('*.md'):
-        try:
-            # Simple peek first
-            text = f.read_text(errors='replace')
-            if ('type: dev-spec' not in text and 'type: dev_spec' not in text
-                    and 'type: activation' not in text):
-                continue
-            fm_text = split_frontmatter(text)
-            if not fm_text:
-                continue
-            fm = yaml.safe_load(fm_text)
-            if not isinstance(fm, dict):
-                continue
-            uid = fm.get('uid') or f.stem
-            if fm.get('type') in ('dev-spec', 'dev_spec'):
-                dev_specs[uid] = fm
-            elif fm.get('type') == 'activation':
-                activations[uid] = fm
-        except Exception:
-            continue
-
-    # 2. Check each test-spec
-    for f in sorted(files_dir.glob('*.md')):
-        try:
-            text = f.read_text(errors='replace')
-            if 'type: test-spec' not in text and 'type: test_spec' not in text:
-                continue
-            fm_text = split_frontmatter(text)
-            if not fm_text:
-                continue
-            fm = yaml.safe_load(fm_text)
-            if not isinstance(fm, dict) or fm.get('type') not in ('test-spec', 'test_spec'):
-                continue
-
-            total_checked += 1
-            rel = f.relative_to(vault)
-            test_uid = fm.get('uid') or f.stem
-
-            # dev-spec linkage
-            dev_uid = fm.get('triggered_by_dev_cycle')
-            if not dev_uid:
-                # Some test-specs might be standalone (uncommon but allowed for base regressions)
-                continue
-
-            # S4 fix (5690a543, v1.80): triggered_by_dev_cycle may carry an ACTIVATION uid
-            # (engine-written at cascade-trigger time) rather than a dev-spec uid.
-            # Resolve the chain: if dev_uid is an activation, follow its dev_spec_uid.
-            resolved_dev_uid = dev_uid
-            if dev_uid not in dev_specs and dev_uid in activations:
-                act_fm = activations[dev_uid]
-                ds_uid = act_fm.get('dev_spec_uid')
-                if ds_uid and ds_uid in dev_specs:
-                    resolved_dev_uid = ds_uid
-                else:
-                    # Also try cycle_context → dev-spec resolution is aspirational;
-                    # log INFO that we're resolving through an activation
-                    findings.append(
-                        f'[INFO] {rel} — triggered_by_dev_cycle {dev_uid!r} is an activation; '
-                        f'dev_spec_uid field missing or unresolvable (S4 chain resolution)'
-                    )
-                    continue
-
-            dev_spec = dev_specs.get(resolved_dev_uid)
-            if not dev_spec:
-                # Might be in a different folder or recently deleted
-                findings.append(f'[WARN] {rel} — triggered_by_dev_cycle {dev_uid!r} not found in vault/files/')
-                # WARN because it might be a cross-studio ref or legacy
-                continue
-
-            dev_acs = dev_spec.get('acceptance_criteria')
-            if not isinstance(dev_acs, list):
-                # If it's a string, it's effectively a 1-item list for coverage
-                dev_acs = [dev_acs] if dev_acs else []
-
-            num_acs = len(dev_acs)
-            behaviors = fm.get('behaviors_covered')
-            if not isinstance(behaviors, list):
-                findings.append(f'[FAIL] {rel} — behaviors_covered missing or not a list')
-                defects += 1
-                continue
-
-            # Track which ACs are covered
-            covered_indices: set[int] = set()
-
-            for i, b in enumerate(behaviors):
-                if not isinstance(b, dict):
-                    continue
-                v_ref = b.get('verifies_acceptance_criterion')
-                if v_ref is None:
-                    findings.append(f'[WARN] {rel} — behavior[{i}] missing verifies_acceptance_criterion')
-                    # Grandfathering: legacy specs (pre-v1.70) are WARN;
-                    # post-v1.70 or explicit opt-in are ERROR.
-                    target_rel = fm.get('target_release', '')
-                    if target_rel and target_rel >= 'v1.70':
-                        defects += 1
-                    continue
-
-                # Support both int and list of ints
-                refs = v_ref if isinstance(v_ref, list) else [v_ref]
-                for r in refs:
-                    try:
-                        idx = int(r)
-                        if 1 <= idx <= num_acs:
-                            covered_indices.add(idx)
-                        else:
-                            findings.append(
-                                f'[FAIL] {rel} — behavior[{i}] verifies AC {idx}, '
-                                f'but dev-spec {resolved_dev_uid} only has {num_acs} ACs'
-                            )
-                            defects += 1
-                    except (ValueError, TypeError):
-                        findings.append(f'[FAIL] {rel} — behavior[{i}] verifies_acceptance_criterion {r!r} is not an integer')
-                        defects += 1
-
-            # Check for uncovered ACs
-            for idx in range(1, num_acs + 1):
-                if idx not in covered_indices:
-                    findings.append(
-                        f'[WARN] {rel} — dev-spec AC #{idx} has NO covering behavior in this test-spec '
-                        f'(triggered_by dev-spec {resolved_dev_uid})'
-                    )
-                    # Grandfathering: legacy specs (pre-v1.70) are WARN; 
-                    # post-v1.70 or explicit opt-in are ERROR.
-                    target_rel = fm.get('target_release', '')
-                    if target_rel and target_rel >= 'v1.70':
-                        defects += 1
-
-        except Exception as e:
-            findings.append(f'[FAIL] {f.name} — pairing check CRASHED: {e}')
-            defects += 1
-
+    findings, total_checked, _ = (
+        check_test_spec_cross_validation_against_dev_spec(vault)
+    )
+    defects = sum(
+        finding.startswith(('[ERROR]', '[FAIL]')) for finding in findings
+    )
     return findings, total_checked, defects
+
+
+def check_test_spec_family(
+    vault: Path,
+    *,
+    include_pairing: bool = True,
+    include_behavior_floor: bool = True,
+) -> tuple[list[str], int, int]:
+    """Full-validator adapter for the same family check-one dispatches."""
+
+    from lib.test_spec_validators import run_all_test_spec_checks
+
+    return run_all_test_spec_checks(
+        vault,
+        include_pairing=include_pairing,
+        include_behavior_floor=include_behavior_floor,
+    )
 
 
 def parse_version(v_str: str) -> list[int]:
@@ -6819,10 +7560,6 @@ def check_no_agent_emit_from_root_uid(vault: Path) -> tuple[list[str], int, int]
     total_checked = 0
     defects = 0
 
-    events_file = vault / 'vault' / 'events' / '00-events.jsonl'
-    if not events_file.is_file():
-        return findings, 0, 0
-
     # 1. Load all agent-root UIDs for detection
     agent_roots: set[str] = set()
     agents_dir = vault / 'vault' / 'agents'
@@ -6834,37 +7571,25 @@ def check_no_agent_emit_from_root_uid(vault: Path) -> tuple[list[str], int, int]
                 if root_uid: agent_roots.add(root_uid)
             except Exception: continue
 
-    # 2. Scan event log (large file — scan from end for recent violations if possible, 
-    # but for v1.70 finish we check all v1.70+ events)
-    try:
-        with events_file.open('r', errors='replace') as fd:
-            for i, line in enumerate(fd, 1):
-                if not line.strip(): continue
-                total_checked += 1
-                try:
-                    ev = json.loads(line)
-                    source = ev.get('source', '')
-                    source_uid = ev.get('source_uid')
-                    # Check agent sources
-                    if source.startswith('/agents/') or source.startswith('//'):
-                        if source_uid in agent_roots:
-                            # Grandfathering: ONLY fail on events after v1.70 rollout
-                            # Heuristic: events with id >= 00003000 (v1.69+ era)
-                            # Actually, let's check the time or just WARN for older ones.
-                            event_id = ev.get('id', '0')
-                            if event_id > CHECK31_GRANDFATHER_MAX_EVENT_ID:
-                                findings.append(
-                                    f'[FAIL] event {event_id} — agent source {source} emitted from root UID {source_uid}; '
-                                    f'MUST use party UID (Check 31; 81e52840; ERROR)'
-                                )
-                                defects += 1
-                            else:
-                                findings.append(
-                                    f'[INFO] event {event_id} — agent source {source} emitted from root UID {source_uid} '
-                                    f'(grandfathered: id<={CHECK31_GRANDFATHER_MAX_EVENT_ID}; honest-record; emit path fixed at v1.70)'
-                                )
-                except Exception: continue
-    except Exception: pass
+    # 2. Scan the canonical legacy-plus-stream union.
+    for ev in _canonical_event_union(vault):
+        total_checked += 1
+        source = ev.get('source', '')
+        source_uid = ev.get('source_uid')
+        if source.startswith('/agents/') or source.startswith('//'):
+            if source_uid in agent_roots:
+                event_id = ev.get('id', '0')
+                if event_id > CHECK31_GRANDFATHER_MAX_EVENT_ID:
+                    findings.append(
+                        f'[FAIL] event {event_id} — agent source {source} emitted from root UID {source_uid}; '
+                        f'MUST use party UID (Check 31; 81e52840; ERROR)'
+                    )
+                    defects += 1
+                else:
+                    findings.append(
+                        f'[INFO] event {event_id} — agent source {source} emitted from root UID {source_uid} '
+                        f'(grandfathered: id<={CHECK31_GRANDFATHER_MAX_EVENT_ID}; honest-record; emit path fixed at v1.70)'
+                    )
 
     return findings, total_checked, defects
 
@@ -6874,6 +7599,27 @@ def check_completion_recording(vault: Path) -> tuple[list[str], int, int]:
 
     Specified in 2fe61817 (LOCKED, emit-on-completion §S2.4).
     Detects "silent" closes (done without an event).
+
+    Governed Autonomy S1 (ef65fccd) rewrite — world-state verification, not just
+    correlation: the baseline check (below, unchanged) only proves an event with a
+    matching correlationid EXISTS somewhere in the log — that is a claim, and the log
+    is an appendable file anything with write access can append one more line to. Per
+    Argus A130's design ("events verify against reality: terminal status, re-parent,
+    correlation, fresh surfaces"):
+      - terminal status: already the entry condition (state in done/archived) — unchanged.
+      - correlation: already the baseline check — unchanged, kept as the FAIL case below.
+      - re-parent: covered by the existing, separate check_inbox_transition (a terminal
+        item still parented under an inbox is ITS finding, not duplicated here).
+      - fresh surfaces (NEW): a correlated event is not enough on its own if the rest of
+        the substrate never caught up — cross-check vault/00-index.jsonl has a row for
+        this UID whose OWN state field agrees. A file claiming done, with a correlated
+        event, whose index row is either MISSING or still shows a non-terminal state, is
+        a real signal: either the index is stale (a "fresh surfaces" gap the write-path
+        should have closed) or the completion event was manufactured without the write
+        that should have accompanied genuine completion. Either way it is not silently
+        trustworthy, so it downgrades from "verified complete" to a flagged INFO — it
+        does not promote to FAIL on its own (index staleness has innocent causes, e.g. a
+        rebuild that simply hasn't run yet), but it is no longer invisible.
     """
     findings: list[str] = []
     total_checked = 0
@@ -6881,19 +7627,20 @@ def check_completion_recording(vault: Path) -> tuple[list[str], int, int]:
 
     # 1. Map all completion events by correlationid
     completions: set[str] = set()
-    events_file = vault / 'vault' / 'events' / '00-events.jsonl'
-    if events_file.is_file():
-        try:
-            with events_file.open('r', errors='replace') as fd:
-                for line in fd:
-                    if 'tropo.message.replied' not in line and 'tropo.cycle.closed' not in line:
-                        continue
-                    try:
-                        ev = json.loads(line)
-                        cid = ev.get('correlationid')
-                        if cid: completions.add(cid)
-                    except Exception: continue
-        except Exception: pass
+    for ev in _canonical_event_union(vault):
+        if ev.get('type') not in ('tropo.message.replied', 'tropo.cycle.closed'):
+            continue
+        cid = ev.get('correlationid')
+        if cid:
+            completions.add(str(cid))
+
+    # 1b. S1 fresh-surfaces: uid -> state as the INDEX currently sees it (may disagree
+    # with the raw file if the index hasn't been refreshed since the file changed).
+    index_state: dict[str, str] = {
+        str(row['uid']): row.get('state')
+        for row in _index_union(vault)
+        if row.get('uid')
+    }
 
     # 2. Scan work-items for terminal state
     files_dir = vault / 'vault' / 'files'
@@ -6910,10 +7657,10 @@ def check_completion_recording(vault: Path) -> tuple[list[str], int, int]:
 
                 total_checked += 1
                 uid = get_scalar(fm_text, 'uid') or f.stem
+                rel = f.relative_to(vault)
 
                 # Check if this UID has a completion event
                 if uid not in completions:
-                    rel = f.relative_to(vault)
                     target_rel_str = get_scalar(fm_text, 'target_release')
                     target_rel = parse_version(target_rel_str)
 
@@ -6927,6 +7674,25 @@ def check_completion_recording(vault: Path) -> tuple[list[str], int, int]:
                             f'[INFO] {rel} — state:{state} but NO correlated completion event found '
                             f'(grandfathered: pre-{CHECK32_GRANDFATHER_MAX_RELEASE}/no-target_release; honest-record)'
                         )
+                    continue
+
+                # S1 fresh-surfaces: the event correlates, but does the queryable index
+                # row agree the item is genuinely terminal? A missing row or a
+                # non-terminal index state means the completion isn't yet (or wasn't
+                # ever) reflected outside this one file + one event line.
+                idx_state = index_state.get(uid)
+                if idx_state is None:
+                    findings.append(
+                        f'[INFO] {rel} — state:{state}, correlated event exists, but uid={uid!r} '
+                        f'has NO row in the current/archive index union (fresh-surfaces gap; Check 32 S1 — '
+                        f'the index has not caught up with this completion, or never will).'
+                    )
+                elif idx_state not in ('done', 'archived'):
+                    findings.append(
+                        f'[INFO] {rel} — state:{state}, correlated event exists, but the index row '
+                        f'for uid={uid!r} shows state:{idx_state!r} (fresh-surfaces mismatch; Check 32 '
+                        f'S1 — the index disagrees with the file about whether this is genuinely done).'
+                    )
             except Exception: continue
 
     return findings, total_checked, defects
@@ -7303,22 +8069,7 @@ def check_archived_forward_pointer(vault: Path) -> tuple[list[str], int, int]:
     # works for vault/files/. Capsules, tools, skills, etc. carry their UID in
     # frontmatter, indexed in 00-index.jsonl. Resolve via the index to catch
     # successors in any One-Home dir, not just vault/files/.
-    index_path = vault / 'vault' / '00-index.jsonl'
-    known_uids: set[str] = set()
-    if index_path.is_file():
-        try:
-            with index_path.open() as idx_f:
-                for line in idx_f:
-                    try:
-                        import json as _json
-                        rec = _json.loads(line)
-                        uid_val = rec.get('uid')
-                        if uid_val:
-                            known_uids.add(str(uid_val))
-                    except Exception:
-                        pass
-        except Exception:
-            pass  # fall back to filesystem-only resolution below
+    known_uids = _index_union_uids(vault)
 
     for f in sorted(files_dir.glob('*.md')):
         try:
@@ -7671,15 +8422,7 @@ def check_calls_pointer_resolution(vault: Path) -> tuple[list[str], int, int]:
     if not index_path.exists():
         return findings, 0, 0
 
-    for raw_line in index_path.read_text(encoding='utf-8', errors='replace').splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith('#'):
-            continue
-        try:
-            rec = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-
+    for rec in _index_union(vault):
         calls = rec.get('calls')
         if not calls:
             continue
@@ -8118,7 +8861,11 @@ _VAULT_ENTITY_SUBTYPE = 'vault-entity'
 _STUDIO_IDENTITY_UID = '32067bea'
 
 
-def validate_vault_manifest_fields(fm: dict, type_lookup: Optional[dict[str, str]] = None) -> list[str]:
+def validate_vault_manifest_fields(
+    fm: dict,
+    type_lookup: Optional[dict[str, str]] = None,
+    strict_audience: bool = False,
+) -> list[str]:
     """943bb220 §2 (ADR-051 Fork 1) — validate a `type: vault` MANIFEST instance's
     frontmatter (already YAML-parsed to a dict) against the new vault-node manifest
     schema. Pure function (dict in, error-string list out): directly unit-testable
@@ -8132,6 +8879,15 @@ def validate_vault_manifest_fields(fm: dict, type_lookup: Optional[dict[str, str
     Check 9 (contract-narrowing diff) is explicitly [target vNext] in the capsule.
     Check 10 (one manifest per vault-node at compose) is Fork 2's job (per-vault-root
     manifest discovery), not owned by this scan.
+
+    ``strict_audience`` is the B4a cutover flag (dev-spec 0bfa771d §"Registry,
+    resolver, and contextual audience"; brief 252534fe §5). When True — set by a
+    caller once a group authority is installed (``lib.audience_gate.cutover_active``)
+    — the audience MUST resolve to a live ``type: group`` UID: ``team``, ``team-def``,
+    and any unknown / non-group 8-hex are refused. This removes the pre-B4a
+    "known team or unknown UID" syntax-only acceptance. When False the pre-cutover
+    lenient behaviour is preserved so a Studio that has not applied the authority
+    update is unaffected.
 
     Returns a list of human-readable error strings (empty = valid).
     """
@@ -8181,13 +8937,28 @@ def validate_vault_manifest_fields(fm: dict, type_lookup: Optional[dict[str, str
 
     audience = fm.get('audience')
     if audience is not None:
-        if isinstance(audience, list):
+        if isinstance(audience, (list, tuple, set, dict)):
             errors.append(
                 "audience is an inline member list — must be a single group-UID "
                 "reference (Rule 4)"
             )
         elif not UID_RE.match(str(audience)):
             errors.append(f"audience={audience!r} is not an 8-hex group-UID reference")
+        elif strict_audience:
+            # B4a strict cutover: the audience must resolve to a live `type: group`.
+            # `team`/`team-def`/entity and any unknown 8-hex UID are refused — the
+            # "known team or unknown UID" fail-open is removed (252534fe §5).
+            resolved_type = type_lookup.get(audience) if type_lookup else None
+            if resolved_type is None:
+                errors.append(
+                    f"audience={audience!r} does not resolve to a known entity — a "
+                    f"vault audience must be a live `type: group` UID (B4a strict; Rule 4)"
+                )
+            elif resolved_type != 'group':
+                errors.append(
+                    f"audience={audience!r} resolves to type={resolved_type!r}, not a "
+                    f"`type: group` — team/team-def/entity audiences are refused (B4a strict; Rule 4)"
+                )
         elif type_lookup and audience in type_lookup and type_lookup[audience] != 'team':
             errors.append(
                 f"audience={audience!r} resolves to type={type_lookup[audience]!r}, "
@@ -8247,6 +9018,20 @@ def validate_vault_entity_fields(fm: dict, type_lookup: Optional[dict[str, str]]
     return errors
 
 
+def _b4a_cutover_active(root: Path) -> bool:
+    """True iff a B4a group authority is installed for this Studio.
+
+    Defensive lazy import: any import/read failure yields False (pre-cutover
+    behaviour), so this never fails open to a synthesized authority and never
+    hard-crashes the validator on a Studio without the B4a runtime.
+    """
+    try:
+        from lib.audience_gate import cutover_active
+        return bool(cutover_active(root))
+    except Exception:
+        return False
+
+
 def check_vault_capsule_types(vault: Path) -> tuple[list[str], int, int]:
     """943bb220 (ADR-051 Fork 1) — validator recognition for the vault.capsule forge.
 
@@ -8281,11 +9066,14 @@ def check_vault_capsule_types(vault: Path) -> tuple[list[str], int, int]:
     violations = 0
 
     index_path = vault / 'vault' / '00-index.jsonl'
-    by_uid: dict[str, dict] = {}
-    if index_path.is_file():
-        by_uid, _ = load_index(index_path)
+    by_uid: dict[str, dict] = {
+        str(record['uid']): record
+        for record in _index_union(vault)
+        if record.get('uid')
+    }
     type_lookup = {u: r.get('type') for u, r in by_uid.items()}
     subtype_lookup = {u: r.get('subtype') for u, r in by_uid.items()}
+    strict_audience = _b4a_cutover_active(vault)
 
     files_dir = vault / 'vault' / 'files'
     if not files_dir.is_dir():
@@ -8313,7 +9101,9 @@ def check_vault_capsule_types(vault: Path) -> tuple[list[str], int, int]:
 
         if entry_type == 'vault':
             checked += 1
-            errors = validate_vault_manifest_fields(fm, type_lookup=type_lookup)
+            errors = validate_vault_manifest_fields(
+                fm, type_lookup=type_lookup, strict_audience=strict_audience
+            )
             if errors:
                 violations += 1
                 for e in errors:
@@ -8756,7 +9546,11 @@ def check_cross_vault_member_of(vault: Path) -> tuple[list[str], int, int]:
     if not index_path.exists():
         return findings, checked, violations
 
-    by_uid, _ = load_index(index_path)
+    by_uid = {
+        str(record['uid']): record
+        for record in _index_union(vault)
+        if record.get('uid')
+    }
     if not by_uid:
         return findings, checked, violations
 
@@ -8803,7 +9597,21 @@ def check_cross_vault_member_of(vault: Path) -> tuple[list[str], int, int]:
         # when there is no real substrate to exercise).
         return findings, checked, violations
 
+    # B4a single-adapter cutover (dev-spec 0bfa771d; brief 252534fe §4/§5): once a
+    # group authority is installed the audience-lattice legality is derived from the
+    # ONE verified AudiencePolicy (via lib.audience_gate.B4aLattice), never a
+    # synthesized default_two_segment_lattice(). The Gardener's composed-index
+    # edge-exclusion layer consumes the SAME adapter, so the two surfaces cannot
+    # drift. Pre-cutover (no installed authority) the prior default lattice is kept
+    # so a Studio without the B4a runtime is unaffected; a load failure under
+    # cutover falls back defensively rather than crashing the validator.
     lattice = default_two_segment_lattice()
+    if _b4a_cutover_active(vault):
+        try:
+            from lib.audience_gate import B4aLattice, load_policy
+            lattice = B4aLattice(load_policy(vault))
+        except Exception:
+            lattice = default_two_segment_lattice()
 
     work_item_types = {'task', 'work-item', 'workitem'}
     for uid, rec in by_uid.items():
@@ -9035,7 +9843,8 @@ def check_dev_spec_activation_coupling(vault: Path, customer_mode: bool = False)
     ratchet_is_error = (len(DEV_SPEC_ACTIVATION_COUPLING_ALLOWLIST) == 0)
     severity = 'ERROR' if ratchet_is_error else 'WARN'
 
-    # Customer-mode guard (vela-v65, 2026-07-11): a shipped box does not carry
+    # Shipped-subset guard (vela-v65, 2026-07-11; A132 release-mode repair,
+    # 2026-07-16): a shipped box does not carry
     # the source studio's activation entries (activations are argo-internal;
     # only a generic template activation ships). So inside a customer extract,
     # every locked dev-spec whose correlated activation stayed home will fire
@@ -9044,7 +9853,9 @@ def check_dev_spec_activation_coupling(vault: Path, customer_mode: bool = False)
     # box cannot verify source-studio pipeline correlations. Downgrade all
     # findings to INFO in customer mode so the shipped self-test (tropo-test.py
     # which passes --customer) doesn't fail its own S2 in-box gate on the
-    # unavoidable absence of source-studio activation records.
+    # unavoidable absence of source-studio activation records. The caller
+    # supplies this for both --customer and --release; those are the same
+    # subset boundary for this source-governance-only coupling check.
     if customer_mode:
         severity = 'INFO'
         violations = 0  # don't count toward the fail tally in customer mode
@@ -9319,9 +10130,1087 @@ def check_publish_boundary(vault: Path) -> tuple[list[str], int, int]:
     return findings, checked, violations
 
 
+def check_mint_provenance(vault: Path) -> tuple[list[str], int, int]:
+    """Governed Autonomy S2 (bba40cd7) fail-loud floor: a governed file under
+    vault/files/ whose type carries a §Template leg (mint-governed, closed
+    registry) but has NO matching row in vault/00-index.jsonl is invisible to
+    every index-driven surface -- exactly the defect class that motivated S2
+    (029972a1: 8 tools invisible to the index from malformed hand-authored
+    frontmatter). ERRORs loudly, naming the file + the cure. Hand-writes can't
+    be physically prevented (an honest ceiling per the spec) -- they become
+    immediately loud and invalid instead of silently orphaned.
+
+    Scoped to types carrying a §Template leg only -- types with no leg yet are
+    outside S2's closed-registry enforcement (nothing migrates in S2; the 90%
+    of types without a leg are simply not checked here, not grandfathered-fail).
+
+    Returns (findings, total_checked, defect_count).
+    """
+    import json as _json
+    import re as _re
+
+    vault_root = vault.parent if (vault / 'files').is_dir() else vault
+    capsules_dir = vault_root / 'vault' / 'capsules'
+    files_dir = vault_root / 'vault' / 'files'
+    index_path = vault_root / 'vault' / '00-index.jsonl'
+
+    if not files_dir.is_dir():
+        return [], 0, 0
+
+    # Which types carry a §Template leg? Cheap: ~80 capsule files, not per-instance.
+    leg_types: set[str] = set()
+    if capsules_dir.is_dir():
+        heading_re = _re.compile(r'^##[ \t]+§Template\b', _re.MULTILINE)
+        for cap in capsules_dir.glob('tropo-*.capsule.md'):
+            try:
+                text = cap.read_text(errors='ignore')
+            except Exception:
+                continue
+            if heading_re.search(text):
+                leg_types.add(cap.name[len('tropo-'):-len('.capsule.md')])
+
+    if not leg_types:
+        return [], 0, 0
+
+    indexed_uids = _index_union_uids(vault)
+
+    fm_re = _re.compile(r'^---\n(.*?)\n---', _re.DOTALL)
+    uid_re = _re.compile(r'^uid:\s*([0-9a-f]{8})\s*$', _re.MULTILINE)
+    type_re = _re.compile(r'^type:\s*"?([\w-]+)"?\s*$', _re.MULTILINE)
+
+    findings: list[str] = []
+    total_checked = 0
+    defect_count = 0
+
+    for f in sorted(files_dir.glob('*.md')):
+        try:
+            text = f.read_text(errors='ignore')
+        except Exception:
+            continue
+        m = fm_re.match(text)
+        if not m:
+            continue
+        type_m = type_re.search(m.group(1))
+        if not type_m or type_m.group(1) not in leg_types:
+            continue
+        total_checked += 1
+        uid_m = uid_re.search(m.group(1))
+        uid = uid_m.group(1) if uid_m else f.stem
+        if uid not in indexed_uids:
+            defect_count += 1
+            findings.append(
+                f"[ERROR] {uid} ({type_m.group(1)}): mint-governed type has NO row in "
+                f"the current/archive index union -- invisible to every index-driven surface. "
+                f"Cure: python3 vault/tools/tropo-rebuild-index.py --only {uid} "
+                f"(hand-authored bypass of `mint file` -- the fail-loud floor per bba40cd7)."
+            )
+
+    return findings, total_checked, defect_count
+
+
+# S1 verification catch (Argus A130, 7627b589): T28's un-sandboxed test runs of
+# pipeline-runtime.py wrote 43 fixture-shaped events (activation_uid/pipeline_run_uid
+# like "act2"/"act3") into the production event log before the sandbox-mode fix
+# (Talos T29, 9e7003b1.py _emit_pipeline_event) landed. Append-only log -- cannot be
+# deleted, only documented. Exhaustive, explicit allowlist (not a date/id-threshold
+# heuristic) so nothing new can silently ride in under a loose cutoff rule.
+_KNOWN_PIPELINE_EVENT_POLLUTION_IDS = frozenset({
+    '00006208', '00006209', '00006210', '00006211', '00006212', '00006213', '00006214',
+    '00006215', '00006216', '00006217', '00006238', '00006239', '00006240', '00006244',
+    '00006245', '00006246', '00006263', '00006264', '00006265', '00006267', '00006268',
+    '00006269', '00006271', '00006272', '00006273', '00006274', '00006275', '00006276',
+    '00006277', '00006278', '00006279', '00006280', '00006281', '00006282', '00006283',
+    '00006284', '00006285', '00006289', '00006290', '00006291', '00006296', '00006297',
+    '00006298',
+})
+
+
+def check_every_agent_can_still_boot(vault: Path) -> tuple[list[str], int, int]:
+    """Can every agent in the fleet still be born?
+
+    WHY THIS EXISTS (metis-g97, 2026-07-29): the G2 hardening made predecessor
+    derivation require a keyed predecessor, but only two activation entries were
+    ever retrofitted with keys. That left 19 agents unable to hand off to a
+    successor -- argus, vela, orpheus, po, cosmo, stratus, pipeline-runtime,
+    every sa.* and every coordinator. It shipped silently and sat for three days,
+    because agent BIRTH is the only operation that trips it and only one agent
+    had been born since.
+
+    That is the expensive failure shape: a gate on the boot path fails at the one
+    moment nobody is home, and the agent who could fix it is the agent who cannot
+    start. Nothing in the studio asked this question, so nobody could see it.
+    Now something asks it on every validate run.
+
+    A live agent whose current generation is still active is NOT a defect -- that
+    is ADR-016 holding correctly. Only a terminal predecessor that cannot produce
+    a successor counts.
+
+    Returns (findings, agents_checked, blocked_count).
+    """
+    import sys as _sys
+
+    findings: list[str] = []
+    tools = vault / 'vault' / 'tools'
+    if str(tools) not in _sys.path:
+        _sys.path.insert(0, str(tools))
+    try:
+        from lib import authority_chain as _ac
+    except Exception as exc:  # pragma: no cover - import surface only
+        return ([f'authority chain unavailable: {exc}'], 0, 0)
+
+    try:
+        records = _ac.load_canonical_activation_entries(vault)
+    except Exception as exc:
+        return ([f'activation entries unreadable: {exc}'], 0, 1)
+
+    by_agent: dict[str, list] = {}
+    for record in records:
+        if record.agent and record.activation_type == 'activation':
+            by_agent.setdefault(record.agent, []).append(record)
+
+    # An ENDED lineage is not a broken one. Never ask about it again.
+    #
+    # An agent whose unified entry declares `superseded_by:` has been formally
+    # retired with no successor to come. Asking "can this lineage produce a
+    # successor?" of a lineage somebody deliberately ended produces a permanent
+    # red line — and a health check that is permanently red teaches the crew to
+    # ignore the one instrument that would have caught a real blocker.
+    #
+    # This is the tropo agent, and it is worth naming because the failure is not
+    # the one it looks like. The tropo agent was renamed to Po and retired on
+    # 2026-08-01 by argus-a143, carrying Mike's verbatim ruling and the explicit
+    # sentence "no T2 is to be born". THE ANSWER HAS BEEN WRITTEN DOWN SINCE
+    # THEN. The data was never wrong. This check simply never read it, and so
+    # kept reporting a decided question as an open defect — which agent after
+    # agent then dutifully raised with Mike as a loose end. Mike, 2026-08-03:
+    # "I never want to hear about this issue again."
+    #
+    # The general lesson, which is the same one this whole session is about: an
+    # instrument that cannot see a decision will keep re-litigating it, and the
+    # cost lands on the human every single time.
+    ended: dict[str, str] = {}
+    agents_root = vault / 'vault' / 'agents'
+    if agents_root.is_dir():
+        for path in sorted(agents_root.glob('*.md')):
+            try:
+                fm = split_frontmatter(path.read_text(errors='replace'))
+            except OSError:
+                continue  # unreadable is UNCHECKED, never "ended" — never silently skip
+            if not fm or (get_scalar(fm, 'type') or '') != 'agent':
+                continue
+            slug = (get_scalar(fm, 'agent') or '').strip()
+            superseded = (get_scalar(fm, 'superseded_by') or '').strip()
+            if slug and superseded:
+                ended[slug] = superseded
+
+    checked = 0
+    blocked = 0
+    for agent in sorted(by_agent):
+        if agent in ended:
+            continue  # deliberately ended; superseded_by names the successor role
+        lineage = by_agent[agent]
+        latest = max(
+            lineage, key=lambda r: (r.activated_at, r.generation, r.uid)
+        )
+        # 163b3923 R3 — a still-active predecessor IS ADR-016 working, but
+        # skipping those agents entirely made this check structurally unable to
+        # see a whole class of birth blocker. It hid two on 2026-07-31 alone:
+        # Po P2 (activation open 29 days after a session that ended without
+        # ceremony) and Vela V72 (a live agent whose own activation frontmatter
+        # was unparseable, poisoning her lineage for fifteen hours). Both were
+        # found by hand, one by a control probe on an agent expected to pass.
+        #
+        # So probe them too, and separate the outcomes: a refusal that is ONLY
+        # "predecessor must be terminal" is ADR-016 holding and is reported as
+        # latent, not blocked. Any OTHER refusal is a real birth blocker that
+        # will fire the moment that agent retires, and is reported now.
+        predecessor_live = str(latest.status).strip().lower() not in {
+            'retired', 'retiring', 'stale', 'closed'
+        }
+        if predecessor_live:
+            try:
+                _ac.derive_new_activation_predecessor(
+                    records,
+                    agent=agent,
+                    agent_class=(
+                        latest.canonical_agent_class
+                        or latest.agent_class
+                        or 'executive'
+                    ),
+                    generation=_next_probe_generation(latest.generation),
+                )
+            except Exception as exc:
+                detail = str(exc)
+                if 'must be terminal' not in detail:
+                    # Something other than liveness blocks this birth. It is
+                    # already true and will fire the moment they retire.
+                    blocked += 1
+                    findings.append(
+                        f'{agent} ({latest.generation}+1) LATENT BIRTH BLOCKER '
+                        f'(predecessor still {latest.status}; this fires when '
+                        f'they retire): {detail}'
+                    )
+                elif (
+                    _agent_class_has_a_birth_lifecycle(latest)
+                    and _activation_is_past_stale_threshold(latest)
+                ):
+                    # "Predecessor must be terminal" is ADR-016 holding when the
+                    # agent is genuinely working. Long past its own stale
+                    # threshold it means the opposite: the session ended without
+                    # ceremony and the activation was never closed, so the
+                    # successor is blocked by an open record nobody will close
+                    # on their own. This is exactly Po P2 — 29 days open, no
+                    # events, no commits, no reflection — which sat unseen
+                    # because this check skipped live predecessors entirely.
+                    blocked += 1
+                    findings.append(
+                        f'{agent} ({latest.generation}+1) STALE OPEN ACTIVATION: '
+                        f'predecessor {latest.uid} is status:{latest.status} but '
+                        f'past its own stale threshold (activated '
+                        f'{latest.activated_at}). Its session ended without '
+                        f'closing. SELF-CLEARING: booting {agent} now sweeps this '
+                        f'record automatically (metis-g100, 2026-08-03) — just '
+                        f'activate them. To clear it without a boot: '
+                        f'40b2f455.py close --activation-uid {latest.uid} '
+                        f'--target-status retired --abandoned --authorized-by <you>.'
+                    )
+            continue
+        checked += 1
+        probe = f'{latest.generation}+1' if latest.generation else 'next'
+        # Probe with the CANONICAL class, not the entry's declared one: a class
+        # mismatch is a different defect and must not masquerade as a boot block.
+        probe_class = (
+            latest.canonical_agent_class or latest.agent_class or 'executive'
+        )
+        try:
+            _ac.derive_new_activation_predecessor(
+                records,
+                agent=agent,
+                agent_class=probe_class,
+                generation=_next_probe_generation(latest.generation),
+            )
+        except Exception as exc:
+            blocked += 1
+            findings.append(
+                f'{agent} ({probe}) LINEAGE DEFECT (birth is NOT blocked): {exc}'
+            )
+    return (findings, checked, blocked)
+
+
+def _agent_class_has_a_birth_lifecycle(record) -> bool:
+    """Whether this activation belongs to something that is BORN, not just run.
+
+    Scoping matters more than coverage here. Without it the stale-predecessor
+    branch reports every long-open `pipeline` run — including six recycled
+    demo records from a single 2026-05-16 batch — as CANNOT BOOT, which buries
+    the one real finding among seven false ones. A health check people learn to
+    skip is the failure this whole line of work exists to fix. Pipeline runs are
+    closed by Vela's Tier 1 stale-sweep; they do not produce successors.
+    """
+    agent_class = str(
+        getattr(record, 'canonical_agent_class', '')
+        or getattr(record, 'agent_class', '')
+        or ''
+    ).strip().lower()
+    if agent_class in {'pipeline', 'worker', 'child-agent'}:
+        return False
+    # A record recovered from the recycle bin is deleted substrate; it must not
+    # drive a live health verdict.
+    source = str(getattr(record, 'source_path', '') or '')
+    if '/recycle/' in source or '/99-recycle/' in source:
+        return False
+    return True
+
+
+def _activation_is_past_stale_threshold(record) -> bool:
+    """Whether a still-open activation has outlived its own declared threshold.
+
+    Deliberately conservative: an unparseable date or a missing threshold
+    returns False. A false positive here accuses a working agent of being dead,
+    which is worse than missing one.
+    """
+    from datetime import date as _date
+
+    raw = str(getattr(record, 'activated_at', '') or '').strip()
+    if not raw:
+        return False
+    try:
+        activated = _date.fromisoformat(raw[:10])
+    except ValueError:
+        return False
+    try:
+        threshold_hours = int(str(getattr(record, 'stale_threshold_hours', '') or 168))
+    except (TypeError, ValueError):
+        threshold_hours = 168
+    return (_date.today() - activated).days > (threshold_hours / 24)
+
+
+def _next_probe_generation(generation: str) -> str:
+    """Synthesize the successor generation label for a boot probe.
+
+    Handles both fleet shapes: executive prefixes (G96 -> G97) and slug-numbered
+    session agents (sa.cold-boot-198 -> sa.cold-boot-199). Getting this wrong
+    makes the probe itself the failure, which is worse than not probing.
+    """
+    import re as _re
+
+    match = _re.fullmatch(r'(.*?)(\d+)', (generation or '').strip())
+    if not match:
+        return 'X1'
+    return f'{match.group(1)}{int(match.group(2)) + 1}'
+
+
+def check_pipeline_event_fixture_pollution(vault: Path) -> tuple[list[str], int, int]:
+    """7627b589 fail-loud floor: a tropo.pipeline.* event in the production event
+    log whose activation_uid/pipeline_run_uid isn't real 8-hex is a fixture-shaped
+    event -- either a pre-fix historical leak (the exhaustive, documented allowlist
+    above) or a NEW un-sandboxed test run that bypassed the sandbox-mode fix in
+    9e7003b1.py's _emit_pipeline_event. The former is INFO (provenance-recorded,
+    already accounted for); the latter is ERROR -- the plant is the proof.
+
+    Returns (findings, total_checked, new_defect_count). Historical pollution is
+    counted in total_checked but not in the defect count.
+    """
+    import re as _re
+
+    uid_re = _re.compile(r'^[0-9a-f]{8}$')
+    findings: list[str] = []
+    total_checked = 0
+    new_defects = 0
+    historical_count = 0
+
+    for rec in _canonical_event_union(vault):
+        if not str(rec.get('type', '')).startswith('tropo.pipeline.'):
+            continue
+        data = rec.get('data') or {}
+        polluted_key = None
+        for key in ('activation_uid', 'pipeline_run_uid'):
+            val = data.get(key)
+            if val is not None and not uid_re.match(str(val)):
+                polluted_key = key
+                break
+        if polluted_key is None:
+            continue
+        total_checked += 1
+        event_id = rec.get('id', '')
+        if event_id in _KNOWN_PIPELINE_EVENT_POLLUTION_IDS:
+            historical_count += 1
+            continue
+        new_defects += 1
+        findings.append(
+            f"[ERROR] event {event_id}: {rec.get('type')} carries fixture-shaped "
+            f"{polluted_key}={data.get(polluted_key)!r} -- not real 8-hex, not in the "
+            f"documented pollution allowlist (7627b589). A test run bypassed the "
+            f"sandbox mode (TROPO_PIPELINE_RUNTIME_SANDBOX) in 9e7003b1.py."
+        )
+
+    if historical_count:
+        findings.insert(0,
+            f"[INFO] {historical_count} historical fixture event(s) (7627b589, pre-sandbox-fix) "
+            f"-- provenance-recorded, not re-litigated. See vault/files/7627b589.md."
+        )
+
+    return findings, total_checked, new_defects
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
+def check_typed_finding_tally_fixture() -> tuple[list[Finding], int, int]:
+    """Law-12 plant: severity, never rendered prose, drives the tally.
+
+    The ERROR carries a deliberately misleading ``[WARN]`` token in its
+    message; the WARN carries ``[FAIL]``.  A prefix parser would invert them.
+    The typed tally must still report exactly one of each severity.
+    """
+    planted = [
+        Finding(
+            Severity.ERROR,
+            "typed-finding-plant",
+            "mis-prefixed-error",
+            "[WARN] this text must not downgrade an ERROR",
+        ),
+        Finding(
+            Severity.WARN,
+            "typed-finding-plant",
+            "mis-prefixed-warn",
+            "[FAIL] this text must not promote a WARN",
+        ),
+        Finding(
+            Severity.INFO,
+            "typed-finding-plant",
+            "prefixless-info",
+            "no control prefix at all",
+        ),
+    ]
+    tally = FindingTally()
+    tally.extend(planted, check_id="typed-finding-plant")
+    defects: list[Finding] = []
+    if (tally.errors, tally.warnings, tally.infos) != (1, 1, 1):
+        defects.append(
+            Finding(
+                Severity.ERROR,
+                "typed-finding-plant",
+                "tally",
+                f"expected (1,1,1), got "
+                f"({tally.errors},{tally.warnings},{tally.infos})",
+            )
+        )
+    if not str(planted[0]).lstrip().startswith("[ERROR]"):
+        defects.append(
+            Finding(
+                Severity.ERROR,
+                "typed-finding-plant",
+                "render",
+                "ERROR did not render from typed severity",
+            )
+        )
+    if not str(planted[1]).lstrip().startswith("[WARN]"):
+        defects.append(
+            Finding(
+                Severity.ERROR,
+                "typed-finding-plant",
+                "render",
+                "WARN did not render from typed severity",
+            )
+        )
+
+    def _crash_plant():
+        raise RuntimeError("planted typed-family crash")
+
+    crashed, _, _ = typed_findings.run_check_family(
+        "typed-finding-crash-plant", _crash_plant
+    )
+    crash_tally = FindingTally()
+    crash_tally.extend(crashed, check_id="typed-finding-crash-plant")
+    if crash_tally.errors != 1:
+        defects.append(
+            Finding(
+                Severity.ERROR,
+                "typed-finding-crash-plant",
+                "tally",
+                f"expected one counted crash, got {crash_tally.errors}",
+            )
+        )
+    return defects, len(planted) + 1, len(defects)
+
+
+PUBLIC_SNAPSHOT_SAMPLE_REL = (
+    Path("02-outbox") / "web-v4" / "public-snapshot-v1"
+)
+
+_PS_FILENAMES = frozenset(
+    {"manifest.json", "release-facts.json", "privacy-receipt.json"}
+)
+_PS_ALLOWED_TYPES = frozenset(
+    {"tropo.release.shipped", "tropo.release.published"}
+)
+_PS_FACT_REQUIRED = frozenset(
+    {"public_fact_id", "type", "occurred_at", "version"}
+)
+_PS_FACT_OPTIONAL = frozenset(
+    {"tag", "public_url", "agent_name", "agent_generation"}
+)
+_PS_HELD_POLICY = {
+    "private-default": "input is private unless explicitly allowlisted",
+    "unverified-release-emitter": "candidate emitter is not the governed verify-live publisher",
+    "malformed-public-candidate": "candidate lacks valid required public fields",
+    "unresolved-public-signer": "optional signer attribution could not be resolved safely",
+    "unknown-input-fields": "candidate contains fields outside the public input allowlist",
+}
+_PS_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+_PS_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
+_PS_FACT_ID_RE = re.compile(r"^rf_[0-9a-f]{64}$")
+_PS_AGENT_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9 .'-]{0,79}$")
+_PS_GENERATION_RE = re.compile(r"^[A-Z][0-9]+$")
+_PS_SEMVER_CORE = r"(?:0|[1-9][0-9]*)"
+_PS_SEMVER_IDENTIFIER = (
+    r"(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
+)
+_PS_SEMVER_RE = re.compile(
+    rf"^{_PS_SEMVER_CORE}\.{_PS_SEMVER_CORE}\.{_PS_SEMVER_CORE}"
+    rf"(?:-{_PS_SEMVER_IDENTIFIER}(?:\.{_PS_SEMVER_IDENTIFIER})*)?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
+_PS_PRIVATE_METADATA_KEYS = frozenset(
+    {
+        "policy_uid",
+        "source_commit",
+        "event_uid",
+        "source_uid",
+        "writer_instance_uid",
+        "stream_uid",
+        "local_seq",
+        "display_seq",
+        "subject",
+        "correlationid",
+        "causationid",
+        "body",
+        "data",
+    }
+)
+_PS_FORBIDDEN_FACT_KEYS = frozenset(
+    {
+        "id",
+        "event_uid",
+        "source_uid",
+        "writer_instance_uid",
+        "stream_uid",
+        "local_seq",
+        "display_seq",
+        "source",
+        "subject",
+        "correlationid",
+        "causationid",
+        "data",
+        "body",
+        "summary",
+        "path",
+        "uid",
+    }
+)
+
+
+def _ps_reject_private_metadata(value: Any, subject: str) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in _PS_PRIVATE_METADATA_KEYS:
+                raise ValueError(f"{subject} contains forbidden private metadata")
+            _ps_reject_private_metadata(child, subject)
+    elif isinstance(value, list):
+        for child in value:
+            _ps_reject_private_metadata(child, subject)
+    elif isinstance(value, str) and (
+        value == "20495aaf" or _PS_COMMIT_RE.fullmatch(value)
+    ):
+        raise ValueError(f"{subject} contains a governed UID or private commit")
+
+
+def _ps_payload(value: Any) -> bytes:
+    try:
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"public snapshot contains non-canonical data: {exc}") from exc
+
+
+def _ps_file_bytes(value: Any) -> bytes:
+    return _ps_payload(value) + b"\n"
+
+
+def _ps_sha256(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _ps_exact(value: Any, expected: set[str], subject: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != expected:
+        raise ValueError(f"{subject} does not have its exact contract keys")
+    return value
+
+
+def _ps_read_json(path: Path) -> tuple[dict[str, Any], bytes]:
+    metadata = path.lstat()
+    if path.is_symlink() or not path.is_file() or metadata.st_nlink != 1:
+        raise ValueError(f"{path.name} must be an unlinked regular file")
+    payload = path.read_bytes()
+
+    def no_duplicates(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"{path.name} has duplicate key {key!r}")
+            result[key] = value
+        return result
+
+    try:
+        value = json.loads(
+            payload.decode("utf-8"),
+            object_pairs_hook=no_duplicates,
+            parse_constant=lambda constant: (_ for _ in ()).throw(
+                ValueError(f"{path.name} has non-finite number {constant}")
+            ),
+        )
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"{path.name} is not valid UTF-8 JSON") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"{path.name} root must be an object")
+    if _ps_file_bytes(value) != payload:
+        raise ValueError(f"{path.name} is not canonical JSON")
+    return value, payload
+
+
+def _ps_timestamp(value: Any, subject: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{subject} is not an ISO-8601 timestamp")
+    candidate = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError as exc:
+        raise ValueError(f"{subject} is not an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{subject} must carry a timezone")
+    parsed = parsed.astimezone(timezone.utc)
+    timespec = "microseconds" if parsed.microsecond else "seconds"
+    normalized = parsed.isoformat(timespec=timespec).replace("+00:00", "Z")
+    if normalized != value:
+        raise ValueError(f"{subject} is not canonical UTC")
+    return normalized
+
+
+def _ps_semver(value: Any) -> str:
+    if not isinstance(value, str) or not _PS_SEMVER_RE.fullmatch(value):
+        raise ValueError("public snapshot version is not normalized SemVer")
+    return value
+
+
+def _ps_public_url(value: Any, version: str) -> None:
+    if not isinstance(value, str) or not value:
+        raise ValueError("public_url must be a non-empty string")
+    if (
+        value != value.strip()
+        or any(ord(character) < 0x20 or ord(character) == 0x7F for character in value)
+        or any(character.isspace() for character in value)
+    ):
+        raise ValueError("public_url contains whitespace or control characters")
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("public_url is malformed") from exc
+    prefix = "/tropo-ai/tropo/releases/tag/"
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc != "github.com"
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.query
+        or parsed.fragment
+        or not parsed.path.startswith(prefix)
+        or parsed.path.endswith("/")
+        or "//" in parsed.path
+        or "%" in parsed.path
+        or any(part in {".", ".."} for part in Path(parsed.path).parts)
+        or value != f"https://github.com{parsed.path}"
+    ):
+        raise ValueError("public_url is outside the fixed GitHub release path")
+    tag = parsed.path[len(prefix):]
+    normalized = tag[1:] if tag.startswith("v") else tag
+    if not _PS_SEMVER_RE.fullmatch(normalized) or normalized != version:
+        raise ValueError("public_url release tag does not match version")
+
+
+def _validate_public_snapshot_independent(bundle_path: Path) -> dict[str, Any]:
+    """Minimal stdlib-only privacy/shape check independent of exporter code."""
+    if bundle_path.is_symlink() or not bundle_path.is_dir():
+        raise ValueError("public snapshot bundle must be a real directory")
+    entries = list(bundle_path.iterdir())
+    if {entry.name for entry in entries} != _PS_FILENAMES:
+        raise ValueError("public snapshot layout must contain exactly three v1 files")
+
+    release, release_payload = _ps_read_json(bundle_path / "release-facts.json")
+    manifest, _ = _ps_read_json(bundle_path / "manifest.json")
+    receipt, receipt_payload = _ps_read_json(
+        bundle_path / "privacy-receipt.json"
+    )
+    _ps_reject_private_metadata(release, "release-facts")
+    _ps_reject_private_metadata(manifest, "manifest")
+    _ps_reject_private_metadata(receipt, "privacy receipt")
+
+    release = _ps_exact(
+        release, {"schema_version", "facts"}, "release-facts"
+    )
+    if release["schema_version"] != "1.0.0":
+        raise ValueError("release-facts schema version is invalid")
+    facts = release["facts"]
+    if not isinstance(facts, list):
+        raise ValueError("release-facts facts must be an array")
+    previous = None
+    seen_ids = set()
+    for index, fact in enumerate(facts):
+        if not isinstance(fact, dict):
+            raise ValueError(f"release fact {index} is not an object")
+        keys = set(fact)
+        if keys & _PS_FORBIDDEN_FACT_KEYS:
+            raise ValueError(f"release fact {index} contains a forbidden private key")
+        if (
+            not _PS_FACT_REQUIRED <= keys
+            or not keys <= (_PS_FACT_REQUIRED | _PS_FACT_OPTIONAL)
+        ):
+            raise ValueError(f"release fact {index} violates the field allowlist")
+        fact_id = fact["public_fact_id"]
+        if not isinstance(fact_id, str) or not _PS_FACT_ID_RE.fullmatch(fact_id):
+            raise ValueError(f"release fact {index} has malformed public_fact_id")
+        if fact_id in seen_ids:
+            raise ValueError("release facts contain duplicate public_fact_id")
+        seen_ids.add(fact_id)
+        if fact["type"] not in _PS_ALLOWED_TYPES:
+            raise ValueError(f"release fact {index} has a non-public type")
+        occurred_at = _ps_timestamp(fact["occurred_at"], "occurred_at")
+        version = _ps_semver(fact["version"])
+        has_name = "agent_name" in fact
+        has_generation = "agent_generation" in fact
+        if has_name != has_generation:
+            raise ValueError("optional public attribution must appear as a pair")
+        if has_name and (
+            not isinstance(fact["agent_name"], str)
+            or not _PS_AGENT_NAME_RE.fullmatch(fact["agent_name"])
+            or not isinstance(fact["agent_generation"], str)
+            or not _PS_GENERATION_RE.fullmatch(fact["agent_generation"])
+        ):
+            raise ValueError("public attribution is malformed")
+        if "tag" in fact and fact["tag"] not in {version, f"v{version}"}:
+            raise ValueError("public release tag does not match version")
+        if "public_url" in fact:
+            _ps_public_url(fact["public_url"], version)
+        projected = dict(fact)
+        del projected["public_fact_id"]
+        expected_id = f"rf_{_ps_sha256(_ps_payload(projected))}"
+        if fact_id != expected_id:
+            raise ValueError("public_fact_id does not derive from public fields")
+        order_key = (occurred_at, fact_id)
+        if previous is not None and order_key <= previous:
+            raise ValueError("release facts are not strictly sorted")
+        previous = order_key
+
+    manifest = _ps_exact(
+        manifest,
+        {
+            "schema_version",
+            "policy",
+            "policy_version",
+            "generated_at",
+            "artifacts",
+            "bundle_sha256",
+        },
+        "manifest",
+    )
+    if (
+        manifest["schema_version"] != "1.0.0"
+        or manifest["policy"] != "public-crew-snapshot"
+        or manifest["policy_version"] != "1.0.0"
+    ):
+        raise ValueError("manifest public policy or schema is invalid")
+    _ps_timestamp(manifest["generated_at"], "generated_at")
+    release_hash = _ps_sha256(release_payload)
+    release_descriptor = {
+        "path": "release-facts.json",
+        "sha256": release_hash,
+        "bytes": len(release_payload),
+        "records": len(facts),
+    }
+    receipt_descriptor = {
+        "path": "privacy-receipt.json",
+        "sha256": _ps_sha256(receipt_payload),
+        "bytes": len(receipt_payload),
+        "records": 1,
+    }
+    artifacts = manifest["artifacts"]
+    if not isinstance(artifacts, list) or len(artifacts) != 2:
+        raise ValueError("manifest must describe data and privacy receipt artifacts")
+    normalized_artifacts = [
+        _ps_exact(
+            artifact,
+            {"path", "sha256", "bytes", "records"},
+            "manifest artifact",
+        )
+        for artifact in artifacts
+    ]
+    if any(
+        not isinstance(artifact["path"], str)
+        or not isinstance(artifact["sha256"], str)
+        or not _PS_HASH_RE.fullmatch(artifact["sha256"])
+        or type(artifact["bytes"]) is not int
+        or artifact["bytes"] < 0
+        or type(artifact["records"]) is not int
+        or artifact["records"] < 0
+        for artifact in normalized_artifacts
+    ):
+        raise ValueError("manifest artifact descriptor fields are malformed")
+    if normalized_artifacts != [release_descriptor, receipt_descriptor]:
+        raise ValueError("manifest artifact descriptors do not match public bytes")
+    expected_bundle_hash = _ps_sha256(_ps_payload(artifacts))
+    if (
+        not isinstance(manifest["bundle_sha256"], str)
+        or not _PS_HASH_RE.fullmatch(manifest["bundle_sha256"])
+        or manifest["bundle_sha256"] != expected_bundle_hash
+    ):
+        raise ValueError("manifest bundle hash does not re-derive")
+
+    receipt = _ps_exact(
+        receipt,
+        {
+            "schema_version",
+            "policy",
+            "policy_version",
+            "exporter_version",
+            "data_bundle_sha256",
+            "crossed",
+            "held_back",
+            "overrides_consumed",
+        },
+        "privacy receipt",
+    )
+    if (
+        receipt["schema_version"] != "1.0.0"
+        or receipt["policy"] != "public-crew-snapshot"
+        or receipt["policy_version"] != "1.0.0"
+        or receipt["exporter_version"] != "1.1.0"
+    ):
+        raise ValueError("privacy receipt public policy or schema is invalid")
+    expected_data_bundle_hash = _ps_sha256(_ps_payload([release_descriptor]))
+    if receipt["data_bundle_sha256"] != expected_data_bundle_hash:
+        raise ValueError("receipt data_bundle_sha256 does not re-derive")
+    crossed = _ps_exact(receipt["crossed"], {"release_facts"}, "receipt crossed")
+    crossed_release = _ps_exact(
+        crossed["release_facts"], {"count", "sha256"}, "receipt release_facts"
+    )
+    if (
+        type(crossed_release["count"]) is not int
+        or crossed_release["count"] != len(facts)
+        or crossed_release["sha256"] != release_hash
+    ):
+        raise ValueError("receipt crossed facts do not re-derive")
+    held_back = receipt["held_back"]
+    if not isinstance(held_back, list):
+        raise ValueError("receipt held_back must be an array")
+    previous_bucket = None
+    for row_value in held_back:
+        row = _ps_exact(row_value, {"bucket", "reason"}, "held-back row")
+        bucket = row["bucket"]
+        if (
+            not isinstance(bucket, str)
+            or bucket not in _PS_HELD_POLICY
+            or row["reason"] != _PS_HELD_POLICY[bucket]
+        ):
+            raise ValueError("receipt has a non-policy held-back row")
+        if previous_bucket is not None and bucket <= previous_bucket:
+            raise ValueError("receipt held-back rows are not strictly sorted")
+        previous_bucket = bucket
+    if receipt["overrides_consumed"] != []:
+        raise ValueError("v1 receipt cannot report consumed overrides")
+    return {
+        "bundle_sha256": manifest["bundle_sha256"],
+        "policy": manifest["policy"],
+        "records": len(facts),
+        "release_facts_sha256": release_hash,
+    }
+
+
+def _ps_current_bound_commit(vault: Path) -> str:
+    git_environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("GIT_")
+    }
+    git_environment["GIT_OPTIONAL_LOCKS"] = "0"
+    try:
+        head_result = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=vault,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=git_environment,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError("public snapshot source binding could not resolve HEAD") from exc
+    commit = head_result.stdout.strip()
+    if not _PS_COMMIT_RE.fullmatch(commit):
+        raise ValueError("public snapshot source binding returned an invalid commit")
+    return commit
+
+
+def check_public_snapshot_contract(vault: Path) -> tuple[list[Finding], int, int]:
+    """Independently check privacy/shape, then source-rederive with exporter code."""
+    bundle_path = vault / PUBLIC_SNAPSHOT_SAMPLE_REL
+    if not bundle_path.exists() and not bundle_path.is_symlink():
+        return [], 0, 0
+    if bundle_path.is_dir() and not any(bundle_path.iterdir()):
+        return [], 0, 0
+    try:
+        _validate_public_snapshot_independent(bundle_path)
+        contract = _load_public_snapshot_contract()
+        bound_source_commit = _ps_current_bound_commit(vault)
+        contract.validate_bundle_directory(
+            bundle_path,
+            source_root=vault,
+            bound_source_commit=bound_source_commit,
+        )
+    except Exception as exc:
+        return (
+            [
+                Finding(
+                    Severity.ERROR,
+                    "public-snapshot-contract",
+                    PUBLIC_SNAPSHOT_SAMPLE_REL.as_posix(),
+                    f"bundle validation/source re-derivation failed: "
+                    f"{exc.__class__.__name__}: {exc}",
+                )
+            ],
+            1,
+            1,
+        )
+    return [], 1, 0
+
+
+_VALIDATOR_PROVENANCE_SCHEMA_VERSION = 1
+
+
+def validator_invocation_scope(
+    *,
+    customer: bool = False,
+    release: bool = False,
+    thorough: bool = False,
+) -> dict[str, bool]:
+    """Return the small, invocation-only scope label for a validator run."""
+    return {
+        "default": not customer and not release,
+        "customer": bool(customer),
+        "release": bool(release),
+        "thorough": bool(thorough),
+    }
+
+
+def _empty_validator_provenance(scope: dict[str, bool]) -> dict[str, Any]:
+    return {
+        "schema_version": _VALIDATOR_PROVENANCE_SCHEMA_VERSION,
+        "commit": None,
+        "index_hash": None,
+        "validator_version": None,
+        "scope": dict(scope),
+    }
+
+
+def _validator_index_hash(vault: Path) -> str:
+    """Hash named current/archive surfaces with unambiguous v1 framing."""
+    combined = hashlib.sha256(b"tropo.validator.index-surfaces.v1\0")
+    for name in ("00-index.jsonl", "00-archive-index.jsonl"):
+        surface = hashlib.sha256()
+        byte_length = 0
+        with (vault / "vault" / name).open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                byte_length += len(chunk)
+                surface.update(chunk)
+        encoded_name = name.encode("utf-8")
+        combined.update(len(encoded_name).to_bytes(4, "big"))
+        combined.update(encoded_name)
+        combined.update(byte_length.to_bytes(8, "big"))
+        combined.update(surface.digest())
+    return combined.hexdigest()
+
+
+def collect_validator_provenance(
+    vault: Path,
+    scope: dict[str, bool],
+    *,
+    validator_path: Optional[Path] = None,
+) -> dict[str, Any]:
+    """Collect bounded run labels; unavailable facts remain null."""
+    provenance = _empty_validator_provenance(scope)
+
+    git_environment = {
+        key: value for key, value in os.environ.items()
+        if not key.startswith("GIT_")
+    }
+    git_environment["GIT_OPTIONAL_LOCKS"] = "0"
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=vault,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=git_environment,
+        )
+        commit = result.stdout.strip()
+        if result.returncode == 0 and commit:
+            provenance["commit"] = commit
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    try:
+        provenance["index_hash"] = _validator_index_hash(vault)
+    except OSError:
+        pass
+
+    implementation = Path(__file__) if validator_path is None else validator_path
+    try:
+        provenance["validator_version"] = hashlib.sha256(
+            implementation.read_bytes()
+        ).hexdigest()
+    except OSError:
+        pass
+
+    return provenance
+
+
+def collect_validator_provenance_nonblocking(
+    vault: Path,
+    scope: dict[str, bool],
+) -> dict[str, Any]:
+    """Keep unexpected label collection failures outside validator semantics."""
+    try:
+        return collect_validator_provenance(vault, scope)
+    except Exception as exc:
+        print(
+            f"WARN: validator provenance collection failed (non-blocking): {exc}",
+            file=sys.stderr,
+        )
+        return _empty_validator_provenance(scope)
+
+
+def emit_validator_run_completed(
+    *,
+    passed: int,
+    failed: int,
+    warnings: int,
+    normalizable: int,
+    meta_status_coverage_gaps: int,
+    meta_status_unresolved: int,
+    provenance: dict[str, Any],
+    exit_code: int,
+) -> int:
+    """Emit the compatible result payload without changing validator status."""
+    data = {
+        "passed": passed,
+        "failed": failed,
+        "warnings": warnings,
+        "normalizable": normalizable,
+        "meta_status_coverage_gaps": meta_status_coverage_gaps,
+        "meta_status_unresolved": meta_status_unresolved,
+        "provenance": {
+            "schema_version": provenance.get("schema_version"),
+            "commit": provenance.get("commit"),
+            "index_hash": provenance.get("index_hash"),
+            "validator_version": provenance.get("validator_version"),
+            "scope": provenance.get("scope"),
+        },
+    }
+    try:
+        from lib.event_emitter import auto_emit
+        auto_emit(
+            "tropo.validator.run.completed",
+            "/tools/tropo-validate",
+            "d2b9c8e6",
+            lifecycle="ephemeral",
+            data=data,
+        )
+    except Exception as exc:
+        print(
+            f"WARN: validator completion event emission failed (non-blocking): {exc}",
+            file=sys.stderr,
+        )
+    return exit_code
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -9345,12 +11234,73 @@ def main() -> int:
                              'in-box refs still [FAIL] loudly. Pass --customer to a customer extract '
                              'health run; the shipped box carries an optional vendor-ref manifest. '
                              'Same mechanics as --release; separated for honest provenance.')
+    parser.add_argument('--thorough', action='store_true',
+                        help='Governed Autonomy S1 (ef65fccd): spot re-derivation for '
+                             'check_step_completion_has_verification — re-runs each passing '
+                             "receipt's recorded verification_command and compares exit_code + "
+                             'output_sha256 against what was recorded, flagging drift/tamper. '
+                             'Off by default (real command re-execution; not a routine-pass default).')
+    parser.add_argument('--fleet-boot-health', action='store_true',
+                        help='Run ONLY the fleet birth-health check and print one line. '
+                             'For the Group 5 boot step: every agent asks, every boot, '
+                             'whether any lineage in the fleet has stopped being able to '
+                             'produce a successor. This check has existed since 2026-07-29 '
+                             'and correctly reported metis, po and tropo as blocked — to '
+                             'nobody, because it only ran inside a full validate that nobody '
+                             'ran. An instrument that reports where no one is looking is the '
+                             'same as no instrument (metis-g100, 2026-08-03).')
     args = parser.parse_args()
 
     vault = resolve_vault_root(args.vault_path)
     if vault is None:
         print('ERROR: Could not resolve vault root.', file=sys.stderr)
         return 2
+
+    # --- Fleet birth health, standalone (metis-g100) ---
+    if args.fleet_boot_health:
+        try:
+            findings, checked, blocked = check_every_agent_can_still_boot(vault)
+        except Exception as exc:
+            print(f'⚠️  Fleet birth health: check failed to run ({exc})')
+            return 1
+        if blocked == 0:
+            print(f'✅ Fleet birth health: {checked} lineage(s) can produce a successor.')
+            return 0
+        # Severity language corrected metis-g101 2026-08-04. This said "CANNOT
+        # produce a successor", which stopped being true when G100 converted
+        # birth from refuse-on-failed-check to record-and-proceed.
+        #
+        # The first correction written here was ALSO wrong, and only a probe
+        # caught it. It claimed the successor would be "born provisional" --
+        # true for argus, but on a planted lineage whose predecessor carried an
+        # unknown agent_class the mint issued a CLEAN entry, no findings at all.
+        # The check and the mint do not share a rule set: this walk is stricter
+        # than birth, and some of what it reports birth simply does not consult.
+        #
+        # So the only claim made here is the one that is verified in both
+        # directions and pinned by test_fleet_health_language.py: the birth is
+        # NOT BLOCKED. Whether it also comes out provisional is the mint's
+        # business to report, not this check's to predict.
+        #
+        # It matters because of who reads this line. Boot step 5.1.9 puts it in
+        # front of a human in every agent's startup signal, and Mike's standing
+        # bar is "I NEVER EVER want to see my agents telling me they are failing
+        # to boot." An alarm that overstates by a whole category is how a real
+        # finding gets discounted -- and this instrument already spent thirty
+        # days being right about Po while nobody acted.
+        #
+        # Findings are unchanged and still surface; only the claim about their
+        # consequence is corrected. Exit code deliberately left non-zero: CI
+        # should still see these, and changing that is a separate decision with
+        # its own blast radius.
+        print(
+            f'🟡 Fleet birth health: {blocked} of {checked} lineage(s) carry a '
+            'lineage defect. Birth is NOT blocked — the mint records what it '
+            'cannot prove and proceeds. These are repairs, not emergencies.'
+        )
+        for line in findings:
+            print(f'   • {line}')
+        return 1
 
     # --- v1.70 S3.5.2: Write Fingerprints Mode ---
     if args.write_fingerprints is not None:
@@ -9442,6 +11392,13 @@ def main() -> int:
 
         return 0
 
+    run_scope = validator_invocation_scope(
+        customer=getattr(args, "customer", False),
+        release=getattr(args, "release", False),
+        thorough=getattr(args, "thorough", False),
+    )
+    run_provenance = collect_validator_provenance_nonblocking(vault, run_scope)
+
     # S1 (v1.80 re-build): customer-mode classification is data (the shipped vendor-ref
     # manifest), not guesswork. Load once here; None means fail-closed downstream.
     vendor_manifest: Optional[set[str]] = None
@@ -9531,6 +11488,76 @@ def main() -> int:
         _tb.print_exc()
         total_fails += 1
 
+    # --- A142 index lifecycle: union integrity stays broad and ERROR-grade ---
+    print(
+        '\n--- Index Union Integrity '
+        '(CURRENT + ARCHIVE; row resolution + UID uniqueness are ERROR invariants) ---'
+    )
+    try:
+        iui_findings, iui_checked, iui_defects = check_index_union_integrity(vault)
+        if iui_defects == 0:
+            print(
+                f'[PASS] {iui_checked} rows checked across current + archive '
+                'union — every row resolves and every UID is unique'
+            )
+            total_passes += 1
+        else:
+            print(
+                f'[ERROR] {iui_checked} rows checked across current + archive '
+                f'union; {iui_defects} integrity violation(s)'
+            )
+            for line in iui_findings[:25]:
+                print(f'  {line}')
+            if len(iui_findings) > 25:
+                print(f'  ... and {len(iui_findings) - 25} more')
+            total_fails += iui_defects
+    except Exception as e:
+        import traceback as _tb
+        print(f'[FAIL] index-union-integrity check CRASHED: {e}')
+        _tb.print_exc()
+        total_fails += 1
+
+    # --- A142 index lifecycle: live authoring checks are current-only ---
+    print(
+        '\n--- Live Template + Body Shape '
+        '(CURRENT surface only; archived history explicitly excluded) ---'
+    )
+    try:
+        ltb_findings, ltb_checked, ltb_defects = check_live_template_body_shape(vault)
+        ltb_warnings = [f for f in ltb_findings if f.startswith('[WARN]')]
+        if ltb_defects == 0:
+            print(
+                f'[PASS] {ltb_checked} current template-governed entries '
+                'checked — archived/superseded entries excluded'
+            )
+            total_passes += 1
+        else:
+            print(
+                f'[FAIL] {ltb_checked} current template-governed entries '
+                f'checked; {ltb_defects} live body-shape defect(s) '
+                '(archive excluded)'
+            )
+        # WARN-grade findings (section presence, per the capsule-declared grade)
+        # print in both branches: they are advisory, so they must not gate the
+        # exit code, but a warning nobody prints is a warning nobody fixes.
+        for line in [f for f in ltb_findings if not f.startswith('[WARN]')][:25]:
+            print(f'  {line}')
+        if ltb_defects > 25:
+            print(f'  ... and {ltb_defects - 25} more defect(s)')
+        if ltb_warnings:
+            print(f'  [WARN] {len(ltb_warnings)} advisory body-shape finding(s):')
+            for line in ltb_warnings[:10]:
+                print(f'  {line}')
+            if len(ltb_warnings) > 10:
+                print(f'  ... and {len(ltb_warnings) - 10} more warning(s)')
+        total_fails += ltb_defects
+        total_warnings += len(ltb_warnings)
+    except Exception as e:
+        import traceback as _tb
+        print(f'[FAIL] live-template-body check CRASHED: {e}')
+        _tb.print_exc()
+        total_fails += 1
+
     # --- Identity Minting Chokepoint (796d9330 / ADR-050; WARN now, ERROR ratchet after first clean pass) ---
     print('\n--- Identity Minting Chokepoint (796d9330/ADR-050; WARN now, ERROR ratchet after first clean pass) ---')
     try:
@@ -9589,20 +11616,12 @@ def main() -> int:
         # resolution set or pattern-scan generates false-positives.
         all_uids: set[str] = set()
         try:
-            with index_path.open() as fp:
-                for raw in fp:
-                    raw = raw.strip()
-                    if not raw:
-                        continue
-                    try:
-                        row = json.loads(raw)
-                    except json.JSONDecodeError:
-                        continue
-                    uid = row.get('uid')
-                    if isinstance(uid, str) and UID_RE.match(uid):
-                        all_uids.add(uid)
+            for row in _index_union(vault):
+                uid = row.get('uid')
+                if isinstance(uid, str) and UID_RE.match(uid):
+                    all_uids.add(uid)
         except OSError:
-            print('[FAIL] vault/00-index.jsonl — unreadable')
+            print('[FAIL] current/archive index union — unreadable')
             total_fails += 1
             all_uids = set()
 
@@ -9833,11 +11852,11 @@ def main() -> int:
             total_warnings += remaining
             print(f'  ... and {remaining} more')
 
-    # --- Memory Typing (v1.26.0 NEW; capsule a5b3c891) ---
-    print('\n--- Memory Typing (v1.26.0 Stream 4; capsule a5b3c891) ---')
+    # --- Memory Typing (capsule a5b3c891 v1.6) ---
+    print('\n--- Memory Typing (Engine Phase 1 reconciliation + v1.6 reinforcement fields; capsule a5b3c891 v1.6) ---')
     mem_findings, mem_checked, mem_defects = check_memory_typing(vault)
     if not mem_findings:
-        print(f'[PASS] {mem_checked} memory entries verified well-formed per memory.capsule v1.0')
+        print(f'[PASS] {mem_checked} memory entries verified well-formed per memory.capsule v1.6')
         total_passes += 1
     else:
         print(f'[INFO] {mem_checked} memory entries checked; {mem_defects} defects (WARN-severity at v1.26.0 grace period; ERROR ratchet in later cycle)')
@@ -9938,6 +11957,24 @@ def main() -> int:
             total_warnings += 1
         if len(stale_findings) > 10:
             remaining = len(stale_findings) - 10
+            total_warnings += remaining
+            print(f'  ... and {remaining} more')
+
+    # --- Pipeline Root Terminal Closure (v3.4 / v1.90 Rule 12; dev-spec c392d833) ---
+    print('\n--- Pipeline Root Terminal Closure (pipeline.capsule v3.4 Rule 12; dev-spec c392d833) ---')
+    prtc_findings, prtc_roots, prtc_violations = check_pipeline_root_terminal_closure(vault)
+    if not prtc_findings:
+        print(f'[PASS] {prtc_roots} activation root(s) checked; 0 shipped/completed cycle left state:active '
+              f'(Rule 12 terminal-closure holds; weld = run_close_out_hook on build-release ship path, backstop = tropo-sweep-stale-roots.py)')
+        total_passes += 1
+    else:
+        print(f'[INFO] {prtc_roots} activation roots checked; {prtc_violations} shipped/completed but still state:active '
+              f'(WARN-severity at v1.90; ratchets to ERROR later — the weld remediates forward, sweep is backstop)')
+        for line in prtc_findings[:10]:
+            print(f'  {line}')
+            total_warnings += 1
+        if len(prtc_findings) > 10:
+            remaining = len(prtc_findings) - 10
             total_warnings += remaining
             print(f'  ... and {remaining} more')
 
@@ -10122,7 +12159,7 @@ def main() -> int:
 
     # --- Step Completion Has Verification (v1.46.0; pipeline-run.capsule v2.0 §Check 14) ---
     print('\n--- Step Completion Has Verification (v1.46.0; pipeline-run.capsule v2.0 §Check 14) ---')
-    scv_findings, scv_checked, scv_defects = check_step_completion_has_verification(vault)
+    scv_findings, scv_checked, scv_defects = check_step_completion_has_verification(vault, thorough=args.thorough)
     if not scv_findings:
         print(f'[PASS] {scv_checked} v2.0-shape pipeline-runs verified — every step_completed has matching verification_receipt:verdict:pass (or step is verification-class)')
         total_passes += 1
@@ -10361,15 +12398,15 @@ def main() -> int:
         if len(fmis_findings) > 10:
             print(f'  ... and {len(fmis_findings) - 10} more')
 
-    # --- Integrity Parity (v1.5 NEW) ---
-    print('\n--- 00-integrity.json Parity (v1.5 inbox 656c26d0) ---')
+    # --- Blocked-Task Parity (v1.5, re-pointed 2026-07-14 per 66b6f3e8) ---
+    print('\n--- Blocked-Task Parity (v1.5 inbox 656c26d0; re-pointed 66b6f3e8, was 00-integrity.json) ---')
     findings, ok = check_integrity_parity(vault)
     for line in findings:
         print(line)
         if '[WARN]' in line:
             total_warnings += 1  # ratchet preserves count for display; FAIL counted by [FAIL] prefix
     if ok and not findings:
-        print('[PASS] integrity report parity (or report not present)')
+        print('[PASS] blocked-task parity across vault/00-index.jsonl and vault/00-index.sqlite (or a surface not present)')
         total_passes += 1
 
     # --- v1.70 Check 34: Boot-Derivation Freshness (Drift-Gate) ---
@@ -10412,7 +12449,7 @@ def main() -> int:
 
         for line in scp_findings[:20]:
             print(f'  {line}')
-            if line.strip().startswith('[FAIL]'):
+            if line.strip().startswith(('[FAIL]', '[ERROR]')):
                 total_fails += 1
             elif line.strip().startswith('[WARN]'):
                 total_warnings += 1
@@ -10420,7 +12457,7 @@ def main() -> int:
             extra = len(scp_findings) - 20
             print(f'  ... and {extra} more')
             for line in scp_findings[20:]:
-                if line.strip().startswith('[FAIL]'):
+                if line.strip().startswith(('[FAIL]', '[ERROR]')):
                     total_fails += 1
                 elif line.strip().startswith('[WARN]'):
                     total_warnings += 1
@@ -10701,22 +12738,45 @@ def main() -> int:
         print(f'[WARN] doc-spec validator lib not importable: {e}')
         total_warnings += 1
 
-    # --- v1.51 Phase B: test-spec.capsule v1.0 §Validation Checks (14 checks; lib module wire-up) ---
-    print('\n--- test-spec.capsule v1.0 §Validation Checks (v1.51 Phase B; 14 checks; WARN at v1.0 / ERROR ratchet v1.51.1+ except SQ1 cross-validation which ratchets v1.1) ---')
+    # --- test-spec.capsule v1.2 §Validation Checks (14 checks; lib module wire-up) ---
+    print('\n--- test-spec.capsule v1.2 §Validation Checks (bounded legacy WARN / v1.2+ ERROR) ---')
     try:
-        from lib.test_spec_validators import run_all_test_spec_checks
-        ts_findings, ts_total, ts_defects = run_all_test_spec_checks(vault)
+        # Check 33 above reports the same shared Rule 3 evaluator once; do not
+        # duplicate those findings in the family roll-up.
+        ts_findings, ts_total, ts_defects = check_test_spec_family(
+            vault,
+            include_pairing=False,
+            include_behavior_floor=False,
+        )
         if not ts_findings:
             print(f'[PASS] {ts_total} test-spec entries verified clean — 14-check family green')
             total_passes += 1
         else:
-            print(f'[WARN] {ts_total} test-spec entries checked; {ts_defects} findings (WARN at v1.0)')
+            strict_defects = sum(
+                line.strip().startswith(('[FAIL]', '[ERROR]'))
+                for line in ts_findings
+            )
+            warning_count = sum(
+                line.strip().startswith('[WARN]') for line in ts_findings
+            )
+            rollup = '[FAIL]' if strict_defects else '[WARN]'
+            print(
+                f'{rollup} {ts_total} test-spec entries checked; '
+                f'{strict_defects} strict defect(s), {warning_count} warning(s)'
+            )
             for line in ts_findings[:10]:
                 print(f'  {line}')
-                total_warnings += 1
+                if line.strip().startswith(('[FAIL]', '[ERROR]')):
+                    total_fails += 1
+                elif line.strip().startswith('[WARN]'):
+                    total_warnings += 1
             if len(ts_findings) > 10:
                 print(f'  ... and {len(ts_findings) - 10} more')
-                total_warnings += (len(ts_findings) - 10)
+                for line in ts_findings[10:]:
+                    if line.strip().startswith(('[FAIL]', '[ERROR]')):
+                        total_fails += 1
+                    elif line.strip().startswith('[WARN]'):
+                        total_warnings += 1
     except ImportError as e:
         print(f'[WARN] test-spec validator lib not importable: {e}')
         total_warnings += 1
@@ -10765,20 +12825,45 @@ def main() -> int:
     print('\n--- Event Log Integrity Checks 1-10 (v1.55 Stream A.8; WARN / ERROR ratchet v1.56) ---')
     try:
         from lib.event_validators import run_all_event_checks
-        ev_findings, ev_checked, ev_defects = run_all_event_checks(vault)
+        ev_findings, ev_checked, _legacy_ev_defects = typed_findings.run_check_family(
+            "events", run_all_event_checks, vault
+        )
+        ev_tally = FindingTally()
+        typed_event_findings = ev_tally.extend(ev_findings, check_id="events")
         if ev_checked == 0:
             print('[INFO] vault/events/00-events.jsonl not present — skipping (no events yet)')
         elif not ev_findings:
             print(f'[PASS] {ev_checked} event(s) checked — Checks 1-10 all clean')
             total_passes += 1
         else:
-            print(f'[WARN] {ev_checked} event(s) checked; {ev_defects} finding(s)')
-            for line in ev_findings:
-                print(line)
-                total_warnings += 1
+            verdict = 'FAIL' if ev_tally.errors else 'WARN'
+            print(
+                f'[{verdict}] {ev_checked} event(s) checked; '
+                f'{ev_tally.errors} ERROR, {ev_tally.warnings} WARN, '
+                f'{ev_tally.infos} INFO finding(s)'
+            )
+            for finding in typed_event_findings:
+                print(finding)
+            total_fails += ev_tally.errors
+            total_warnings += ev_tally.warnings
     except ImportError as e:
         print(f'[WARN] event_validators import failed: {e}; A.8 checks skipped')
         total_warnings += 1
+
+    # --- Tropo Engine Phase 1: Typed-Finding Tally Gauntlet (Law 12) ---
+    print('\n--- Typed-Finding Tally Gauntlet (Engine Phase 1; severity drives tally) ---')
+    tf_findings, tf_checked, tf_defects = check_typed_finding_tally_fixture()
+    if tf_defects:
+        print(f'[FAIL] {tf_checked} planted typed findings; {tf_defects} tally/render defect(s)')
+        for finding in tf_findings:
+            print(finding)
+        total_fails += tf_defects
+    else:
+        print(
+            f'[PASS] {tf_checked} planted findings — mis-prefixed ERROR/WARN + '
+            'prefixless INFO tally and render from typed severity'
+        )
+        total_passes += 1
 
     # --- V1 (v1.54) Canonical Reference Shape (WARN; ERROR ratchet v1.55) ---
     print('\n--- V1 Canonical Reference Shape (v1.54; WARN ratchet / ERROR v1.55) ---')
@@ -10928,6 +13013,38 @@ def main() -> int:
     except ImportError as e:
         print(f'[WARN] meta_validators import failed: {e}; Layer 3 checks skipped')
         total_warnings += 1
+
+    # --- core v1.7: Gardener Pruning contract ---
+    print('\n--- check_pruning_contract (core v1.7; shared writer/validator/check-one rules) ---')
+    pruning_findings, pruning_checked, pruning_defects = check_pruning_contract(vault)
+    pruning_warnings = [
+        line for line in pruning_findings if line.startswith('[WARN]')
+    ]
+    pruning_failures = [
+        line for line in pruning_findings if line.startswith('[FAIL]')
+    ]
+    if pruning_checked == 0:
+        print('[INFO] No pruning blocks in eligible governed Markdown — silent PASS')
+    elif not pruning_findings:
+        print(f'[PASS] {pruning_checked} pruning block(s) checked — all current and valid')
+        total_passes += 1
+    else:
+        if pruning_failures:
+            print(
+                f'[FAIL] {pruning_defects} pruning contract defect(s) across '
+                f'{pruning_checked} block(s)'
+            )
+            for line in pruning_failures:
+                print(line)
+            total_fails += pruning_defects
+        if pruning_warnings:
+            print(
+                f'[WARN] {len(pruning_warnings)} stale/re-queue pruning finding(s) '
+                f'across {pruning_checked} block(s)'
+            )
+            for line in pruning_warnings:
+                print(line)
+            total_warnings += len(pruning_warnings)
 
     # --- v1.56 Lane E + v1.64 tool-discovery: tool.capsule v1.7 §4 Validation Checks ---
     # v1.7 adds: Check v1.7-1 (name != uid; WARN at v1.64, ERROR ratchet v1.65)
@@ -11381,16 +13498,23 @@ def main() -> int:
     if run_all_loop_checks:
         try:
             loop_findings, loop_total, loop_defects = run_all_loop_checks(vault)
-            if loop_total == 0:
+            if not loop_findings and loop_total == 0:
                 print("[INFO] No loop entries or runs found — skipping")
             elif not loop_findings:
                 print(f"[PASS] {loop_total} loop-run(s) / loop-definition(s) checked — all clean")
                 total_passes += 1
             else:
-                print(f"[FAIL] {loop_total} loop items checked; {loop_defects} finding(s)")
+                level = "FAIL" if loop_defects else "WARN"
+                print(
+                    f"[{level}] {loop_total} loop items checked; "
+                    f"{len(loop_findings)} finding(s), {loop_defects} defect(s)"
+                )
                 for line in loop_findings:
                     print(f"  {line}")
-                    total_fails += 1
+                    if "[ERROR]" in line or "[FAIL]" in line:
+                        total_fails += 1
+                    elif "[WARN]" in line:
+                        total_warnings += 1
         except Exception as e:
             print(f"[FAIL] loop-validators CRASHED: {e}")
             total_fails += 1
@@ -11682,7 +13806,13 @@ def main() -> int:
     # --- 8f15f08d: Pipeline-Activation Coupling Gate (ERROR-ratchet live since 2026-07-08 — register 2b12e41d) ---
     print('\n--- Pipeline-Activation Coupling Gate (8f15f08d; ERROR-ratchet live — allowlist emptied 2026-07-08) ---')
     try:
-        dsac_findings, dsac_checked, dsac_violations = check_dev_spec_activation_coupling(vault, customer_mode=getattr(args, 'customer', False))
+        dsac_findings, dsac_checked, dsac_violations = check_dev_spec_activation_coupling(
+            vault,
+            customer_mode=(
+                getattr(args, 'customer', False)
+                or getattr(args, 'release', False)
+            ),
+        )
         if dsac_violations == 0:
             print(f'[PASS] {dsac_checked} locked/terminal-build-status dev-spec(s) checked — all have a correlated pipeline activation')
             total_passes += 1
@@ -11708,26 +13838,135 @@ def main() -> int:
         _tb.print_exc()
         total_fails += 1
 
+    # --- Fleet Boot Health (metis-g97): can every agent still be born? ---
+    print('\n--- Fleet Boot Health (a gate on BIRTH fails when nobody is home) ---')
+    try:
+        fb_findings, fb_checked, fb_blocked = check_every_agent_can_still_boot(vault)
+        if fb_checked == 0:
+            print('[INFO] No agents with a terminal latest activation — skipping')
+        elif fb_blocked == 0:
+            print(f'[PASS] {fb_checked} agent(s) checked — every lineage can still produce a successor')
+            total_passes += 1
+        else:
+            print(f'[ERROR] {fb_checked} agent(s) checked; {fb_blocked} CANNOT BOOT a successor')
+            total_fails += fb_blocked
+            for line in fb_findings[:25]:
+                print(f'  {line}')
+            if len(fb_findings) > 25:
+                print(f'  ... and {len(fb_findings) - 25} more')
+    except Exception as e:
+        print(f'[FAIL] fleet-boot-health check CRASHED: {e}')
+        total_fails += 1
+
+    # --- Governed Autonomy S2 (bba40cd7): Mint Provenance Fail-Loud Floor (ERROR) ---
+    print('\n--- Mint Provenance Fail-Loud Floor (bba40cd7; ERROR on index-invisible mint-governed files) ---')
+    try:
+        mp_findings, mp_checked, mp_violations = check_mint_provenance(vault)
+        if mp_checked == 0:
+            print('[INFO] No mint-governed (§Template-leg) types found — skipping')
+        elif mp_violations == 0:
+            print(f'[PASS] {mp_checked} mint-governed entry(ies) checked — all indexed')
+            total_passes += 1
+        else:
+            print(f'[ERROR] {mp_checked} mint-governed entry(ies) checked; {mp_violations} invisible to the index')
+            total_fails += mp_violations
+            for line in mp_findings[:25]:
+                print(f'  {line}')
+            if len(mp_findings) > 25:
+                print(f'  ... and {len(mp_findings) - 25} more')
+    except Exception as e:
+        import traceback as _tb
+        print(f'[FAIL] mint-provenance check CRASHED: {e}')
+        _tb.print_exc()
+        total_fails += 1
+
+    # --- Event Ledger v2 Cutover Evidence Pins (P0 guardrail 2026-07-18; ERROR on drift) ---
+    # A pinned-evidence file that drifts from the marker fail-closes EVERY v2 emit
+    # crew-wide (load_cutover_marker raises). Before this check, that drift only
+    # surfaced at the next agent's emit; now it fails loud here at validate/commit.
+    # Reuses load_cutover_marker verbatim so this check is exactly the emit gate.
+    print('\n--- Event Ledger v2 Cutover Evidence Pins (fail loud at validate, not at every emit) ---')
+    try:
+        marker_path = vault / '.tropo' / 'event-streams-v2.enabled'
+        if not marker_path.is_file():
+            print('[INFO] No cutover marker — pre-cutover studio; evidence-pin check skipped')
+        else:
+            from lib import event_identity as _cutover_ei
+            try:
+                _cutover_ei.load_cutover_marker(vault)
+                print('[PASS] cutover marker verifies — pinned evidence + legacy epoch match (v2 emit unblocked)')
+                total_passes += 1
+            except Exception as _cutover_err:
+                print('[ERROR] cutover marker verification FAILED — this blocks EVERY v2 emit crew-wide: '
+                      f'{_cutover_err}')
+                print('  Cure: restore the drifted pinned-evidence file to its marker-pinned bytes, or do a '
+                      'governed marker re-pin if the change was intentional. The relations-header renderer now '
+                      'skips pinned evidence; a manual edit to it must re-pin the marker in the same commit.')
+                total_fails += 1
+    except Exception as e:
+        import traceback as _tb
+        print(f'[FAIL] cutover-evidence-pin check CRASHED: {e}')
+        _tb.print_exc()
+        total_fails += 1
+
+    # --- 7627b589: Pipeline Event Fixture-Pollution Floor (ERROR on new leaks; INFO on grandfathered) ---
+    print('\n--- Pipeline Event Fixture-Pollution Floor (7627b589; ERROR on new fixture-shaped pipeline events) ---')
+    try:
+        pep_findings, pep_checked, pep_new = check_pipeline_event_fixture_pollution(vault)
+        if pep_checked == 0:
+            print('[PASS] 0 fixture-shaped pipeline event(s) found in the production log')
+            total_passes += 1
+        elif pep_new == 0:
+            print(f'[PASS] {pep_checked} fixture-shaped pipeline event(s) found, all in the documented '
+                  f'historical allowlist (7627b589) — no new leaks')
+            total_passes += 1
+            for line in pep_findings:
+                print(f'  {line}')
+        else:
+            print(f'[ERROR] {pep_checked} fixture-shaped pipeline event(s) found; {pep_new} NOT in the '
+                  f'historical allowlist — a test run bypassed the sandbox mode')
+            total_fails += pep_new
+            for line in pep_findings:
+                print(f'  {line}')
+    except Exception as e:
+        import traceback as _tb
+        print(f'[FAIL] pipeline-event-fixture-pollution check CRASHED: {e}')
+        _tb.print_exc()
+        total_fails += 1
+
+    # --- web-v4 Phase 0.6: local public snapshot contract (ERROR when sample exists) ---
+    print('\n--- Public Snapshot Contract v1 (web-v4 Phase 0.6; fail-loud when sample exists) ---')
+    ps_findings, ps_checked, ps_defects = typed_findings.run_check_family(
+        "public-snapshot-contract", check_public_snapshot_contract, vault
+    )
+    if ps_checked == 0:
+        print(f'[INFO] {PUBLIC_SNAPSHOT_SAMPLE_REL.as_posix()} absent — skipping')
+    elif ps_defects == 0:
+        print('[PASS] default public snapshot bundle is canonical and source-rederived')
+        total_passes += 1
+    else:
+        print(f'[ERROR] default public snapshot bundle has {ps_defects} contract defect(s)')
+        total_fails += ps_defects
+        for finding in ps_findings:
+            print(str(finding))
+
     # --- Summary ---
     print()
     print('=' * 70)
     print(f'Summary: {total_passes} passed, {total_fails} failed, {total_warnings} warnings, {total_normalizable} normalizable')
     print('=' * 70)
 
-    # C.7 — Stream C auto-emission: tropo.validator.run.completed (v1.58)
-    try:
-        from lib.event_emitter import auto_emit
-        auto_emit(
-            "tropo.validator.run.completed",
-            "/tools/tropo-validate",
-            "d2b9c8e6",  # tool's own UID (A108: tools emit their own UID, not agent-root 123e12e7)
-            lifecycle="ephemeral",
-            data={"passed": total_passes, "failed": total_fails, "warnings": total_warnings, "normalizable": total_normalizable, "meta_status_coverage_gaps": ms_gaps, "meta_status_unresolved": ms_unresolved},
-        )
-    except Exception:
-        pass
-
-    return 0 if total_fails == 0 else 1
+    validator_status = 0 if total_fails == 0 else 1
+    return emit_validator_run_completed(
+        passed=total_passes,
+        failed=total_fails,
+        warnings=total_warnings,
+        normalizable=total_normalizable,
+        meta_status_coverage_gaps=ms_gaps,
+        meta_status_unresolved=ms_unresolved,
+        provenance=run_provenance,
+        exit_code=validator_status,
+    )
 
 
 if __name__ == '__main__':

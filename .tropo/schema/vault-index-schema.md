@@ -110,10 +110,12 @@ Every record is a JSON object with the following fields, in this order:
 ### `title` — required
 
 - **Type:** string
-- **Max length:** 100 characters
+- **Check-in/source max length:** 100 characters by default; a capsule specialization may define a different effective title limit
 - **Constraints:** no newlines, no tab characters, no control characters
 - **Purpose:** human-readable name for display in queries, boards, collection renderings
-- **Rationale for limit:** titles longer than 100 chars are doing description work and should be rewritten
+- **Rationale for limit:** titles over their effective source limit are doing description work and should be rewritten
+- **Projection rule:** title limits are source-validation rules, not rendering instructions. JSONL, SQLite, FTS, and other index projections preserve the canonical title value exactly and never truncate it.
+- **Existing violations:** a canonical title over its effective limit remains fully visible in every projection so validation can report it; rebuilds must not silently normalize an existing violation.
 - **Example:** `"Lock Tropo Work Architecture Spec"`
 
 ### `description` — required

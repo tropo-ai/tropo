@@ -57,7 +57,7 @@ capsule_version: '2.5'
 schema_version: 2
 extraction_scope: ship
 member_of:
-- c7e4f9a2
+- 8dd772a0
 tags:
 - tool
 - cli
@@ -500,6 +500,7 @@ def load_member_of_map() -> dict[str, list[str]]:
     scan_dirs = [
         VAULT_ROOT / "vault" / "files",
         VAULT_ROOT / "vault" / "capsules",   # ADR-045: moved from .tropo/capsules/ (v1.21.0)
+        VAULT_ROOT / "vault" / "skills",
         VAULT_ROOT / ".tropo-studio",
     ]
     boot_ext_glob = list((VAULT_ROOT / "agents").glob("*/agent-boot.extension.md"))
@@ -715,13 +716,14 @@ def validate_release_plan(uid: str, fm: dict, mo_map: dict[str, list[str]], stri
     if not capabilities_touched:
         return findings
 
-    # Check 20: every UID in capabilities_touched resolves to a capability with valid hub member_of
+    # Check 20: every UID resolves to a capability with a canonical hub edge
+    # (`subsystem_hub`, or grandfathered `member_of`; load_member_of_map merges both).
     derived, non_hub = derive_subsystems(capabilities_touched, mo_map)
     if non_hub:
         findings.append(Finding(
             severity_19_20, "C20-non-hub-capabilities", uid,
             f"release-plan v{capsule_version} capabilities_touched contains "
-            f"{len(non_hub)} UID(s) without direct hub member_of (audit trail): "
+            f"{len(non_hub)} UID(s) without a direct subsystem hub edge (audit trail): "
             f"{non_hub[:5]}{'...' if len(non_hub) > 5 else ''}"
         ))
 

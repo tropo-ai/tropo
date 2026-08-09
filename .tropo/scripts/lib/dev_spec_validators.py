@@ -37,9 +37,119 @@ TARGETS_CAPSULE = "dev-spec"  # Lane V Layer 3 M.1 targeting (8e2f1a47)
 VALID_CHANGE_CLASS = {"NEW", "AMENDED", "DEPRECATED", "REFACTORED"}
 from functools import lru_cache
 from pathlib import Path
+import re
 from typing import Any
 
 import yaml
+
+try:
+    from . import spec_substrate_refs
+except ImportError:  # check-one imports validator modules directly from this directory
+    import spec_substrate_refs
+
+DEV_SPEC_V18 = (1, 8, 0)
+DEV_SPEC_VERSION_RE = re.compile(r"^(\d+)\.(\d+)(?:\.(\d+))?$")
+AC_ID_RE = re.compile(r"^AC[1-9]\d*$")
+NA_COMMAND_RE = re.compile(
+    r"^N/A(?=$|\s|[:—–-])(?:\s*[:—–-]\s*|\s+)?(?P<reason>.*)$",
+    re.IGNORECASE,
+)
+VALID_ACCEPTANCE_METHODS = frozenset({"automated", "manual", "peer-review"})
+DEV_SPEC_BASE_REQUIRED = (
+    "type",
+    "description",
+    "status",
+    "state",
+    "committed_substrate",
+    "acceptance_criteria",
+)
+DEV_SPEC_LEGACY_ROUTING_REQUIRED = ("target_release", "target_stream")
+
+
+def dev_spec_version(frontmatter: dict) -> tuple[int, int, int] | None:
+    """Return a normalized capsule version, or None for legacy/unversioned specs."""
+    raw = frontmatter.get("capsule_version")
+    if not isinstance(raw, str):
+        return None
+    match = DEV_SPEC_VERSION_RE.fullmatch(raw)
+    if not match:
+        return None
+    major, minor, patch = match.groups()
+    return int(major), int(minor), int(patch or 0)
+
+
+def is_v18_dev_spec(frontmatter: dict) -> bool:
+    """Whether this instance is governed by the v1.8+ dev-spec contract."""
+    version = dev_spec_version(frontmatter)
+    return version is not None and version >= DEV_SPEC_V18
+
+
+def required_fields_for(frontmatter: dict) -> tuple[str, ...]:
+    """Version-aware required fields; routing metadata becomes optional at v1.8."""
+    if is_v18_dev_spec(frontmatter):
+        return DEV_SPEC_BASE_REQUIRED
+    return DEV_SPEC_BASE_REQUIRED + DEV_SPEC_LEGACY_ROUTING_REQUIRED
+
+
+def acceptance_criteria_problems(frontmatter: dict) -> list[str]:
+    """Return structural acceptance-criteria problems for the applicable contract."""
+    criteria = frontmatter.get("acceptance_criteria")
+    if not isinstance(criteria, list) or not criteria:
+        shape = "objects" if is_v18_dev_spec(frontmatter) else "non-empty strings"
+        return [f"acceptance_criteria must be a non-empty list of {shape}"]
+
+    if not is_v18_dev_spec(frontmatter):
+        return [
+            f"acceptance_criteria[{index}] must be a non-empty string"
+            for index, criterion in enumerate(criteria)
+            if not isinstance(criterion, str) or not criterion.strip()
+        ]
+
+    problems: list[str] = []
+    seen_ids: set[str] = set()
+    for index, criterion in enumerate(criteria):
+        prefix = f"acceptance_criteria[{index}]"
+        if not isinstance(criterion, dict):
+            problems.append(f"{prefix} must be an object")
+            continue
+
+        criterion_id = criterion.get("id")
+        if not isinstance(criterion_id, str) or not AC_ID_RE.fullmatch(criterion_id):
+            problems.append(f"{prefix}.id must match AC<number> (starting at AC1)")
+        elif criterion_id in seen_ids:
+            problems.append(
+                f"{prefix}.id {criterion_id!r} is duplicated; acceptance IDs must be unique and stable"
+            )
+        else:
+            seen_ids.add(criterion_id)
+
+        behavior = criterion.get("behavior")
+        if not isinstance(behavior, str) or not behavior.strip():
+            problems.append(f"{prefix}.behavior must be a non-empty string")
+
+        verify = criterion.get("verify")
+        if not isinstance(verify, dict):
+            problems.append(f"{prefix}.verify must be an object")
+            continue
+        method = verify.get("method")
+        if method not in VALID_ACCEPTANCE_METHODS:
+            problems.append(
+                f"{prefix}.verify.method must be one of {sorted(VALID_ACCEPTANCE_METHODS)}"
+            )
+        command = verify.get("command")
+        if not isinstance(command, str) or not command.strip():
+            problems.append(f"{prefix}.verify.command must be non-empty")
+        else:
+            na_command = NA_COMMAND_RE.fullmatch(command.strip())
+            if na_command and not na_command.group("reason").strip():
+                problems.append(
+                    f"{prefix}.verify.command may use N/A only with a reason"
+                )
+        evidence = verify.get("evidence")
+        if not isinstance(evidence, str) or not evidence.strip():
+            problems.append(f"{prefix}.verify.evidence must be a non-empty string")
+    return problems
+
 
 # v1.51 perf fix (Argus A80 2026-05-23): cache vault scans across check functions.
 # Each check function used to do a full vault iteration; with 9 checks × ~2329 files
@@ -156,26 +266,29 @@ def _load_uid_status_map(vault: Path) -> dict:
 
 @lru_cache(maxsize=4)
 def _load_vault_index_uids(vault: Path) -> frozenset:
-    """Load all UIDs from vault/00-index.jsonl for resolvability checks. Cached."""
+    """Load all UIDs from the ADR-047 current+archive union. Cached."""
     import json
     uids: set[str] = set()
-    index = vault / 'vault' / '00-index.jsonl'
-    if not index.exists():
-        return frozenset(uids)
-    try:
-        with index.open() as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                    if isinstance(entry, dict) and 'uid' in entry:
-                        uids.add(entry['uid'])
-                except json.JSONDecodeError:
-                    continue
-    except OSError:
-        pass
+    for index in (
+        vault / 'vault' / '00-index.jsonl',
+        vault / 'vault' / '00-archive-index.jsonl',
+    ):
+        if not index.exists():
+            continue
+        try:
+            with index.open() as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                        if isinstance(entry, dict) and 'uid' in entry:
+                            uids.add(entry['uid'])
+                    except json.JSONDecodeError:
+                        continue
+        except OSError:
+            pass
     return frozenset(uids)
 
 
@@ -186,20 +299,21 @@ def _load_vault_index_uids(vault: Path) -> frozenset:
 def check_dev_spec_required_fields(vault: Path) -> tuple[list[str], int, int]:
     """Validate dev-spec entries declare all required frontmatter fields.
 
-    Per dev-spec.capsule v1.0 §Required Frontmatter:
-      type / target_release / target_stream / committed_substrate / acceptance_criteria
+    Per dev-spec.capsule v1.8 §Required Frontmatter, target_release and
+    target_stream are optional routing metadata for v1.8+ instances. Legacy
+    pre-v1.8 instances retain their original required-field contract.
 
     WARN at v1.0; ERROR ratchet at v1.51.1+.
     """
-    required = ('type', 'target_release', 'target_stream', 'committed_substrate', 'acceptance_criteria')
     findings: list[str] = []
     total = 0
 
     for path, fm in _iter_dev_specs(vault):
         total += 1
         rel = path.relative_to(vault)
+        required = required_fields_for(fm)
         missing = [k for k in required if k not in fm]
-        # target_stream may be explicitly null; presence is what counts
+        # Legacy target_stream may be explicitly null; presence is what counts.
         if missing:
             findings.append(
                 f'[WARN] {rel} — dev-spec missing required fields: {", ".join(missing)}'
@@ -247,15 +361,16 @@ def check_dev_spec_committed_substrate_non_empty(vault: Path) -> tuple[list[str]
 # =============================================================================
 
 def check_dev_spec_committed_substrate_resolvable(vault: Path) -> tuple[list[str], int, int]:
-    """Validate each committed_substrate entry resolves: target is UID-in-index or valid path,
-    change_class is one of the four enum values, description ≤ 200 chars.
+    """Validate committed targets through the shared spec-family substrate parser.
 
-    Per dev-spec.capsule v1.0 §Validation Checks Check 3.
+    Missing canonical paths are expected only for NEW declarations and remain
+    visible as INFO; unresolved UIDs, unsafe paths, and missing non-NEW paths
+    remain WARN-grade under the dev-spec v1.5 additive schema amendment.
     """
     valid_change_classes = {'NEW', 'AMENDED', 'REFACTORED', 'DEPRECATED'}
     findings: list[str] = []
     total = 0
-    index_uids = _load_vault_index_uids(vault)
+    identities = spec_substrate_refs.load_index_identities(vault)
 
     for path, fm in _iter_dev_specs(vault):
         total += 1
@@ -273,22 +388,41 @@ def check_dev_spec_committed_substrate_resolvable(vault: Path) -> tuple[list[str
             change_class = entry.get('change_class')
             description = entry.get('description', '')
 
-            # Target validation: 8-hex UID OR vault-relative path
-            if not target:
-                findings.append(f'[WARN] {rel} — committed_substrate[{idx}] missing target')
-            elif isinstance(target, str):
-                # Is it an 8-hex UID?
-                is_uid = len(target) == 8 and all(c in '0123456789abcdef' for c in target.lower())
-                if is_uid:
-                    if target not in index_uids:
+            try:
+                target_ref = spec_substrate_refs.parse_substrate_ref(target, vault)
+            except spec_substrate_refs.SubstrateRefError as exc:
+                findings.append(
+                    f'[WARN] {rel} — committed_substrate[{idx}] target '
+                    f'{target!r} is invalid: {exc}'
+                )
+            else:
+                if (
+                    target_ref.kind == 'uid'
+                    and target_ref.value not in identities.uids
+                ):
+                    findings.append(
+                        f'[WARN] {rel} — committed_substrate[{idx}] target UID '
+                        f'{target_ref.value} does not resolve in current/archive index'
+                    )
+                elif target_ref.kind == 'path' and not target_ref.exists:
+                    if change_class == 'NEW':
                         findings.append(
-                            f'[WARN] {rel} — committed_substrate[{idx}] target UID {target} does not resolve in vault index'
+                            f'[INFO] {rel} — committed_substrate[{idx}] NEW path '
+                            f'{target_ref.value!r} does not exist yet (legal mid-cycle)'
                         )
-                # Else treat as path; presence check is informational at v1.0
-                # (path-based targets may reference files yet to be authored mid-cycle)
+                    else:
+                        findings.append(
+                            f'[WARN] {rel} — committed_substrate[{idx}] '
+                            f'{change_class or "<missing>"} path '
+                            f'{target_ref.value!r} does not exist; only NEW targets '
+                            f'may be planned paths'
+                        )
 
             # Change class validation
-            if change_class not in valid_change_classes:
+            if (
+                not isinstance(change_class, str)
+                or change_class not in valid_change_classes
+            ):
                 findings.append(
                     f'[WARN] {rel} — committed_substrate[{idx}] change_class {change_class!r} not in {valid_change_classes}'
                 )
@@ -299,7 +433,7 @@ def check_dev_spec_committed_substrate_resolvable(vault: Path) -> tuple[list[str
                     f'[WARN] {rel} — committed_substrate[{idx}] description must be ≤ 200 chars (got {len(description) if isinstance(description, str) else "non-string"})'
                 )
 
-    defects = len(findings)
+    defects = sum(not finding.startswith('[INFO]') for finding in findings)
     return findings, total, defects
 
 
@@ -308,11 +442,10 @@ def check_dev_spec_committed_substrate_resolvable(vault: Path) -> tuple[list[str
 # =============================================================================
 
 def check_dev_spec_acceptance_criteria_present(vault: Path) -> tuple[list[str], int, int]:
-    """Validate acceptance_criteria is non-empty string.
+    """Validate legacy list strings or the v1.8 stable-ID verification objects.
 
-    Per dev-spec.capsule v1.0 §Validation Checks Check 4 + Rule 5 (Mike-walkable).
-    Semantic Mike-walkability cannot be mechanically validated; this check
-    enforces structural presence + non-empty.
+    Semantic walkability cannot be mechanically validated. The v1.8 contract
+    does make each behavior and standalone verify block structurally testable.
     """
     findings: list[str] = []
     total = 0
@@ -320,10 +453,9 @@ def check_dev_spec_acceptance_criteria_present(vault: Path) -> tuple[list[str], 
     for path, fm in _iter_dev_specs(vault):
         total += 1
         rel = path.relative_to(vault)
-        ac = fm.get('acceptance_criteria')
-        if not ac or (isinstance(ac, str) and not ac.strip()):
+        for problem in acceptance_criteria_problems(fm):
             findings.append(
-                f'[WARN] {rel} — dev-spec acceptance_criteria is empty (Rule 5 violation)'
+                f'[WARN] {rel} — dev-spec {problem} (Rule 5 violation)'
             )
 
     defects = len(findings)
@@ -451,7 +583,7 @@ def check_dev_spec_acceptance_evidence_resolvable(vault: Path) -> tuple[list[str
 # =============================================================================
 
 def check_dev_spec_close_invariants(vault: Path) -> tuple[list[str], int, int]:
-    """Validate stage:done + state:active requires closed_at + all triggered_*_spec_uids done.
+    """Validate status:done + state:active requires close evidence and completed children.
 
     Per dev-spec.capsule v1.0 §Validation Checks Check 8 + Rule 3 (three-pipeline coupling
     enforcement at engine close-time). This validator catches the structural invariant in
@@ -465,14 +597,14 @@ def check_dev_spec_close_invariants(vault: Path) -> tuple[list[str], int, int]:
     for path, fm in _iter_dev_specs(vault):
         total += 1
         rel = path.relative_to(vault)
-        stage = fm.get('stage')
+        status = fm.get('status')
         state = fm.get('state')
-        if stage != 'done' or state != 'active':
+        if status != 'done' or state != 'active':
             continue  # only enforce on closed-active dev-specs
 
         if not fm.get('closed_at'):
             findings.append(
-                f'[WARN] {rel} — stage:done + state:active requires closed_at field (Check 8)'
+                f'[WARN] {rel} — status:done + state:active requires closed_at field (Check 8)'
             )
 
         # Check triggered_*_spec_uids all at status:done
@@ -484,8 +616,7 @@ def check_dev_spec_close_invariants(vault: Path) -> tuple[list[str], int, int]:
                 if not isinstance(triggered_uid, str):
                     continue
                 triggered_status = status_map.get(triggered_uid)
-                if triggered_status not in ('done', 'locked'):
-                    # locked included as compatibility; some pipeline activations close to locked
+                if triggered_status != 'done':
                     findings.append(
                         f'[WARN] {rel} — dev-spec closed but {field_name} entry {triggered_uid} not done (status={triggered_status!r}); three-pipeline coupling violation'
                     )

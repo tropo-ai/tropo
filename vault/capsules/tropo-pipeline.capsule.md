@@ -5,13 +5,17 @@ uid: e4c8a6b2
 name: pipeline
 type: capsule-definition
 extends: core
-version: '3.2'
-supersedes_version: '3.1'
+version: '3.4'
+template_enforced_from: '2026-07-13'
+template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
+supersedes_version: '3.3'
+v3_4_amendment_note: 'v3.3 -> v3.4 amendment 2026-07-22 by talos-t35 per Mike-approved dev-spec c392d833 (activation 63988cfb; durable pipeline closure), diagnosed by metis-g91 (task 1d689277), specced by Argus A136. Capsule is status:active (NOT locked) so no lock-break — the amendment is this cycle''s sanctioned committed_substrate. Additive + non-breaking: adds Governance Rule 12 (the Rule-10-symmetric TERMINAL closure invariant — every activation root MUST reach state:archived + final_commit at ship/close, the closing bookend of Rule 10''s step-0 authoring invariant) + Validation Check 21 (check_pipeline_root_terminal_closure, WARN-ratchet like Check 19/20: flags a shipped/completed cycle whose root is still state:active). SUPERSEDES the "Option A" state:active-on-done decision (99e52c18) with rationale (93 roots stuck state:active proved Option A caused sprawl). No schema/enum/state-machine change; no single-active-root lock (parallel cycles stay legal, Mike-A94 concurrency_model:independent); the tropo-sweep-stale-roots.py backstop (metis-g91) is preserved. Changelog row appended to companion pipeline.history.md per that file''s established convention.'
+v3_3_amendment_note: 'v3.2 -> v3.3 amendment 2026-07-13 by talos-t29 per Mike-locked Governed Autonomy S2 dev-spec bba40cd7 (activation 0d9f89bc; committed substrate "Template legs for the top-10 types"). Additive + non-breaking: NEW §Template section (the mint-stamped scaffold, all 6 required body sections + appended Changelog seeded) per the Template-Leg Contract v1.0 (b933eafb). No schema, enum, or state-machine change. Changelog row appended to companion pipeline.history.md per that file''s own established convention.'
 tier: os
 author: argus
 created: 2026-04-21
-modified: 2026-06-09
-modified_by: argus-a105
+modified: 2026-07-22
+modified_by: talos-t35
 status: active
 last_locked_at: 2026-05-07
 last_locked_by: argus-a49
@@ -271,7 +275,7 @@ Gate `exit_criteria:` are **mixed-class** — a real close step legitimately mix
 
 ## 7. Validation Rules
 
-### Governance Rules (11, in addition to core)
+### Governance Rules (12, in addition to core)
 
 1. **One root-pipeline per domain, per active version.** Duplicate root pipelines with the same `domain:` at `status: active` or `locked` are a validation error. Distinct workflows warrant distinct domains.
 2. **Children reference separate vault entries.** Authoring a pipeline with inline children (children-as-objects instead of children-as-UID-references) is a v2.0 violation. Every WorkflowNode is its own vault entry.
@@ -284,8 +288,9 @@ Gate `exit_criteria:` are **mixed-class** — a real close step legitimately mix
 9. **(v2.1)** `requires_confirmation: true` field is meaningful only on **leaf step** WorkflowNodes. Presence on composite stages is honor-system ignored by the executor; declare confirmation gates on the actual gating step.
 10. **(v2.2) Activation-root-project authoring at step-0** — every pipeline activation MUST author a `type: project` vault entry as part of its step-0 (accept-work-item) sub-actions; that project becomes the graph parent for all downstream artifacts the activation produces. Substrate invariant: *"Everything a pipeline activation produces is a child of the activation root project."* Runtime enforcement via [`vault/tools/e337f1dd.py`](../scripts/pipeline-activate.py) at v1.35.0; per-pipeline migration earned at future cycles.
 11. **(v3.1 / v1.62) Completion-gate invariant — empty `exit_criteria` is FAIL for gate steps, not pass.** For any **`verification_class: false`** step that is a ship/close step OR carries `trust_level: approval-required`, an absent or empty `exit_criteria:` resolves to **FAIL**, never the permissive v2.6 empty-criteria fallback (§8). *(Carve-out: `verification_class: true` steps self-verify via their natural output per §5 — the build exit code / HTTP status / validator verdict IS the verification — so they are exempt from the non-empty requirement. This matches the engine: pipeline-runtime.py B1 applies empty→FAIL to `verification_class: false` steps and auto-receipts `verification_class: true` steps from natural output.)* Three coupled requirements: (a) a pipeline-run MUST refuse to bootstrap if any such gate step declares no `exit_criteria:` — you cannot start a run that cannot be verified at the end; (b) `workflow_complete` MUST NOT fire until `assert_all_steps_verified` confirms every step carries a real PASS `verification_receipt`; (c) criteria are **engine-computed against substrate**, never agent self-attestation (the `--verification-data-stdin` path is removed). Runtime enforcement: [`pipeline-runtime.py`](../../vault/tools/9e7003b1.py) (v1.62 Lane B — B1 empty→FAIL, B2 refuse-bootstrap, B3 assert_all_steps_verified, B4 self-attestation removed). This closes the "fail-closed engine shipped failing open" class ([cascade-completion retrospective cdc1615e](../../vault/files/cdc1615e.md)): the §8 empty-`exit_criteria` fallback was the escape hatch. Composes with release.capsule v3.10 Rule 17 (the ship-block). **(v3.2 / v1.64) The vc:true branch — completing both gate-step branches.** The §5 carve-out (vc:true steps self-verify via natural output) holds ONLY when that natural output is *machine-produced*: a `verification_class: true` GATE step MUST have a **verdict source** — a `verification_command` (command method; engine runs it at `step_completed`, exit code = verdict), a `human:`/`trust_level: approval-required` human_signoff, or an `aggregate:` criterion (the per-criterion methods, §6a). A vc:true gate step with **no verdict source of any kind** is the **vc:true self-attestation hole** (an agent typing `--natural-verdict pass` with no mechanism that produced the verdict — the parallel to the vc:false `--verification-data-stdin` hatch v1.62 B4 removed). It resolves to FAIL once Check 20 ratchets to ERROR (**WARN at v1.64** so it cannot red-light a concurrent cycle's validate while existing steps are remediated). Both gate-step branches are now closed: **vc:false needs `exit_criteria` (Check 19); vc:true needs a verdict source (Check 20).** Engine: `evaluate_criterion` dispatches the per-criterion methods + runs `verification_command` (pipeline-runtime.py 9e7003b1); the validator catches a sourceless vc:true step at rebuild (Check 20).
+12. **(v3.4 / v1.90) Activation-root TERMINAL closure — the symmetric mirror of Rule 10.** Where Rule 10 welds root *authoring* to activation step-0, Rule 12 welds root *closure* to ship/terminal, completing the bookend: **every pipeline activation root MUST reach `state: archived` + a stamped `final_commit` when its cycle ships or otherwise reaches terminal.** Opening is welded atomically (spec-lock → [`pipeline-activate.py`](../scripts/pipeline-activate.py) authors the root at `state: active` per Rule 10); closing is now welded symmetrically — the release-ship path ([`tropo-build-release.py`](../../vault/tools/tropo-build-release.py)) invokes `run_close_out_hook` ([pipeline-runtime.py](../../vault/tools/9e7003b1.py)) as a **guaranteed side-effect** of shipping, which flips the root `state: active → archived` and stamps `final_commit=<ship SHA>`. There is no honor-system step to forget; a ship can no longer leave its own root `state: active`. This **SUPERSEDES the "Option A" decision** (`99e52c18`, 2026-06-09) that set `status: done` but deliberately LEFT `state: active` — 93 activation roots were found stuck `state: active` studio-wide (dev 81% closed / test 17% / doc 9%) because closing was coupled to nothing, and `final_commit` had effectively no writer (16/180 hand-typed). `state` IS visibility; a *shipped* cycle's root belongs archived, and the board/list work-lens (metis-g91) already separates active work from scaffolding, so archived-on-ship loses no signal (reversible via `tropo-archive.py --unarchive`). Three coupled requirements: (a) **welded, not honor-system** — root closure is a side-effect of the ship gesture; (b) **idempotent + per-root** — closure fires on the ship/terminal path only (never mid-run), re-running on an already-archived+stamped root is a no-op, and it NEVER adds a global single-active-root lock (dev-pipeline sanctions parallel cycles, Mike-A94 `concurrency_model: independent`), so each root closes at its OWN ship, not a fleet gate; (c) **ported to all pipelines** — the close step (`8a476130` close-loose-ends / its hook equivalent) exists in doc/test/web/app, not only dev, so every pipeline closes symmetrically. The `tropo-sweep-stale-roots.py` sweep (metis-g91) remains the belt-and-suspenders backstop for crashes / ad-hoc cycles — the weld is primary, the sweep is recovery; neither is removed. Runtime enforcement: `run_close_out_hook` (9e7003b1) + the `tropo-build-release.py` ship-path weld. Validator: Check 21 flags a shipped/completed cycle whose root is still `state: active`. Diagnosed by metis-g91 (task 1d689277); specced by Argus A136 (dev-spec c392d833). This is the closing mirror of Rule 10 — "author the root at step 0; archive the root at ship."
 
-### Validation Checks (20; Checks 1-19 ERROR-severity at check-in, Check 20 WARN-ratchet at v1.64)
+### Validation Checks (21; Checks 1-19 ERROR-severity at check-in, Checks 20-21 WARN-ratchet)
 
 1. `type: pipeline`
 2. `subtype: workflow-node`
@@ -307,6 +312,7 @@ Gate `exit_criteria:` are **mixed-class** — a real close step legitimately mix
 18. **(NEW v3.0) `check_step_depends_on_acyclic`** — for any pipeline definition graph, walk all step's `depends_on_steps:` and confirm no cycles. DAG invariant enforced structurally.
 19. **(NEW v3.1 / v1.62) `check_gate_steps_have_exit_criteria`** — for any **`verification_class: false`** step that is a ship/close step OR carries `trust_level: approval-required`, `exit_criteria:` MUST be non-empty. Empty/absent → ERROR (the engine refuses bootstrap + refuses `workflow_complete`). `verification_class: true` steps are exempt (they self-verify via natural output per §5 + Rule 11 carve-out). Closes the empty-criteria escape hatch (Governance Rule 11; cdc1615e). Runtime-enforced in pipeline-runtime.py (v1.62 Lane B).
 20. **(NEW v3.2 / v1.64) `check_vc_true_has_verification_command`** — the vc:true completeness check (vc:true parallel to Check 19). For any **`verification_class: true`** step, a **verdict source** MUST exist — one of: `verification_command` (command); `trust_level: approval-required` or a `human:` criterion (human_signoff); or an `aggregate:` criterion (§6a per-criterion methods). None present → **WARN** (ratchets to ERROR later, the Check 19 WARN→ERROR lifecycle — shipped WARN at v1.64 so it cannot red-light a concurrent cycle's validate). A vc:true step's verdict is supposed to BE its natural output; with no source the engine has no mechanism and falls back to agent attestation (the self-attestation hole). **Recognizes all four verdict sources, not command-only** — approval-required gates are human_signoff-verified and correctly need no `verification_command` (the A94 re-scope; the original command-only framing falsely warned human gates). Closes the vc:true self-attestation hole (Rule 11 vc:true branch). Engine: `evaluate_criterion` + `verification_command` (9e7003b1); validator catches a sourceless vc:true step at rebuild (d2b9c8e6.py).
+21. **(NEW v3.4 / v1.90) `check_pipeline_root_terminal_closure`** — the Rule 12 terminal-invariant check (the closing mirror of Rule 10's step-0 authoring). For any `type: project` activation-root entry (title contains "Activation Root" OR it carries `activated_by_pipeline:`) whose cycle has reached **terminal** (`status:` ∈ {done, retired, closed, complete, cancelled}) but whose `state:` is still **`active`**, flag it: a shipped/completed cycle MUST have archived its root (`state: archived` + `final_commit`) per Rule 12. **WARN at v1.90** — ratchets to ERROR later on the Check 19/20 WARN→ERROR lifecycle (shipped WARN so it cannot red-light a concurrent cycle's validate while the weld remediates the field forward). An **in-flight** root (`status: active`) is deliberately NOT flagged — parallel cycles stay legal (Mike-A94). The weld in `run_close_out_hook` (9e7003b1) + the `tropo-build-release.py` ship path is the primary writer; `tropo-sweep-stale-roots.py` (metis-g91) is the backstop; this check catches any completed root that slipped both. Implemented in tropo-validate.py.
 
 Core checks inherited. (Two additional essential checks ship in pipeline-run.capsule v2.0; see Part 2 of the spec.)
 
@@ -368,11 +374,59 @@ Core checks inherited. (Two additional essential checks ship in pipeline-run.cap
 
   **First instance:** Hello Tropo's event-campaign master pipeline + 6 workstream pipeline templates (v1.35.0 ship).
 
-### History
+## §Template (v3.3 — the mint-stamped scaffold; contract at [b933eafb](../../vault/files/b933eafb.md))
 
-The v1.0/v2.0/v2.1/v2.2/v2.3/v2.4/v2.5/v2.6 amendment-block prose, the §Conscious Trade-offs section, the §Known Enforcement Gaps table, the §Migration Notes v1.0 → v2.0, the full §Studio — Shop Signage authoring procedure, the Relationship-to-Other-Capsules narrative, the Extension-from-core section, and the full changelog are preserved in the companion [pipeline.history.md (fa811352)](pipeline.history.md) governed by `capsule-history.capsule` (5ec083a3). v3.0 amendment narrative + diff appended to history at v1.46.0 ship.
+*Stamped verbatim by `mint file --type pipeline` (S2, bba40cd7); `<<MINT:*>>` tokens are the only substitution. `status: draft` is the ONLY legal birth value (§State Machine: direct creation at `active`/`locked` is a validation error). `subtype: workflow-node` is fixed, never templated. `children: []` is a real, valid-by-construction default for a new leaf node, not a placeholder-avoidance — set real child UIDs by hand if this mint is actually a stage or root pipeline. All 6 required body sections plus the appended `## Changelog` are seeded per §Required Body Sections.*
+
+~~~markdown
+---
+uid: <<MINT:uid>>
+type: pipeline
+subtype: workflow-node
+name: "<!-- REQUIRED: human-readable name, ≤120 chars -->"
+version: "<!-- REQUIRED: starting semver, e.g. 0.1 -->"
+author: "<!-- REQUIRED: authoring entity UID -->"
+children: []
+state: active
+status: draft
+schema_version: 2
+capsule_version: '<<MINT:capsule_version>>'
+governed_by: 8dd772a0
+---
+
+# <!-- REQUIRED: name (mirror frontmatter) -->
+
+## Purpose
+<!-- REQUIRED: what workflow this pipeline governs, and what it does NOT govern -->
+
+## Structure
+<!-- REQUIRED: diagram (ASCII or prose) of the WorkflowNode tree -->
+
+## Nodes
+<!-- REQUIRED: table of every child WorkflowNode -- UID, name, role, children-count, next_steps-count -->
+
+## Flow Rules
+<!-- REQUIRED: how execution advances -- linear, branching, or DAG via depends_on_steps: -->
+
+## Cold-Boot Walk-Through
+<!-- REQUIRED: narrative walking a hypothetical pipeline-run start to completion, stranger-readable -->
+
+## Known Enforcement Gaps
+<!-- REQUIRED: table of gap / what closes it / target release / owner (per ADR-031 pattern) -->
+
+## Changelog
+<!-- REQUIRED: append-only log of amendments to this pipeline instance -- start with the mint itself -->
+~~~
+
+**Leg rules:** `status:` has exactly one legal birth value — `draft`; direct creation at any other status is a validator ERROR, not just a template convention. `## Design Rationale` (required when nesting depth > 3), `## Related Pipelines`, and `## Migration Protocol` (required when superseding a prior pipeline) are situational — add them by hand when the condition applies; they are not scaffolded.
 
 ---
 
-*pipeline capsule definition | v3.0 ACTIVE | history at [pipeline.history.md](pipeline.history.md) | v3.0 body authored 2026-05-20 by Argus A76 per v1.46.0 Replacement-Body Specs (8e5b3c47 v0.5 LOCKED). Prior v1.0–v2.6 locks preserved in history. UID `e4c8a6b2` preserved.*
-*"Pipeline is the template. Pipeline-run is the instance. The step is the contract. The receipt is the proof."*
+### History
+
+The v1.0/v2.0/v2.1/v2.2/v2.3/v2.4/v2.5/v2.6 amendment-block prose, the §Conscious Trade-offs section, the §Known Enforcement Gaps table, the §Migration Notes v1.0 → v2.0, the full §Studio — Shop Signage authoring procedure, the Relationship-to-Other-Capsules narrative, the Extension-from-core section, and the full changelog are preserved in the companion [pipeline.history.md (fa811352)](pipeline.history.md) governed by `capsule-history.capsule` (5ec083a3). v3.0 amendment narrative + diff appended to history at v1.46.0 ship. v3.3's §Template leg addition is logged in the same companion history's changelog table.
+
+---
+
+*pipeline capsule definition | v3.4 amended 2026-07-22 by Talos T35 (durable pipeline closure — Rule 12 terminal invariant + Check 21; dev-spec c392d833, metis-g91 diagnosis 1d689277) | v3.3 amended 2026-07-13 by Talos T29 (Governed Autonomy S2 — §Template leg) | v3.0 ACTIVE | history at [pipeline.history.md](pipeline.history.md) | v3.0 body authored 2026-05-20 by Argus A76 per v1.46.0 Replacement-Body Specs (8e5b3c47 v0.5 LOCKED). Prior v1.0–v2.6 locks preserved in history. UID `e4c8a6b2` preserved.*
+*"Pipeline is the template. Pipeline-run is the instance. The step is the contract. The receipt is the proof. Author the root at step 0; archive the root at ship."*

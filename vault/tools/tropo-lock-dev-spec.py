@@ -30,7 +30,7 @@ modified: '2026-07-07'
 modified_by: talos-t25
 governed_by: d5e1b4a3
 member_of:
-  - "c7e4f9a2"
+  - "8dd772a0"
 schema_version: 2
 belt: false  # trimmed from belt by vela-v65 2026-07-10 — over the 15-entry cap; mount/publish are federation-specific, lock-dev-spec is ceremony-specific. Cataloged + functional; not in quick-ref.
 extraction_scope: argo-reference
@@ -114,7 +114,7 @@ VAULT_ROOT = Path(__file__).resolve().parents[2]
 VAULT_FILES = VAULT_ROOT / "vault" / "files"
 PIPELINE_ACTIVATE_SCRIPT = Path(__file__).resolve().parent / "e337f1dd.py"
 DEFAULT_PIPELINE_UID = "cd1fcd25"  # dev-pipeline
-LOCKABLE_STATUSES = {"draft", "active"}
+LOCKABLE_STATUSES = {"draft"}
 
 
 def split_frontmatter(text: str) -> Optional[str]:

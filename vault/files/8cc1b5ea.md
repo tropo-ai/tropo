@@ -51,23 +51,7 @@ tags:
 
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-work](b8e5f3a2.md) → [vault-ops-pipeline](9dab87a0.md) → **validate-evidence - vault-ops-pipeline step 4**
-
-**🌳 Tropo-Nav Path** (VS Code): [../../00-tropo-nav/00-tropo-active/tropo-work/vault-ops-pipeline/8cc1b5ea — validate-evidence - vault-ops-pipeline step 4.md](../../00-tropo-nav/00-tropo-active/tropo-work/vault-ops-pipeline/8cc1b5ea%20%E2%80%94%20validate-evidence%20-%20vault-ops-pipeline%20step%204.md)
-
-**🌳 Tropo-Nav Path** (chat): [tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-work/vault-ops-pipeline/8cc1b5ea — validate-evidence - vault-ops-pipeline step 4.md](tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-work/vault-ops-pipeline/8cc1b5ea%20%E2%80%94%20validate-evidence%20-%20vault-ops-pipeline%20step%204.md)
-
-**🔗 This file** — UID `8cc1b5ea` · type `pipeline` · state `active` · status `draft`
-
-**↔ Siblings (4):**
-  - **under [vault-ops-pipeline](9dab87a0.md):** [accept-vault-ops-spec - vault-ops-pipeline step 1](dac91126.md) · [close-activation - vault-ops-pipeline step 5](98de904e.md) · [execute-vault-ops - vault-ops-pipeline step 3](7a683e3a.md) · [plan-vault-ops - vault-ops-pipeline step 2](bd298097.md)
 <!-- nav-block:end -->
-
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Governed by | [pipeline (e4c8a6b2)](e4c8a6b2.md) |
-| Member of | [vault-ops-pipeline (9dab87a0)](9dab87a0.md) |
 
 *The anti-box-checking gate. Mirrors test-pipeline step 4 validate-coverage. Without this, "I dispatched the fleet" becomes box-checking when one sa.* silently failed.*
 

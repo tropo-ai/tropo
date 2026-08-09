@@ -20,7 +20,7 @@ created: 2026-05-27
 created_by: talos-t10
 governed_by: d5e1b4a3
 member_of:
-  - c7e4f9a2
+  - 8dd772a0
 schema_version: 2
 ---
 """
@@ -70,6 +70,7 @@ import os
 import re
 import sys
 import datetime
+import json
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -106,6 +107,31 @@ def parse_frontmatter(path: Path) -> dict:
             value = value[1:-1]
         fm[key] = value
     return fm
+
+
+def read_lineage(slug):
+    """The live generation from agents/<slug>/lineage.jsonl, or None.
+
+    Deliberately re-implemented in nine lines rather than imported: this
+    renderer must never be able to break a birth, so it shares no code with the
+    lifecycle. Reading is cheap; coupling is not.
+    """
+    path = VAULT_ROOT / 'agents' / slug / 'lineage.jsonl'
+    if not path.is_file():
+        return None
+    live = None
+    for raw in path.read_text(encoding='utf-8').splitlines():
+        if not raw.strip():
+            continue
+        try:
+            rec = json.loads(raw)
+        except ValueError:
+            return None  # unreadable lineage: fall back to the card, say nothing false
+        if rec.get('t') == 'born':
+            live = dict(rec, retired=False)
+        elif rec.get('t') == 'retired' and live and rec.get('gen') == live.get('gen'):
+            live['retired'] = True
+    return live
 
 
 def discover_crew() -> list[dict]:
@@ -169,13 +195,26 @@ def discover_crew() -> list[dict]:
         if status_card_path is None:
             continue  # no resolvable status card; skip silently
         sc_fm = parse_frontmatter(status_card_path)
+        # LINEAGE IS THE TRUTH (metis-g102, 2026-08-06). The status card's
+        # generation/status fields are a second copy of a fact, and a second copy
+        # is what made this brief render newborn agents as their own retired
+        # predecessor. If agents/<slug>/lineage.jsonl exists it wins; the card is
+        # the fallback for agents not yet backfilled. Role and links still come
+        # from the card, which is what a card is actually for.
+        generation, status = sc_fm.get('generation', '?'), sc_fm.get('status', '?')
+        last_session = sc_fm.get('last_session', '?')
+        live = read_lineage(slug)
+        if live:
+            generation = live['gen']
+            status = 'RETIRED' if live['retired'] else 'ACTIVE'
+            last_session = str(live.get('at', last_session))[:10]
         crew.append({
             'slug': slug,
             'class': agent_class,
             'role': role,
-            'generation': sc_fm.get('generation', '?'),
-            'status': sc_fm.get('status', '?'),
-            'last_session': sc_fm.get('last_session', '?'),
+            'generation': generation,
+            'status': status,
+            'last_session': last_session,
             'status_card_uid': status_card_uid,
         })
     return crew

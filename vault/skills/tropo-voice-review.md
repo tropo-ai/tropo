@@ -13,10 +13,11 @@ status: active
 owner: orpheus
 created: 2026-05-23
 created_by: orpheus-o11
-modified: 2026-05-28
-modified_by: orpheus-o12
-version: 1.2
-supersedes_version: 1.1
+modified: 2026-07-21
+modified_by: orpheus-o33
+version: 1.3
+supersedes_version: 1.2
+v1_3_amendment_note: 'v1.2 → v1.3 amendment 2026-07-21 by orpheus-o33 adding a concrete banned-jargon-word checklist to Layer 3 (stranger-encounter test), seeded with "substrate." Trigger: Mike direction 2026-07-21 during the-readiness-trap (18cd6f16) retitle/refile — the word had shipped unnoticed across the homepage, How Tropo Works, Market Map, and Who We Follow copy, past this exact review layer, because Layer 3''s prior wording was a judgment call ("flag if a reference assumes jargon") rather than a concrete list to check against — it even used "substrate-jargon" as its own generic example term. The fix is at the review-gate source, not a one-off word swap on the single article Mike caught: a living, growing list future reviews check mechanically. A fully automated version of this class of check (started for the no-em-dash discipline) already exists as an unbuilt design-brief ([70f29fea](../files/70f29fea.md)) — Orpheus O33 flagged it back to Mike as worth reviving now that a second concrete rule motivates it; not yet actioned.'
 v1_2_amendment_note: 'v1.1 → v1.2 amendment 2026-05-28 by orpheus-o12 adding Step 4.5b (coordination-channel state check; Layer 1.5) per finding [f90791ad](../../vault/files/f90791ad.md) Option A. Empirically demonstrated by v1.53 doc-pipeline c7a26c5a where Argus A83 posted scope-narrowing directive between E7 ship and Step 5 close; Orpheus O11 read the post AFTER executing the scope-variance work. Step 4.5 v1.1 caught canonical drift; coordination drift was the adjacent gap. v1.2 extends the same substrate-verify-twice discipline to the coordination layer: before declaring step PASS on long-running activations, tail inter-agent channels (argus-<self> + metis-<self> + ops.md) for posts since activation start that may refine, narrow, supersede, or redirect scope. Light addition; same composition shape; closes finding f90791ad.'
 v1_1_amendment_note: v1.0 → v1.1 amendment 2026-05-25 by orpheus-o11 adding Step 4.5 (substrate-verify-twice check) per defect-class brief 83af4ac1 Layer 1. Discipline runs alongside the three layers without renaming the canon. Reviews now verify canonical-primitive references in the artifact under review (capsule schemas, enums, cited file versions, agent states) before declaring PASS — closes the defect class captured at v1.52 first production run (5 instances; all fix-on-see absorbed but each cost a remediation cycle).
 governed_by: a7c3f489
@@ -64,7 +65,10 @@ The skill operationalizes the three-layer Voice Review Definition from [doc-spec
 
 4. **Layer 3 — Stranger-encounter test.** Read the doc as a 10+ year domain expert encountering Tropo for the first time:
 
- - Can the reader follow without external context? If a reference assumes substrate-jargon the reader hasn't been introduced to, flag.
+ - Can the reader follow without external context? If a reference assumes internal jargon the reader hasn't been introduced to, flag.
+ - **Banned-word check (concrete, not a judgment call).** Grep the doc for Tropo-internal terms that read as jargon to a stranger and have no place in reader-facing copy — flag every hit, don't rely on catching it by feel:
+   - **substrate** — internal shorthand for "the underlying governed layer / vault / infrastructure." Reader-facing copy says what it means instead (foundation, groundwork, infrastructure, the underlying system) — never the word itself. (Mike direction 2026-07-21, after it shipped unnoticed across the homepage, How Tropo Works, Market Map, and Who We Follow copy — the word was so embedded in crew usage that Layer 3's own prior wording used it as the example term for jargon. Grep `docs/app/tropo-app` for `substrate` for the still-open backlog.)
+   - Add to this list whenever Mike flags a term as jargon — this is a living checklist, not a one-time fix. Don't wait for the next full voice-review pass to apply a newly-banned word to already-shipped copy; that's a Path 2 self-healing item.
  - Does the opening land with a specific moment / receipt / concrete claim, or with category-level marketing-set-up?
  - Does the closing invite reflection on the reader's own work (peer-to-peer), or does it sell?
  - The peer-recognition test: does the reader finish thinking *"that's a real thing they built; I can imagine working that way"* — NOT *"wow, clever"* and NOT *"this reads like a pitch"*?

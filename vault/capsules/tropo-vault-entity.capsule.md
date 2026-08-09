@@ -9,7 +9,7 @@ author: argus
 created: 2026-04-23
 modified: 2026-07-07
 modified_by: talos-t25
-status: locked
+status: retired
 locked_by: argus-a127
 locked_at: 2026-07-07
 schema_version: 2
@@ -19,6 +19,9 @@ aligned_with:
   - 18059aef
 subsystem_hub:
   - 8dd772a0
+retired_at: '2026-07-12'
+retired_by: argus-a130
+retired_via: "Type Disposition walk 5dcbadbd (Mike-verdicted 2026-07-12, S2 activation 0d9f89bc) — zero instances ever authored; retired on the how-to precedent (v1.60, 'never earned itself empirically'). Verified no live convention references before retirement (grep 2026-07-12: historical mentions only). Tombstone-in-place per the how-to pattern; a future need re-enters via the closed registry (propose capsule → Mike locks)."
 ---
 
 # vault-entity — Capsule Definition v1.1

@@ -63,7 +63,7 @@ capsule_version: '2.5'
 schema_version: 2
 extraction_scope: ship
 member_of:
-- c7e4f9a2
+- 8dd772a0
 tags:
 - tool
 - cli
@@ -171,8 +171,15 @@ def parse_frontmatter(text: str) -> dict | None:
     return out
 
 
-BELT_BUDGET_CHARS = 3700   # ADR-048: tropo-* names are longer; bumped from 3072
-BELT_MAX_ENTRIES = 15       # hard cap; generator fails if more than this carry belt: true
+# The belt is a quick-reference every agent reads at BOOT, so its budget is a
+# boot-cost control, not a taste limit. Raised 3700 -> 6700 by Mike, 2026-08-02:
+# "It is a small amount in the grand scheme." The 16th belt tool (preflight /
+# smoke) had been failing the generator, which aborts the vault rebuild partway
+# through — so a cap nobody had revisited was silently breaking every rebuild.
+BELT_BUDGET_CHARS = 6700   # ADR-048; +3000 by Mike 2026-08-02 (was 3700)
+# Entry count is a loose guard now that bytes are the real gate. Kept so a
+# runaway promotion still trips something before the budget does.
+BELT_MAX_ENTRIES = 25       # generator fails if more than this carry belt: true
 
 
 def _extract_python_frontmatter(text: str) -> dict | None:

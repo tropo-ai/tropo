@@ -25,21 +25,6 @@ member_of: []
 
 # tropo-subsystems — Root
 
-<!-- nav-block:start -->
-**🌳 Tropo-Nav Path** (VS Code): [../../00-tropo-nav/00-tropo-active/tropo-subsystems/aae9a37b — tropo-subsystems.md](../../00-tropo-nav/00-tropo-active/tropo-subsystems/aae9a37b%20%E2%80%94%20tropo-subsystems.md)
-
-**🌳 Tropo-Nav Path** (chat): [tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-subsystems/aae9a37b — tropo-subsystems.md](tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-subsystems/aae9a37b%20%E2%80%94%20tropo-subsystems.md)
-
-**🔗 This file** — UID `aae9a37b` · type `project` · state `active` · status `evergreen`
-
-**↓ Children (10):**
-  - **document:** [Tropo Capabilities](7a1ca900.md)
-  - **project (9):** [Tropo Agents](99ed55fd.md) · [Tropo Documentation](f87e33f0.md) · [Tropo Governance](8dd772a0.md) · [Tropo Library](1aba710c.md) · [Tropo Link](3a207ed3.md) · [Tropo Playbooks](76bab75f.md) · [Tropo Rendering](dbc1cbbf.md) · [Tropo Test Harness](952f3aa3.md) · + 1 more
-
-**📥 Cited by (1):**
-- [Tropo Capabilities](7a1ca900.md) — `7a1ca900` (type `document`, via `member_of`, `refs`)
-<!-- nav-block:end -->
-
 *Standing infrastructure surfaces for Tropo-OS. Each subsystem below is an evergreen project hub — it holds the living history of work on that subsystem, across releases.*
 
 *This is NOT in the work-pipeline. Pipeline stages are for versioned work that flows through ideate → design → specify → build → deploy. Subsystems are long-lived containers that span all of that — discrete work units flow through the pipeline, referencing the subsystem they belong to; subsystems themselves never move.*

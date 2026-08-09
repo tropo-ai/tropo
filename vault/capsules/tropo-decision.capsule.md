@@ -5,13 +5,15 @@ ship_scope_lock_break: 'extraction_scope: ship ADDED 2026-07-02 per Mike verbati
 name: decision
 type: capsule-definition
 extends: core
-version: 3.1
-supersedes_version: '3.0'
+version: 3.3
+supersedes_version: '3.2'
+v3_3_lifecycle_compatibility_lock_break: 'v3.2 -> v3.3 bounded lock-break 2026-07-23 by talos per Mike-approved locked dev-spec de2015c1 (activation 3295c41a; approval recorded verbatim as "I approve"). Adds required legacy_default metadata to the unambiguous principal-only lifecycle move and declares false. No enum, alias, state, transition, gate, prose machine, validator, or write-policy change.'
+v3_2_lifecycle_machine_lock_break: 'v3.1 -> v3.2 bounded lock-break 2026-07-23 by talos per Mike-approved locked dev-spec b06aa0fb (activation 1b3c6eaa; approval recorded verbatim as "Looks good. I approve"). Additive lifecycle_machine declaration only: canonical status enum/order + the existing principal-gated design-to-done move and stable unique move_id/UI metadata. done remains terminal; no reopen invented. No enum, meta_status_rollup, prose machine, validator, or write-gate change.'
 tier: os
 author: tropo
 created: 2026-04-10
-modified: 2026-06-09
-modified_by: argus-a105
+modified: 2026-07-23
+modified_by: talos
 status: locked
 enforced_enums:
   status:
@@ -22,6 +24,24 @@ meta_status_rollup:
     - design
   done:
     - done
+lifecycle_machine:
+  field: status
+  optional: false
+  states:
+    - {value: design, label: Design, terminal: false}
+    - {value: done, label: Done, terminal: true}
+  moves:
+    - move_id: accept
+      from: design
+      to: done
+      label: Accept decision
+      direction: forward
+      confirm: true
+      resolution: null
+      gate: vault-principal
+      warning: Accepted decisions are immutable; supersede rather than reopen.
+      principal_only: true
+      legacy_default: false
 schema_version: 2
 governed_by: 222873b9
 aligned_with: 8b3f1d92

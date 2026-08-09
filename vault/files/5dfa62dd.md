@@ -32,8 +32,6 @@ capsule_version: '2.5'
 
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Governance](8dd772a0.md) → **ADR-034 — collection-ref is the canonical collection pattern**
-
-**🔗 This file** — UID `5dfa62dd` · type `decision` · state `active` · status `done`
 <!-- nav-block:end -->
 
 ## Status

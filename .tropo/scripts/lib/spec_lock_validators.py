@@ -44,6 +44,11 @@ from typing import Any
 
 import yaml
 
+try:
+    from . import dev_spec_validators
+except ImportError:  # check-one imports validator modules directly from this directory
+    import dev_spec_validators
+
 
 def _split_frontmatter(text: str) -> str | None:
     """Extract raw YAML frontmatter block (between leading --- delimiters)."""
@@ -93,16 +98,24 @@ def _iter_locked_specs(vault: Path, spec_type: str):
 # E3.1 — dev-spec LOCK-strict required fields
 # =============================================================================
 
-DEV_SPEC_REQUIRED = ('type', 'target_release', 'target_stream', 'committed_substrate', 'acceptance_criteria')
+DEV_SPEC_REQUIRED_V18 = ('type', 'committed_substrate', 'acceptance_criteria')
+DEV_SPEC_REQUIRED_LEGACY = (
+    'type',
+    'target_release',
+    'target_stream',
+    'committed_substrate',
+    'acceptance_criteria',
+)
 
 
 def check_dev_spec_locked_required_fields_strict(vault: Path) -> tuple[list[str], int, int]:
     """E3 — FAIL on locked dev-spec entries missing required frontmatter fields.
 
-    Required fields per dev-spec.capsule v1.0.1 §Required Frontmatter:
-      type / target_release / target_stream / committed_substrate / acceptance_criteria
+    For v1.8+, target_release and target_stream are optional routing metadata.
+    Legacy pre-v1.8 locked specs retain the original required-field contract.
 
-    target_stream MAY be explicitly null (presence is what counts); other fields MUST be populated.
+    Legacy target_stream MAY be explicitly null (presence is what counts);
+    other fields MUST be populated.
 
     LOCK signoff ratchet: missing required field on a status:locked dev-spec = [FAIL].
     Drafts + active-unlocked entries are skipped (existing WARN-class check handles those).
@@ -112,7 +125,12 @@ def check_dev_spec_locked_required_fields_strict(vault: Path) -> tuple[list[str]
     for path, fm in _iter_locked_specs(vault, 'dev-spec'):
         total += 1
         rel = path.relative_to(vault)
-        missing = [k for k in DEV_SPEC_REQUIRED if k not in fm]
+        required = (
+            DEV_SPEC_REQUIRED_V18
+            if dev_spec_validators.is_v18_dev_spec(fm)
+            else DEV_SPEC_REQUIRED_LEGACY
+        )
+        missing = [k for k in required if k not in fm]
         if missing:
             findings.append(
                 f'[FAIL] {rel} — dev-spec LOCKED missing required fields: {", ".join(missing)} '
@@ -127,11 +145,10 @@ def check_dev_spec_locked_required_fields_strict(vault: Path) -> tuple[list[str]
                     f'(E3 LOCK-signoff strict; Rule 2 anti-fuzzy-framing enforced at LOCK)'
                 )
         if 'acceptance_criteria' in fm:
-            ac = fm.get('acceptance_criteria')
-            if not ac or (isinstance(ac, str) and not ac.strip()):
+            for problem in dev_spec_validators.acceptance_criteria_problems(fm):
                 findings.append(
-                    f'[FAIL] {rel} — dev-spec LOCKED acceptance_criteria empty '
-                    f'(E3 LOCK-signoff strict; must be populated at LOCK)'
+                    f'[FAIL] {rel} — dev-spec LOCKED {problem} '
+                    f'(E3 LOCK-signoff strict; acceptance contract must be valid at LOCK)'
                 )
     return findings, total, len(findings)
 

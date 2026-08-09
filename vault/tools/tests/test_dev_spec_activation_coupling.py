@@ -188,6 +188,13 @@ class TestDevSpecActivationCoupling(unittest.TestCase):
         self.assertEqual(violations, 1)
         self.assertIn("NOT on the named grandfather allowlist", findings[0])
 
+    def test_shipped_subset_downgrades_missing_source_activation(self) -> None:
+        _write(self.tmp, "abcdef01", _dev_spec("abcdef01"))
+        findings, checked, violations = check_fn(self.tmp, customer_mode=True)
+        self.assertEqual(checked, 1)
+        self.assertEqual(violations, 0)
+        self.assertTrue(all(f.startswith("[INFO]") for f in findings), findings)
+
     # Integration sanity check against the REAL studio vault — confirms item 3's
     # feed-the-pipeline cure (activations 413db7f5 / 019c765a) actually correlates
     # against 92093c81 / 8e551957, per Argus's explicit instruction to verify this

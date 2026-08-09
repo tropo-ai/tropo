@@ -35,7 +35,7 @@ File classes measured:
   tier2_canonical      — vault/files/cf8c3be9.md (Tier 2 substrate)
   operating_principles — .tropo-studio/operating-principles.md
   self_healing         — .tropo/SELF-HEALING.md
-  mission_brief        — context/mission-brief.md
+  mission_brief        — .tropo-studio/mission-brief.md
   write_time_capsule   — vault/capsules/*.md (consulted at every vault write; ADR-045: moved from .tropo/capsules/)
   vault_playbook       — vault/playbooks/*.md (all playbooks)
   activation_playbook  — vault/playbooks/99341618.md only
@@ -116,7 +116,7 @@ CLASSES = [
     ),
     (
         "mission_brief",
-        "context/mission-brief.md",
+        ".tropo-studio/mission-brief.md",
         8192,    # 8 KB — measured 4 KB
         "Required boot read. Compressed mission; should never grow large.",
     ),

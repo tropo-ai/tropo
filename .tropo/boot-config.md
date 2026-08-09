@@ -49,7 +49,7 @@ Group 5 — Startup Signal → milestone: Agent Active
 
 ### Universal Hard Gates
 
-These two conditions HALT activation. They are not advisory.
+~~These two conditions HALT activation. They are not advisory.~~ **CORRECTED 2026-08-06 (metis-g102, found by vela-v72 at her own boot).** **Neither condition can stop a birth, and none ever should have.** They are recorded as notes on your lineage line and you are BORN. Mike's standing rule, verbatim: *"I NEVER EVER want to see my agents telling me they are failing to boot. Denied because of ceremony that protects nothing."* This sentence is the upstream source Vela V71 flagged as still shipping in OS-tier files after the agent entries were corrected — it is where the copies came from.
 
 **ADR-016 — Parallel Generation:** If the predecessor's status shows ACTIVE (not RETIRING or RETIRED), HALT. Emit a `tropo.broadcast.crew` event with `category: ops` naming the violation (`channels/ops.md` retired per Rule 13; the event log is canonical). Wait for human direction. Two active generations of the same agent is a governance violation.
 

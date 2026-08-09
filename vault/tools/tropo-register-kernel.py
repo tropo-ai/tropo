@@ -40,7 +40,7 @@ capsule_version: '2.5'
 schema_version: 2
 extraction_scope: ship
 member_of:
-- c7e4f9a2
+- 8dd772a0
 tags:
 - tool
 - cli
@@ -81,7 +81,7 @@ import importlib.util as _ilu_rk
 from pathlib import Path as _Path_rk
 
 VAULT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-INDEX_PATH = os.path.join(VAULT_ROOT, 'ledger', '00-index.jsonl')
+INDEX_PATH = os.path.join(VAULT_ROOT, 'vault', '00-index.jsonl')
 TROPO_DIR = os.path.join(VAULT_ROOT, '.tropo')
 
 # 796d9330 (ADR-050) chokepoint: delegate to the canonical collision-checked minter.
@@ -146,13 +146,13 @@ def parse_frontmatter(filepath):
 def extract_title(fm, content):
     """Get title from frontmatter or first H1."""
     if 'title' in fm and fm['title']:
-        return fm['title'][:100]
+        return fm['title']
     if 'name' in fm and fm['name']:
-        return fm['name'][:100]
+        return fm['name']
     # Look for first H1
     match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
     if match:
-        return match.group(1).strip()[:100]
+        return match.group(1).strip()
     return None
 
 
@@ -253,7 +253,7 @@ def main():
                 'uid': uid,
                 'type': 'kernel',
                 'status': status,
-                'title': title[:100],
+                'title': title,
                 'description': desc,
                 'owner': 'tropo',
                 'created': created,

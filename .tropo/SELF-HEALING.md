@@ -166,7 +166,12 @@ python3 vault/tools/tropo-recycle.py <uid> [<uid> ...] --reason "<brief rational
 
 ## Boundaries
 
-**Self-Healing does not override write-scope discipline.** If a defect lives in another agent's owns-scope, surface to that agent (channel post, cross-generational note) — don't auto-author in their lane. The principle empowers action within your scope; it doesn't expand your scope.
+**Write-scope: the boundary is what the file is FOR, not whose name is on it.** *(Amended 2026-08-03 by Mike. The prior rule — "if a defect lives in another agent's owns-scope, surface to that agent, don't auto-author in their lane" — was never his intent and was actively blocking work. Mike verbatim: "I never intended this type of doctrine. Ever. Any executive agent can work with me to update another agents lifecycle record.")*
+
+- **Lifecycle and operational records** — activation entries, status cards, stale closes, boot repair, registry hygiene, anything that blocks the fleet: **any executive may act, working with Mike.** Surfacing is not enough here, and often it is nothing at all: the agent who owns such a record is frequently the exact agent who cannot fix it. A session that died cannot close itself, and its successor cannot be born until it does. Po's record sat open for thirty days under the old rule because the only correct action it permitted was to notify an agent who was not there to hear it.
+- **Voice and identity substrate** — soul letters, reflections, charters, memory surfaces, generation notes: **stays with its agent.** Surface the defect to them; do not author it. This one is not a permission boundary and does not relax with authorization — it is their voice, and writing it on their behalf makes the lineage a fiction. That is the actual thing the old rule was protecting, and it is worth protecting.
+
+The principle still does not expand your scope arbitrarily. It draws the line where it does real work: unblock the machinery, never ghost-write the person.
 
 **Self-Healing does not override governance gates.** If a fix requires a lock-break on locked governance (capsule schemas, locked specs, sealed decisions), surface to the principal (Mike, in Argo) for explicit approval per the OS Invariant. Lock-breaks are governance events; the principle compresses how fast they're surfaced, not whether they require approval.
 

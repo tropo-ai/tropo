@@ -45,7 +45,7 @@ capsule_version: '2.5'
 schema_version: 2
 extraction_scope: ship
 member_of:
-- c7e4f9a2
+- 8dd772a0
 tags:
 - tool
 - cli
@@ -107,17 +107,22 @@ Governed by: `.tropo/scripts/CAPSULE.md` (kernel-tier scripts).
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import shutil
 from pathlib import Path
 
+from lib import index_surfaces
+
 
 VAULT_ANCHORS = (
     Path(".tropo") / "boot-config.md",  # Tier 1 v1.1 (ADR-032) — current standard
     Path("settings") / "env.md",        # legacy — retained for older vaults
 )
+NAV_COMPONENT_MAX_BYTES = 240
+NAV_COMPONENT_HASH_CHARS = 16
 
 
 def _has_anchor(directory: Path) -> bool:
@@ -157,6 +162,33 @@ def resolve_vault_root(explicit_path):
 def sanitize(name: str) -> str:
     name = name.replace("/", "-").replace(":", "-").replace("\\", "-")
     return re.sub(r'[<>"|?*]', "-", name).strip()
+
+
+def navigation_component(stem: str, *, identity: str, suffix: str = "") -> str:
+    """Fit one rendered navigation name within a deterministic byte budget.
+
+    The canonical title remains untouched in source/index surfaces. Only the
+    disposable navigation projection is shortened. A digest of the complete
+    pre-shortening component prevents titles sharing a long prefix from
+    colliding, while UTF-8-aware clipping keeps the readable title prefix.
+    """
+    candidate = f"{stem}{suffix}"
+    candidate_bytes = candidate.encode("utf-8", errors="surrogatepass")
+    if len(candidate_bytes) <= NAV_COMPONENT_MAX_BYTES:
+        return candidate
+
+    digest_source = f"{identity}\0{candidate}".encode("utf-8", errors="surrogatepass")
+    digest = hashlib.sha256(digest_source).hexdigest()[:NAV_COMPONENT_HASH_CHARS]
+    marker = f" …~{digest}"
+    fixed_bytes = len(marker.encode("utf-8")) + len(suffix.encode("utf-8"))
+    readable_budget = NAV_COMPONENT_MAX_BYTES - fixed_bytes
+    if readable_budget < 0:
+        raise ValueError("navigation component suffix exceeds the byte budget")
+
+    readable = stem.encode("utf-8", errors="surrogatepass")[:readable_budget].decode(
+        "utf-8", errors="ignore"
+    ).rstrip()
+    return f"{readable}{marker}{suffix}"
 
 
 def build_project_paths(project_tree_path, index, project_states, state_filter):
@@ -252,6 +284,7 @@ def build_project_paths(project_tree_path, index, project_states, state_filter):
                     name = f"{parent_name}-{name}"
                     break  # only first navigable parent contributes
 
+        name = navigation_component(name, identity=uid)
         new_visited = visited | {uid}
 
         results = []
@@ -289,22 +322,27 @@ def build_project_paths(project_tree_path, index, project_states, state_filter):
     return paths
 
 
-def load_index(index_path):
+def load_index(index_path, archive_index_path=None):
     """Load uid -> {title, state, type, member_of, subsystem_hub, subsystem_name} from
-    the pre-built index.
+    the pre-built current + archive index union.
 
     v1.14 schema split (Argus A80 2026-05-23): subsystem_hub: is the canonical home for
     subsystem hub catalog membership; member_of: holds true parent project UIDs only.
     Tree-building in build_project_paths reads BOTH fields as parent-edge sources.
     subsystem_name retained for hub-identification (informational use).
+
+    ADR-047 Layer 1: rehydrate is intentionally an archive-aware consumer
+    because it renders BOTH ``00-tropo-active`` and ``00-tropo-archived``.
+    Default retrieval remains current-only; this renderer explicitly opts in.
     """
     entries = {}
-    with open(index_path) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            e = json.loads(line)
+    paths = [Path(index_path)]
+    if archive_index_path is not None:
+        paths.append(Path(archive_index_path))
+    for path in paths:
+        if not path.is_file():
+            continue
+        for e in index_surfaces.iter_jsonl(path):
             entries[e["uid"]] = {
                 "title": e.get("title", ""),
                 "state": e.get("state", ""),
@@ -353,7 +391,11 @@ def build_one_tree(vault_root, output_dir, ledger_files, project_tree_path,
             skipped_filter += 1
             continue
 
-        link_name = f"{uid} — {sanitize(entry['title'])}.md"
+        link_name = navigation_component(
+            f"{uid} — {sanitize(entry['title'])}",
+            identity=uid,
+            suffix=".md",
+        )
 
         # Project anchors live inside their own folder(s) — one anchor per rendered path.
         if uid in project_paths:
@@ -421,11 +463,12 @@ def main():
     ledger_files = vault_root / "vault" / "files"   # path renamed ledger/ → vault/ in v1.9.0; variable name retained for diff minimality (v1.10+ rename candidate)
     project_tree_path = vault_root / "vault" / "00-project-tree.jsonl"
     index_path = vault_root / "vault" / "00-index.jsonl"
+    archive_index_path = vault_root / "vault" / "00-archive-index.jsonl"
     nav_root = vault_root / args.output_dir_name
 
     print(f"Vault root: {vault_root}")
-    print(f"Loading index from {index_path.name}...")
-    index = load_index(index_path)
+    print(f"Loading index union from {index_path.name} + {archive_index_path.name}...")
+    index = load_index(index_path, archive_index_path)
     project_states = {uid: entry["state"] for uid, entry in index.items()}
     print(f"  {len(index)} entries indexed")
 

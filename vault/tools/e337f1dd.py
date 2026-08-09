@@ -20,7 +20,7 @@ created: 2026-05-27
 created_by: talos-t10
 governed_by: d5e1b4a3
 member_of:
-  - c7e4f9a2
+  - 8dd772a0
 schema_version: 2
 ---
 """
@@ -217,7 +217,7 @@ def author_activation_root_project(
     desc = f"Activation-root-project for pipeline {pipeline_uid} run on {TODAY}. Per pipeline.capsule §Rule 10 v2.2. All downstream substrate for this activation member_of: this project."
     content = (
         f"---\n"
-        f"uid: {proj_uid}\n"
+        f"uid: {yaml_quote(proj_uid)}\n"
         f"type: project\n"
         f"title: {yaml_quote(title)}\n"
         f"description: {yaml_quote(desc)}\n"
@@ -231,9 +231,9 @@ def author_activation_root_project(
         f"modified_by: pipeline-activate.py\n"
         f"schema_version: 2\n"
         f"member_of:\n"
-        f"  - {pipeline_uid}\n"
-        f"activated_by_pipeline: {pipeline_uid}\n"
-        f"activation_entry: {master_activation_uid}\n"
+        f"  - {yaml_quote(pipeline_uid)}\n"
+        f"activated_by_pipeline: {yaml_quote(pipeline_uid)}\n"
+        f"activation_entry: {yaml_quote(master_activation_uid)}\n"
         f"tags: [activation-root-project, pipeline-activation, v1-35-0]\n"
         f"file_ext: md\n"
         f"---\n\n"
@@ -351,7 +351,9 @@ def open_master_activation_entry(
     pipeline_name = pipeline_fm.get("name", "pipeline")
     desc = f"Pipeline activation for {pipeline_name} ({pipeline_uid}) opened by pipeline-activate.py on {TODAY}."
     cycle_ref = f"cycle_context: {yaml_quote(cycle_context)}\n" if cycle_context else ""
-    dev_spec_ref = f"dev_spec_uid: {dev_spec_uid}\n" if dev_spec_uid else ""
+    dev_spec_ref = (
+        f"dev_spec_uid: {yaml_quote(dev_spec_uid)}\n" if dev_spec_uid else ""
+    )
     # v1.52 owner+assigned_to propagation (Mike-A82 board-surfacing amendment 2026-05-24):
     # Read pipeline def's owner: field; write owner + assigned_to on activation entry so
     # sa.board-agent's owner_prefix/assigned_to_prefix filters catch the activation as
@@ -364,7 +366,7 @@ def open_master_activation_entry(
     generation = f"{pipeline_uid}-{int(time.time())}"
     content = (
         f"---\n"
-        f"uid: {activation_uid}\n"
+        f"uid: {yaml_quote(activation_uid)}\n"
         f"type: activation\n"
         f"name: {yaml_quote(f'pipeline-runtime-{pipeline_uid}')}\n"
         f"title: {yaml_quote(f'{pipeline_name} Activation — {TODAY}')}\n"
@@ -376,16 +378,16 @@ def open_master_activation_entry(
         f"activation_class: pipeline\n"
         f"agent: {yaml_quote('pipeline-runtime')}\n"
         f"agent_class: pipeline\n"
-        f"agent_root: {pipeline_uid}\n"
+        f"agent_root: {yaml_quote(pipeline_uid)}\n"
         f"generation: {yaml_quote(generation)}\n"
         f"model: {yaml_quote('pipeline-activate.py-v1.0')}\n"
         f"platform: kernel\n"
-        f"pipeline_uid: {pipeline_uid}\n"
+        f"pipeline_uid: {yaml_quote(pipeline_uid)}\n"
         f"activated_by: {yaml_quote(activated_by)}\n"
         f"activated_at: {TODAY}\n"
-        f"activation_root_project: {activation_root_uid}\n"
+        f"activation_root_project: {yaml_quote(activation_root_uid)}\n"
         f"member_of:\n"
-        f"  - {activation_root_uid}\n"
+        f"  - {yaml_quote(activation_root_uid)}\n"
         f"author: pipeline-activate.py\n"
         f"created: {TODAY}\n"
         f"created_by: pipeline-activate.py\n"

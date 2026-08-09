@@ -7,13 +7,28 @@ ship_scope_lock_break: 'extraction_scope: ship ADDED 2026-07-02 per Mike verbati
 name: note
 type: capsule-definition
 extends: core
-version: 3.2
-supersedes_version: '3.1'
+version: 3.6
+mint_mode: human
+mint_template: vault/capsules/templates/note.template.md
+mint_template_version: '1.0'
+mint_template_sha256: 786e93806d3456e7093a568fb02a3efa2d51e963482b14560c480b6ea14e63b3
+mint_output_home: vault/files
+core_field_specializations:
+  title: optional
+  status: optional
+  owner: optional
+template_enforced_from: '2026-07-13'
+template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
+supersedes_version: '3.5'
+v3_6_companion_template_amendment: "Mike-approved typed-mint pilot, 2026-08-03. Moves the single mint/verifier scaffold from the capsule body to a hash-bound visible companion; declares the existing note exceptions to core as explicit subtype specializations. No note lifecycle or instance migration."
+v3_5_lifecycle_compatibility_lock_break: 'v3.4 -> v3.5 bounded lock-break 2026-07-23 by talos per Mike-approved locked dev-spec de2015c1 (activation 3295c41a; approval recorded verbatim as "I approve"). Adds required legacy_default metadata to every lifecycle_machine move; all note moves are unambiguous and declare false. No enum, alias, state, transition, gate, prose machine, validator, or write-policy change.'
+v3_4_lifecycle_machine_lock_break: 'v3.3 -> v3.4 bounded lock-break 2026-07-23 by talos per Mike-approved locked dev-spec b06aa0fb (activation 1b3c6eaa; approval recorded verbatim as "Looks good. I approve"). Additive lifecycle_machine declaration only: optional canonical status enum/order + every existing legal prose transition and stable unique move_id/UI metadata. closed remains terminal; no reopen invented. No enum, alias, meta_status_rollup, prose machine, validator, or write-gate change.'
+v3_3_amendment_note: 'v3.2 → v3.3 amendment 2026-07-13 by talos-t29 per Mike-locked Governed Autonomy S2 dev-spec bba40cd7 (activation 0d9f89bc; committed substrate "Template legs for the top-10 types"). Additive + non-breaking: NEW §Template section (the mint-stamped scaffold) per the Template-Leg Contract v1.0 (b933eafb). No schema, enum, or state-machine change.'
 tier: os
 author: tropo
 created: 2026-04-11
-modified: 2026-06-09
-modified_by: argus-a105
+modified: 2026-08-03
+modified_by: argus-a144
 meta_status_rollup_added: argus-a104 2026-06-08 — +done→done in meta_status_rollup per 4acf3f2d v0.4 DERIVE (Mike-signed 7-capsule lock-break batch); additive; prior modified argus-a43 2026-05-03
 status: locked
 locked_by: argus-a43
@@ -28,17 +43,72 @@ enforced_enums:
     aliases:
       done: closed
 m2_rollup_gapfill_lock_break: 'Mike-approved lock-break 2026-07-01 (verbatim "approved", Argus A122 session): meta_status_rollup gap-fill — adds archived->done + draft->to-do. Context: the M2-at-scale regression (rollup loaders keyed tropo-<type> after the One-Home capsule renames; fixed same session) exposed 90 real residuals; 88 were status:archived absent from task/note/design-brief rollups (the document capsule already carried archived — established precedent). Comprehensive-rollup doctrine (A116): enforced_enums narrows, meta_status_rollup stays comprehensive over observed values. Data-only list addition; no schema or enum change.'
+m2_rollup_2026_07_15_note: 'Data-only comprehensive-rollup hygiene by Argus A132 before v1.85 build: adds observed legacy open→to-do. Does not widen the canonical enum; new writes remain narrowed to {new, accepted, active, closed}. Clears the one unexplained note lifecycle-N/A row.'
 meta_status_rollup:
   to-do:
     - new
     - accepted
     - draft
+    - open
   in-progress:
     - active
   done:
     - closed
     - done
     - archived
+lifecycle_machine:
+  field: status
+  optional: true
+  states:
+    - {value: new, label: New, terminal: false}
+    - {value: accepted, label: Accepted, terminal: false}
+    - {value: active, label: Active, terminal: false}
+    - {value: closed, label: Closed, terminal: true}
+  moves:
+    - move_id: accept
+      from: new
+      to: accepted
+      label: Accept
+      direction: forward
+      confirm: false
+      resolution: null
+      gate: acceptance-record
+      warning: null
+      principal_only: false
+      legacy_default: false
+    - move_id: start
+      from: accepted
+      to: active
+      label: Start processing
+      direction: forward
+      confirm: false
+      resolution: null
+      gate: processor-start
+      warning: null
+      principal_only: false
+      legacy_default: false
+    - move_id: reroute
+      from: accepted
+      to: new
+      label: Return for rerouting
+      direction: back
+      confirm: false
+      resolution: null
+      gate: all-acceptances-rejected
+      warning: null
+      principal_only: false
+      legacy_default: false
+    - move_id: close
+      from: active
+      to: closed
+      label: Close processing
+      direction: forward
+      confirm: true
+      resolution: null
+      gate: all-processors-completed-or-explicit-close
+      warning: null
+      principal_only: false
+      legacy_default: false
 schema_version: 2
 governed_by: 222873b9
 aligned_with:
@@ -97,7 +167,7 @@ The OS says: "this thing exists and is governed." The app says: "do whatever you
 |-------|------|-----------|
 | `captured_by` | string | Agent-id or human name of who wrote the note. ≤ 30 chars. |
 
-**Required core fields (inherited from `core.capsule`):** `uid`, `type` (= `"note"`), `created`, `modified`, `state` (= `active` at capture). See [core.capsule (ee814120)](core.capsule.md) for full core inheritance. *(v3.2 cross-capsule alignment: same five fields enumerated identically across note v3.2 / design-brief v3.1 / task v4.0.)*
+**Required core fields (inherited from `core.capsule`):** `uid`, `type` (= `"note"`), `created`, `modified`, `state` (= `active` at capture). This capsule explicitly specializes core's `title`, `status`, and `owner` defaults as optional via `core_field_specializations`; their omission is legal, not an inferred validator exception. See [core.capsule (ee814120)](core.capsule.md) for the bounded specialization contract.
 
 **Timestamp convention:** `created` SHOULD use `YYYY-MM-DDTHH:MM` (date + time) rather than date-only. Notes are quick captures where temporal ordering within a day matters. The core capsule's ISO 8601 format permits both; notes prefer the higher resolution.
 
@@ -319,16 +389,28 @@ Reframe decision as a 4th work-item type.
 
 ---
 
+## §Template (v3.6 — companion scaffold; contract at [b933eafb](../../vault/files/b933eafb.md))
+
+The single mint and verifier scaffold is the visible companion
+[note.template.md](templates/note.template.md), hash-bound in this capsule's
+frontmatter. It intentionally omits `title`, `owner`, `status`, and any required
+body: all are legally absent for a minimal note. `member_of` starts at the
+Studio-inbox fallback and may be replaced with the actual owning project.
+
+---
+
 ## Changelog
 
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
+| 3.6 | 2026-08-03 | Moved the single mint/verifier scaffold to a visible hash-bound companion and declared note's existing core-field specializations. No lifecycle or instance migration. | argus-a144 |
 | 2.0 | 2026-04-16 | (v2.0 locked; body signature at the time read "DRAFT v1" — a drift documented at v3 reconciliation.) | tropo |
 | 3.0 | 2026-04-24 | **v3 amendment — note becomes the universal lightweight WorkItem.** Subsumes `concept` (deprecated, see [concept.capsule (c9e1a5b7)](concept.capsule.md)) per v3 Decision 1; any capture (idea / concept / observation / question) is now a note with appropriate tags. Rule 2 FLIPPED from append-only to rewriteable per Decision 2 — git history carries the temporal record. `stage:` field dropped; state machine is `state: active → archived` only per Decision 4. Added optional frontmatter fields: `intended_for:` (UID of entity the capture is routed to) + `composes_into:` (downstream artifacts derived from this note). Rule 4 reworded: tags + projects are the grouping mechanism (collections remain available as lower-weight reference manifests per collection-ref.capsule). Signature-line drift (body said "DRAFT v1" while frontmatter said v2.0) resolved at v3.0. UID preserved at 7c47429a. | argus-a33 |
 | 3.1 | 2026-04-25 | **Gate B P0 #4 remediation (sa.skeptic 014 lens).** Added §Workshop — Shop Signage section (the surface Decision 13's verb-audit explicitly governs). v3.0 had shipped without §Studio on the most-used primitive — sa.skeptic 014 P0-3 flagged this as a cold-boot self-containment cliff. Studio section pattern matches the 8 other v3 capsules (Tools / Skills / Procedures / Rules-at-a-glance / Pitfalls / Worked examples / Go next); content uses canonical Decision 13 verbs throughout (`capture`, `tag`, `archive`). Renamed §"How to Create a Note" heading → §"How to Capture a Note" (deprecated verb `create` → canonical `capture`). UID preserved at 7c47429a. | argus-a34 |
 | 3.2 | 2026-05-03 | **LOCKED — v1.4.4 Stream A work-item primitives** ([source brief: e1c47a9f](../../vault/files/e1c47a9f.md)). Note joins task and design-brief under the universal work-item primitives — at the lightest discipline level, all OPTIONAL. Added optional `status:` enum (`new` / `accepted` / `active` / `closed`; absence is the default for self-captured notes). Added optional `accepted_by:` array of acceptance records + `processor:` derived array (computed-on-read by default; materialization is implementation choice). Aggregate Rule documented (when `status:` is set, it's derived from `accepted_by:`; stored explicitly for query efficiency; consistency enforced by Validation Check 10). State machine §updated to two orthogonal dimensions (optional `status:` work-item lifecycle + preserved `state:` lifecycle visibility). Validation checks 8–11 added; check 10 cross-linked to Aggregate Rule. `accepted → active` transition trigger documented (processor edits body, populates composes_into, or explicit flip). Required core fields enumerated (uid, type, created, modified, state). Two minimal worked-example instances added (self-captured + routed). No request-lifecycle (`requested_by:` / `requested_of:` / `verifier:` / `approver:`) — notes are captures, not requests; promotion to task handles request-shaped work. **Migration v3.1 → v3.2 zero-touch:** existing notes pass v3.2 validation unchanged (status optional, absence legal). UID preserved at 7c47429a. Pending three-instrument verification regression (post-remediation) bundled with task v4.0 + design-brief v3.1. | argus-a43 |
+| 3.3 | 2026-07-13 | **Governed Autonomy S2** ([bba40cd7](../../vault/files/bba40cd7.md)) — NEW §Template leg per the Template-Leg Contract v1.0 ([b933eafb](../../vault/files/b933eafb.md)). `mint file --type note` now stamps a valid-by-construction scaffold; `status:` deliberately not scaffolded (no legal birth default). Additive; no schema/enum/state-machine change. | talos-t29 |
 
 ---
 
-*note capsule definition | LOCKED v3.2 | Tropo-OS | amended + locked 2026-05-03 by argus-a43 (v1.4.4 Stream A — optional work-item primitives + three-instrument verification across 3 rounds + single-instrument regression PASS); v3.1 lock April 25, 2026 by argus-a34 preserved in git history; v3.0 amendment April 24, 2026 by argus-a33; v2.0 lock April 11, 2026 preserved | UID preserved at 7c47429a*
+*note capsule definition | LOCKED v3.6 | companion-template amendment 2026-08-03 by Argus A144 under Mike's typed-mint approval | prior locks preserved | UID 7c47429a*
 *"The lightest governed primitive. Capture it. Tag it. Find it later. Edit it freely; git remembers. Track its lifecycle only when it matters."*

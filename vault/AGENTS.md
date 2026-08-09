@@ -43,8 +43,8 @@ The Vault is:
 
 - **Flat.** All entries are stored in `files/` with no subfolder hierarchy. The filename is the entry's UID. Organization is through collections in `collections/`, not through folders.
 - **Governed.** Every entry conforms to a capsule definition that specifies required frontmatter, a state machine, and validation rules. Entries that do not conform are not checked in.
-- **Authoritative.** If an entry is not in the Vault's index, it does not exist in the Vault. The index is the truth.
-- **Query-first.** The discovery interface is `00-index.jsonl`. Do not walk `files/` directly to find entries. Read the index.
+- **Authoritative.** If an entry is not in the current/archive index union, it does not exist in the Vault. Governed files are canonical; both indexes are disposable projections of them.
+- **Query-first.** The default discovery interface is `00-index.jsonl` (current truth only). History is the explicit opt-in surface `00-archive-index.jsonl`. Do not walk `files/` directly to discover entries.
 - **Machine-first.** The Vault is optimized for reasoning agents to read and write. It is not optimized for human browsing. Humans use collections (`collections/`) to organize their view of the Vault.
 
 The Vault is NOT:
@@ -71,10 +71,11 @@ If any of this is unclear, read the spec before touching this folder.
 
 ## How to Find Entries (Retrieve)
 
-1. **Read `00-index.jsonl`.** It contains one record per entry with UID, title, type, status, owner, and description.
+1. **Read `00-index.jsonl` for current truth.** It contains one current record per entry with UID, title, type, status, owner, and description.
 2. **Scan the index for the field you care about** — UID, type, status, owner, or keywords in the description.
 3. **Once you have a UID, open `files/<uid>.md`** to read the entry.
-4. **If the index does not contain what you need, the entry does not exist in the Vault.** The index is authoritative.
+4. **When you deliberately need history, opt in.** Use `python3 vault/tools/tropo-vault-search.py "<query>" --include-archive` or read `00-archive-index.jsonl`.
+5. **If neither surface contains what you need, the entry does not exist in the Vault.**
 
 **Do not navigate `files/` directly.** The filenames are UIDs, not names. Human-readable names live in the index, not in the filesystem. Walking `files/` will give you unintelligible UUIDs and wastes context.
 
@@ -130,9 +131,9 @@ This is deliberate: the filesystem is a lookup table, not a navigation tree. Hum
 
 ### Step 4 — Update the index atomically
 
-Add or update the entry's record in `00-index.jsonl`. The index record must match the file's frontmatter.
+Freshen the entry through `python3 vault/tools/tropo-rebuild-index.py --only <uid>`. The shared ADR-047 predicate routes it to `00-index.jsonl` (current) or `00-archive-index.jsonl` (`state: archived` / `status: superseded`) and keeps the SQLite resolution union current.
 
-**The index update is not optional.** An entry that exists in `files/` but is not in the index is invisible to the Vault. An index record that has no corresponding file is drift that the vault steward will flag.
+**The index update is not optional.** An entry that exists in `files/` but is absent from both index surfaces is invisible to the Vault. An index record with no corresponding file is drift that the vault steward will flag.
 
 Update index and place file in the same operation wherever possible. If the operations must be sequential, place the file first, then update the index — that way a failure leaves an orphaned file (recoverable) rather than an index pointer to nothing (harder to detect).
 
@@ -245,7 +246,7 @@ npm run vault:rebuild
 
 ## The Index Format
 
-The index lives at `00-index.jsonl` in this folder. **The format is locked v1: JSONL (JSON Lines) — one JSON object per line, each object a complete self-describing record.**
+The default current index lives at `00-index.jsonl`; preserved history lives at `00-archive-index.jsonl`. **Both use locked v1 JSONL (JSON Lines) — one complete self-describing object per line.** One rebuild pass partitions one canonical record set with zero overlap and zero loss; `00-index.sqlite` retains the full union for resolution.
 
 Full schema reference: [`.tropo/schema/vault-index-schema.md`](../.tropo/schema/vault-index-schema.md)
 
@@ -259,10 +260,11 @@ Each record fits on one line. Append new entries at the end of the file. Update 
 
 **Common queries:**
 
-- Lookup by UID: `grep '"uid": "a7e3d1f9"' 00-index.jsonl`
-- All active tasks: `grep '"type": "task"' 00-index.jsonl | grep '"status": "active"'`
-- Owned by Metis: `grep '"owner": "metis"' 00-index.jsonl`
-- By tag: `grep '"architecture"' 00-index.jsonl | grep '"tags":'`
+- Current lookup by UID: `rg '"uid":"a7e3d1f9"' 00-index.jsonl`
+- Historical lookup: `python3 tools/tropo-vault-search.py "query" --include-archive`
+- All active tasks: `rg '"type":"task".*"status":"active"' 00-index.jsonl`
+- Owned by Metis: `rg '"owner":"metis"' 00-index.jsonl`
+- By tag: `rg '"architecture"' 00-index.jsonl`
 
 For complex queries, use `jq` or parse line-by-line in your language of choice.
 
@@ -306,16 +308,7 @@ From the Vault's perspective, collections are consumers. They reference vault en
 
 ## Current State
 
-This folder was created on April 10, 2026 by Metis G38 as part of the Phase 1 Vault build. It is currently empty of entries and the index is a placeholder.
-
-The next generation (or G38 in bonus-round work) will:
-
-1. Lock the index format (§5 of the Phase 1 spec)
-2. Populate the Vault with initial entries from the existing `design/`, `tasks/`, and `decisions/` folders (migration Phase 1b)
-3. Build the vault steward's vault audit functions
-4. Ship the Vault into the starter vault as a Phase 1 primitive
-
-Until then, treat this folder as the designated landing zone for governed work and follow the check-in protocol above.
+This folder was created on April 10, 2026 by Metis G38 as part of the Phase 1 Vault build. It is now the live governed store (4K+ entries at the ADR-047 Layer-1 cut-over). The default index carries current truth only; the opt-in archive surface preserves history; both rebuild from canonical files.
 
 ---
 

@@ -7,13 +7,22 @@ ship_scope_lock_break: 'extraction_scope: ship ADDED 2026-07-02 per Mike verbati
 name: design-brief
 type: capsule-definition
 extends: core
-version: 3.2
-supersedes_version: '3.1'
+version: 3.4
+mint_mode: human
+mint_template: vault/capsules/templates/design-brief.template.md
+mint_template_version: '1.0'
+mint_template_sha256: 88c2357f748d00a6cf95e6484330a0f514556b0d3a6b17fb8d060ad9df922abf
+mint_output_home: vault/files
+template_enforced_from: '2026-07-12'
+template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
+v3_4_companion_template_amendment: "Mike-approved 2026-08-05: connects design-brief to the existing typed mint through a visible hash-bound companion. The companion preserves the v3.3 required sections, adds inherited core owner and activation provenance, and uses the Studio inbox as a valid birth fallback. No lifecycle or instance migration."
+v3_3_amendment_note: 'v3.2 → v3.3 amendment 2026-07-12 by argus-a130 per Mike-locked Governed Autonomy S2 dev-spec bba40cd7 (activation 0d9f89bc; committed substrate "Template legs for the top-10 types... Argus: contract + design-brief leg"). Additive + non-breaking: NEW §Template section (the mint-stamped scaffold; first leg of ten — the dogfood) per the Template-Leg Contract v1.0 (b933eafb). No schema, enum, or state-machine change. Note: the v3.2 changelog row was already absent pre-amendment (pre-existing gap, not this edit).'
+supersedes_version: '3.3'
 tier: os
 author: tropo
 created: 2026-04-10
-modified: 2026-06-09
-modified_by: argus-a105
+modified: 2026-08-05
+modified_by: argus-a145
 meta_status_rollup_added: argus-a104 2026-06-08 — +locked→done in meta_status_rollup per 4acf3f2d v0.4 DERIVE (Mike-signed 7-capsule lock-break batch); additive, bucket-only (status enforced_enums unchanged — locked still WARNs per v3_2 note); prior modified argus-a99 2026-06-05
 status: locked
 locked_by: argus-a99
@@ -288,10 +297,24 @@ See [`127d2fe2`](../../vault/files/127d2fe2.md) — frontmatter shows `author: a
 
 ---
 
+## §Template (v3.4 — companion scaffold; contract at [b933eafb](../../vault/files/b933eafb.md))
+
+The single mint and verifier scaffold is the visible companion
+[design-brief.template.md](templates/design-brief.template.md), hash-bound in
+this capsule's frontmatter. It preserves the v3.3 problem/direction/questions
+contract, stamps the inherited core fields, and starts `member_of` at the
+Studio-inbox fallback until the author replaces it with the real owning project.
+
+**Leg rules (per the contract):** `status: design` is the only legal birth value (§State Machine — briefs are born being-written, no `new` state); optional relationship fields (`informs`/`refs`/`derived_from`/`composes_into`/`requested_by`/`requested_of`/`accepted_by`) are added when real, never scaffolded empty; the companion defaults are valid-by-construction against this capsule's own enums — plant-test: mint once into scratch → `check-one` passes with zero edits beyond placeholder consumption.
+
+---
+
 ## Changelog
 
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
+| 3.4 | 2026-08-05 | Connected design-brief to the existing typed mint through a visible hash-bound companion. Preserved the v3.3 required sections; added inherited core owner, activation provenance, and a valid Studio-inbox birth fallback. No lifecycle or instance migration. | argus-a145 |
+| 3.3 | 2026-07-12 | **§Template leg (first of ten — the S2 dogfood).** New §Template section per the Template-Leg Contract v1.0 ([b933eafb](../../vault/files/b933eafb.md)): the mint-stamped scaffold (frontmatter template with valid-by-construction defaults, body skeleton with consumable REQUIRED placeholders, `<<MINT:*>>` token set). Committed substrate of Mike-locked Governed Autonomy S2 ([bba40cd7](../../vault/files/bba40cd7.md), activation 0d9f89bc). Additive, non-breaking; no schema/enum/state-machine change. (v3.2 changelog row was already absent pre-amendment — pre-existing gap, noted not fabricated.) | argus-a130 |
 | 3.0 | 2026-04-24 | **v3 amendment.** `stage:` field renamed → `status:` per v3 Decision 4; values (`design → specify → done`) preserved. Pre-v3 `⚠️ Known terminology collision` §State Machine block removed as resolved-by-rename; historical note retained. Studio prose updated (Procedures + Rules-at-a-glance + Pitfalls) to use `status:` consistently. `pattern_exemplar: d0c00001` declared in frontmatter per Decision 3 — design-brief is patterned on document.capsule with exploratory-permissiveness + composability-pair + lifecycle-without-lock discipline layer. Signature-line drift resolved at v3.0. UID preserved at de5181b0. | argus-a33 |
 | 3.1 | 2026-05-03 | **LOCKED — v1.4.4 Stream A work-item primitives** ([source brief: e1c47a9f](../../vault/files/e1c47a9f.md)). Design-brief joins note + task as a first-class work-item. Intrinsic 3-state status enum preserved unchanged. Added optional `accepted_by:` array of acceptance records + `processor:` derived array (universal work-item pattern; `processor:` is computed-on-read by default, materialization is implementation choice). Added optional `requested_by:` / `requested_of:` (formalizes today's mike-directed tag + body-provenance convention). State Machine §updated with abstract 4-state mapping (`design` → active, `specify` → active, `done` → closed), `state: archived` orthogonality clarification, and aggregate note clarifying the relationship between intrinsic `status:` and `accepted_by:`. Added `status:` to Required Frontmatter table (drift fix from v3.0 — was implicit). Required core fields enumerated. 4 new validation checks (7-10). §Known Enforcement Gaps section added — pre-v3 instances carrying `stage:` instead of `status:` flagged as MIGRATION-PENDING (per arch-specs P1-3). Two minimal worked-example instances added (self-initiated + reference to Mike-directed `127d2fe2`). No `verifier:` / `approver:` / `resolution:` (briefs aren't verified/approved/resolved that way). Migration v3.0 → v3.1 purely additive: existing briefs get `accepted_by: []`. UID preserved at de5181b0. Pending three-instrument verification regression (post-remediation) bundled with note v3.2 + task v4.0. | argus-a43 |
 | 2.1 | 2026-04-21 | v1.3 capsule ship deliverable D5. Additive non-breaking amendment: added `derived_from:` and `composes_into:` optional frontmatter fields to enable composability pair with typed pipeline artifacts. Added validation checks 5 + 6. Added §Relationship to Other Capsules section. Self-attested mechanical amendment per project-plan v1.3 Typed Pipeline Capsule Ship project plan D5 acceptance criteria. Existing v2.0 instances remain Day-1 compliant (fields are optional). | argus-a30 |
@@ -299,5 +322,5 @@ See [`127d2fe2`](../../vault/files/127d2fe2.md) — frontmatter shows `author: a
 
 ---
 
-*design-brief capsule definition | LOCKED v3.1 | Tropo-OS | amended + locked 2026-05-03 by argus-a43 (v1.4.4 Stream A — work-item primitives + request-lifecycle + three-instrument verification across 3 rounds + single-instrument regression PASS); v3.0 lock April 24, 2026 by argus-a33 preserved in git history; v2.1 lock April 21, 2026 preserved | UID preserved at de5181b0*
+*design-brief capsule definition | LOCKED v3.4 | companion-template amendment 2026-08-05 by Argus A145 under Mike's typed-mint approval | prior locks preserved | UID de5181b0*
 *v3.1 adds work-item primitives (`accepted_by:` + `processor:`) and optional request-lifecycle (`requested_by:` / `requested_of:`) without changing the intrinsic 3-state lifecycle.*

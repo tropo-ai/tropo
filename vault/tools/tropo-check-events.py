@@ -25,10 +25,17 @@ input:
 output:
   type: object
   description: "new_events (cursor-bounded directed+broadcasts) + unanswered_reply_required (unbounded, both axes)"
-write_scope: ["vault/events/.cursor-<party_uid>.json"]
+write_scope: ["vault/events/.cursor-<party_uid>.json", "vault/events/receipts/<party_uid>.jsonl"]
 created: 2026-06-11
 created_by: talos.director
-version: "1.2"
+modified: 2026-07-31
+modified_by: vela-v71
+version: "1.7"
+v1_7_note: "1f29bcfb Case 5, found by Talos T37, fixed by vela-v71 with Talos's explicit owner consent ('YES ON CASE 5. Take it.'). An instrument whose entire job is reporting whether you were answered was reporting 'no answer' while a correlated reply sat correct and pushed on main. Two causes, both closed: (1) a reply lacking final:true was discarded BEFORE the correlation lookup and never mentioned again; (2) only correlationid was read, though the emit tool accepts --causationid on the same command line, so a reply correlated that way was invisible. Metis G98 spent hours reporting zero confirmations from nine directives and drew a conclusion about the crew from a silence that was partly manufactured by this code. THE STRICTNESS IS UNCHANGED AND DELIBERATELY SO — terminal-reply semantics are defensible and only final:true closes a thread. What changed is the SILENCE: a discarded reply is now reported as '1 correlated reply seen, NOT terminal (<reason>)' naming what was discarded AND why on one line, so the asker knows to go read it and the sender learns what was missing. causationid is now accepted as a correlation source alongside correlationid and reply_to_id. The frozen numeric epoch keeps its historical rule (no event_uid: any correlated answer was terminal). Per Rule 1b: an instrument that discards an input must say so."
+v1_6_note: "Captain-mode edit (talos-owned tool; Talos notified per the A95/A106 captain-edit precedent), Mike-directed 'I want it fixed permanently' 2026-07-31. Closes the trigger gap left by v1.9: the self-heal existed only on the WRITE path, so it could only fire when something emitted. On a multi-agent day the dominant divergence source is `git merge` — another agent's stream lands in the canonical union with NO local emit — so nothing triggered the heal and every read warned until a human ran tropo-rebuild-events-sqlite.py by hand. Observed live 2026-07-31: the projection diverged three times in 40 minutes purely from integrating crew pushes. THE FIX MOVES THE TRIGGER FROM A COMMAND TO A CONDITION: event_identity.ensure_sqlite_projection() pairs detection with repair in one shared gesture, and emit / check-events / query-events all call it, so ANY touch of the log repairs a divergence regardless of what caused it — merge, fresh clone, manual copy, or emit. Safety posture is unchanged and deliberately so: still only the sanctioned full rebuild (never an incremental patch), still cooldown-gated at 300s via a marker now SHARED across all callers so concurrent agents cannot storm it, plus a subprocess-env recursion guard (TROPO_SQLITE_AUTOHEAL_ACTIVE) and an operator escape hatch (TROPO_NO_SQLITE_AUTOHEAL) for a provably side-effect-free read. Delivery semantics are untouched: the canonical JSONL union is loaded before any repair and remains the sole delivery truth, so a heal can speed up later reads but can never change what a drain delivers. Regression-pinned by test_divergent_projection_self_heals_on_read (merge shape, read-only) and test_autoheal_is_cooldown_gated_and_never_recurses. In this tool specifically, the v1.5 projection gate was explicitly diagnostic-only — it could SEE a divergence it had no way to fix. It now heals. The v1.5 delivery guarantee is preserved verbatim: the union is read before the repair and is what the drain returns."
+v1_5_note: "Projection trust hardening: cursor/drain delivery always uses the canonical legacy-plus-stream union; event_identity's shared exact identity-coverage gate is diagnostic-only and warns for an existing incomplete, divergent, or unreadable SQLite projection without changing receipt, cursor, or unanswered-thread semantics."
+v1_4_note: "Correctness hardening: the canonical append-only event union is always authoritative for delivery, so a stale SQLite projection cannot hide a newly merged message. --id/--type filters now apply before receipt writes and cannot silently mark unrelated unread messages as read."
+v1_3_note: "Distributed Event Ledger dual-read under f15a9b85: receipts use immutable event_uid for new events while accepting legacy numeric IDs; cursor stores derived display sequence only; unanswered scan unions legacy epoch + per-writer streams and resolves both correlation forms."
 v1_2_note: "Talos T18 2026-06-13 S2.4 refresh. Identity resolution moved to vault/agents/ unified entries. agent_root_uid now read directly from frontmatter rather than inferred from index titles. Aligned with emit-event v1.5."
 v1_1_note: "S2.1/S2.2 v1.70 — receipt ledger + set-difference semantics. Per-reader receipt at vault/events/receipts/<uid>.jsonl. new_events = (union) - receipt_set. Cursor retained as scan-start performance hint only; correctness never depends on it."
 test_spec: "c831c7a3"
@@ -64,6 +71,8 @@ from __future__ import annotations
 import argparse, json, re, sqlite3, sys, time
 from pathlib import Path
 
+from lib import event_identity
+
 VAULT_ROOT = Path(__file__).resolve().parents[2]
 JSONL_PATH = VAULT_ROOT / "vault" / "events" / "00-events.jsonl"
 SQLITE_PATH = VAULT_ROOT / "vault" / "events" / "00-events-index.sqlite"
@@ -83,6 +92,21 @@ ANSWERED_TYPES = frozenset([
     "tropo.message.acked",
     "tropo.message.sent",
 ])
+
+
+def _event_key(event: dict) -> str:
+    return event_identity.immutable_event_uid(event)
+
+
+def _display_seq(event: dict) -> int:
+    raw = event.get("_display_seq", event.get("display_seq"))
+    if raw is not None:
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            pass
+    event_id = str(event.get("id", ""))
+    return int(event_id) if event_id.isdigit() else 0
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +152,10 @@ def load_receipt_set(party_uid: str) -> set[str]:
             rec = json.loads(line)
             eid = rec.get("event_id")
             if eid:
-                ids.add(str(eid))
+                value = str(eid)
+                ids.add(value)
+                if value.isdigit():
+                    ids.add(f"legacy_{value.zfill(8)}")
         except json.JSONDecodeError:
             continue
     return ids
@@ -143,7 +170,7 @@ def append_receipts(party_uid: str, events: list[dict], existing: set[str]) -> N
     path = _receipt_path(party_uid)
     with open(path, "a", encoding="utf-8") as fh:
         for ev in events:
-            eid = str(ev.get("id", ""))
+            eid = _event_key(ev)
             if eid and eid not in existing:
                 fh.write(json.dumps({"event_id": eid, "read_at": now_ts, "reader": party_uid}) + "\n")
                 existing.add(eid)
@@ -196,11 +223,49 @@ def resolve_identity(agent_name: str) -> tuple[str, str | None]:
 # Event queries
 # ---------------------------------------------------------------------------
 
+def _canonical_event_union_with_projection_warning() -> list[dict]:
+    """Load delivery truth, and repair the derived projection if it diverged.
+
+    v1.6: this was diagnostic-only, which left the read path able to SEE a
+    divergence it could not fix. On a multi-agent day the divergence source is
+    `git merge` — new canonical events arrive with no local emit — so the
+    emit-time heal never fired and the warning repeated on every read until a
+    human intervened. Detection now heals, via the shared cooldown-gated
+    rebuild in event_identity.
+
+    Delivery semantics are unchanged and deliberately so: the canonical union
+    below is loaded BEFORE any repair and is what gets returned. Receipt,
+    cursor, and unanswered-thread behaviour never depend on the cache, so a
+    heal can speed up later reads but can never alter what this drain delivers.
+    """
+    event_union = event_identity.load_event_union(VAULT_ROOT)
+    if not SQLITE_PATH.exists():
+        return event_union
+    event_identity.ensure_sqlite_projection(
+        VAULT_ROOT,
+        event_union,
+        sqlite_path=SQLITE_PATH,
+        context="check-events drain",
+    )
+    return event_union
+
+
 def _query_new_events(since_id: str | None, party_uid: str, agent_root_uid: str | None,
-                      include_telemetry: bool) -> list[dict]:
-    if SQLITE_PATH.exists():
-        return _query_sqlite(since_id, party_uid, agent_root_uid, include_telemetry)
-    return _query_jsonl(since_id, party_uid, agent_root_uid, include_telemetry)
+                      include_telemetry: bool,
+                      event_union: list[dict] | None = None) -> list[dict]:
+    # Receipt-set difference—not cursor position or cache freshness—is the
+    # delivery contract. SQLite coverage is only a diagnostic snapshot: a
+    # stream can merge after that check and before any subsequent cache read.
+    # Therefore even a complete projection can never become delivery truth.
+    if event_union is None:
+        event_union = _canonical_event_union_with_projection_warning()
+    return _query_jsonl(
+        since_id,
+        party_uid,
+        agent_root_uid,
+        include_telemetry,
+        event_union=event_union,
+    )
 
 
 def _query_sqlite(since_id: str | None, party_uid: str, agent_root_uid: str | None,
@@ -208,7 +273,10 @@ def _query_sqlite(since_id: str | None, party_uid: str, agent_root_uid: str | No
     conn = sqlite3.connect(str(SQLITE_PATH))
     conn.row_factory = sqlite3.Row
 
-    since_clause = "AND CAST(id AS INTEGER) > CAST(? AS INTEGER)" if since_id else ""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(events)")}
+    has_v2 = "display_seq" in columns and "event_uid" in columns
+    since_column = "display_seq" if has_v2 else "CAST(id AS INTEGER)"
+    since_clause = f"AND {since_column} > CAST(? AS INTEGER)" if since_id else ""
     since_param = [since_id] if since_id else []
 
     if include_telemetry:
@@ -229,11 +297,16 @@ def _query_sqlite(since_id: str | None, party_uid: str, agent_root_uid: str | No
     seen: set[str] = set()
 
     def _run(where: str, params: list) -> None:
-        sql = f"SELECT raw FROM events WHERE {where} ORDER BY CAST(id AS INTEGER) ASC LIMIT 1000"
+        selected = "raw, display_seq, event_uid" if has_v2 else "raw"
+        order = "display_seq" if has_v2 else "CAST(id AS INTEGER)"
+        sql = f"SELECT {selected} FROM events WHERE {where} ORDER BY {order} ASC LIMIT 1000"
         try:
             for row in conn.execute(sql, params).fetchall():
                 ev = json.loads(row["raw"])
-                eid = ev.get("id", "")
+                if has_v2:
+                    ev.setdefault("event_uid", row["event_uid"])
+                    ev["_display_seq"] = row["display_seq"]
+                eid = _event_key(ev)
                 if eid not in seen:
                     seen.add(eid)
                     results.append(ev)
@@ -244,24 +317,24 @@ def _query_sqlite(since_id: str | None, party_uid: str, agent_root_uid: str | No
     _run(f"type = 'tropo.broadcast.crew' {since_clause}", since_param)
 
     conn.close()
-    results.sort(key=lambda x: int(x.get("id", "0")))
+    results.sort(key=_display_seq)
     return results
 
 
 def _query_jsonl(since_id: str | None, party_uid: str, agent_root_uid: str | None,
-                 include_telemetry: bool) -> list[dict]:
+                 include_telemetry: bool,
+                 event_union: list[dict] | None = None) -> list[dict]:
     results = []
     seen: set[str] = set()
-    for line in JSONL_PATH.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        try:
-            ev = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        eid = ev.get("id", "0")
-        if since_id and int(eid) <= int(since_id):
+    if event_union is None:
+        event_union = event_identity.load_event_union(VAULT_ROOT)
+    ordered = event_identity.derive_display_order(
+        event_union
+    )
+    for display_seq, ev in ordered:
+        ev["_display_seq"] = display_seq
+        eid = _event_key(ev)
+        if since_id and display_seq <= int(since_id):
             continue
         etype = ev.get("type", "")
         if not include_telemetry and etype not in MESSAGING_TYPES:
@@ -272,7 +345,7 @@ def _query_jsonl(since_id: str | None, party_uid: str, agent_root_uid: str | Non
         if (is_directed or is_broadcast) and eid not in seen:
             seen.add(eid)
             results.append(ev)
-    results.sort(key=lambda x: int(x.get("id", "0")))
+    results.sort(key=_display_seq)
     return results
 
 
@@ -280,22 +353,70 @@ def _query_jsonl(since_id: str | None, party_uid: str, agent_root_uid: str | Non
 # Unanswered reply_required — UNBOUNDED scan, BOTH axes
 # ---------------------------------------------------------------------------
 
-def scan_unanswered_rr(party_uid: str, agent_root_uid: str | None) -> list[dict]:
+def scan_unanswered_rr(
+    party_uid: str,
+    agent_root_uid: str | None,
+    event_union: list[dict] | None = None,
+) -> list[dict]:
+    if event_union is None:
+        event_union = event_identity.load_event_union(VAULT_ROOT)
+    ordered = event_identity.derive_display_order(
+        event_union
+    )
     all_events = []
-    for line in JSONL_PATH.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        try:
-            all_events.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
+    for display_seq, event in ordered:
+        event["_display_seq"] = display_seq
+        all_events.append(event)
 
     answered_ids: set[str] = set()
+    # v1.7 (Case 5): a discarded reply is now RECORDED rather than dropped in
+    # silence. Strictness is unchanged — only final:true closes a thread — but
+    # a correlated reply that failed the terminal test is kept here so the
+    # report can say what exists and what is missing from it.
+    discarded: dict[str, list[tuple[dict, str]]] = {}
     for ev in all_events:
         if ev.get("type") in ANSWERED_TYPES:
             data = ev.get("data", {})
-            corr = ev.get("correlationid") or data.get("reply_to_id")
+            if not isinstance(data, dict):
+                continue
+            # v1.7: causationid is accepted as a correlation source. The emit
+            # tool takes --correlationid and --causationid on the same command
+            # line; reading only the first made a well-formed reply invisible
+            # with no signal to either side.
+            corr = (
+                ev.get("correlationid")
+                or ev.get("causationid")
+                or data.get("reply_to_id")
+            )
+            if (
+                ev.get("type") == "tropo.message.replied"
+                and data.get("final") is True
+                and not event_identity.terminal_reply_has_renderable_content(
+                    VAULT_ROOT,
+                    data,
+                )
+            ):
+                if corr:
+                    discarded.setdefault(str(corr), []).append(
+                        (ev, "no renderable body/body_file")
+                    )
+                continue
+            if ev.get("event_uid") and data.get("final") is not True:
+                # The frozen numeric epoch retains its historical rule: any
+                # correlated answer was terminal, even when final:false was
+                # present. Every distributed-stream reply requires explicit
+                # final:true.
+                if corr:
+                    reason = (
+                        "final:false" if data.get("final") is False
+                        else "no final: flag"
+                    )
+                    if not ev.get("correlationid") and (
+                        ev.get("causationid") or data.get("reply_to_id")
+                    ):
+                        reason += ", correlated via causationid"
+                    discarded.setdefault(str(corr), []).append((ev, reason))
+                continue
             if corr:
                 answered_ids.add(str(corr))
 
@@ -307,8 +428,15 @@ def scan_unanswered_rr(party_uid: str, agent_root_uid: str | None) -> list[dict]
         subj = ev.get("subject", "")
         if subj != party_uid and not (agent_root_uid and subj == agent_root_uid):
             continue
-        eid = str(ev.get("id", ""))
-        if eid not in answered_ids:
+        identities = {_event_key(ev), str(ev.get("id", ""))}
+        if identities.isdisjoint(answered_ids):
+            # Attach any correlated-but-non-terminal replies so the caller can
+            # report "seen, not terminal" instead of a bare, misleading zero.
+            near = []
+            for identity in identities:
+                near.extend(discarded.get(identity, []))
+            if near:
+                ev["_nonterminal_replies"] = near
             unanswered.append(ev)
 
     return unanswered
@@ -319,7 +447,9 @@ def scan_unanswered_rr(party_uid: str, agent_root_uid: str | None) -> list[dict]
 # ---------------------------------------------------------------------------
 
 def _fmt(ev: dict, prefix: str = "") -> str:
-    eid = ev.get("id", "?")
+    eid = ev.get("event_uid") or ev.get("id", "?")
+    display = _display_seq(ev)
+    display_label = f"#{display} " if display else ""
     etype = ev.get("type", "?")
     ts = ev.get("time", "")[:16]
     data = ev.get("data", {})
@@ -327,7 +457,7 @@ def _fmt(ev: dict, prefix: str = "") -> str:
     subj = ev.get("subject", "")
     rr = " [reply_required]" if data.get("reply_required") else ""
     content = data.get("headline") or data.get("subject_text") or str(data.get("body", ""))[:120]
-    return (f"{prefix}[{eid}] {ts} {etype} from={from_f} subj={subj}{rr}\n"
+    return (f"{prefix}{display_label}[{eid}] {ts} {etype} from={from_f} subj={subj}{rr}\n"
             f"{prefix}  {content[:120]}")
 
 
@@ -403,6 +533,20 @@ def _print_result(agent_name: str, party_uid: str, agent_root_uid: str | None,
         print(f"UNANSWERED reply_required ({len(unanswered)}) — unbounded scan, both axes:")
         for ev in unanswered:
             print(_fmt(ev, prefix="  ⚠ "))
+            # v1.7 (Case 5): never report a bare zero when a correlated reply
+            # exists. Say what was seen AND what is missing from it, on one
+            # line, so the asker knows to go read it and the sender learns why
+            # their reply did not count.
+            for reply, reason in ev.get("_nonterminal_replies", []):
+                rid = reply.get("event_uid") or reply.get("id", "?")
+                sender = (reply.get("data", {}) or {}).get("from") \
+                    or reply.get("source_uid", "?")
+                when = reply.get("time", "")[:16]
+                print(
+                    f"      ↳ 1 correlated reply seen, NOT terminal "
+                    f"({reason}) — [{rid}] {when} from={sender}. "
+                    f"The thread stays open, but it was answered: read it."
+                )
         print()
         if triage:
             print("--- TRIAGE ---")
@@ -419,21 +563,41 @@ def run_once(agent_name: str, party_uid: str, agent_root_uid: str | None,
              triage: bool = False, triage_model: str | None = None,
              filter_type: str | None = None, filter_id: str | None = None) -> int:
     receipt_set = load_receipt_set(party_uid)
-    since_id = load_cursor(party_uid)
-    candidate_events = _query_new_events(since_id, party_uid, agent_root_uid, include_telemetry)
-    new_events = [ev for ev in candidate_events if str(ev.get("id", "")) not in receipt_set]
-    append_receipts(party_uid, new_events, receipt_set)
+    event_union = _canonical_event_union_with_projection_warning()
+    # Correctness is receipt-set difference, never cursor position. A newly
+    # merged stream event may derive a display_seq behind the reader's prior
+    # cursor; querying only "after cursor" would hide it forever (Talos T32
+    # AC8 break). Cursor remains an output/performance hint for future indexed
+    # optimization, not a filter on the authoritative scan.
+    candidate_events = _query_new_events(
+        None,
+        party_uid,
+        agent_root_uid,
+        include_telemetry,
+        event_union=event_union,
+    )
+    new_events = [ev for ev in candidate_events if _event_key(ev) not in receipt_set]
 
     if candidate_events:
-        newest_id = max(ev.get("id", "0") for ev in candidate_events)
-        save_cursor(party_uid, newest_id)
+        save_cursor(party_uid, str(max(_display_seq(ev) for ev in candidate_events)))
 
     if filter_type:
         new_events = [ev for ev in new_events if ev.get("type") == filter_type]
     if filter_id:
-        new_events = [ev for ev in new_events if ev.get("id") == filter_id]
+        new_events = [
+            ev for ev in new_events
+            if ev.get("id") == filter_id or _event_key(ev) == filter_id
+        ]
+    # Targeted drains must not acknowledge unrelated unseen messages. Filters
+    # narrow both output and durable receipt writes; the cursor is only a hint,
+    # so unreceipted messages remain discoverable on the next full scan.
+    append_receipts(party_uid, new_events, receipt_set)
 
-    unanswered = scan_unanswered_rr(party_uid, agent_root_uid)
+    unanswered = scan_unanswered_rr(
+        party_uid,
+        agent_root_uid,
+        event_union=event_union,
+    )
 
     if json_output:
         print(json.dumps({
@@ -456,15 +620,24 @@ def run_until_answered(agent_name: str, party_uid: str, agent_root_uid: str | No
     attempt = 0
     while True:
         receipt_set = load_receipt_set(party_uid)
-        since_id = load_cursor(party_uid)
-        candidate_events = _query_new_events(since_id, party_uid, agent_root_uid, include_telemetry)
-        new_events = [ev for ev in candidate_events if str(ev.get("id", "")) not in receipt_set]
+        event_union = _canonical_event_union_with_projection_warning()
+        candidate_events = _query_new_events(
+            None,
+            party_uid,
+            agent_root_uid,
+            include_telemetry,
+            event_union=event_union,
+        )
+        new_events = [ev for ev in candidate_events if _event_key(ev) not in receipt_set]
         append_receipts(party_uid, new_events, receipt_set)
         if candidate_events:
-            newest_id = max(ev.get("id", "0") for ev in candidate_events)
-            save_cursor(party_uid, newest_id)
+            save_cursor(party_uid, str(max(_display_seq(ev) for ev in candidate_events)))
 
-        unanswered = scan_unanswered_rr(party_uid, agent_root_uid)
+        unanswered = scan_unanswered_rr(
+            party_uid,
+            agent_root_uid,
+            event_union=event_union,
+        )
 
         if not unanswered:
             if json_output:

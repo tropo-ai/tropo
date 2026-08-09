@@ -23,6 +23,9 @@ input:
     json:
       type: boolean
       description: When set, emits machine-readable JSON output.
+    extraction-scope:
+      type: string
+      description: Optional project scope filter; release builds use ship while standalone audits default to all.
 output:
   type: object
   properties:
@@ -61,7 +64,7 @@ capsule_version: '2.5'
 schema_version: 2
 extraction_scope: ship
 member_of:
-- c7e4f9a2
+- 8dd772a0
 tags:
 - tool
 - cli
@@ -182,16 +185,48 @@ def _minimal_parse(text: str) -> dict[str, Any]:
     return out
 
 
-def load_rendered_l0_set(vault_root: Path, state_filter: Optional[str] = 'active') -> Optional[list[dict[str, Any]]]:
+def load_extraction_scopes(vault_root: Path) -> dict[str, str]:
+    """Load explicit extraction scopes from the composed index."""
+    index_path = vault_root / 'vault' / '00-index.jsonl'
+    scopes: dict[str, str] = {}
+    if not index_path.is_file():
+        return scopes
+    with index_path.open(encoding='utf-8') as handle:
+        for line in handle:
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            uid = row.get('uid')
+            scope = row.get('extraction_scope')
+            if uid and scope:
+                scopes[str(uid)] = str(scope)
+    return scopes
+
+
+def _uid_in_extraction_scope(uid: str, scopes: dict[str, str],
+                             scope_filter: Optional[str]) -> bool:
+    """Unknown scope stays visible (fail-safe); explicit non-matches are excluded."""
+    if scope_filter is None:
+        return True
+    return scopes.get(uid) in (None, scope_filter)
+
+
+def load_rendered_l0_set(vault_root: Path, state_filter: Optional[str] = 'active',
+                         extraction_scope_filter: Optional[str] = None
+                         ) -> Optional[list[dict[str, Any]]]:
     """Load the rendered L0 set from 00-project-tree.jsonl (parent: null entries).
 
     state_filter: 'active' (default — daily working view), 'archived', or None (all states).
     The canonical L0 declaration is for the active working view; archived L0s with hub-only
     member_of: are tracked as a separate carry-forward (Vela-lane reparenting work).
+    extraction_scope_filter: release builds pass 'ship' so source-Studio-only projects do not
+    block a package they cannot enter. Standalone canonical-L0 audits leave this unset.
     """
     tree_path = vault_root / 'vault' / '00-project-tree.jsonl'
     if not tree_path.exists():
         return None
+    scopes = load_extraction_scopes(vault_root)
     roots = []
     seen_uids: set[str] = set()
     with open(tree_path) as f:
@@ -201,6 +236,10 @@ def load_rendered_l0_set(vault_root: Path, state_filter: Optional[str] = 'active
                 continue
             n = json.loads(line)
             if n.get('parent') is None and n['uid'] not in seen_uids:
+                if not _uid_in_extraction_scope(
+                    str(n['uid']), scopes, extraction_scope_filter
+                ):
+                    continue
                 # v1.46.0.1 substrate fix (argus-a76 2026-05-20): treat state:standing as part of
                 # the "active" view. Standing-state entries (evergreen / never-complete containers
                 # like the agents L0 anchor 5e9c1a82) ARE active for navigation purposes; only
@@ -323,6 +362,8 @@ def main() -> int:
     parser.add_argument('--vault-path', help="Vault root path. Default: walk up from script location.")
     parser.add_argument('--state', default='active', choices=['active', 'archived', 'all'],
                         help="Which L0 state set to validate against canonical (default: active — the daily working view).")
+    parser.add_argument('--extraction-scope', default='all', choices=['all', 'ship'],
+                        help="Project extraction scope to validate (default: all; release builds use ship).")
     parser.add_argument('--json', action='store_true', help="Emit findings as JSON (no human-readable report).")
     args = parser.parse_args()
 
@@ -346,8 +387,21 @@ def main() -> int:
 
     canonical = registry.get('canonical_l0_projects', [])
     non_l0_risk = registry.get('non_l0_with_hub_only_risk', [])
+    extraction_scope_filter = None if args.extraction_scope == 'all' else args.extraction_scope
+    scopes = load_extraction_scopes(vault_root)
+    if extraction_scope_filter:
+        canonical = [
+            entry for entry in canonical
+            if _uid_in_extraction_scope(str(entry['uid']), scopes, extraction_scope_filter)
+        ]
+        non_l0_risk = [
+            entry for entry in non_l0_risk
+            if _uid_in_extraction_scope(str(entry['uid']), scopes, extraction_scope_filter)
+        ]
     state_filter = None if args.state == 'all' else args.state
-    rendered = load_rendered_l0_set(vault_root, state_filter)
+    rendered = load_rendered_l0_set(
+        vault_root, state_filter, extraction_scope_filter
+    )
     if rendered is None:
         msg = "vault/00-project-tree.jsonl not found. Run rebuild-vault.py first."
         if args.json:

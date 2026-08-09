@@ -24,14 +24,14 @@ Agents may operate autonomously within their declared scope — the `write_scope
 - **Operational decisions** are made by the responsible agent within their declared scope.
 - **Scope changes** require the vault owner's approval — either inline ("yes, expand into X") or by amending the agent's charter (the per-agent contract file at `agents/<name>/<name>-charter.md`).
 - **New agents** require the vault owner's approval. Chartering is a governed act; agents do not commission other agents unilaterally.
-- **Significant decisions** are recorded as governed artifacts in the **ledger** (the durable record at `vault/`, where every governed artifact lives as a UID-addressed entry at `vault/files/<uid>.md`). Significant decisions become entries of `type: decision` (the ADR pattern). The decision is the artifact; the conversation about it lives in [channels/](channels/) — see [channels/README.md](channels/README.md) for navigation and [channels/CAPSULE.md](channels/CAPSULE.md) for the canonical channel rules.
+- **Significant decisions** are recorded as governed artifacts in the **Vault** (the protected governed-content store at `vault/`, where every governed artifact lives as a UID-addressed entry at `vault/files/<uid>.md`). Significant decisions become entries of `type: decision` (the ADR pattern). The decision is the artifact; the discussion that produced it lives in the **event log** (emit with `tropo-emit-event.py`, read with `tropo-query-events.py`). *(Crew channels were retired at v1.61 per events.capsule Rule 13; the event log is the canonical coordination surface.)*
 - **Architectural decisions** that affect how the vault itself works (governance rules, capsule definitions, kernel rules) require the vault owner's explicit acceptance — they are not delegable to agents.
 
 ## 4. Communication
 
 All coordination happens through files. There is no hidden state — if it matters, it's in a file.
 
-- **Agent-to-agent coordination** happens in [channels/](channels/) — see [channels/CAPSULE.md](channels/CAPSULE.md) for the canonical channel governance and [channels/README.md](channels/README.md) for the navigator.
+- **Agent-to-agent coordination** happens through the **event log** — agents emit at their party UID (`tropo.message.sent` / `tropo.broadcast.crew`) and drain with `tropo-check-events.py --as <name>`. *(Crew channels were retired at v1.61 per events.capsule Rule 13; `channels/` now holds user-facing projections only, not coordination.)*
 - **System events** (boot, retire, milestones, alerts) are logged to the event log as `tropo.broadcast.crew` events (read via `query-events`); `channels/ops.md` and `channels/alerts.md` retired per Rule 13.
 - **Cross-generational continuity** — agents in Tropo are session-bound: each session ends, but the agent's identity carries forward via a generation-numbered lineage. When a session ends, the outgoing agent writes a transfer document for its successor (the next generation in the lineage). The successor reads the transfer at boot and continues the work. This is what lets institutional knowledge survive across AI sessions instead of evaporating with each one.
 - **The crew brief** — a human-readable executive summary of who's on the crew and what's in flight — is something a vault may choose to maintain at vault root (typically as `00-crew-brief.md`). This template doesn't ship one; if your vault has a chief of staff or coordinator agent, ask them to start one when the crew is large enough to warrant it.
@@ -50,7 +50,7 @@ The vault owner's standing constraints on every agent:
 
 "Locked" does not mean "built." A spec or a decision is verified when a stranger reads the governance and produces the correct behavior — the cold-boot test. The vault owner sets the verification standard for the team's work; the standing default is: load-bearing artifacts (capsules, architectural specs, OS-level playbooks) are verified before they're treated as binding. Lighter artifacts may use lighter verification.
 
-If the team adopts a specific verification regime (e.g., three-instrument verification — author + independent reviewer + stranger cold-boot), record it as a ledger decision and reference it from this Operating Agreement.
+If the team adopts a specific verification regime (e.g., three-instrument verification — author + independent reviewer + stranger cold-boot), record it as a Vault decision and reference it from this Operating Agreement.
 
 ## 7. Amendments
 
@@ -64,4 +64,4 @@ History is the record. Don't edit the OA in place to "make it match" current pra
 
 ---
 
-*Operating Agreement | Tropo-OS template | This file ships at vault root in every new Tropo vault. Customize freely; replace, rename, restructure the **content** as your team requires. The substrate this OA composes with — channels, ledger, capsules, the three-tier governance hierarchy — is the load-bearing framework; the *content* of this contract is yours, but the *primitives this contract references* are what makes governance work. Don't delete §5 Boundaries' CAPSULE-reading invariant without understanding what you're disabling.*
+*Operating Agreement | Tropo-OS template | This file ships at vault root in every new Tropo vault. Customize freely; replace, rename, restructure the **content** as your team requires. The substrate this OA composes with — the event log, the Vault, capsules, the three-tier governance hierarchy — is the load-bearing framework; the *content* of this contract is yours, but the *primitives this contract references* are what makes governance work. Don't delete §5 Boundaries' CAPSULE-reading invariant without understanding what you're disabling.*

@@ -51,23 +51,7 @@ capsule_version: '2.5'
 
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Governance](8dd772a0.md) → **Deletion Discipline — Substrate Preservation Doctrine**
-
-**🔗 This file** — UID `0aefe71d` · type `document` · state `active` · status `published`
-
-**↔ Siblings (1):**
-  - **under [2f34d5f8](2f34d5f8.md):** [Tropo-OS v1.40.0 — Deletion Discipline Doctrine...](8c9962a7.md)
-
-**📥 Cited by (3):**
-- [Tropo-OS v1.40.0 — Deletion Discipline Doctrine (Multi-Tier Co...](8c9962a7.md) — `8c9962a7` (type `release`, via `foundation`, `capabilities_touched`)
-- [Tropo Test Harness](952f3aa3.md) — `952f3aa3` (type `project`, via `aligned_with`)
-- [Release Cold-Boot Walk](6f3d2a18.md) — `6f3d2a18` (type `playbook`, via `aligned_with`)
 <!-- nav-block:end -->
-
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Governed by | [Tropo Governance (8dd772a0)](8dd772a0.md) |
 
 *Authoritative substrate declaration. Single source of truth. Tier-specific amendments at SELF-HEALING.md + operating-principles.md + vault/AGENTS.md + vault-level memory reference this entry; they do not duplicate content.*
 

@@ -62,6 +62,9 @@ GATE_PRODUCE = "produce-release-folder"
 KEY_FILENAME = "release-authorization.json"
 CHANGELOG_PATH = VAULT_ROOT / "CHANGELOG.md"
 ATTESTED_BUILD_SOURCE_UID = "2ffdd9d6"  # this module's governing dev-spec — stable identity for audit emits
+PRODUCE_STEP_UID = "8654900a"  # the mint-release-auth step (9e7003b1.py ~L1837) whose own
+# completion legitimately lands AFTER an already-minted key, immediately followed by the
+# runtime's own automatic post-completion remint (~L1840) — see _post_mint_event_allowed.
 
 # Events that constitute the "work record" the fingerprint is computed over.
 # NOTE: human_signoff is DELIBERATELY excluded — the fingerprint attests the PIPELINE ran (and
@@ -357,6 +360,82 @@ def _has_human_signoff(run_folder: Path) -> bool:
     return False
 
 
+
+# Release Coupling (fbe50871, Mike-locked 2026-07-13): the FULL vocabulary of run.jsonl
+# event types the real engine (vault/tools/9e7003b1.py, via its make_event() helper) can
+# ever produce, less "run_created" and "step_declared" -- both are bootstrap/declaration-
+# time-only events with no legitimate reason to appear AFTER a key has already been
+# minted at the produce gate; a post-mint occurrence of either is exactly the kind of
+# thing this allowlist exists to still refuse. Deliberately a code constant, not
+# configurable (same doctrine as PUBLIC_EXTRACTION_SCOPES) -- widening this list is an
+# architectural change, not a runtime flag.
+_ENGINE_EVENT_TYPES = frozenset({
+    "pause_started", "pause_resumed", "human_signoff",
+    "step_started", "step_completed", "step_failed", "step_skipped",
+    "skip_request", "skip_authorization",
+    "verification_receipt", "verifier_findings",
+    "step_criteria_amended", "status_changed",
+    "test_executed", "test_aggregate",
+    "workflow_complete", "activation_superseded",
+})
+_STEP_UID_RE = re.compile(r"^[0-9a-f]{8}$")
+
+
+def _post_mint_event_allowed(ev: dict) -> bool:
+    """Allowlist-by-shape for events appended AFTER the key's recorded mint point (Argus
+    A129 ruling, event 00006127 — hardening-track p1; widened per the BREAKS finding on
+    the Release Coupling gauntlet, fbe50871, 2026-07-13 — the ORIGINAL two-shape allowlist
+    refused the engine's own real ceremony: external-test/bc6b17ec, cold-walk/c6b61fb9,
+    git-commit/3e0bb81e, and the pauses/receipts/close around them all landed AFTER the
+    produce-gate mint in every real run and every one was a disallowed shape. No full
+    ceremony had run since the original allowlist landed (2026-07-11/12) — the S1/S2
+    closes and the v1.85.0 cut would have hit this FIRST. Empirically reproduced against a
+    scratch copy of dev-pipeline-bd21c40c (baseline AUTHORIZED -> append one engine-
+    legitimate step_started@bc6b17ec -> REFUSED) and against the real ceremony evidence at
+    vault/pipeline-runs/dev-pipeline-896e6c9b-2026-07-02 (events 73-91).
+
+    Bug the ORIGINAL allowlist closed: compute_fingerprint's event_limit truncation makes
+    the recomputed fingerprint blind to EVERYTHING appended after minted_at_event, not just
+    the one legitimate append it was built to tolerate (the produce-step's own completion,
+    which triggers pipeline-runtime.py's automatic post-completion remint at ~L1837-1844).
+    A forged/injected event landing in that same window was previously invisible to
+    require_release_authorization. This widening keeps that window explicit and closed by
+    default while finally recognizing the shapes a genuine ceremony actually produces:
+
+    Shape 1 — the produce-step's own completion (unchanged from the original fix; the
+    event that triggers the runtime's own immediate remint).
+    Shape 2 — a human_signoff event (unchanged; the module's own design already treats
+    this as legitimately arriving after mint, checked separately and more strictly by
+    _has_human_signoff — independent registered principal, not self-signed; this allowlist
+    only recognizes the SHAPE, not the identity).
+    Shape 3 (NEW) — any OTHER engine-vocabulary event type (_ENGINE_EVENT_TYPES above)
+    whose `step` reference, if any, resolves to a real vault entry of type `pipeline` —
+    i.e. a genuine run-declared downstream step, not an attacker-fabricated UID. Events
+    carrying no step reference at all (pause_started with no step, workflow_complete,
+    activation_superseded, status_changed) are run-level by nature and pass on event-type
+    alone. This is a proportionate widening, not a cryptographic one — consistent with
+    this module's own disclosed threat-model ceiling (module docstring): it defeats
+    fabricating a step reference to a non-existent UID, not a fully malicious insider with
+    arbitrary file-write access walking the run's OWN real pipeline tree. Anything whose
+    event type isn't in the engine's real vocabulary at all, or whose step reference
+    doesn't resolve to a real pipeline entry, still refuses.
+    """
+    et = ev.get("event")
+    if et == "step_completed" and _step(ev) == PRODUCE_STEP_UID:
+        return (ev.get("data") or {}).get("natural_verdict") == "pass"
+    if et == "human_signoff":
+        return True
+    if et not in _ENGINE_EVENT_TYPES:
+        return False
+    step_uid = _step(ev)
+    if not step_uid:
+        return True
+    if not _STEP_UID_RE.match(str(step_uid)):
+        return False
+    step_fm = _load_fm(VAULT_FILES / f"{step_uid}.md")
+    return bool(step_fm and step_fm.get("type") == "pipeline")
+
+
 def require_release_authorization(activation_uid: str, gate: str = GATE_PRODUCE,
                                   *, require_human_signoff: bool = False,
                                   version: str = None) -> dict:
@@ -408,6 +487,20 @@ def require_release_authorization(activation_uid: str, gate: str = GATE_PRODUCE,
             raise ReleaseAuthorizationError(
                 "key fingerprint does not match the run's work record "
                 "(forged, stale, tampered key, or a key minted for a different run's nonce)")
+
+        # Allowlist-by-shape (Argus A129 ruling, event 00006127; hardening-track p1): the
+        # fingerprint check above only proves the PREFIX (events[:mint_event_count]) is
+        # untampered — it says nothing about what was appended after. Every post-mint event
+        # must match a known-legitimate shape or this refuses; closes the blind window where
+        # ANY post-mint append (not just the one legitimate one) was previously invisible.
+        if mint_event_count is not None:
+            for _ev in _read_run_events(run_folder)[mint_event_count:]:
+                if not _post_mint_event_allowed(_ev):
+                    raise ReleaseAuthorizationError(
+                        f"post-mint event does not match an authorized shape "
+                        f"(event={_ev.get('event')!r}, step={_step(_ev)!r}) — "
+                        f"possible tampering after the key was minted; refused"
+                    )
         if require_human_signoff and not _has_human_signoff(run_folder):
             raise ReleaseAuthorizationError(
                 "public ship requires a human_signoff event in the run — none found "

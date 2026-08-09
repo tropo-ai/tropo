@@ -5,13 +5,16 @@ ship_scope_lock_break: 'extraction_scope: ship ADDED 2026-07-02 per Mike verbati
 name: document
 type: capsule-definition
 extends: core
-version: 3.1
-supersedes_version: '3.0'
+version: 3.2
+template_enforced_from: '2026-07-13'
+template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
+supersedes_version: '3.1'
+v3_2_amendment_note: 'v3.1 → v3.2 amendment 2026-07-13 by talos-t29 per Mike-locked Governed Autonomy S2 dev-spec bba40cd7 (activation 0d9f89bc; committed substrate "Template legs for the top-10 types"). Additive + non-breaking: NEW §Template section (the mint-stamped scaffold) per the Template-Leg Contract v1.0 (b933eafb). No schema, enum, or state-machine change.'
 tier: os
 author: tropo
 created: 2026-04-10
-modified: 2026-06-09
-modified_by: argus-a105
+modified: 2026-07-15
+modified_by: argus-a132
 status: locked
 enforced_enums:
   status:
@@ -24,9 +27,11 @@ enforced_enums:
     aliases:
       done: published
 m2_rollup_gapfill_lock_break: 'Mike-approved lock-break 2026-07-01 (verbatim "approved", Argus A122 session): meta_status_rollup gap-fill — adds sent->done. Context: the M2-at-scale regression (rollup loaders keyed tropo-<type> after the One-Home capsule renames; fixed same session) exposed 90 real residuals; 88 were status:archived absent from task/note/design-brief rollups (the document capsule already carried archived — established precedent). Comprehensive-rollup doctrine (A116): enforced_enums narrows, meta_status_rollup stays comprehensive over observed values. Data-only list addition; no schema or enum change.'
+m2_rollup_2026_07_15_note: 'Data-only comprehensive-rollup hygiene by Argus A132 before v1.85 build: adds observed legacy active→in-progress and final→done. Does not widen the canonical enum; enforced_enums still narrows new writes. Clears 8 unexplained lifecycle-N/A rows under the Mike-approved comprehensive-rollup doctrine above.'
 meta_status_rollup:
   in-progress:
     - draft
+    - active
   done:
     - published
     - archived
@@ -36,6 +41,7 @@ meta_status_rollup:
     - done
     - locked
     - reviewed
+    - final
 schema_version: 2
 governed_by: 222873b9
 aligned_with: 8b3f1d92
@@ -178,6 +184,35 @@ Extends `core`. Inherits all core rules. May be extended by domain-specific subt
 
 ---
 
+## §Template (v3.2 — the mint-stamped scaffold; contract at [b933eafb](../../vault/files/b933eafb.md))
+
+*Stamped verbatim by `mint file --type document` (S2, bba40cd7); `<<MINT:*>>` tokens are the only substitution. `status:` starts at its legal birth value `draft`; `published_by:`/`published_at:` are NOT scaffolded (they become required only once `status: published`, per Validation Check 4 — a fresh mint hasn't published anything yet). No required body sections — the body below is a starter heading, not a contract.*
+
+~~~markdown
+---
+uid: <<MINT:uid>>
+type: document
+description: "<!-- REQUIRED: one-line summary, ≤120 chars -->"
+status: draft
+state: active
+created: '<<MINT:date>>'
+created_by: <<MINT:author>>
+modified: '<<MINT:date>>'
+modified_by: <<MINT:author>>
+schema_version: 2
+capsule_version: '<<MINT:capsule_version>>'
+governed_by: 8dd772a0
+---
+
+# <!-- REQUIRED: title (mirror the description's subject) -->
+
+<!-- REQUIRED: the document's actual content — this type has no required section structure; write what the content needs -->
+~~~
+
+**Leg rules:** `published_by:`/`published_at:` are required only once `status:` flips to `published` (Validation Check 4) — never scaffold them at birth. `pattern_family` is a capsule-definition self-declaration field (used by capsules citing their own pattern exemplar), not a field for ordinary document instances — never scaffold it here.
+
+---
+
 ## Changelog
 
 | Version | Date | Change | Author |
@@ -186,8 +221,9 @@ Extends `core`. Inherits all core rules. May be extended by domain-specific subt
 | 2.0 | 2026-04-16 | (v2.0 implicit in prior frontmatter; reconciled at v3.0 amendment.) | tropo |
 | 3.0 | 2026-04-24 | **v3 amendment — document becomes standalone exemplar for document-pattern capsules per Decision 3.** `stage:` field renamed → `status:` per Decision 4. v3.0 incorrectly preserved v2.0 values (`design`, `done`) — see v3.1. Added `pattern_family: document` self-declaration in frontmatter. Added `pattern_family:` optional frontmatter row. Content publications terminate here per Decision 11. UID preserved at d0c00001. | argus-a33 |
 | 3.1 | 2026-04-25 | **Gate B P0 #1 remediation (dual-instrument convergence: sa.arch-specs 016 + sa.skeptic 014).** Status enum corrected to `draft → published → archived` per [v3 spec (8b3f1d92)](../../vault/files/8b3f1d92.md) §4 + Decision 11. v3.0 had retained v2.0 values `design / done` against spec mandate; the §Intent paragraph (line 26) had always said `draft → published → archived` while the State Machine + Validation Check 2 + Studio Procedures said `design / done` — the file contradicted itself. Now reconciled. Affects 203-entry migration scope: v2→v3 migration script (Phase 7 of [9d3f7a61]) remaps `done → published` + `design → draft` for documents (not just key-rename as v3.0 had specified). State Machine, Status table, Valid transitions, Validation Check 2 + 3, Studio Procedures + Rules + Pitfalls all updated. UID preserved at d0c00001. | argus-a34 |
+| 3.2 | 2026-07-13 | **Governed Autonomy S2** ([bba40cd7](../../vault/files/bba40cd7.md)) — NEW §Template leg per the Template-Leg Contract v1.0 ([b933eafb](../../vault/files/b933eafb.md)). `mint file --type document` now stamps a valid-by-construction scaffold at `status: draft`. Additive; no schema/enum/state-machine change. | talos-t29 |
 
 ---
 
-*document capsule definition | LOCKED v3.1 | amended 2026-04-25 by argus-a34 (Gate B P0 #1 — status enum corrected to draft→published→archived per spec §4 + D11); v3.0 amended 2026-04-24 by argus-a33; v1/v2.0 lock April 10, 2026 by Tropo preserved in git history | UID preserved at d0c00001*
+*document capsule definition | v3.2 amended 2026-07-13 by talos-t29 (Governed Autonomy S2 — §Template leg); LOCKED v3.1 amended 2026-04-25 by argus-a34 (Gate B P0 #1 — status enum corrected to draft→published→archived per spec §4 + D11); v3.0 amended 2026-04-24 by argus-a33; v1/v2.0 lock April 10, 2026 by Tropo preserved in git history | UID preserved at d0c00001*
 *"Living artifacts. Editable. The pattern exemplar for document-like capsules across Tropo Work v3."*

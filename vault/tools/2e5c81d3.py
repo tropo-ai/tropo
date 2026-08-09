@@ -18,7 +18,7 @@ created: 2026-06-16
 created_by: talos-t20
 governed_by: d5e1b4a3
 member_of:
-  - c7e4f9a2
+  - 8dd772a0
 realizes_dev_spec: 9da979b2
 schema_version: 2
 belt: true

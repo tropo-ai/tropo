@@ -34,21 +34,7 @@ capsule_version: '2.5'
 
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Governance](8dd772a0.md) → **Argo-OS Studio Boot Extension — Tier 2 (Canonical Substrate)**
-
-**🔗 This file** — UID `cf8c3be9` · type `os-config` · state `active` · status `published`
-
-**↔ Siblings (8):**
-  - **under [32610cb0](32610cb0.md):** [Argus — Generation Log](37d22f44.md) · [D.pm \u2014 Generation Log](4a929a70.md) · [Metis — Generation Log](8ba27c18.md) · [Orpheus — Generation Log (ARCHIVED — gen-log su...](7f3431d5.md) · [Talos — Generation Log](43dc39bc.md) · [Tropo-OS Boot Configuration — Tier 1 (Canonical...](8f6ea459.md) · + 2 more
-
-**📥 Cited by (1):**
-- [Tropo-OS v1.20.0 — Convergence Phase 2](4920ce3a.md) — `4920ce3a` (type `release`, via `capabilities_touched`)
 <!-- nav-block:end -->
-
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Governed by | [Tropo Governance (8dd772a0)](8dd772a0.md) |
 
 *Layer 2 of the three-tier boot config (ADR-032). Applies to every agent on this vault.*
 *Read at Group 0, Step 0.2 of [.tropo/playbooks/agent-activation.playbook.md](../.tropo/playbooks/agent-activation.playbook.md).*
@@ -94,7 +80,7 @@ Catalogs are agent-canonical scannable surfaces (mirror Claude Code's tool-catal
 - [.tropo/orientation.md](../.tropo/orientation.md) — "Find Things" lookup table + pointer to the three catalogs. Pre-v1.15 narrative inventory of actions/skills/playbooks/sa.\* moved to the catalogs; orientation.md now scoped to harness-map navigation only. Executive agents should read; session-specific agents may skip.
 
 **Mission brief — required:**
-- [context/mission-brief.md](../context/mission-brief.md) — the compressed mission for all crew. Read at every boot.
+- [.tropo-studio/mission-brief.md](mission-brief.md) — the compressed mission for all crew. Read at every boot.
 
 ---
 
@@ -134,7 +120,7 @@ These rules preserve the safety-net value of the prior channel-read protocol wit
 
 **Vault navigation — load at every boot, with sa.\* conditional skip:**
 - [vault/00-project-tree.jsonl](../vault/00-project-tree.jsonl) — project hierarchy backbone (Layer 1). Know where everything lives before doing any work.
-- **Conditional-skip rule:** If a session agent that loads the full project hierarchy is being commissioned at boot — `sa.metis-nav`, `sa.project-manager`, or `sa.project-tree` — skip the direct project-tree read in parent context. Route hierarchy questions through the sa.* agent. Parent keeps only strategic-level awareness; full hierarchy lives with the specialist. This restores the original sa.* design intent per [vault/files/e863a1e0.md (7d3f9a2c)](../vault/files/e863a1e0.md): *"pay the boot cost once; query freely."*
+- **Conditional-skip rule:** If a session agent that loads the full project hierarchy is being commissioned at boot — `sa.metis-nav`, `sa.project-manager`, or `sa.project-tree` — skip the direct project-tree read in parent context. Route hierarchy questions through the sa.* agent. Parent keeps only strategic-level awareness; full hierarchy lives with the specialist. This restores the original sa.* design intent per [vault/files/e863a1e0.md (e863a1e0)](../vault/files/e863a1e0.md): *"pay the boot cost once; query freely."*
 
 **Cascade index — load by session domain:**
 - Read [vault/00-cascade-roots.jsonl](../vault/00-cascade-roots.jsonl) first to see all available cascades.
@@ -146,7 +132,7 @@ These rules preserve the safety-net value of the prior channel-read protocol wit
 - Loading the cascade for your domain gives you every task, spec, decision, and document in that pillar — no further index reads needed for cross-project navigation.
 
 **sa.\* commissioning protocol (applies to all agents on this vault):**
-- Before spawning any sa.* agent — at boot or mid-session — read [agents/sa/commission-quickref.md (8c3b8017)](../agents/sa/commission-quickref.md) and follow its 6-step protocol exactly. This is the hot-path extraction from the full [CAPSULE.md (7d3f9a2c)](../vault/files/e863a1e0.md); read the full CAPSULE only on first boot or when designing new sa.* agents.
+- Before spawning any sa.* agent — at boot or mid-session — read [agents/sa/commission-quickref.md (8c3b8017)](../agents/sa/commission-quickref.md) and follow its 6-step protocol exactly. This is the hot-path extraction from the full [CAPSULE.md (e863a1e0)](../vault/files/e863a1e0.md); read the full CAPSULE only on first boot or when designing new sa.* agents.
 - Creating the record file is not commissioning. The agent is not running until it writes `[QUERY]` to the record.
 - This rule applies universally. Tier 3 extensions that declare sa.* agents inherit this requirement automatically.
 
@@ -216,6 +202,8 @@ That is the whole semantic. No type filter. No substrate-modified inclusion. No 
 - [pin-a85-008](../agents/argus/.tropo-capsule/memory/short-term-memory.jsonl) (Mike-A85 proposed; Argus A85 refined; doctrine pin captured 2026-05-27)
 - ScheduleWakeup discipline pin stm-a85-004
 - stm-a87-004 candidate doctrine pin (engineering-for-understanding-and-simplicity; Mike-A87 verbatim 2026-05-28)
+
+**Wake-Discipline completion (2026-07-24, Mike-directed; OS primitive [`d2bb4dda`](../../.tropo/WAKE-DISCIPLINE.md)).** This protocol was authored in the one-checkout era. In the multi-machine crew: every listen tick and drain begins with `git fetch origin` (the local log is a snapshot, not the bus — a tick without a fetch is deaf); sessions expecting a live counterpart arm an **origin watch** (push-triggered wake, ≥30s poll, bounded + re-armed) at Group 3; coordination plans name the counterpart's activation mode (live-watch / scheduled-drain / human activation) before depending on a reply. The curve, triggers, cooldown, and per-class declarations above are unchanged and now point at the bus. Proven live 2026-07-24 (distiller canary loop, two agents, two machines, zero human relays after arming).
 
 ---
 

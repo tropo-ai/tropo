@@ -75,6 +75,56 @@ class TestLoopStartFailClose(unittest.TestCase):
         with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": GATEWAY}, clear=False):
             self.assertTrue(watchdog.check_loop_run_start_preconditions(self.run_dir))
 
+    def test_zero_budget_still_requires_gateway_route(self):
+        """Zero is a declared hard ceiling, never truthiness-equivalent to absent."""
+        self._contract(brakes={"max_iterations": 1, "max_budget_usd": 0.0})
+        with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": ""}, clear=False):
+            self.assertFalse(
+                watchdog.check_loop_run_start_preconditions(self.run_dir)
+            )
+        with mock.patch.dict(
+            os.environ,
+            {"ANTHROPIC_BASE_URL": GATEWAY},
+            clear=False,
+        ):
+            self.assertTrue(
+                watchdog.check_loop_run_start_preconditions(self.run_dir)
+            )
+
+    def test_invalid_budget_domains_refuse_at_precondition(self):
+        invalid_values = (
+            float("nan"),
+            float("inf"),
+            True,
+            -0.01,
+            "not-a-number",
+        )
+        for value in invalid_values:
+            with self.subTest(value=repr(value)):
+                self._contract(
+                    brakes={
+                        "max_iterations": 1,
+                        "max_budget_usd": value,
+                    }
+                )
+                with mock.patch.dict(
+                    os.environ,
+                    {"ANTHROPIC_BASE_URL": GATEWAY},
+                    clear=False,
+                ):
+                    self.assertFalse(
+                        watchdog.check_loop_run_start_preconditions(
+                            self.run_dir
+                        )
+                    )
+
+    def test_null_budget_preserves_no_gateway_behavior(self):
+        self._contract(brakes={"max_iterations": 1, "max_budget_usd": None})
+        with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": ""}, clear=False):
+            self.assertTrue(
+                watchdog.check_loop_run_start_preconditions(self.run_dir)
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

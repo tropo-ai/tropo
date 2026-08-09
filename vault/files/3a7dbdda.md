@@ -37,14 +37,6 @@ capsule_version: '2.5'
 
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Playbooks](76bab75f.md) → **deploy — dev-pipeline stage**
-
-**🔗 This file** — UID `3a7dbdda` · type `pipeline` · state `active` · status `draft`
-
-**↓ Children (6):**
-  - **pipeline (6):** [cold-boot-walk — dev-pipeline step 7.5](c6b61fb9.md) · [groom-subsystems — dev-pipeline step (NEW v1.7)](a5554670.md) · [notify-triggered-pipeline-owners — dev-pipeline...](37996741.md) · [pre-author-release-entry — dev-pipeline step 5.5](674af8fe.md) · [trigger-doc-pipeline-activation — dev-pipeline ...](0cf86ea5.md) · [trigger-test-pipeline-activation — dev-pipeline...](4f64ec3c.md)
-
-**📥 Cited by (1):**
-- [Tropo-OS v1.48.0 — Cycle B Extraction-and-Publish Engineering ...](1d25e142.md) — `1d25e142` (type `release`, via `capabilities_touched`)
 <!-- nav-block:end -->
 
 ## Purpose

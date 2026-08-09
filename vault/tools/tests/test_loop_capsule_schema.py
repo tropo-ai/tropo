@@ -8,8 +8,8 @@ vault_root = Path(__file__).resolve().parents[3]
 
 class TestLoopCapsuleSchema(unittest.TestCase):
     def setUp(self):
-        self.loop_capsule_path = vault_root / '.tropo' / 'capsules' / 'loop.capsule.md'
-        self.loop_run_capsule_path = vault_root / '.tropo' / 'capsules' / 'loop-run.capsule.md'
+        self.loop_capsule_path = vault_root / 'vault' / 'capsules' / 'tropo-loop.capsule.md'
+        self.loop_run_capsule_path = vault_root / 'vault' / 'capsules' / 'tropo-loop-run.capsule.md'
 
     def test_loop_capsule_exists_and_declares_fields(self):
         self.assertTrue(self.loop_capsule_path.exists(), "loop.capsule.md must exist")

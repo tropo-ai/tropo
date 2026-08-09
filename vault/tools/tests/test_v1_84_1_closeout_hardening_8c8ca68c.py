@@ -15,9 +15,21 @@ step-definition DATA was wrong (wrong-repo path, nonexistent script), not engine
 test instead covers the engine plumbing that let a broken command silently misreport, so the
 same class of drift is caught earlier next time.
 
+COMPOSITION NOTE (Governed Autonomy S1, ef65fccd, 2026-07-12): this file IS T-6 of the
+dev-spec's A129-replay regression suite acceptance criterion ("A129-replay regression suite
+T-1..T-6 ... 6 close-ceremony bugs green (8c8ca68c item 4)"). T-1..T-5 (the four retirement
+substance gates R-1..R-4 plus the full replay-both-directions integration test) live in
+test_close_tool_substance_gates_ef65fccd.py; the validator-side "forged receipts FAIL" /
+"false world-state refused" acceptance criteria live in
+test_validator_checks_14_32_ef65fccd.py. All three files compose (run clean together; none
+depend on each other) rather than duplicating — this file was already complete and correct
+before S1 existed, so S1 absorbs it as-is per the dev-spec's own instruction ("compose, do
+not duplicate").
+
 Self-running (python3 test_v1_84_1_closeout_hardening_8c8ca68c.py) and pytest-compatible.
 """
 import importlib.util
+import os
 import shutil
 import sys
 import tempfile
@@ -45,10 +57,21 @@ class _SandboxedVaultTest(unittest.TestCase):
         self._orig_vault_files = eng.VAULT_FILES
         eng.VAULT_ROOT = self.tmp
         eng.VAULT_FILES = self.files
+        # 7627b589: this file's action_complete_workflow("act2", ...) /
+        # action_step_complete("act3", ...) calls are the confirmed source of the
+        # 43-event fixture pollution in the real production log -- route this
+        # suite's pipeline events to a sandbox file instead (9e7003b1.py's
+        # _emit_pipeline_event honors TROPO_PIPELINE_RUNTIME_SANDBOX).
+        self._orig_sandbox_env = os.environ.get("TROPO_PIPELINE_RUNTIME_SANDBOX")
+        os.environ["TROPO_PIPELINE_RUNTIME_SANDBOX"] = str(self.tmp / "sandbox-events.jsonl")
 
     def tearDown(self):
         eng.VAULT_ROOT = self._orig_vault_root
         eng.VAULT_FILES = self._orig_vault_files
+        if self._orig_sandbox_env is None:
+            os.environ.pop("TROPO_PIPELINE_RUNTIME_SANDBOX", None)
+        else:
+            os.environ["TROPO_PIPELINE_RUNTIME_SANDBOX"] = self._orig_sandbox_env
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _write(self, uid: str, fm: dict, body: str = "body\n"):

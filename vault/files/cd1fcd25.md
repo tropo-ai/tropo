@@ -58,37 +58,7 @@ v1_9_2_changes:
 
 <!-- nav-block:start -->
 **📍 Vault Path:** [tropo-work](b8e5f3a2.md) → **dev-pipeline**
-
-**🌳 Tropo-Nav Path** (VS Code): [../../00-tropo-nav/00-tropo-active/tropo-work/dev-pipeline/cd1fcd25 — dev-pipeline.md](../../00-tropo-nav/00-tropo-active/tropo-work/dev-pipeline/cd1fcd25%20%E2%80%94%20dev-pipeline.md)
-
-**🌳 Tropo-Nav Path** (chat): [tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-work/dev-pipeline/cd1fcd25 — dev-pipeline.md](tropo-os-v1.84.1/00-tropo-nav/00-tropo-active/tropo-work/dev-pipeline/cd1fcd25%20%E2%80%94%20dev-pipeline.md)
-
-**🔗 This file** — UID `cd1fcd25` · type `pipeline` · state `active` · status `active`
-
-**↓ Children (22):**
-  - **design-brief (6):** [Tropo-OS v1.15.4 — Self-Healing Primitive](3e50b7b6.md) · [Tropo-OS v1.17.0 — First-User Experience Redesi...](9fc8a149.md) · [Tropo-OS v1.18.0 — Capsule Library Phase 1 (ker...](d95d75e5.md) · [Tropo-OS v1.19.0 — Convergence Phase 1](c0e5380b.md) · [Tropo-OS v1.20.0 — Convergence Phase 2](d549c82e.md) · [Tropo-OS v1.36.0 — Hello Tropo Tutorial Series:...](8dd292e3.md)
-  - **document:** [Setup New Pipeline](45d21cd8.md)
-  - **note (2):** [License decision reversal — AGPL-3 → Apache 2.0...](c5d8e421.md) · [Undefined-token references in globals.css — pre...](53a7a624.md)
-  - **pipeline:** [groom-subsystems — dev-pipeline step (NEW v1.7)](a5554670.md)
-  - **release (10):** [Tropo-OS v1.16.0 — First-User Readiness Pass](9149b649.md) · [Tropo-OS v1.35.0 — Hello Tropo: First-Encounter...](9743fa03.md) · [Tropo-OS v1.36.0 — Hello Tropo Tutorial Series:...](a4c8d691.md) · [Tropo-OS v1.37.0 — Charter Capsule Definition](a8d3f74c.md) · [Tropo-OS v1.38.0 — Validator-Check Consolidatio...](f1e50c42.md) · [Tropo-OS v1.39.0 — Memory Subsystem Generationa...](8638c394.md) · [Tropo-OS v1.40.0 — Deletion Discipline Doctrine...](8c9962a7.md) · [Tropo-OS v1.48.0 — Cycle B Extraction-and-Publi...](1d25e142.md) · + 2 more
-  - **tool (2):** [tropo-mount — vault mount-gate + compose-lockfi...](8a4c1f6e.md) · [tropo-publish — orphan-commit public-only publi...](6f9a3c72.md)
-
-**↔ Siblings (7):**
-  - **under [tropo-work](b8e5f3a2.md):** [app-pipeline](2918e3b4.md) · [doc-pipeline](5a4337ff.md) · [Hello Tropo — 2026 Customer Event Plan](e8d1a4f6.md) · [publish-pipeline](e2f4a8c1.md) · [test-pipeline](da3f50dc.md) · [vault-ops-pipeline](9dab87a0.md) · + 1 more
-
-**📥 Cited by (5):**
-- [Tropo-OS v1.48.0 — Cycle B Extraction-and-Publish Engineering ...](1d25e142.md) — `1d25e142` (type `release`, via `member_of`, `capabilities_touched`)
-- [doc-pipeline](5a4337ff.md) — `5a4337ff` (type `pipeline`, via `composes_with`)
-- [Tropo-OS v1.51.0 — Three-Pipeline Substrate-Engineering (Six A...](b0435ff0.md) — `b0435ff0` (type `release`, via `member_of`, `capabilities_touched`)
-- [tropo-work](b8e5f3a2.md) — `b8e5f3a2` (type `project`, via `refs`)
-- [test-pipeline](da3f50dc.md) — `da3f50dc` (type `pipeline`, via `composes_with`)
 <!-- nav-block:end -->
-
-**Relations**
-
-| Relation | Target |
-|---|---|
-| Member of | [tropo-work (b8e5f3a2)](b8e5f3a2.md) |
 
 ## Purpose
 

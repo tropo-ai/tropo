@@ -93,7 +93,7 @@ Run grooming when the substrate feels noisy or when validators surface drift fin
 
 ## The Bounded-Verification Thesis
 
-Tropo's strategic moat is **bounded verification** — the human's scarce capacity to validate outcomes scales when the verification surface is bounded by the constraints the human defined ([mission-brief.md](../../context/mission-brief.md)).
+Tropo's strategic moat is **bounded verification** — the human's scarce capacity to validate outcomes scales when the verification surface is bounded by the constraints the human defined ([mission-brief.md](../../.tropo-studio/mission-brief.md)).
 
 In practice: you don't verify *everything* an agent produces. You verify the dimensions that matter for the constraint you set. Three-instrument verification (Argus build + independent review + sa.cold-boot stranger test) is the canonical pattern for substrate-introducing work; lighter verification (single-instrument + dogfood gate) is right for substrate-amending work.
 

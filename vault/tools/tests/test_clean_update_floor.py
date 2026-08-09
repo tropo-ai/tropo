@@ -88,6 +88,9 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
+TOOLS_DIR = ROOT / "vault" / "tools"
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
 NAMESPACE_MODULE_PATH = ROOT / "vault" / "tools" / "lib" / "tropo_update_namespace.py"
 RECEIPT_MODULE_PATH = ROOT / "vault" / "tools" / "lib" / "tropo_update_receipt.py"
 CONFIRM_MODULE_PATH = ROOT / "vault" / "tools" / "lib" / "tropo_update_confirm_gate.py"
@@ -251,7 +254,7 @@ def build_update_plan(fixture, plant_violation=False):
 def apply_plan(root, plan, namespace_mod, manifest_index, bypass_predicate=False):
     """The engine under test: for each planned op, consult the four-category
     predicate (classify()) and branch on REPLACE / PRESERVE / USER_MODIFIED_SHIPPED.
-    Returns (written, refused, needs_confirm) rel-path lists.
+    Returns (written, refused, needs_confirm, regenerated) rel-path lists.
 
     PRESERVE means something different depending on op kind (LOCK-AMENDMENT 2 F3):
     for a 'replace' op it's a governance violation (this path should never have
@@ -265,7 +268,7 @@ def apply_plan(root, plan, namespace_mod, manifest_index, bypass_predicate=False
     everything without consulting the predicate — used ONLY by --gauntlet to
     prove the churn detector would catch a violation even if the predicate
     that normally prevents it were absent or buggy."""
-    written, refused, needs_confirm = [], [], []
+    written, refused, needs_confirm, regenerated = [], [], [], []
     for kind, rel, content in plan:
         if bypass_predicate:
             (root / rel).write_text(content)
@@ -274,15 +277,31 @@ def apply_plan(root, plan, namespace_mod, manifest_index, bypass_predicate=False
 
         p = root / rel
 
+        # The class is consulted BEFORE the add-target-missing fast path.
+        #
+        # That fast path wrote unconditionally when the target did not exist —
+        # "nothing to overwrite, no classify() call needed" — which is true for
+        # every class except REGENERATED. On a studio where the derived index
+        # is absent (fresh install, or after a clean), an `add` targeting
+        # vault/00-index.jsonl would have written it here and made something
+        # other than the Step 4.4 rebuild its writer. Ordering was the whole
+        # defect: the guard existed, and one branch reached past it.
+        # (A146, 2026-08-08; d220d43b D9.)
+        current_hash = _hash(p) if p.exists() else None
+        verdict = namespace_mod.classify(rel, manifest_index=manifest_index, current_hash=current_hash)
+
+        if verdict == namespace_mod.REGENERATED:
+            # Neither prompt nor write, in any branch. The rebuild is the sole
+            # writer and it runs at Step 4.4 regardless.
+            regenerated.append(rel)
+            continue
+
         if kind == 'add' and not p.exists():
-            # Playbook Step 3 add-operation step 2, "does not exist" branch — nothing to
-            # overwrite, proceeds unconditionally. No classify() call needed.
+            # Playbook Step 3 add-operation step 2, "does not exist" branch —
+            # nothing to overwrite, proceeds unconditionally.
             p.write_text(content)
             written.append(rel)
             continue
-
-        current_hash = _hash(p) if p.exists() else None
-        verdict = namespace_mod.classify(rel, manifest_index=manifest_index, current_hash=current_hash)
 
         if verdict == namespace_mod.REPLACE:
             p.write_text(content)
@@ -293,7 +312,7 @@ def apply_plan(root, plan, namespace_mod, manifest_index, bypass_predicate=False
             needs_confirm.append(rel)  # F3: add-target collision with unlisted content — confirm, not a hard halt
         else:
             refused.append(rel)  # 'replace' op targeting a PRESERVE path — governance violation, refused
-    return written, refused, needs_confirm
+    return written, refused, needs_confirm, regenerated
 
 
 def run_floor_test(plant_violation=False):
@@ -317,7 +336,7 @@ def run_floor_test(plant_violation=False):
         collision_before_apply = (tmp / fixture["add_collision_path"]).read_text()
 
         plan = build_update_plan(fixture, plant_violation=plant_violation)
-        written, refused, needs_confirm = apply_plan(
+        written, refused, needs_confirm, _regen = apply_plan(
             tmp, plan, namespace_mod, manifest_index, bypass_predicate=plant_violation
         )
 
@@ -464,7 +483,7 @@ def check_e2e_apply_with_housekeeping_and_receipt():
 
         # Step 3 (discrete operations) — every OS-substrate write recorded via the seal.
         plan = build_update_plan(fixture)
-        written, refused, needs_confirm = apply_plan(tmp, plan, namespace_mod, manifest_index)
+        written, refused, needs_confirm, _regen = apply_plan(tmp, plan, namespace_mod, manifest_index)
         for rel in written:
             seal.record_write(rel)
         for rel in needs_confirm:

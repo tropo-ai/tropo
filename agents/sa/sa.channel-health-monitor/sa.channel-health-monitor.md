@@ -13,8 +13,8 @@ spawnable_by:
   - fleet-ops
 commissioned: 2026-04-16
 commissioned_by: vela-v29
-modified: 2026-05-09
-modified_by: argus-a53
+modified: '2026-07-25'
+modified_by: "vela-v69"
 governed_by: b4e2a718
 capsule_version: '1.4'
 extraction_scope: ship
@@ -23,9 +23,58 @@ supersedes: agents/operations/channel-health-monitor/activate.md
 trigger_description: 'Reach for this as part of fleet-ops or vault-maintenance hygiene — audits channels (ops.md, alerts.md, pair channels) for stale entries (older than rolling window with no activity), unresolved FLASH alerts that should be acknowledged or archived, and format compliance against the channel header conventions. Vela-fleet-ops scoped: spawnable_by limited to vela + fleet-ops dispatch. Use when channel health visibly degrades or as scheduled audit.'
 subsystem_hub:
   - 99ed55fd
+pruning:
+  verdict: superseded
+  evidence_span: '> ## ⚠️ OBSOLETE — DO NOT DISPATCH
+
+    >
+
+    > **This agent''s entire function was retired at v1.61 (events.capsule Rule 13).** All four of its
+
+    > checks audit `channels/` — working channels, topic channels, FLASH alerts, and channel format
+
+    > compliance. **Channels no longer exist.** Every check below reads files that are gone, so a run
+
+    > either fails outright or reports "clean" about nothing.
+
+    >
+
+    > **Do not dispatch this agent.** Its coverage is already provided elsewhere:'
+  evidence_locator:
+    body_sha256: 5c7f879a775bf5ea8551d2e0f034e4ec0f1cc0db346acb5d5292aa4ab175d02c
+    start_byte: 30
+    end_byte: 504
+  judge_policy_uid: 341823aa
+  judge_version: 2.0.0
+  judge_prompt_sha256: 855e18bd29d09ed8ecff16c006a3b0f18c39aa913207619978dda02fdc54f6db
+  origin_studio: f1a7b3c2
+  judged_at: '2026-07-25T22:18:27Z'
+  confidence: 0.95
+  normalized_body_hash_judged: 5c7f879a775bf5ea8551d2e0f034e4ec0f1cc0db346acb5d5292aa4ab175d02c
 ---
 
 # sa.channel-health-monitor
+
+> ## ⚠️ OBSOLETE — DO NOT DISPATCH
+>
+> **This agent's entire function was retired at v1.61 (events.capsule Rule 13).** All four of its
+> checks audit `channels/` — working channels, topic channels, FLASH alerts, and channel format
+> compliance. **Channels no longer exist.** Every check below reads files that are gone, so a run
+> either fails outright or reports "clean" about nothing.
+>
+> **Do not dispatch this agent.** Its coverage is already provided elsewhere:
+> - unresolved FLASH alerts → `tropo-query-events.py --severity flash` (now in `sa.daily-vault-health` §2)
+> - coordination-surface health → `tropo-query-events.py --type tropo.broadcast.crew` + unanswered
+>   `reply_required` via `tropo-check-events.py` (now in `sa.daily-vault-health` §5)
+>
+> **Status:** formal retirement is a crew-composition decision (Mike + Argus), so this file is
+> flagged rather than deleted or flipped to `status: retired` unilaterally. `524163ed` defect (4)
+> records that V56 already considered it retired while the class definition still reads
+> `status: active` — that drift is what left it in Vela's `fleet_ops_schedule`.
+>
+> *Flagged 2026-07-19 by vela-v68 during the fleet-ops machinery repair.*
+
+---
 
 *One-shot auditor. Checks channels, reports findings, terminates.*
 *Dispatched by `fleet-ops.playbook.md` at every executive boot.*
@@ -46,7 +95,9 @@ Report findings. Do not fix. `sa.repair-agent` acts on this output.
 
 ## Vault Root
 
-Detect dynamically: vault root is the directory containing `settings/env.md`. All paths in this file are vault-root-relative. Never hardcode an absolute machine path.
+Detect dynamically: **vault root is the directory containing `.tropo/`** (equivalently, the directory containing `vault/00-index.jsonl`). All paths in this file are vault-root-relative. Never hardcode an absolute machine path.
+
+*(Anchor corrected 2026-07-19 by vela-v68 — `524163ed` defect (1). The prior anchor named `settings/env.md`, which does not exist in a Tropo Studio; root detection fell through to cwd and on a multi-repo machine resolved OUTSIDE the studio. `.tropo/` is the canonical anchor, matching agent-activation.playbook Step 0.0a.)*
 
 ---
 

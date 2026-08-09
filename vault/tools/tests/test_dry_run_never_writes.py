@@ -267,11 +267,39 @@ class TestCompleteWorkflowAndTriggerStep(DryRunNeverWritesTestCase):
         self.assertTrue(result.get("dry_run"))
 
     def test_trigger_step_hard_errors_on_real_b5_collision(self):
-        """ad02f944's real dev-spec already triggered a doc leg — B5 single-cascade
-        idempotency must still refuse (cleanly, zero writes) even under --dry-run;
-        preview must not paper over a real contract violation."""
+        """A dev-spec that already has a LIVE (non-terminal) triggered doc leg must
+        still refuse a second trigger-step (cleanly, zero writes) even under --dry-run;
+        preview must not paper over a real contract violation.
+
+        Synthetic fixture (not the real ad02f944/5a4337ff pair): this test originally
+        relied on a real dev-spec whose triggered doc-pipeline leg was still live at
+        the time of writing. That real activation has since reached a terminal status
+        through ordinary Studio operation (the B5 check is status-aware by design —
+        see the STATUS-AWARE FIX comment on action_trigger_step), so the collision it
+        exercised stopped reproducing — the test started silently falling through to
+        the success path instead of catching a real regression. A synthetic dev-spec
+        with an explicitly non-terminal "already triggered" activation makes the
+        precondition this test needs independent of how far real Studio work has
+        progressed by the time it runs.
+        """
+        synth_activation_uid = "55556666"
+        synth_dev_spec_uid = "77778888"
+        synth_live_cascade_uid = "99990000"
+        eng.write_vault_entry(synth_live_cascade_uid,
+                              {"uid": synth_live_cascade_uid, "type": "activation",
+                               "activation_class": "pipeline", "status": "active"},
+                              "synthetic fixture — B5 collision test; deliberately non-terminal\n")
+        eng.write_vault_entry(synth_dev_spec_uid,
+                              {"uid": synth_dev_spec_uid, "type": "dev-spec",
+                               "triggered_doc_activation_uids": [synth_live_cascade_uid]},
+                              "synthetic fixture — B5 collision test\n")
+        eng.write_vault_entry(synth_activation_uid,
+                              {"uid": synth_activation_uid, "type": "activation",
+                               "activation_class": "pipeline", "dev_spec_uid": synth_dev_spec_uid},
+                              "synthetic fixture — B5 collision test\n")
+
         outcome, _ = self.assert_dry_run_never_writes(
-            eng.action_trigger_step, _ACT_2, "9d4f7e21", "abcdef34",
+            eng.action_trigger_step, synth_activation_uid, "9d4f7e21", "abcdef34",
             "---\nuid: abcdef34\n---\nbody\n", "5a4337ff", "doc-pipeline", "talos",
         )
         self.assertEqual(outcome, "hard_error")

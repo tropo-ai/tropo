@@ -127,6 +127,7 @@ class TestGitBeat1Core(unittest.TestCase):
         """00005787 followup: only 00-index.jsonl was ignored; its siblings churned live."""
         text = (ROOT / '.gitignore').read_text()
         for sibling in (
+            'vault/00-archive-index.jsonl',
             'vault/00-graph.jsonl',
             'vault/00-graph-registry.jsonl',
             'vault/00-index-boards.jsonl',
@@ -161,7 +162,17 @@ class TestGitBeat1Core(unittest.TestCase):
             self.assertNotIn('locks/', porc, 'lock file leaked into git status despite .gitignore')
             lock_file.unlink()
             porc_after_delete = _git(fx.root, 'status', '--porcelain').stdout
-            self.assertEqual(porc_after_delete.strip(), '', 'deleting an ignored lock must never dirty the tree')
+            # Compare against the pre-delete baseline, not against "" — StudioFixture seeds
+            # real, intentionally-tracked files (playbook-runs/*/run.jsonl, vault/events/
+            # 00-events.jsonl are governed audit-trail substrate in this Studio, not scratch;
+            # .gitignore never covers them) alongside the lock dir in the same `add -A`, so
+            # `porc` is legitimately non-empty even before the lock file is touched. The
+            # actual invariant under test is narrower: deleting an ALREADY-IGNORED file must
+            # not change git's view of the tree at all — it was asserting a stronger, false
+            # claim (a pristine tree) that happened to hold only by coincidence of whatever
+            # else was untracked in the repo at the time this was written.
+            self.assertEqual(porc_after_delete, porc,
+                             'deleting an ignored lock must never change git status')
         finally:
             fx.cleanup()
 
@@ -291,6 +302,114 @@ class TestGitBeat1Core(unittest.TestCase):
         finally:
             fx.cleanup()
 
+    def test_clear_uncommitted_flag_removes_existing(self):
+        fx = StudioFixture()
+        try:
+            fx.init_repo()
+            import lib.tropo_git_history as gh
+            gh.set_repo_root(fx.root)
+            try:
+                gh.signal_commit_failure('abcd1234', 'simulated failure')
+                flag = fx.root / '.tropo' / 'flags' / 'uncommitted-abcd1234.flag'
+                self.assertTrue(flag.exists())
+                removed = gh.clear_uncommitted_flag('abcd1234')
+                self.assertTrue(removed)
+                self.assertFalse(flag.exists())
+                # Idempotent — clearing an already-absent flag is a no-op, not an error.
+                self.assertFalse(gh.clear_uncommitted_flag('abcd1234'))
+            finally:
+                gh.set_repo_root(ROOT)
+        finally:
+            fx.cleanup()
+
+    def test_reconcile_stale_flags_noop_when_tree_dirty(self):
+        """A dirty tree can't prove any specific flag's drift is resolved — leave them all."""
+        fx = StudioFixture()
+        try:
+            fx.init_repo()
+            import lib.tropo_git_history as gh
+            gh.set_repo_root(fx.root)
+            try:
+                gh.signal_commit_failure('deadbeef', 'simulated failure')
+                (fx.root / 'vault' / 'files' / 'uncommitted-drift.md').write_text('drift\n')
+                self.assertFalse(gh.is_clean(fx.root))
+                cleared = gh.reconcile_stale_uncommitted_flags(fx.root)
+                self.assertEqual(cleared, [])
+                flag = fx.root / '.tropo' / 'flags' / 'uncommitted-deadbeef.flag'
+                self.assertTrue(flag.exists())
+            finally:
+                gh.set_repo_root(ROOT)
+        finally:
+            fx.cleanup()
+
+    def test_reconcile_stale_flags_sweeps_when_tree_clean(self):
+        """6fb1bfa5 core repro: a flag surviving a since-resolved drift must not linger forever."""
+        fx = StudioFixture()
+        try:
+            fx.init_repo()
+            # Establish a clean baseline — StudioFixture's own scaffold (vault/, playbook-runs/)
+            # is untracked-but-present right after init_repo(), so the tree isn't clean yet.
+            _git(fx.root, 'add', '-A')
+            _git(fx.root, 'commit', '-m', 'baseline')
+            import lib.tropo_git_history as gh
+            gh.set_repo_root(fx.root)
+            try:
+                gh.signal_commit_failure('4a43ab81', 'simulated failure 1')
+                gh.signal_commit_failure('be06cdc4', 'simulated failure 2')
+                self.assertTrue(gh.is_clean(fx.root), gh.porcelain(fx.root))  # flag files are gitignored, not a tree change
+                cleared = gh.reconcile_stale_uncommitted_flags(fx.root)
+                self.assertEqual(sorted(cleared), ['uncommitted-4a43ab81.flag', 'uncommitted-be06cdc4.flag'])
+                self.assertFalse((fx.root / '.tropo' / 'flags' / 'uncommitted-4a43ab81.flag').exists())
+                self.assertFalse((fx.root / '.tropo' / 'flags' / 'uncommitted-be06cdc4.flag').exists())
+            finally:
+                gh.set_repo_root(ROOT)
+        finally:
+            fx.cleanup()
+
+    def test_boot_reconcile_on_clean_tree_sweeps_stale_flag(self):
+        """The exact 6fb1bfa5 scenario: an orphaned flag from a past session, next boot is clean."""
+        fx = StudioFixture()
+        try:
+            fx.init_repo()
+            _git(fx.root, 'add', '-A')
+            _git(fx.root, 'commit', '-m', 'baseline')
+            import lib.tropo_git_history as gh
+            gh.set_repo_root(fx.root)
+            try:
+                gh.signal_commit_failure('c0ffee01', 'a past session failed to commit')
+                flag = fx.root / '.tropo' / 'flags' / 'uncommitted-c0ffee01.flag'
+                self.assertTrue(flag.exists())
+                self.assertTrue(gh.is_clean(fx.root), gh.porcelain(fx.root))
+                ok, detail = gh.boot_reconcile_if_dirty('talos', 'T31', lambda: [])
+                self.assertTrue(ok, detail)
+                self.assertFalse(flag.exists(), 'stale flag must not survive a clean-tree boot')
+            finally:
+                gh.set_repo_root(ROOT)
+        finally:
+            fx.cleanup()
+
+    def test_activation_close_success_clears_its_own_flag(self):
+        """The retry-success half: a close that previously failed for THIS uid, now succeeds."""
+        fx = StudioFixture()
+        try:
+            fx.init_repo()
+            import lib.tropo_git_history as gh
+            gh.set_repo_root(fx.root)
+            try:
+                gh.signal_commit_failure('aabbccdd', 'first attempt failed to commit')
+                flag = fx.root / '.tropo' / 'flags' / 'uncommitted-aabbccdd.flag'
+                self.assertTrue(flag.exists())
+                entry = fx.root / 'vault' / 'files' / 'aabbccdd.md'
+                entry.write_text('---\nuid: aabbccdd\ntype: activation\nagent: talos\ngeneration: T99\nstatus: retired\n---\n\n# T99\n')
+                fm = {'agent': 'talos', 'generation': 'T99', 'status': 'retired'}
+                ok, detail = gh.activation_close_commit(fm, 'aabbccdd', 'retired', 'clean-retirement')
+                self.assertTrue(ok, detail)
+                self.assertFalse(flag.exists(), 'retry-success must clear the flag it previously failed under')
+            finally:
+                gh.set_repo_root(ROOT)
+        finally:
+            fx.cleanup()
+
     def test_tropo_restore_requires_reason(self):
         script = TOOLS / 'tropo-restore.py'
         r = subprocess.run(
@@ -357,6 +476,94 @@ class TestGitBeat1Core(unittest.TestCase):
                 lock_file.unlink()
 
                 self.assertTrue(gh.is_clean(fx.root), f'dirty after close+rebuild: {gh.porcelain(fx.root)}')
+            finally:
+                gh.set_repo_root(ROOT)
+        finally:
+            fx.cleanup()
+
+    def test_stage_paths_commits_only_declared_pathset(self):
+        """The scoped-staging mechanism itself must not sweep a sibling agent."""
+        fx = StudioFixture()
+        try:
+            fx.init_repo()
+            talos = fx.root / 'agents' / 'talos' / 'work.md'
+            argus = fx.root / 'agents' / 'argus' / 'work.md'
+            talos.parent.mkdir(parents=True)
+            argus.parent.mkdir(parents=True)
+            talos.write_text('baseline talos\n')
+            argus.write_text('baseline argus\n')
+            _git(fx.root, 'add', '-A')
+            _git(fx.root, 'commit', '-m', 'baseline agents')
+
+            talos.write_text('talos changed\n')
+            argus.write_text('argus foreign change\n')
+
+            import lib.tropo_git_history as gh
+            ok, detail = gh.stage_then_commit(
+                lambda: 'scoped talos commit',
+                fx.root,
+                paths=['agents/talos'],
+            )
+            self.assertTrue(ok, detail)
+            committed = _git(fx.root, 'show', '--pretty=', '--name-only', 'HEAD').stdout.splitlines()
+            self.assertIn('agents/talos/work.md', committed)
+            self.assertNotIn('agents/argus/work.md', committed)
+            self.assertIn('agents/argus/work.md', _git(fx.root, 'status', '--porcelain').stdout)
+        finally:
+            fx.cleanup()
+
+    def test_stage_paths_rejects_repo_escape(self):
+        fx = StudioFixture()
+        try:
+            fx.init_repo()
+            import lib.tropo_git_history as gh
+            ok, detail = gh.stage_paths(['../foreign'], fx.root)
+            self.assertFalse(ok)
+            self.assertIn('outside repo', detail)
+        finally:
+            fx.cleanup()
+
+    @unittest.expectedFailure
+    def test_activation_close_does_not_sweep_foreign_agent_work_PINNED_GAP(self):
+        """Pinned Phase-1 gap: lifecycle close still lacks bound entitlements.
+
+        This expected failure is intentional until design 8976b728 lands the
+        machine-readable activation write-set.  Removing expectedFailure before
+        that wiring must make the test green, not delete the plant.
+        """
+        fx = StudioFixture()
+        try:
+            fx.init_repo()
+            talos = fx.root / 'agents' / 'talos' / 'work.md'
+            argus = fx.root / 'agents' / 'argus' / 'work.md'
+            talos.parent.mkdir(parents=True)
+            argus.parent.mkdir(parents=True)
+            talos.write_text('baseline talos\n')
+            argus.write_text('baseline argus\n')
+            _git(fx.root, 'add', '-A')
+            _git(fx.root, 'commit', '-m', 'baseline agents')
+
+            talos.write_text('talos close work\n')
+            argus.write_text('argus concurrent work\n')
+
+            import lib.tropo_git_history as gh
+            gh.set_repo_root(fx.root)
+            try:
+                ok, detail = gh.activation_close_commit(
+                    {'agent': 'talos', 'generation': 'T99'},
+                    'aabbccdd',
+                    'retired',
+                    'clean-retirement',
+                )
+                self.assertTrue(ok, detail)
+                committed = _git(
+                    fx.root, 'show', '--pretty=', '--name-only', 'HEAD'
+                ).stdout.splitlines()
+                self.assertNotIn(
+                    'agents/argus/work.md',
+                    committed,
+                    'activation-close swept foreign concurrent work (8976b728)',
+                )
             finally:
                 gh.set_repo_root(ROOT)
         finally:

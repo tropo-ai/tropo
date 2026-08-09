@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Release Test — Tropo-OS v1.86.0</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c2230; --line:#2a3140;
+    --ink:#e6edf3; --dim:#9aa7b8; --faint:#6b7789;
+    --pass:#3fb950; --warn:#d29922; --fail:#f85149; --accent:#58a6ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+    padding:40px 24px 72px}
+  .wrap{max-width:1080px;margin:0 auto}
+  header{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:28px}
+  h1{margin:0 0 6px;font-size:26px;letter-spacing:-.02em}
+  .sub{color:var(--dim);font-size:14px}
+  .verdict-bar{display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+    background:linear-gradient(90deg,rgba(63,185,80,.14),rgba(63,185,80,.02));
+    border:1px solid rgba(63,185,80,.35);border-left:4px solid var(--pass);
+    border-radius:10px;padding:18px 22px;margin-bottom:28px}
+  .verdict-word{font-size:30px;font-weight:700;color:var(--pass);letter-spacing:-.02em}
+  .verdict-note{color:var(--dim);font-size:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:30px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .card .k{color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.09em;margin-bottom:7px}
+  .card .v{font-size:21px;font-weight:650}
+  .card .v small{font-size:13px;font-weight:400;color:var(--dim)}
+  h2{font-size:16px;margin:34px 0 14px;letter-spacing:.01em}
+  h2 .hint{font-weight:400;color:var(--faint);font-size:13px;margin-left:8px}
+  table{width:100%;border-collapse:collapse;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th{background:var(--panel2);text-align:left;padding:11px 14px;font-size:11px;
+    text-transform:uppercase;letter-spacing:.08em;color:var(--faint);font-weight:600}
+  td{padding:12px 14px;border-top:1px solid var(--line);vertical-align:top;font-size:14px}
+  td.num{color:var(--faint);width:34px}
+  .chk{font-weight:600;white-space:nowrap}
+  .sys{display:inline-block;background:var(--panel2);border:1px solid var(--line);
+    border-radius:20px;padding:2px 10px;font-size:11.5px;color:var(--dim);white-space:nowrap}
+  .pill{display:inline-block;border-radius:20px;padding:2px 11px;font-size:11.5px;
+    font-weight:700;letter-spacing:.04em;white-space:nowrap}
+  .p-pass{background:rgba(63,185,80,.15);color:var(--pass);border:1px solid rgba(63,185,80,.4)}
+  .p-warn{background:rgba(210,153,34,.15);color:var(--warn);border:1px solid rgba(210,153,34,.4)}
+  .p-fail{background:rgba(248,81,73,.15);color:var(--fail);border:1px solid rgba(248,81,73,.4)}
+  .note{color:var(--dim);font-size:13.5px}
+  .cov{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}
+  .cov span{background:rgba(88,166,255,.1);border:1px solid rgba(88,166,255,.32);
+    color:var(--accent);border-radius:20px;padding:4px 13px;font-size:12.5px}
+  .finding{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--warn);
+    border-radius:8px;padding:15px 18px;margin-bottom:12px}
+  .finding h3{margin:0 0 7px;font-size:14.5px;color:var(--warn)}
+  .finding p{margin:0;color:var(--dim);font-size:13.5px}
+  code{background:#0b0f14;border:1px solid var(--line);border-radius:4px;
+    padding:1px 6px;font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:#c8d3e0}
+  ol.fu{padding-left:20px;color:var(--dim);font-size:13.5px} ol.fu li{margin-bottom:7px}
+  .prov{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 20px}
+  .prov dl{margin:0;display:grid;grid-template-columns:170px 1fr;gap:9px 18px;font-size:13.5px}
+  .prov dt{color:var(--faint)} .prov dd{margin:0;color:var(--ink)}
+  footer{margin-top:38px;padding-top:18px;border-top:1px solid var(--line);
+    color:var(--faint);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Release Test — Tropo-OS v1.86.0</h1>
+  <div class="sub">Two-layer harness · conducted by Po · 2026-08-08</div>
+</header>
+
+<div class="verdict-bar">
+  <div class="verdict-word">PASS</div>
+  <div class="verdict-note">
+    Clear to ship. L1 mechanical 11/11 · L2 cold stranger 5&nbsp;PASS / 2&nbsp;WARN / 0&nbsp;FAIL.<br>
+    Neither WARN blocks the gate; both are queued as fast follow-ups.
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card"><div class="k">L1 mechanical</div><div class="v" style="color:var(--pass)">11 / 11</div></div>
+  <div class="card"><div class="k">L2 capability</div><div class="v" style="color:var(--pass)">5 <small>pass</small> · <span style="color:var(--warn)">2 <small>warn</small></span></div></div>
+  <div class="card"><div class="k">Strangers</div><div class="v">1 <small>generalist</small></div></div>
+  <div class="card"><div class="k">Subsystems covered</div><div class="v">7 / 7</div></div>
+</div>
+
+<h2>Layer 1 — mechanical regression <span class="hint">deterministic; pure Python, no agent</span></h2>
+<table>
+  <tr><th>Check</th><th style="width:110px">Verdict</th><th>Detail</th></tr>
+  <tr><td>required files/dirs present</td><td><span class="pill p-pass">PASS</span></td><td class="note">all present</td></tr>
+  <tr><td>index parses</td><td><span class="pill p-pass">PASS</span></td><td class="note">475 rows, 0 malformed</td></tr>
+  <tr><td>version stamped</td><td><span class="pill p-pass">PASS</span></td><td class="note">v1.86.0</td></tr>
+  <tr><td>capsule definitions ship</td><td><span class="pill p-pass">PASS</span></td><td class="note">1 capsule-definition entry</td></tr>
+  <tr><td>MANIFEST present</td><td><span class="pill p-pass">PASS</span></td><td class="note">MANIFEST.md</td></tr>
+  <tr><td>no private content leaked</td><td><span class="pill p-pass">PASS</span></td><td class="note">clean</td></tr>
+  <tr><td>playbooks ship</td><td><span class="pill p-pass">PASS</span></td><td class="note">18 playbooks</td></tr>
+  <tr><td>START-TROPO.md non-empty</td><td><span class="pill p-pass">PASS</span></td><td class="note">27 non-blank lines</td></tr>
+  <tr><td>validator present</td><td><span class="pill p-pass">PASS</span></td><td class="note">642,209 bytes</td></tr>
+  <tr><td>Python lib import closure</td><td><span class="pill p-pass">PASS</span></td><td class="note">86 tools, 66 lib modules resolved</td></tr>
+  <tr><td>golden-output snapshot</td><td><span class="pill p-pass">PASS</span></td><td class="note">not seeded — skipped</td></tr>
+</table>
+
+<h2>Layer 2 — cold stranger-walk <span class="hint">capability, not recognition: can a newcomer actually do it?</span></h2>
+<table>
+  <tr><th class="num">#</th><th>Capability check</th><th>Subsystem</th><th style="width:104px">Verdict</th><th>Note</th></tr>
+  <tr>
+    <td class="num">1</td><td class="chk">boot-orient</td><td><span class="sys">concierge</span></td>
+    <td><span class="pill p-pass">PASS</span></td>
+    <td class="note">Boot chain resolved with no dead links. Greeting fired with live status — 3 system agents, 0 user agents, 475 index entries. Capsule types and the markdown&nbsp;+&nbsp;filesystem&nbsp;+&nbsp;LLM constraint stated correctly.</td>
+  </tr>
+  <tr>
+    <td class="num">2</td><td class="chk">configure</td><td><span class="sys">onboarding</span></td>
+    <td><span class="pill p-pass">PASS</span></td>
+    <td class="note">STUDIO.md Bootstrap filled all 5 frontmatter and 3 body placeholders. No <code>&lt;FILL</code> remains after bootstrap; logged as a crew event.</td>
+  </tr>
+  <tr>
+    <td class="num">3</td><td class="chk">create-agent</td><td><span class="sys">agents</span></td>
+    <td><span class="pill p-warn">WARN</span></td>
+    <td class="note">Bar met — agent created, registered, indexed (6 rows), answered in character with citations. But the documented path is degraded twice: <code>vault/templates/</code> does not ship, and the skill's shared-uid rule is contradicted by the rebuilder.</td>
+  </tr>
+  <tr>
+    <td class="num">4</td><td class="chk">tropo-work</td><td><span class="sys">work</span></td>
+    <td><span class="pill p-pass">PASS</span></td>
+    <td class="note">Project and task created as typed entries, landed active, moved to closed/done, index reflected closure without hand-editing. Cleaned up via governed soft-delete.</td>
+  </tr>
+  <tr>
+    <td class="num">5</td><td class="chk">engine</td><td><span class="sys">runtime/index</span></td>
+    <td><span class="pill p-warn">WARN</span></td>
+    <td class="note"><code>tropo-test.py</code> 103 passed / <strong>0 FAILED</strong>; rebuild completed all 5 stages and wrote every index and catalog. WARN is the false alarm the rebuild prints on the way — see finding 2.</td>
+  </tr>
+  <tr>
+    <td class="num">6</td><td class="chk">coordination</td><td><span class="sys">events</span></td>
+    <td><span class="pill p-pass">PASS</span></td>
+    <td class="note">3 crew events emitted and drained with correct source, subject, payload and timestamp. Clean empty result on the fresh vault, no error.</td>
+  </tr>
+  <tr>
+    <td class="num">7</td><td class="chk">governance</td><td><span class="sys">governance</span></td>
+    <td><span class="pill p-pass">PASS</span></td>
+    <td class="note">Permission model, four-file hierarchy, override resolution order and human-decides authority all statable from the governing files alone.</td>
+  </tr>
+</table>
+
+<h2>Subsystem coverage</h2>
+<div class="cov">
+  <span>concierge</span><span>onboarding</span><span>agents</span><span>work</span>
+  <span>runtime/index</span><span>events</span><span>governance</span>
+</div>
+
+<h2>Conductor-verified findings <span class="hint">reproduced independently, not taken on the stranger's word</span></h2>
+
+<div class="finding">
+  <h3>1 · <code>vault/templates/</code> does not ship</h3>
+  <p>Absent from the extract, absent from the build tree, <strong>0 entries in the zip</strong>, 0 template-typed index rows, 1 stray <code>.template.md</code> studio-wide. An extraction-scope omission rather than a broken pointer. It breaks the <code>create-executive-agent</code> template steps, the concierge's §1.5b mission-brief offer, <code>vault/templates/AGENTS.md</code> and <code>CAPSULE.md</code>, and the task capsule's <code>mint_template</code>.</p>
+</div>
+
+<div class="finding">
+  <h3>2 · A pristine install is told its substrate is broken</h3>
+  <p><code>tropo-validate.py</code> on a clean extract reports <code>100 passed, 284 failed</code> with the banner <em>"do not ship against a broken substrate"</em>. The same validator with <code>--customer</code> reports <code>103 passed, 0 failed</code>. <code>tropo-rebuild-vault.py</code> invokes the pre-step without <code>--customer</code> and exits non-zero. The substrate is clean; the alarm is a mode bug in the wrapper.</p>
+</div>
+
+<h2>Follow-ups <span class="hint">none ship-blocking</span></h2>
+<ol class="fu">
+  <li>Ship <code>vault/templates/</code>.</li>
+  <li>Resolve the shared-uid contradiction — <code>create-executive-agent</code> Validation Check 4 vs the rebuilder's cross-document UID collision abort. The shipped <code>agents/example/</code> already uses distinct UIDs, so the skill is the stale side.</li>
+  <li>Pass <code>--customer</code> from the rebuild's validator pre-step.</li>
+  <li>Add <code>--lifecycle</code> and <code>--source-uid</code> to every kernel-quoted <code>tropo-emit-event.py</code> invocation.</li>
+  <li>Refresh stale pointers in <code>TROPO-CONTROL.md</code> and <code>STUDIO.md</code> — <code>channels/ops.md</code>, <code>system/updates/pending/</code>, the 1.49.0 version stamp.</li>
+  <li><code>agents/example/</code> activation references <code>example-briefing.md</code>, which does not exist.</li>
+</ol>
+
+<h2>Provenance</h2>
+<div class="prov">
+  <dl>
+    <dt>Cold walk</dt><dd><strong>Ran</strong> — elected at the cut, not skipped</dd>
+    <dt>Conductor</dt><dd>Po — full studio context; orchestration only, <strong>did not walk</strong></dd>
+    <dt>Stranger mode</dt><dd>Cold, no-context sub-agent — 1 generalist (routine release)</dd>
+    <dt>Walk surface</dt><dd>Pristine extract of <code>dist/tropo-os-v1.86.0.zip</code>, fenced from <code>builds/</code> · <code>dist/</code> · <code>testing/</code>; discarded after the walk</dd>
+    <dt>Rollup rule</dt><dd><code>overall: FAIL</code> only if L1 fails or a capability check #1–#6 fails. Neither happened.</dd>
+    <dt>Verdict JSON</dt><dd><code>cold-walk-verdict.json</code></dd>
+    <dt>Persona report</dt><dd><code>coldwalk/reports/generalist-report.json</code></dd>
+  </dl>
+</div>
+
+<footer>
+  A green L1 regression run is not a passed stranger walk — the two layers are recorded separately, and the conductor never walked its own release.<br>
+  Tropo-OS v1.86.0 · release test-harness (conductor playbook) · rendered 2026-08-08
+</footer>
+
+</div>
+</body>
+</html>

@@ -12,6 +12,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
+from lib.decay_gate import TERMINAL_STATES, TERMINAL_STATUSES
+
 MANIFEST_ROOT_UID = 'b2e7d4a9'
 CONFIG_UID = 'be2296f9'
 PRIVATE_SIDECAR = '.tropo-studio/gardener-wall-clock.json'
@@ -27,12 +29,8 @@ OPEN_STATUSES = frozenset({
     'draft', 'active', 'proposed', 'design', 'in-progress', 'open',
     'pending', 'ready', 'review', 'blocked',
 })
-# Terminal for signal-1; published/locked/evergreen intentionally excluded.
-TERMINAL_STATUSES = frozenset({
-    'closed', 'done', 'shipped', 'retired', 'superseded', 'complete',
-    'archived', 'cancelled', 'deprecated', 'tested', 'failed',
-})
-DEAD_PARENT_STATES = frozenset({'archived', 'deprecated', 'cancelled', 'retired'})
+# Compatibility alias; the shared gate owns the terminal state vocabulary.
+DEAD_PARENT_STATES = TERMINAL_STATES
 INBOUND_EDGE_FIELDS = frozenset({
     'refs', 'governed_by', 'composes_with', 'supersedes', 'aligned_with',
     'calls', 'mentions', 'implements', 'informs', 'related_to', 'derived_from',
@@ -402,6 +400,7 @@ def build_illegal_member_of_edge_set(
     records: list[dict],
     by_uid: dict[str, dict],
     segments: dict[str, str],
+    lattice: object = None,
 ) -> set[tuple[str, str]]:
     """4275b01c (ADR-051) — the set of (source_uid, target_uid) member_of
     pairs classified as ILLEGAL-BUT-PRESENT by the shared cross-vault
@@ -439,7 +438,14 @@ def build_illegal_member_of_edge_set(
     if not vault_entity_home_node:
         return illegal
 
-    lattice = default_two_segment_lattice()
+    # B4a single-adapter parity: the caller (tropo-rebuild-index.py) injects the
+    # verified B4a lattice (lib.audience_gate.B4aLattice over the ONE AudiencePolicy)
+    # once a group authority is installed, so the composed-index edge-exclusion
+    # layer and tropo-validate.py's check_cross_vault_member_of consume the SAME
+    # audience authority and cannot drift. Pre-cutover / no injection keeps the
+    # prior default lattice.
+    if lattice is None:
+        lattice = default_two_segment_lattice()
     work_item_types = {'task', 'work-item', 'workitem'}
 
     for rec in records:
@@ -681,5 +687,6 @@ def apply_gardener_pass(
         'superseded_os_count': len(superseded_os),
         'lint_count': len(lint),
         'repo_clock': repo_clock.isoformat(),
+        'wall_clock_as_of': wall_clock.isoformat(),
     }
     return stats

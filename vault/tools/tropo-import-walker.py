@@ -160,7 +160,10 @@ def _url_quote_path(p):
 
 
 TOOL_NAME = 'import-walker'
-TOOL_VERSION = '1.0.5'   # v1.0.5 = v1.81 Work Crosses the Boundary (92093c81): fa026415 ungoverned-folder
+TOOL_VERSION = '1.0.6'   # v1.0.6 = folder mounts: a source vouched for by a mount may sit outside
+                          # the Studio tree, and the mount_uid + mount_relpath stored beside its
+                          # path are what let a projection survive the folder moving.
+                          # v1.0.5 = v1.81 Work Crosses the Boundary (92093c81): fa026415 ungoverned-folder
                           # enumeration in reconcile; a2c8ea26 schema_version 2 on folder-markers;
                           # 311c63aa dual relative-path convention documented below.
                           # v1.0.4 = v1.70 ingest one-gesture; v1.0.3 = v1.28.0 Stream B amendments.
@@ -199,6 +202,53 @@ KERNEL_INGEST_NEVER = {
 OFFICE_EXTENSIONS = {'.docx', '.xlsx', '.pptx'}
 PDF_EXTENSIONS = {'.pdf'}
 
+# ==========================================================================
+# Source references for mounted folders (v1.0.6)
+# ==========================================================================
+#
+# Every stored source reference in this file used to be `relative_to(studio_root)`,
+# which says two things at once: WHERE the file is, and THAT it is under the Studio.
+# A mounted folder — a OneDrive or SharePoint sync directory — is not under the
+# Studio, so there is no studio-relative form, and the walker refused it outright.
+#
+# The refusal is lifted only when a caller supplies a mount that vouches for the
+# path, and what gets stored is then the absolute path: a handle any consumer can
+# open with no lookup. It goes stale when a cloud folder re-syncs to a new path,
+# which is why the projection also carries `mount_uid` + `mount_relpath` — the pair
+# that never changes, and the pair that lets `tropo-folder.py reconcile` recompute a
+# stale handle instead of leaving a governed entry pointing at nothing.
+#
+# Nothing changes in-tree: with no mount context, this returns the same studio-
+# relative string it always did and refuses an out-of-tree source with the same
+# message.
+
+def anchor_source_path(studio_root, path, mount_uid=None, mount_root=None):
+    """Render `path` as the string a sidecar, projection or event stores for it."""
+    path = Path(path)
+    try:
+        return str(path.relative_to(studio_root))
+    except ValueError:
+        pass
+    if mount_uid and mount_root:
+        try:
+            path.relative_to(Path(mount_root))
+        except ValueError:
+            pass  # a mount is in play but this path is not under it; fall through
+        else:
+            return str(path)
+    raise SystemExit(f"Source file is not inside Studio root: {path}")
+
+
+def mount_relative_path(mount_root, path):
+    """The path of `path` within `mount_root`, POSIX-style. The part a move preserves."""
+    if not mount_root:
+        return None
+    try:
+        rel = Path(path).relative_to(Path(mount_root))
+    except ValueError:
+        return None
+    return '' if str(rel) == '.' else rel.as_posix()
+
 # Confidence thresholds (strict inequalities per arch-spec §C.5 Rule 2)
 THRESHOLD_ROUTINE = 0.95
 THRESHOLD_PATTERN = 0.80
@@ -210,12 +260,21 @@ THRESHOLD_JUDGMENT = 0.50
 # ==========================================================================
 
 def resolve_studio_root(arg_path=None):
-    """Find Studio root: explicit arg, or walk up from cwd looking for .tropo/."""
+    """Find Studio root: explicit arg, or walk up from cwd looking for .tropo/.
+
+    An EXPLICIT --studio-root also accepts a root carrying only `.tropo-studio/`.
+    A studio's minimum real shape is a vault, an index and a `.tropo-studio/`;
+    requiring the kernel directory as well turned that minimum into an error for a
+    caller who had already named the root by hand. The cwd walk-up below is
+    deliberately NOT widened: `.tropo-studio/` appears inside governed folders all
+    over a studio, so treating it as a root marker while searching upward would
+    resolve an imported folder as the Studio.
+    """
     if arg_path:
         p = Path(arg_path).resolve()
-        if (p / '.tropo').exists():
+        if (p / '.tropo').exists() or (p / '.tropo-studio').is_dir():
             return p
-        raise SystemExit(f"--studio-root {arg_path} does not contain .tropo/")
+        raise SystemExit(f"--studio-root {arg_path} does not contain .tropo/ or .tropo-studio/")
     cwd = Path.cwd()
     for candidate in [cwd] + list(cwd.parents):
         if (candidate / '.tropo').exists():
@@ -338,14 +397,23 @@ def _parse_scalar(value):
         return True
     if value.lower() in ('false', 'no'):
         return False
+    # Existing sidecars historically emitted UIDs unquoted. Keep an all-numeric
+    # UID such as ``01234567`` textual: integer coercion would drop the leading
+    # zero, change its filename, and violate mounted identity continuity.
+    if re.fullmatch(r'[0-9a-f]{8}', value):
+        return value
     try:
         return int(value)
     except ValueError:
         pass
-    try:
-        return float(value)
-    except ValueError:
-        pass
+    # Do not interpret UID-shaped values such as `114e8351` as scientific
+    # notation (`inf`). Sidecars historically emit UIDs unquoted, so exponent
+    # parsing here can silently replace identity during regeneration.
+    if "." in value:
+        try:
+            return float(value)
+        except ValueError:
+            pass
     return value
 
 
@@ -556,7 +624,8 @@ def _yaml_str(s):
 
 def write_sidecar(sidecar_path, uid, source_filename, source_path_rel, original_path,
                   size_bytes, mtime_iso, source_hash, hash_function, folder_uid,
-                  governance='tier-1-sidecar', title=None, description=''):
+                  governance='tier-1-sidecar', title=None, description='',
+                  original_styles=None):
     """Author a sidecar with full external-artifact frontmatter.
     String values are JSON-escaped for YAML safety (handles quotes, colons, backslashes)."""
     sidecar_path.parent.mkdir(parents=True, exist_ok=True)
@@ -564,8 +633,12 @@ def write_sidecar(sidecar_path, uid, source_filename, source_path_rel, original_
     # Body uses plain markdown-safe rendering (no special chars expected from internals)
     body_title = title.replace('\n', ' ').replace('`', "'")
     body_path = source_path_rel.replace('`', "'")
+    original_styles_block = (
+        _serialize_original_styles_yaml(original_styles) + '\n'
+        if original_styles else ''
+    )
     content = f"""---
-uid: {uid}
+uid: {_yaml_str(uid)}
 type: external-artifact
 status: active
 title: {_yaml_str(title)}
@@ -581,7 +654,7 @@ member_of:
   - {_yaml_str(folder_uid)}
 governance: {governance}
 description: {_yaml_str(description)}
-created: {now_date()}
+{original_styles_block}created: {now_date()}
 created_by: {TOOL_NAME}-v{TOOL_VERSION}
 modified: {now_date()}
 modified_by: {TOOL_NAME}-v{TOOL_VERSION}
@@ -606,7 +679,7 @@ def write_folder_marker(folder_path, uid, folder_name, original_path,
     marker_path = marker_dir / '.tropo-folder.md'
     body_name = folder_name.replace('`', "'").replace('\n', ' ')
     content = f"""---
-uid: {uid}
+uid: {_yaml_str(uid)}
 type: project
 status: active
 title: {_yaml_str(folder_name)}
@@ -693,9 +766,94 @@ def _build_mirror_members_section(studio_root, folder_uid):
     return "\n".join(lines) + "\n"
 
 
+def _mirror_origin_block(mount_uid, mount_relpath):
+    """Frontmatter that marks a folder mirror as mirroring somebody else's folder.
+
+    A mirror of a mounted folder is outside-origin content in its own right: its
+    title is the folder's name and its Members table is a list of filenames from
+    someone's OneDrive. Those strings are no more ours to send than the file bodies
+    are, and without a mark the shipped egress classifier cannot tell this entry
+    apart from agent-authored work. `external` is the publishing label the walker
+    already stamps on the file projections beside it; the mirror gets the same one
+    for the same reason, and `mount_uid` + `mount_relpath` are what reconcile
+    recomputes the stale `original_path` handle from.
+
+    Empty for in-tree folders, which have no outside origin to declare.
+    """
+    if not mount_uid:
+        return ''
+    block = f'extraction_scope: external\nmount_uid: {_yaml_str(mount_uid)}\n'
+    if mount_relpath is not None:
+        block += f'mount_relpath: {_yaml_str(mount_relpath)}\n'
+    return block
+
+
+def render_folder_mirror(studio_root, folder_uid, folder_name, original_path,
+                         folder_marker_path_rel,
+                         parent_member=TROPO_WORK_L0_UID, governance='tier-1-sidecar',
+                         mount_uid=None, mount_relpath=None,
+                         availability='available', owner=None, created=None,
+                         created_by=None, modified=None, modified_by=None,
+                         schema_version=2, members_section=None):
+    """Render the complete derived folder mirror without writing it.
+
+    Keeping rendering separate from placement gives reconcile one deterministic
+    byte surface to compare before it repairs a hand-edited projection.
+    """
+    body_name = folder_name.replace('`', "'").replace('\n', ' ')
+    if members_section is None:
+        members_section = _build_mirror_members_section(studio_root, folder_uid)
+    return f"""---
+uid: {_yaml_str(folder_uid)}
+type: project
+status: active
+title: {_yaml_str(folder_name)}
+description: {_yaml_str("Imported folder governed by Tropo (vault-resident mirror of the on-disk .tropo-folder.md).")}
+owner: {owner or f'{TOOL_NAME}-v{TOOL_VERSION}'}
+stage: build
+state: active
+lifecycle: standing
+source_folder_name: {_yaml_str(folder_name)}
+original_path: {_yaml_str(original_path)}
+governance: {governance}
+mirror_of: {folder_uid}
+folder_marker_path: {_yaml_str(folder_marker_path_rel)}
+availability: {availability}
+projection_authority: derived-only
+{_mirror_origin_block(mount_uid, mount_relpath)}member_of:
+  - {_yaml_str(parent_member)}
+created: {created or now_date()}
+created_by: {created_by or f'{TOOL_NAME}-v{TOOL_VERSION}'}
+modified: {modified or created or now_date()}
+modified_by: {modified_by or f'{TOOL_NAME}-v{TOOL_VERSION}'}
+schema_version: {schema_version}
+---
+
+# {body_name} — Tropo Folder (vault mirror)
+
+This entry is the vault-resident MIRROR of the on-disk folder-marker at
+`{folder_marker_path_rel}`. The two files share the same UID and represent
+a single governed entity with two on-disk representations:
+
+- On-disk marker (portable; travels with the folder if moved)
+- Vault mirror (this file; queryable via the vault index + tropo-nav)
+
+Per arch-spec [5a89297a v0.5](5a89297a.md) §3.5.5 Amendment 1 + §3.8
+folder-mirror UID-duplication sanctioned exception.
+
+{members_section}
+*Mirror authored by `{TOOL_NAME}` v{TOOL_VERSION}. Strictly derived; hand edits
+are replaced and reported by `tropo-folder.py reconcile`.*
+"""
+
+
 def write_folder_mirror(studio_root, folder_uid, folder_name, original_path,
                         folder_marker_path_rel,
-                        parent_member=TROPO_WORK_L0_UID, governance='tier-1-sidecar'):
+                        parent_member=TROPO_WORK_L0_UID, governance='tier-1-sidecar',
+                        mount_uid=None, mount_relpath=None,
+                        availability='available', owner=None, created=None,
+                        created_by=None, modified=None, modified_by=None,
+                        schema_version=2):
     """Author a vault-resident folder-marker MIRROR at vault/files/<folder-uid>.md.
 
     Per arch-spec 5a89297a §3.5.5 Amendment 1 v0.5 (closes "I'm blind without it" gap):
@@ -715,56 +873,19 @@ def write_folder_mirror(studio_root, folder_uid, folder_name, original_path,
     mirror_tmp = studio_root / 'vault' / 'files' / f'{folder_uid}.md.tmp'
     mirror_path.parent.mkdir(parents=True, exist_ok=True)
 
-    body_name = folder_name.replace('`', "'").replace('\n', ' ')
-    members_section = _build_mirror_members_section(studio_root, folder_uid)
-    members_section_quoted = members_section  # already markdown
-
-    content = f"""---
-uid: {folder_uid}
-type: project
-status: active
-title: {_yaml_str(folder_name)}
-description: {_yaml_str("Imported folder governed by Tropo (vault-resident mirror of the on-disk .tropo-folder.md).")}
-owner: {TOOL_NAME}-v{TOOL_VERSION}
-stage: build
-state: active
-lifecycle: standing
-source_folder_name: {_yaml_str(folder_name)}
-original_path: {_yaml_str(original_path)}
-governance: {governance}
-mirror_of: {folder_uid}
-folder_marker_path: {_yaml_str(folder_marker_path_rel)}
-member_of:
-  - {_yaml_str(parent_member)}
-created: {now_date()}
-created_by: {TOOL_NAME}-v{TOOL_VERSION}
-modified: {now_date()}
-modified_by: {TOOL_NAME}-v{TOOL_VERSION}
-schema_version: 2
----
-
-# {body_name} — Tropo Folder (vault mirror)
-
-This entry is the vault-resident MIRROR of the on-disk folder-marker at
-`{folder_marker_path_rel}`. The two files share the same UID and represent
-a single governed entity with two on-disk representations:
-
-- On-disk marker (portable; travels with the folder if moved)
-- Vault mirror (this file; queryable via the vault index + tropo-nav)
-
-Per arch-spec [5a89297a v0.5](5a89297a.md) §3.5.5 Amendment 1 + §3.8
-folder-mirror UID-duplication sanctioned exception.
-
-{members_section_quoted}
-*Mirror authored by `{TOOL_NAME}` v{TOOL_VERSION}. Regenerable via
-`tropo-backfill-styles.py --folder-markers` if lost.*
-"""
+    content = render_folder_mirror(
+        studio_root, folder_uid, folder_name, original_path,
+        folder_marker_path_rel, parent_member, governance, mount_uid,
+        mount_relpath, availability, owner, created, created_by, modified,
+        modified_by, schema_version,
+    )
     mirror_tmp.write_text(content)
     return mirror_tmp, mirror_path
 
 
 def append_projection_index_row(studio_root, uid, title, member_of_uid,
-                                source_filename, source_relpath, description=''):
+                                source_filename, source_relpath, description='',
+                                mount_uid=None, mount_relpath=None):
     """Append a vault/00-index.jsonl row for an external-artifact projection.
 
     v1.0.3 in-stream micro-amendment (v0.5.1 — surfaced by Stream B smoke-test 2026-05-14):
@@ -775,6 +896,11 @@ def append_projection_index_row(studio_root, uid, title, member_of_uid,
     Idempotent: skips if a row with this UID already exists.
     Schema matches rebuild-index.py output so re-runs don't replace inconsistent fields.
     """
+    # Mounted-folder adoption batches every authored projection through the
+    # canonical sealed writer after the walk. Direct append would advance only
+    # JSONL and leave SQLite/FTS/edges/seals stale.
+    if mount_uid:
+        return
     index_path = studio_root / VAULT_INDEX_RELPATH
     if not index_path.exists():
         return  # First-gen Studio; rebuild-index will catch
@@ -814,8 +940,14 @@ def append_projection_index_row(studio_root, uid, title, member_of_uid,
         'modified_by': f'{TOOL_NAME}-v{TOOL_VERSION}',
         'schema_version': 2,
         'extraction_scope': 'external',
+        'availability': 'available',
+        'projection_authority': 'derived-only',
         'file_ext': 'md',
     }
+    if mount_uid:
+        row['mount_uid'] = mount_uid
+        if mount_relpath is not None:
+            row['mount_relpath'] = mount_relpath
     with index_path.open('a') as f:
         f.write(json.dumps(row, separators=(',', ':')) + '\n')
         f.flush()
@@ -825,7 +957,8 @@ def append_projection_index_row(studio_root, uid, title, member_of_uid,
 def append_folder_mirror_index_row(studio_root, folder_uid, folder_name, original_path,
                                    folder_marker_path_rel,
                                    parent_member=TROPO_WORK_L0_UID,
-                                   governance='tier-1-sidecar'):
+                                   governance='tier-1-sidecar',
+                                   mount_uid=None, mount_relpath=None):
     """Append a vault/00-index.jsonl row for a folder-marker mirror.
 
     Per arch-spec §3.10 check 4 (v0.5 widened to include type:project): every
@@ -835,6 +968,8 @@ def append_folder_mirror_index_row(studio_root, folder_uid, folder_name, origina
     Schema matches what rebuild-index.py emits so re-runs don't replace inconsistent fields.
     Skips silently if index doesn't exist (first-gen Studio; rebuild-index will catch).
     """
+    if mount_uid:
+        return
     index_path = studio_root / VAULT_INDEX_RELPATH
     if not index_path.exists():
         return
@@ -878,9 +1013,19 @@ def append_folder_mirror_index_row(studio_root, folder_uid, folder_name, origina
         'modified_by': f'{TOOL_NAME}-v{TOOL_VERSION}',
         'schema_version': 2,
         'extraction_scope': 'argo-private',
+        'availability': 'available',
+        'projection_authority': 'derived-only',
         'tags': ['folder-marker-mirror', 'tropo-work', 'import-walker-authored'],
         'file_ext': 'md',
     }
+    if mount_uid:
+        # Keep the row saying what the file says. An index row that reads
+        # argo-private beside a mirror that reads external is two answers to one
+        # egress question, and the classifier consults the row first.
+        row['extraction_scope'] = 'external'
+        row['mount_uid'] = mount_uid
+        if mount_relpath is not None:
+            row['mount_relpath'] = mount_relpath
     with index_path.open('a') as f:
         f.write(json.dumps(row, separators=(',', ':')) + '\n')
         f.flush()
@@ -993,38 +1138,212 @@ def _serialize_original_styles_yaml(styles_dict):
     return '\n'.join(lines)
 
 
-def write_vault_projection(studio_root, uid, sidecar_relpath, source_relpath,
-                          title, member_of_uid, source_filename, source_size_bytes,
-                          source_mtime, source_hash, hash_function, original_path,
-                          governance='tier-1-sidecar', description='',
-                          original_styles=None):
-    """Author a vault projection at vault/files/<uid>.md (Tier 1).
+def _projection_link(ref):
+    """One markdown link in a projection body, for a stored source reference.
 
-    v1.0.1 fix (sa.skeptic round-2 P0-A4): projection now carries all required
-    external-artifact fields per the capsule's Required Frontmatter contract.
-    Per arch-spec §C.3 the projection's source_path is relative to Studio root
-    (vs sidecar's relative-to-sidecar).
-
-    v1.0.3 (v1.28.0 per arch-spec §3.5.5 Amendment 2 v0.5): accepts optional
-    `original_styles` dict (per arch-spec §3.4 schema). When provided, emitted
-    as an indented YAML block in the projection frontmatter. The field is OPTIONAL
-    on external-artifact.capsule v1.1; pre-v1.28.0 projections + non-Office binaries
-    remain valid without it.
+    A studio-relative reference is linkable from vault/files/ with `../../`, which is
+    what this has always emitted. A mounted folder's absolute path has no relative
+    form from the vault, so it is linked as-is.
     """
-    projection_path = studio_root / 'vault' / 'files' / f'{uid}.md'
-    projection_path.parent.mkdir(parents=True, exist_ok=True)
-    body_title = title.replace('`', "'").replace('\n', ' ')
+    return _url_quote_path(ref) if Path(ref).is_absolute() else f'../../{_url_quote_path(ref)}'
 
+
+def render_unavailable_projection(metadata, mount_uid, availability):
+    """Render a stable link-target tombstone with no source-derived edges.
+
+    This is used only while a mounted source cannot be read. Identity metadata
+    remains visible, but paths, membership edges, relations, and source links do
+    not survive into the unavailable view.
+    """
+    uid = str(metadata.get('uid') or '')
+    title = str(metadata.get('title') or metadata.get('source_filename') or uid)
+    entry_type = str(metadata.get('type') or 'external-artifact')
+    status = str(metadata.get('status') or 'active')
+    owner = str(metadata.get('owner') or f'{TOOL_NAME}-v{TOOL_VERSION}')
+    description = str(metadata.get('description') or '')
+    created = str(metadata.get('created') or now_date())
+    created_by = str(metadata.get('created_by') or owner)
+    modified = str(metadata.get('modified') or created)
+    modified_by = str(metadata.get('modified_by') or owner)
+    schema_version = metadata.get('schema_version') or 2
+    body_title = title.replace('`', "'").replace('\n', ' ')
+    return f"""---
+uid: {_yaml_str(uid)}
+type: {entry_type}
+status: {status}
+title: {_yaml_str(title)}
+owner: {owner}
+description: {_yaml_str(description)}
+availability: {availability}
+projection_authority: derived-only
+mount_uid: {_yaml_str(mount_uid)}
+created: {created}
+created_by: {created_by}
+modified: {modified}
+modified_by: {modified_by}
+schema_version: {schema_version}
+---
+
+# {body_title} (vault projection)
+
+This document is currently unavailable because its mounted source cannot be
+read. Its UID remains stable, so inbound links continue to resolve.
+
+*Strictly derived link target. Source paths, body content, and source-derived
+outgoing edges are intentionally absent while unavailable.*
+"""
+
+
+def _frontmatter_text(path):
+    """Return exact frontmatter bytes without delimiters."""
+    text = Path(path).read_text(encoding='utf-8')
+    if not text.startswith('---'):
+        raise ValueError(f'{path} has no YAML frontmatter')
+    rest = text[3:].lstrip('\n')
+    end = rest.find('\n---')
+    if end < 0:
+        raise ValueError(f'{path} has unterminated YAML frontmatter')
+    return rest[:end]
+
+
+def _replace_top_level_fields(frontmatter_text, replacements):
+    """Replace named top-level YAML fields while preserving every other byte."""
+    lines = frontmatter_text.splitlines()
+    starts = []
+    for index, line in enumerate(lines):
+        match = re.match(r'^([A-Za-z_][A-Za-z0-9_]*):(?:\s|$)', line)
+        if match:
+            starts.append((index, match.group(1)))
+    ranges = {}
+    for position, (start, key) in enumerate(starts):
+        end = starts[position + 1][0] if position + 1 < len(starts) else len(lines)
+        ranges[key] = (start, end)
+
+    output = []
+    cursor = 0
+    emitted = set()
+    for start, key in starts:
+        if start < cursor:
+            continue
+        end = ranges[key][1]
+        output.extend(lines[cursor:start])
+        if key in replacements:
+            output.extend(str(replacements[key]).splitlines())
+            emitted.add(key)
+        else:
+            output.extend(lines[start:end])
+        cursor = end
+    output.extend(lines[cursor:])
+    for key, rendered in replacements.items():
+        if key not in emitted and key not in ranges:
+            output.extend(str(rendered).splitlines())
+    return '\n'.join(output)
+
+
+def render_projection_from_sidecar(
+    sidecar_path,
+    source_path,
+    mount_uid,
+    mount_root,
+    availability='available',
+    sidecar_reference=None,
+):
+    """Render a projection from the complete authoritative sidecar surface."""
+    sidecar_path = Path(sidecar_path).resolve()
+    source_path = Path(source_path).resolve()
+    metadata = parse_frontmatter(sidecar_path)
+    if availability != 'available':
+        return render_unavailable_projection(metadata, mount_uid, availability)
+    source_ref = str(source_path)
+    sidecar_ref = str(sidecar_reference or sidecar_path)
+    mount_relpath = mount_relative_path(mount_root, source_path)
+    replacements = {
+        'source_sidecar': f'source_sidecar: {_yaml_str(sidecar_ref)}',
+        'source_path': f'source_path: {_yaml_str(source_ref)}',
+        'original_path': f'original_path: {_yaml_str(source_ref)}',
+        'extraction_scope': 'extraction_scope: external',
+        'availability': 'availability: available',
+        'projection_authority': 'projection_authority: derived-only',
+        'mount_uid': f'mount_uid: {_yaml_str(mount_uid)}',
+    }
+    if mount_relpath is not None:
+        replacements['mount_relpath'] = (
+            f'mount_relpath: {_yaml_str(mount_relpath)}'
+        )
+    frontmatter = _replace_top_level_fields(
+        _frontmatter_text(sidecar_path),
+        replacements,
+    )
+    title = str(
+        metadata.get('title')
+        or metadata.get('source_filename')
+        or metadata.get('uid')
+        or ''
+    )
+    body_title = title.replace('`', "'").replace('\n', ' ')
+    source_link = _projection_link(source_ref)
+    sidecar_link = _projection_link(sidecar_ref)
+    return f"""---
+{frontmatter}
+---
+
+# {body_title} (vault projection)
+
+**Relations**
+
+(See authoritative sidecar frontmatter.)
+
+**Source:** [{source_ref}]({source_link})
+**Sidecar:** [{sidecar_ref}]({sidecar_link})
+
+*Strictly derived from the authoritative sidecar. Hand edits are replaced and
+reported by `tropo-folder.py reconcile`.*
+"""
+
+
+def render_vault_projection(uid, sidecar_relpath, source_relpath, title,
+                            member_of_uid, source_filename, source_size_bytes,
+                            source_mtime, source_hash, hash_function,
+                            original_path, governance='tier-1-sidecar',
+                            description='', original_styles=None, mount_uid=None,
+                            mount_relpath=None, availability='available',
+                            owner=None, status='active', created=None,
+                            created_by=None, modified=None, modified_by=None,
+                            schema_version=2):
+    """Render the complete external-artifact projection without writing it."""
+    metadata = {
+        'uid': uid,
+        'type': 'external-artifact',
+        'status': status,
+        'title': title,
+        'owner': owner or f'{TOOL_NAME}-v{TOOL_VERSION}',
+        'description': description,
+        'created': created or now_date(),
+        'created_by': created_by or f'{TOOL_NAME}-v{TOOL_VERSION}',
+        'modified': modified or created or now_date(),
+        'modified_by': modified_by or f'{TOOL_NAME}-v{TOOL_VERSION}',
+        'schema_version': schema_version,
+    }
+    if availability != 'available':
+        return render_unavailable_projection(metadata, mount_uid, availability)
+
+    body_title = title.replace('`', "'").replace('\n', ' ')
     original_styles_block = ''
     if original_styles:
         original_styles_block = _serialize_original_styles_yaml(original_styles) + '\n'
-
-    content = f"""---
-uid: {uid}
+    mount_block = ''
+    if mount_uid:
+        mount_block = f'mount_uid: {_yaml_str(mount_uid)}\n'
+        if mount_relpath is not None:
+            mount_block += f'mount_relpath: {_yaml_str(mount_relpath)}\n'
+    source_link = _projection_link(source_relpath)
+    sidecar_link = _projection_link(sidecar_relpath)
+    return f"""---
+uid: {_yaml_str(uid)}
 type: external-artifact
-status: active
+status: {status}
 title: {_yaml_str(title)}
-owner: {TOOL_NAME}-v{TOOL_VERSION}
+owner: {metadata['owner']}
 source_sidecar: {_yaml_str(sidecar_relpath)}
 source_filename: {_yaml_str(source_filename)}
 source_path: {_yaml_str(source_relpath)}
@@ -1039,11 +1358,13 @@ member_of:
 governance: {governance}
 relations: []
 extraction_scope: external
-{original_styles_block}created: {now_date()}
-created_by: {TOOL_NAME}-v{TOOL_VERSION}
-modified: {now_date()}
-modified_by: {TOOL_NAME}-v{TOOL_VERSION}
-schema_version: 2
+availability: available
+projection_authority: derived-only
+{mount_block}{original_styles_block}created: {metadata['created']}
+created_by: {metadata['created_by']}
+modified: {metadata['modified']}
+modified_by: {metadata['modified_by']}
+schema_version: {schema_version}
 ---
 
 # {body_title} (vault projection)
@@ -1052,13 +1373,59 @@ schema_version: 2
 
 (none yet)
 
-**Source:** [{source_relpath}](../../{_url_quote_path(source_relpath)})
-**Sidecar:** [{sidecar_relpath}](../../{_url_quote_path(sidecar_relpath)})
+**Source:** [{source_relpath}]({source_link})
+**Sidecar:** [{sidecar_relpath}]({sidecar_link})
 
-*Projection derived from sidecar; regenerable via `import-walker.py reconcile --apply` or `rebuild-vault.py`.*
+*Strictly derived from the authoritative sidecar. Hand edits are replaced and
+reported by `tropo-folder.py reconcile`.*
 """
-    projection_path.write_text(content)
+
+
+def write_rendered_projection(projection_path, content):
+    """Place rendered projection bytes atomically, writing only on change."""
+    projection_path = Path(projection_path)
+    projection_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if projection_path.read_text(encoding='utf-8') == content:
+            return projection_path
+    except (OSError, UnicodeDecodeError):
+        pass
+    tmp = projection_path.with_suffix(projection_path.suffix + '.tmp')
+    tmp.write_text(content, encoding='utf-8')
+    os.replace(tmp, projection_path)
     return projection_path
+
+
+def write_vault_projection(studio_root, uid, sidecar_relpath, source_relpath,
+                          title, member_of_uid, source_filename, source_size_bytes,
+                          source_mtime, source_hash, hash_function, original_path,
+                          governance='tier-1-sidecar', description='',
+                          original_styles=None, mount_uid=None, mount_relpath=None,
+                          availability='available', owner=None, status='active',
+                          created=None, created_by=None, modified=None,
+                          modified_by=None, schema_version=2):
+    """Author a vault projection at vault/files/<uid>.md (Tier 1).
+
+    v1.0.1 fix (sa.skeptic round-2 P0-A4): projection now carries all required
+    external-artifact fields per the capsule's Required Frontmatter contract.
+    Per arch-spec §C.3 the projection's source_path is relative to Studio root
+    (vs sidecar's relative-to-sidecar).
+
+    v1.0.3 (v1.28.0 per arch-spec §3.5.5 Amendment 2 v0.5): accepts optional
+    `original_styles` dict (per arch-spec §3.4 schema). When provided, emitted
+    as an indented YAML block in the projection frontmatter. The field is OPTIONAL
+    on external-artifact.capsule v1.1; pre-v1.28.0 projections + non-Office binaries
+    remain valid without it.
+    """
+    projection_path = studio_root / 'vault' / 'files' / f'{uid}.md'
+    content = render_vault_projection(
+        uid, sidecar_relpath, source_relpath, title, member_of_uid,
+        source_filename, source_size_bytes, source_mtime, source_hash,
+        hash_function, original_path, governance, description, original_styles,
+        mount_uid, mount_relpath, availability, owner, status, created,
+        created_by, modified, modified_by, schema_version,
+    )
+    return write_rendered_projection(projection_path, content)
 
 
 # ==========================================================================
@@ -1295,10 +1662,12 @@ def cmd_create_sidecar(args, studio_root):
     if not source_path.is_file():
         raise SystemExit(f"Source is not a regular file: {source_path}")
 
-    try:
-        rel_to_root = source_path.relative_to(studio_root)
-    except ValueError:
-        raise SystemExit(f"Source file is not inside Studio root: {source_path}")
+    # Mount context, when the caller has one. Absent (every pre-mount caller), every
+    # anchor_source_path call below is the studio-relative string it always was, and
+    # an out-of-tree source is refused with the message it always carried.
+    mount_uid = getattr(args, 'mount_uid', None)
+    mount_root = Path(getattr(args, 'mount_root')).resolve() if getattr(args, 'mount_root', None) else None
+    rel_to_root = anchor_source_path(studio_root, source_path, mount_uid, mount_root)
 
     parent_folder = source_path.parent
     tropo_studio = parent_folder / '.tropo-studio'
@@ -1318,8 +1687,19 @@ def cmd_create_sidecar(args, studio_root):
         folder_uid = TROPO_WORK_L0_UID
     else:
         marker_path = tropo_studio / '.tropo-folder.md'
-        marker_rel = str(marker_path.relative_to(studio_root))
-        folder_rel = str(parent_folder.relative_to(studio_root))
+        marker_rel = anchor_source_path(studio_root, marker_path, mount_uid, mount_root)
+        folder_rel = anchor_source_path(studio_root, parent_folder, mount_uid, mount_root)
+        folder_mount_relpath = mount_relative_path(mount_root, parent_folder)
+
+        # What `original_path` carries on this folder's marker AND on its mirror
+        # — validate.py's folder-mirror pair check requires the two to agree.
+        # In-tree it is the studio-relative folder path it has always been.
+        # Under a mount it is the folder's own marker: the folder itself is a
+        # directory, and a directory-valued path field is a handle no consumer
+        # in this tree can open, while the folder is still `parent.parent` of
+        # the value stored. Absolute, like every other mount-anchored reference
+        # here, so nobody has to guess which base it is relative to.
+        folder_origin_rel = marker_rel if mount_uid else folder_rel
 
         if not marker_path.exists():
             # Fresh import: mint UID + author marker + mirror (ordered-write protocol)
@@ -1332,11 +1712,13 @@ def cmd_create_sidecar(args, studio_root):
                     studio_root=studio_root,
                     folder_uid=folder_uid,
                     folder_name=parent_folder.name,
-                    original_path=folder_rel,
+                    original_path=folder_origin_rel,
                     folder_marker_path_rel=marker_rel,
+                    mount_uid=mount_uid,
+                    mount_relpath=folder_mount_relpath,
                 )
                 # Step 2: write on-disk marker (atomic per single-write semantics)
-                write_folder_marker(parent_folder, folder_uid, parent_folder.name, folder_rel)
+                write_folder_marker(parent_folder, folder_uid, parent_folder.name, folder_origin_rel)
                 # Step 3: atomic-rename .tmp → .md (POSIX/NTFS atomic)
                 os.replace(mirror_tmp, mirror_final)
                 # Step 4: inline index append per §3.10 check 4 v0.5 widening
@@ -1344,8 +1726,10 @@ def cmd_create_sidecar(args, studio_root):
                     studio_root=studio_root,
                     folder_uid=folder_uid,
                     folder_name=parent_folder.name,
-                    original_path=folder_rel,
+                    original_path=folder_origin_rel,
                     folder_marker_path_rel=marker_rel,
+                    mount_uid=mount_uid,
+                    mount_relpath=folder_mount_relpath,
                 )
                 folder_mirror_action = 'authored'
                 print(f"Authored folder marker: {marker_path} (uid: {folder_uid})", file=sys.stderr)
@@ -1378,16 +1762,20 @@ def cmd_create_sidecar(args, studio_root):
                         studio_root=studio_root,
                         folder_uid=folder_uid,
                         folder_name=parent_folder.name,
-                        original_path=folder_rel,
+                        original_path=folder_origin_rel,
                         folder_marker_path_rel=marker_rel,
+                        mount_uid=mount_uid,
+                        mount_relpath=folder_mount_relpath,
                     )
                     os.replace(mirror_tmp, mirror_final)
                     append_folder_mirror_index_row(
                         studio_root=studio_root,
                         folder_uid=folder_uid,
                         folder_name=parent_folder.name,
-                        original_path=folder_rel,
+                        original_path=folder_origin_rel,
                         folder_marker_path_rel=marker_rel,
+                        mount_uid=mount_uid,
+                        mount_relpath=folder_mount_relpath,
                     )
                     folder_mirror_action = 'retro-filled'
                     print(f"Retro-filled folder mirror: vault/files/{folder_uid}.md (existing marker UID)", file=sys.stderr)
@@ -1441,11 +1829,12 @@ def cmd_create_sidecar(args, studio_root):
         hash_function=hash_function,
         folder_uid=folder_uid,
         description=description,
+        original_styles=original_styles,
     )
 
     # Vault projection — pass full sidecar metadata per arch-spec §C.3 + capsule v1.0.1.
     # v1.0.3: pass original_styles dict if extracted (None otherwise; field is optional).
-    sidecar_rel = str(sidecar_path.relative_to(studio_root))
+    sidecar_rel = anchor_source_path(studio_root, sidecar_path, mount_uid, mount_root)
     write_vault_projection(
         studio_root=studio_root,
         uid=uid,
@@ -1461,6 +1850,8 @@ def cmd_create_sidecar(args, studio_root):
         original_path=source_rel_to_root,
         description=description,
         original_styles=original_styles,
+        mount_uid=mount_uid,
+        mount_relpath=mount_relative_path(mount_root, source_path),
     )
 
     # Inline-sync the projection row into vault/00-index.jsonl per v0.5.1 in-stream
@@ -1474,6 +1865,8 @@ def cmd_create_sidecar(args, studio_root):
         source_filename=source_path.name,
         source_relpath=source_rel_to_root,
         description=description,
+        mount_uid=mount_uid,
+        mount_relpath=mount_relative_path(mount_root, source_path),
     )
 
     # If folder has a mirror, rebuild its ## Members section to include this new sidecar.
@@ -1481,8 +1874,11 @@ def cmd_create_sidecar(args, studio_root):
     # (For 'authored' + 'retro-filled' paths: the mirror was written BEFORE the projection
     # landed in the index per ordered-write protocol; refresh now so first-touch Members is correct.)
     if folder_mirror_action in ('authored', 'retro-filled', 'rebuilt-members') and folder_uid != TROPO_WORK_L0_UID:
-        folder_rel = str(parent_folder.relative_to(studio_root))
-        marker_rel = str((parent_folder / '.tropo-studio' / '.tropo-folder.md').relative_to(studio_root))
+        folder_rel = anchor_source_path(studio_root, parent_folder, mount_uid, mount_root)
+        marker_rel = anchor_source_path(
+            studio_root, parent_folder / '.tropo-studio' / '.tropo-folder.md', mount_uid, mount_root)
+        # Members-only rebuild; the mount fields the mirror already carries are
+        # preserved because rebuild_folder_mirror rewrites the body, not the header.
         rebuild_folder_mirror(
             studio_root=studio_root,
             folder_uid=folder_uid,
@@ -1530,15 +1926,21 @@ def cmd_create_sidecar(args, studio_root):
         print(f"Original styles: populated ({ns_count} named styles)", file=sys.stderr)
 
 
-def _detect_deltas_in_ungoverned_folders(studio_root, patterns, events):
+def _detect_deltas_in_ungoverned_folders(studio_root, patterns, events,
+                                         scan_root=None, mount_uid=None, mount_root=None):
     """Enumerate files inside ungoverned folders (fa026415 / v1.81 S1).
 
     Share-drop pattern: a brand-new folder dropped into 04-external-work/ has no
     `.tropo-folder.md` marker yet, so the governed-folder pass cannot see its files.
     This pass walks ungoverned directories and emits `new-uncompanioned-file` deltas
     so reconcile --apply has input on first encounter.
+
+    `scan_root` defaults to 04-external-work/, which is where a share-drop lands in
+    an unmounted Studio. A mounted folder is the same share-drop one directory
+    outside the tree, so the folder-mount tool passes its own root and the mount
+    context that names the resulting paths.
     """
-    scan_root = studio_root / '04-external-work'
+    scan_root = Path(scan_root) if scan_root else (studio_root / '04-external-work')
     if not scan_root.exists():
         return
 
@@ -1565,13 +1967,15 @@ def _detect_deltas_in_ungoverned_folders(studio_root, patterns, events):
             sidecar = folder / '.tropo-studio' / f'{fn}.tropo.md'
             if sidecar.exists():
                 continue
-            rel = str(fpath.relative_to(studio_root))
-            folder_rel = str(folder.relative_to(studio_root))
+            rel = anchor_source_path(studio_root, fpath, mount_uid, mount_root)
+            folder_rel = anchor_source_path(studio_root, folder, mount_uid, mount_root)
             events.append({
                 'type': 'new-uncompanioned-file',
                 'path': rel,
                 'folder_path': folder_rel,
                 'source_filename': fn,
+                'mount_uid': mount_uid,
+                'mount_root': str(mount_root) if mount_root else None,
                 'confidence': 0.97,
                 'action': 'create_sidecar',
                 'evidence': (
@@ -1751,8 +2155,15 @@ def _detect_deltas_at_root(studio_root, patterns, events, wc_map=None):
                 })
 
 
-def _detect_deltas_in_folder(folder_path, studio_root, patterns, events, wc_map=None):
-    """Detect substrate deltas in a governed folder."""
+def _detect_deltas_in_folder(folder_path, studio_root, patterns, events, wc_map=None,
+                             mount_uid=None, mount_root=None):
+    """Detect substrate deltas in a governed folder.
+
+    The optional mount context names paths in the emitted events relative to a mount
+    rather than the Studio tree, so this pass runs unchanged over a folder that lives
+    outside the tree. Unset, every path in the events is the studio-relative string
+    it has always been.
+    """
     wc_map = wc_map or {}
     tropo_studio = folder_path / '.tropo-studio'
     existing_sidecars = {}
@@ -1773,9 +2184,12 @@ def _detect_deltas_in_folder(folder_path, studio_root, patterns, events, wc_map=
         if name not in existing_sidecars:
             events.append({
                 'type': 'new-uncompanioned-file',
-                'path': str(fp.relative_to(studio_root)),
-                'folder_path': str(folder_path.relative_to(studio_root)) if folder_path != studio_root else '.',
+                'path': anchor_source_path(studio_root, fp, mount_uid, mount_root),
+                'folder_path': (anchor_source_path(studio_root, folder_path, mount_uid, mount_root)
+                                if folder_path != studio_root else '.'),
                 'source_filename': name,
+                'mount_uid': mount_uid,
+                'mount_root': str(mount_root) if mount_root else None,
                 'confidence': 0.97,
                 'action': 'create_sidecar',
                 'evidence': f'File present in governed folder {folder_path.name}/ without sidecar; auto-index.',
@@ -1787,9 +2201,11 @@ def _detect_deltas_in_folder(folder_path, studio_root, patterns, events, wc_map=
             fm = parse_frontmatter(sidecar_path)
             events.append({
                 'type': 'orphan-sidecar',
-                'sidecar_path': str(sidecar_path.relative_to(studio_root)),
+                'sidecar_path': anchor_source_path(studio_root, sidecar_path, mount_uid, mount_root),
                 'recorded_uid': fm.get('uid', ''),
                 'recorded_source': fm.get('source_filename', name),
+                'mount_uid': mount_uid,
+                'mount_root': str(mount_root) if mount_root else None,
                 'confidence': 0.40,
                 'action': 'surface_to_user',
                 'evidence': f'Sidecar {sidecar_path.name} has no source file; could be deleted source, moved file, or stale sidecar.',
@@ -1824,9 +2240,12 @@ def _detect_deltas_in_folder(folder_path, studio_root, patterns, events, wc_map=
 
                 events.append({
                     'type': 'content-change',
-                    'path': str(fp.relative_to(studio_root)),
-                    'sidecar_path': str(existing_sidecars[name].relative_to(studio_root)),
+                    'path': anchor_source_path(studio_root, fp, mount_uid, mount_root),
+                    'sidecar_path': anchor_source_path(
+                        studio_root, existing_sidecars[name], mount_uid, mount_root),
                     'uid': uid,
+                    'mount_uid': mount_uid,
+                    'mount_root': str(mount_root) if mount_root else None,
                     'old_hash': recorded_hash,
                     'new_hash': current_hash,
                     'old_hash_function': recorded_fn,
@@ -1845,6 +2264,10 @@ def _apply_event(studio_root, event, run_uid, executive):
         if action == 'create_sidecar':
             # Reuse cmd_create_sidecar logic via direct call
             source_relpath = event.get('path')
+            mount_uid = event.get('mount_uid')
+            mount_root = Path(event['mount_root']).resolve() if event.get('mount_root') else None
+            # An absolute reference wins this join, so a mounted folder's file
+            # resolves through the same line an in-tree one always has.
             source_path = studio_root / source_relpath
             if not source_path.exists():
                 return False, f"Source not found: {source_path}"
@@ -1859,8 +2282,15 @@ def _apply_event(studio_root, event, run_uid, executive):
             marker_path = tropo_studio / '.tropo-folder.md'
             if not marker_path.exists():
                 folder_uid = generate_uid()
-                folder_rel = str(parent_folder.relative_to(studio_root)) if parent_folder != studio_root else '.'
-                write_folder_marker(parent_folder, folder_uid, parent_folder.name, folder_rel)
+                folder_rel = ('.' if parent_folder == studio_root
+                              else anchor_source_path(studio_root, parent_folder, mount_uid, mount_root))
+                # Same `original_path` rule as cmd_create_sidecar: the folder's
+                # own marker under a mount, the studio-relative folder in-tree.
+                write_folder_marker(
+                    parent_folder, folder_uid, parent_folder.name,
+                    anchor_source_path(studio_root, marker_path, mount_uid, mount_root)
+                    if mount_uid else folder_rel,
+                )
             else:
                 fm = parse_frontmatter(marker_path)
                 folder_uid = fm.get('uid', generate_uid())
@@ -1875,15 +2305,15 @@ def _apply_event(studio_root, event, run_uid, executive):
                 uid=uid,
                 source_filename=source_path.name,
                 source_path_rel=f'../{source_path.name}',
-                original_path=str(source_path.relative_to(studio_root)),
+                original_path=anchor_source_path(studio_root, source_path, mount_uid, mount_root),
                 size_bytes=stat.st_size,
                 mtime_iso=mtime_iso,
                 source_hash=source_hash,
                 hash_function=hash_function,
                 folder_uid=folder_uid,
             )
-            sidecar_rel = str(sidecar_path.relative_to(studio_root))
-            source_rel = str(source_path.relative_to(studio_root))
+            sidecar_rel = anchor_source_path(studio_root, sidecar_path, mount_uid, mount_root)
+            source_rel = anchor_source_path(studio_root, source_path, mount_uid, mount_root)
             write_vault_projection(
                 studio_root=studio_root,
                 uid=uid,
@@ -1897,10 +2327,12 @@ def _apply_event(studio_root, event, run_uid, executive):
                 source_hash=source_hash,
                 hash_function=hash_function,
                 original_path=source_rel,
+                mount_uid=mount_uid,
+                mount_relpath=mount_relative_path(mount_root, source_path),
             )
             event['target_uid'] = uid
             event['hash_function'] = hash_function
-            event['after'] = {'path': str(source_path.relative_to(studio_root)), 'hash': source_hash}
+            event['after'] = {'path': source_rel, 'hash': source_hash}
             return True, None
 
         elif action == 'update_sidecar_metadata':
@@ -2039,9 +2471,15 @@ def cmd_ingest(args, studio_root):
 
     patterns = parse_tropoignore(studio_root)
     root_rel = getattr(args, 'root', None) or '04-external-work'
+    # An absolute --root wins the join, which is how a mounted folder outside the
+    # Studio tree is ingested; a relative one is resolved under the Studio exactly
+    # as before.
     scan_root = (studio_root / root_rel).resolve()
     if not scan_root.exists():
         raise SystemExit(f"ingest root not found: {scan_root} (relative to studio root {studio_root})")
+
+    mount_uid = getattr(args, 'mount_uid', None)
+    mount_root = Path(getattr(args, 'mount_root')).resolve() if getattr(args, 'mount_root', None) else None
 
     created, already, ignored, failed = [], [], [], []
 
@@ -2063,7 +2501,7 @@ def cmd_ingest(args, studio_root):
             if matches_ignore(fn, False, patterns):
                 ignored.append(fn); continue
             fpath = Path(dirpath) / fn
-            rel = str(fpath.relative_to(studio_root))
+            rel = anchor_source_path(studio_root, fpath, mount_uid, mount_root)
             sidecar = fpath.parent / '.tropo-studio' / f'{fn}.tropo.md'
             if sidecar.exists():
                 already.append(rel); continue
@@ -2074,6 +2512,8 @@ def cmd_ingest(args, studio_root):
                 source=str(fpath),
                 run_uid=getattr(args, 'run_uid', None),
                 executive=getattr(args, 'executive', None) or 'ingest',
+                mount_uid=mount_uid,
+                mount_root=str(mount_root) if mount_root else None,
             )
             buf = _io.StringIO()
             try:
@@ -2123,6 +2563,10 @@ def main():
     p_create.add_argument('--source', required=True)
     p_create.add_argument('--run-uid', default=None)
     p_create.add_argument('--executive', default=None)
+    p_create.add_argument('--mount-uid', default=None,
+                          help='Anchor stored paths to this folder mount instead of the Studio tree (see tropo-folder.py)')
+    p_create.add_argument('--mount-root', default=None,
+                          help='Absolute path of the mounted folder --mount-uid names')
 
     p_reconcile = subs.add_parser('reconcile', help='Full reconciliation pass')
     p_reconcile.add_argument('--scope', default='full-studio')
@@ -2148,11 +2592,15 @@ def main():
     p_ingest = subs.add_parser('ingest',
                                help='ONE GESTURE: recursively sidecar every NEW file under a root (default 04-external-work/). No file args needed.')
     p_ingest.add_argument('--root', default='04-external-work',
-                          help='Root to scan recursively (default: 04-external-work)')
+                          help='Root to scan recursively (default: 04-external-work). Absolute paths are allowed and are how a mounted folder outside the Studio tree is ingested.')
     p_ingest.add_argument('--dry-run', action='store_true', help='Preview what would be sidecarred; no writes')
     p_ingest.add_argument('--json', action='store_true')
     p_ingest.add_argument('--run-uid', default=None)
     p_ingest.add_argument('--executive', default=None)
+    p_ingest.add_argument('--mount-uid', default=None,
+                          help='Anchor stored paths to this folder mount instead of the Studio tree (see tropo-folder.py)')
+    p_ingest.add_argument('--mount-root', default=None,
+                          help='Absolute path of the mounted folder --mount-uid names')
 
     args = parser.parse_args()
     studio_root = resolve_studio_root(args.studio_root)
