@@ -15,9 +15,10 @@ ONE MOUNT, TWO STATES, AND A SWITCH BETWEEN THEM
 ------------------------------------------------
 ATTACHED
     Agents have hands on the folder: they can read it, search it, change files
-    in it. No metadata, no governance, no identifiers, and — the part that
-    matters — **nothing is written into the folder**. This is day one, and it
-    costs nothing.
+    in it. **Nothing is written into the folder.** The studio does carry one
+    governed mount-project identity under ``external-context`` (7b1e0ae5), so
+    adopt/ingest never references a hole — but no content sidecars or
+    content projections yet. This is day one.
 
 ADOPTED
     The SAME mount, tooled. Every file gets a sidecar at
@@ -282,6 +283,10 @@ def _load_index_writer():
 
 index_writer = _load_index_writer()
 
+# Standing L0 for governed mount projects (Mount Identity 7b1e0ae5 / §3.1).
+# Shipped skeleton entry vault/files/48f8c52c.md + canonical-l0 registry row.
+EXTERNAL_CONTEXT_L0_UID = "48f8c52c"
+
 
 # --------------------------------------------------------------------------- #
 # The record                                                                    #
@@ -320,6 +325,7 @@ class AdoptReport:
     files_ignored: int
     failures: list = field(default_factory=list)
     created_paths: list = field(default_factory=list)
+    dry_run: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -354,6 +360,17 @@ class ReconcileReport:
     affected_files: list = field(default_factory=list)
     sidecars_created: int = 0
     sidecars_updated: int = 0
+    #: Named sidecar work that did NOT happen, one record per failure:
+    #: `{"mount": uid, "file": path, "action": create|update, "reason": str}`.
+    #:
+    #: The counters above are the second half of a truth and were shipping
+    #: alone. `sidecars_created` can be 2 while a third file silently has no
+    #: sidecar, because `cmd_ingest` reports per-file faults in its summary
+    #: rather than raising and this command was reading only `created`. That
+    #: is the same false-clean the field four lines up was added for, on the
+    #: projections side, and the sidecar half went untouched beside it
+    #: (254a360b, A148 evt_a9360f18f56fe472_00000015).
+    sidecar_failures: list = field(default_factory=list)
     mounts: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -983,6 +1000,186 @@ def _mint_mount_uid(taken: set) -> str:
     raise FolderMountError("could not mint a free mount_uid in 64 tries")
 
 
+def _mount_identity_path(root: Path, mount_uid: str) -> Path:
+    return Path(root) / "vault" / "files" / f"{mount_uid}.md"
+
+
+def _render_mount_identity_bytes(
+    mount_uid: str,
+    name: str,
+    actor: str,
+    *,
+    mounted_at: str,
+) -> bytes:
+    """Governed mount project bytes — first-class authored substrate (7b1e0ae5 §3.2).
+
+    Real title and body; no ``<!-- REQUIRED: -->`` / ``<<MINT:*>>`` placeholders.
+    Survives unmount as the record of what was mounted.
+    """
+    title = f"{name} — mounted folder"
+    # Keep YAML simple: single-quoted scalars; escape embedded single quotes.
+    safe_title = title.replace("'", "''")
+    safe_name = name.replace("'", "''")
+    safe_actor = str(actor or "unknown").replace("'", "''")
+    safe_desc = (
+        f"Governed identity for folder mount {safe_name}. "
+        f"Parent: external-context ({EXTERNAL_CONTEXT_L0_UID}). "
+        f"Written at mount time before adopt/ingest can reference it (7b1e0ae5)."
+    )
+    body = (
+        f"---\n"
+        f"uid: {mount_uid}\n"
+        f"type: project\n"
+        f"status: active\n"
+        f"state: active\n"
+        f"title: '{safe_title}'\n"
+        f"description: '{safe_desc}'\n"
+        f"owner: mike\n"
+        f"created: '{mounted_at[:10]}'\n"
+        f"modified: '{mounted_at[:10]}'\n"
+        f"created_by: '{safe_actor}'\n"
+        f"modified_by: '{safe_actor}'\n"
+        f"schema_version: 2\n"
+        f"extraction_scope: argo-private\n"
+        f"lifecycle: standing\n"
+        f"member_of:\n"
+        f"  - {EXTERNAL_CONTEXT_L0_UID}\n"
+        f"mount_kind: folder\n"
+        f"mount_name: '{safe_name}'\n"
+        f"mounted_by: '{safe_actor}'\n"
+        f"mounted_at: '{mounted_at}'\n"
+        f"mount_record: .tropo-studio/folder-mounts.json\n"
+        f"governed_by: 34e4cb0b\n"
+        f"refs:\n"
+        f"  - 7b1e0ae5\n"
+        f"tags:\n"
+        f"  - folder-mount\n"
+        f"  - mount-identity\n"
+        f"  - external-context\n"
+        f"---\n"
+        f"\n"
+        f"# {title}\n"
+        f"\n"
+        f"*Governed mount project under "
+        f"[external-context]({EXTERNAL_CONTEXT_L0_UID}.md). "
+        f"Identity before rendering (7b1e0ae5).*\n"
+        f"\n"
+        f"## What this is\n"
+        f"\n"
+        f"The first-class vault identity for the folder mount named "
+        f"**{name}**. Every adopted file and folder mirror carries "
+        f"`mount_uid: {mount_uid}`; this entry is what those references "
+        f"resolve to.\n"
+        f"\n"
+        f"- **Mount UID:** `{mount_uid}`\n"
+        f"- **Mounted by:** {actor}\n"
+        f"- **Mounted at:** {mounted_at}\n"
+        f"\n"
+        f"## Why this file exists\n"
+        f"\n"
+        f"`tropo-folder.py mount` writes this entry at mount time and indexes "
+        f"it before adopt is possible. Without it, every ingested file would "
+        f"reference a UID that resolves nowhere.\n"
+    )
+    return body.encode("utf-8")
+
+
+def _index_resolves_uid(root: Path, uid: str) -> bool:
+    """True when the mount identity is present on a current index surface."""
+    vault = Path(root) / "vault"
+    sqlite_path = vault / "00-index.sqlite"
+    if sqlite_path.is_file() and sqlite_path.stat().st_size > 0:
+        try:
+            with sqlite3.connect(f"file:{sqlite_path}?mode=ro", uri=True) as conn:
+                row = conn.execute(
+                    "SELECT 1 FROM entries WHERE uid = ? LIMIT 1", (uid,)
+                ).fetchone()
+                if row:
+                    return True
+        except sqlite3.Error:
+            pass
+    index_path = vault / "00-index.jsonl"
+    if index_path.is_file() and index_path.stat().st_size > 0:
+        for line in index_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                if json.loads(line).get("uid") == uid:
+                    return True
+            except json.JSONDecodeError:
+                continue
+    return False
+
+
+def ensure_mount_identity(
+    root: Path,
+    mount_uid: str,
+    name: str,
+    actor: str,
+    *,
+    mounted_at: Optional[str] = None,
+) -> Path:
+    """Write + index the governed mount project. Fail loud if the index refuses.
+
+    Mount Identity 7b1e0ae5 §3.2: identity at MOUNT time, before adopt/ingest.
+    """
+    if not re.fullmatch(r"[0-9a-f]{8}", mount_uid or ""):
+        raise FolderMountError(
+            f"mount identity requires an 8-hex mount_uid, got {mount_uid!r}"
+        )
+    when = mounted_at or _now()
+    path = _mount_identity_path(root, mount_uid)
+    staged = {
+        path: _render_mount_identity_bytes(
+            mount_uid, name, actor, mounted_at=when
+        )
+    }
+    # Declare the mount registry as a companion input, not silent drift.
+    #
+    # The index writer refuses a batch when a semantic derivation input changed
+    # outside the owned projections, and `.tropo-studio/folder-mounts.json` is
+    # one. Identity is written BEFORE the registry row by design (7b1e0ae5
+    # §3.2), so on every mount after the first the registry on disk is already
+    # newer than the last index transaction and the writer read that as
+    # tampering: the second `mount` in a studio refused with "no index surface
+    # was reported current". Passing the CURRENT bytes states what this
+    # transaction is derived against and rewrites them byte-identically; the new
+    # mount's row still lands only in `_save_registry` afterwards.
+    registry_path = _registry_path(root)
+    registry_bytes = registry_path.read_bytes() if registry_path.is_file() else None
+    try:
+        _freshen_projection_index(root, staged, registry_bytes=registry_bytes)
+    except FolderMountError as exc:
+        raise FolderMountError(
+            f"mount identity for {mount_uid!r} ({name!r}) could not be indexed: "
+            f"{exc}. Mount refuses rather than leaving cross-reference debt."
+        ) from exc
+    if not path.is_file():
+        raise FolderMountError(
+            f"mount identity file missing after index transaction: {path}"
+        )
+    if not _index_resolves_uid(root, mount_uid):
+        raise FolderMountError(
+            f"mount identity {mount_uid!r} was written to {path} but does not "
+            f"resolve in the index — mount refuses (7b1e0ae5 fail-before-success)"
+        )
+    return path
+
+
+def require_mount_identity(
+    root: Path,
+    mount_uid: str,
+    name: str,
+    actor: str,
+) -> None:
+    """Adopt gate: identity must resolve; repair via ensure if missing."""
+    path = _mount_identity_path(root, mount_uid)
+    if path.is_file() and _index_resolves_uid(root, mount_uid):
+        return
+    # Migration / crash-recovery path: re-stage through the canonical writer.
+    ensure_mount_identity(root, mount_uid, name, actor)
+
+
 def mount(root, path, *, name, mounted_by=None) -> FolderMount:
     """Attach a folder. Requires nothing of it and writes nothing into it."""
     root = Path(root).resolve()
@@ -1023,16 +1220,27 @@ def _mount_locked(root, path, *, name, mounted_by=None) -> FolderMount:
             f"first. Run: reconcile {carried}"
         )
 
+    mounted_at = _now()
+    actor = _actor(mounted_by)
     record = FolderMount(
         mount_uid=_mint_mount_uid(set(mounts_by_uid)),
         name=str(name).strip(),
         path=str(folder),
         state=STATE_ATTACHED,
         availability=AVAILABILITY_AVAILABLE,
-        mounted_at=_now(),
-        mounted_by=_actor(mounted_by),
+        mounted_at=mounted_at,
+        mounted_by=actor,
         adopted_at=None,
         fingerprint=fingerprint_folder(folder),
+    )
+    # Identity BEFORE registry persist (7b1e0ae5 §3.2): if the index refuses,
+    # the mount never lands and no ingest can ever reference a hole.
+    ensure_mount_identity(
+        root,
+        record.mount_uid,
+        record.name,
+        actor,
+        mounted_at=mounted_at,
     )
     mounts_by_uid[record.mount_uid] = _record_to_dict(record)
     _save_registry(root, registry)
@@ -1043,16 +1251,87 @@ def _mount_locked(root, path, *, name, mounted_by=None) -> FolderMount:
 # adopt — the same mount, tooled.                                               #
 # --------------------------------------------------------------------------- #
 
-def _ingest(root: Path, folder: Path, mount_uid: str, actor: str) -> dict:
+class AdoptInterrupted(FolderMountError):
+    """Ingest stopped part-way and the operator needs the two lists.
+
+    Carries what LANDED and what is still PENDING because the recovery gesture
+    is re-running adopt, and an operator deciding whether to re-run against a
+    live cloud folder is entitled to know what is already in it. `landed` and
+    `pending` are derived from the folder rather than from a tally kept in
+    memory, so the same numbers survive a process that dies without unwinding.
+    """
+
+    def __init__(self, message: str, *, landed: list, pending: list, retry: str):
+        super().__init__(message)
+        self.landed = landed
+        self.pending = pending
+        self.retry = retry
+
+
+def _ingest_progress(
+    root: Path,
+    folder: Path,
+    mount_uid: str,
+    actor: str,
+) -> tuple[list, list]:
+    """Read what has landed and what remains out of the folder itself.
+
+    THE SUBSTRATE IS THE JOURNAL. Nothing here consults a counter kept by the
+    run that was interrupted, because the case this exists for -- a process
+    killed mid-ingest -- is exactly the case where no such counter survived.
+    A dry-run walk answers both halves from what is on disk: files already
+    carrying a sidecar have landed, files that would still be sidecarred are
+    pending.
+    """
+    # LANDED IS READ FIRST AND WITHOUT THE WALKER. It is the half an operator
+    # needs most -- what is already sitting in their cloud folder -- and the
+    # situation that produced this report is one where the walker has just
+    # failed. Deriving it from a plain directory read means the fault that
+    # interrupted the ingest cannot also erase the record of what the ingest
+    # had already done.
+    landed = sorted(_sidecar_relative_paths(folder))
+    try:
+        plan = _ingest(root, folder, mount_uid, actor, dry_run=True)
+    except Exception:  # noqa: BLE001 -- pending is best-effort; landed is not
+        # UNKNOWN IS NOT EMPTY. Whatever stopped the ingest has also stopped
+        # us listing the remainder, and reporting "pending: none" here would
+        # tell an operator the job had finished. None says we do not know.
+        return landed, None
+    return landed, sorted(plan.get("created_files", []) or [])
+
+
+def _sidecar_relative_paths(folder: Path) -> list:
+    """Sidecars present in the mounted folder, relative and stable."""
+    found = []
+    for sidecar in folder.rglob(".tropo-studio/*.tropo.md"):
+        try:
+            found.append(sidecar.relative_to(folder).as_posix())
+        except ValueError:
+            found.append(str(sidecar))
+    return found
+
+
+def _ingest(
+    root: Path,
+    folder: Path,
+    mount_uid: str,
+    actor: str,
+    *,
+    dry_run: bool = False,
+) -> dict:
     """Run the import walker's one-gesture ingest over a folder outside the tree.
 
     Idempotent by the walker's own construction: a file that already has a
     sidecar is skipped, which is what makes re-running `adopt` a recovery rather
     than a duplication.
+
+    Under ``dry_run`` the walker walks and counts but writes nothing, so the
+    preview is produced by the same code that would do the work rather than by
+    a second implementation that can drift away from it.
     """
     args = types.SimpleNamespace(
         root=str(folder),
-        dry_run=False,
+        dry_run=dry_run,
         json=True,
         run_uid=None,
         executive=actor,
@@ -1061,13 +1340,69 @@ def _ingest(root: Path, folder: Path, mount_uid: str, actor: str) -> dict:
     )
     buffer = io.StringIO()
     noise = io.StringIO()
-    with redirect_stdout(buffer), redirect_stderr(noise):
-        walker.cmd_ingest(args, root)
+    try:
+        with redirect_stdout(buffer), redirect_stderr(noise):
+            walker.cmd_ingest(args, root)
+    except Exception as exc:  # noqa: BLE001 -- re-raised loudly, never swallowed
+        if dry_run:
+            raise
+        raise _interrupted(root, folder, mount_uid, actor, str(exc)) from exc
     try:
         return json.loads(buffer.getvalue().strip().splitlines()[-1])
     except (ValueError, IndexError):
-        return {"created": 0, "already_governed": 0, "ignored": 0,
-                "failed": 0, "created_files": [], "failed_files": []}
+        # A tally we cannot read is not a tally of zero. Sidecars may be on
+        # disk right now; reporting "created: 0" here is the silent-write the
+        # P0 was escalated for (254a360b: "a tool that computes 3,297 records
+        # and writes none of them must say so").
+        if dry_run:
+            # UNKNOWN IS NOT EMPTY, ON THIS SIDE TOO. Returning a fabricated
+            # zero summary here fed `_ingest_progress` a confident "nothing
+            # pending", which is the same lie the non-dry-run branch below
+            # was fixed for -- left standing in its twin, in the same edit.
+            # Raising lets the caller report UNFINISHED instead of inventing
+            # a clean plan out of output it could not read.
+            raise FolderMountError(
+                f"cannot plan adoption of {mount_uid}: the ingest walker "
+                f"returned no readable summary, so what remains to be written "
+                f"is unknown"
+            )
+        raise _interrupted(
+            root, folder, mount_uid, actor,
+            "the ingest walker returned no readable summary",
+        )
+
+
+def _interrupted(
+    root: Path,
+    folder: Path,
+    mount_uid: str,
+    actor: str,
+    reason: str,
+) -> AdoptInterrupted:
+    """Build the loud report: what landed, what is pending, how to finish."""
+    landed, pending = _ingest_progress(root, folder, mount_uid, actor)
+    retry = f"tropo-folder.py adopt {mount_uid}"
+    remaining = (
+        "the remaining files could not be listed -- whatever stopped the "
+        "ingest also stopped us re-reading the folder, so treat the work as "
+        "UNFINISHED"
+        if pending is None
+        else f"{len(pending)} file(s) still need one"
+    )
+    detail = (
+        f"adopt {mount_uid} stopped part-way: {reason}. "
+        f"{len(landed)} sidecar(s) are already in the mounted folder and "
+        f"{remaining}. Nothing was removed and the source files were not "
+        f"modified. Re-run `{retry}` to converge: existing sidecars are "
+        f"recognised, not duplicated."
+    )
+    if landed:
+        detail += f" landed: {', '.join(landed)}."
+    if pending:
+        detail += f" pending: {', '.join(pending)}."
+    return AdoptInterrupted(
+        detail, landed=landed, pending=pending, retry=retry
+    )
 
 
 _TOMBSTONE_METADATA_FIELDS = (
@@ -1348,14 +1683,22 @@ def _restore_file_snapshots(
         )
 
 
-def adopt(root, mount_uid, *, executive=None) -> AdoptReport:
-    """Flip the SAME mount to adopted. Never mints a second record."""
+def adopt(root, mount_uid, *, executive=None, dry_run=False) -> AdoptReport:
+    """Flip the SAME mount to adopted. Never mints a second record.
+
+    ``dry_run`` reports what adoption would write and writes nothing. Adoption
+    is the one verb here that puts files into somebody's live cloud folder, so
+    it is the one where seeing the plan first matters most; `mount`, `ingest`
+    and `reconcile` all offered a preview and this did not (254a360b D2).
+    """
     root = Path(root).resolve()
     with _registry_operation_lock(root):
-        return _adopt_locked(root, mount_uid, executive=executive)
+        return _adopt_locked(
+            root, mount_uid, executive=executive, dry_run=dry_run
+        )
 
 
-def _adopt_locked(root, mount_uid, *, executive=None) -> AdoptReport:
+def _adopt_locked(root, mount_uid, *, executive=None, dry_run=False) -> AdoptReport:
     registry = _load_registry(root)
     raw = (registry.get("mounts") or {}).get(mount_uid)
     if raw is None:
@@ -1375,12 +1718,65 @@ def _adopt_locked(root, mount_uid, *, executive=None) -> AdoptReport:
     folder = outcome.path
 
     _preflight_mount_uid_collisions(root, folder, record.mount_uid)
+    _preflight_index_authority(root, record.mount_uid)
+
+    # Every refusal above this line is a READ. A preview that skipped them
+    # would answer a different question than the one the operator asked --
+    # they want to know whether adoption would succeed, not merely how many
+    # files it would touch if nothing objected.
+    if dry_run:
+        planned = _ingest(root, folder, record.mount_uid, actor, dry_run=True)
+        return AdoptReport(
+            mount_uid=record.mount_uid,
+            name=record.name,
+            path=str(folder),
+            state=record.state,
+            availability=record.availability,
+            adopted_at=record.adopted_at,
+            already_adopted=bool(record.adopted_at),
+            sidecars_created=int(planned.get("created", 0)),
+            sidecars_existing=int(planned.get("already_governed", 0)),
+            files_ignored=int(planned.get("ignored", 0)),
+            failures=list(planned.get("failed_files", []) or []),
+            created_paths=list(planned.get("created_files", []) or []),
+            dry_run=True,
+        )
+
+    # Identity must resolve before any ingest compounds cross-reference debt
+    # (7b1e0ae5 §3.2). Repair path covers legacy mounts and mid-gesture kills.
+    require_mount_identity(root, record.mount_uid, record.name, actor)
+
     # The anchor goes down BEFORE the sidecars. A crash halfway through ingest
     # then leaves a folder that can still say who it is, which is the state that
     # makes the retry a retry rather than a rediscovery.
     write_mount_anchor(folder, record.mount_uid, record.name, actor)
 
     result = _ingest(root, folder, record.mount_uid, actor)
+
+    # A SWEEP THAT FINISHED IS NOT A SWEEP THAT SUCCEEDED.
+    #
+    # `cmd_ingest` catches per-file exceptions on purpose -- one unreadable
+    # file must not abort a folder -- and returns them in `failed_files`
+    # rather than raising. So the walker's own resilience is what made this
+    # path silent: adoption read a normal return, flipped the mount to
+    # ADOPTED, and reported success while a source file had no sidecar.
+    #
+    # That is worse than the interruption case, because interruption at least
+    # left the mount ATTACHED for the next run to finish. Here the registry
+    # said the folder was fully tooled and nothing would ever revisit it.
+    failed_files = list(result.get("failed_files") or [])
+    if int(result.get("failed") or 0) or failed_files:
+        rendered = "; ".join(
+            f"{path}: {reason}" for path, reason in
+            (entry if isinstance(entry, (list, tuple)) and len(entry) == 2
+             else (entry, "unreported reason") for entry in failed_files)
+        )
+        raise _interrupted(
+            root, folder, record.mount_uid, actor,
+            f"{len(failed_files) or result.get('failed')} file(s) could not be "
+            f"sidecarred ({rendered})",
+        )
+
     raw["path"] = str(folder)
     raw["state"] = STATE_ADOPTED
     raw["availability"] = AVAILABILITY_AVAILABLE
@@ -1614,6 +2010,46 @@ def _projection_tamper_reasons(current: str, canonical_current: str) -> list[str
     return reasons
 
 
+def _rebuild_after_refused_batch(
+    root: Path,
+    staged: dict[Path, bytes],
+    *,
+    first_surface: bool = False,
+) -> int:
+    """Write the staged projections and re-derive every surface, or restore.
+
+    The canonical full-rebuild path, used both to create a studio's first index
+    surfaces and as the writer's own cure when an incremental batch refuses. On
+    any exception the staged files are restored byte-for-byte, so a failed
+    attempt leaves neither half-written projections nor a half-built index.
+    """
+    vault = Path(root) / "vault"
+    if first_surface:
+        current = vault / "00-index.jsonl"
+        if (
+            current.is_file()
+            and current.stat().st_size == 0
+            and not (vault / "00-archive-index.jsonl").exists()
+            and not (vault / "00-index.sqlite").exists()
+        ):
+            # Legacy first-gen fixtures install an empty placeholder. It carries
+            # no rows or floor evidence; removing it lets the canonical writer
+            # perform its explicit initial-surface transaction.
+            current.unlink()
+    snapshots: dict[Path, Optional[bytes]] = {}
+    try:
+        for projection, raw in staged.items():
+            _capture_file_snapshot(snapshots, projection)
+            projection.write_bytes(raw)
+        code = index_writer.rebuild_index(Path(root), True)
+    except Exception:
+        _restore_file_snapshots(snapshots)
+        raise
+    if code != 0:
+        _restore_file_snapshots(snapshots)
+    return code
+
+
 def _freshen_projection_index(
     root: Path,
     staged: dict[Path, bytes],
@@ -1650,26 +2086,7 @@ def _freshen_projection_index(
             companion_replacements=companions,
         )
     else:
-        current = vault / "00-index.jsonl"
-        if (
-            current.is_file()
-            and current.stat().st_size == 0
-            and not (vault / "00-archive-index.jsonl").exists()
-            and not (vault / "00-index.sqlite").exists()
-        ):
-            # Legacy first-gen fixtures install an empty placeholder. It carries
-            # no rows or floor evidence; removing it lets the canonical writer
-            # perform its explicit initial-surface transaction.
-            current.unlink()
-        snapshots: dict[Path, Optional[bytes]] = {}
-        try:
-            for projection, raw in staged.items():
-                _capture_file_snapshot(snapshots, projection)
-                projection.write_bytes(raw)
-            code = index_writer.rebuild_index(Path(root), True)
-        except Exception:
-            _restore_file_snapshots(snapshots)
-            raise
+        code = _rebuild_after_refused_batch(root, staged, first_surface=True)
     if code != 0:
         raise FolderMountError(
             "canonical index transaction refused projection batch "
@@ -1721,6 +2138,53 @@ def _assert_projection_destination(
             f"{mount_uid} claims {projection.stem}, but {projection} is not its "
             "derived-only projection"
         )
+
+
+def _preflight_index_authority(root: Path, mount_uid: str) -> None:
+    """Adoption ends in an index write, so check the index can take one first.
+
+    254a360b is the whole argument. `adopt` wrote 114 sidecars into Mike's live
+    SharePoint folder and only then reached an index that had been refusing
+    every write since a ghost mount stranded its derivation inputs. Neither
+    half was unreasonable alone; the ORDER is what turned a refusal into 114
+    files on a company drive that somebody then had to reason about.
+
+    Refusing here is free. Refusing after ingest is not, and it is not free in
+    a place we control. A surface that cannot be parsed now cannot be updated
+    later, so this is the cheapest honest question to ask before the first
+    write leaves the repository.
+    """
+    for name in ("00-index.jsonl", "00-archive-index.jsonl"):
+        surface = root / "vault" / name
+        if not surface.is_file():
+            # A studio that has not built its surfaces yet is not a studio in
+            # trouble; adoption will create them. Absence is not corruption.
+            continue
+        try:
+            if not surface.read_bytes().strip():
+                # Empty is the state every studio starts in, and the strict
+                # reader rightly refuses it for lack of a trusted zero-row
+                # proof. That refusal is about trusting a COUNT; adoption is
+                # asking a narrower question -- can this surface be read at
+                # all -- and answering it with someone else's stricter one
+                # would refuse every first adoption in a new studio.
+                continue
+        except OSError as exc:
+            raise FolderMountError(
+                f"cannot adopt {mount_uid}: index surface vault/{name} cannot "
+                f"be read ({exc}). Stopping now leaves the mounted folder "
+                f"untouched (254a360b)."
+            ) from exc
+        try:
+            index_writer.index_surfaces.read_jsonl_strict(surface)
+        except Exception as exc:  # noqa: BLE001 -- any unreadable surface refuses
+            raise FolderMountError(
+                f"cannot adopt {mount_uid}: index surface vault/{name} does "
+                f"not parse ({type(exc).__name__}: {exc}). Adoption finishes "
+                f"with an index write, and stopping now leaves the mounted "
+                f"folder untouched -- stopping after ingest would not "
+                f"(254a360b)."
+            ) from exc
 
 
 def _preflight_mount_uid_collisions(
@@ -2147,16 +2611,63 @@ def _reconcile_sidecars(root: Path, folder: Path, mount_uid: str, actor: str) ->
         )
 
     created = updated = 0
+    failures: list = []
+
+    # BOTH SOURCES OF FAILURE ARE CARRIED, BY NAME.
+    #
+    # Repair is not rolled back -- a file that got its sidecar keeps it, which
+    # is the same forward-convergence law adoption follows. What changes is
+    # that a file which did NOT get one is now impossible to miss: it is named
+    # in the report, and the CLI exits non-zero. Reconcile used to return a
+    # clean repair over exactly this state.
     if any(event.get("action") == "create_sidecar" for event in events):
         result = _ingest(root, folder, mount_uid, actor)
         created = int(result.get("created", 0))
+        for entry in (result.get("failed_files") or []):
+            path, reason = (
+                entry if isinstance(entry, (list, tuple)) and len(entry) == 2
+                else (entry, "unreported reason")
+            )
+            failures.append({
+                "mount": mount_uid,
+                "file": str(path),
+                "action": "create_sidecar",
+                "reason": str(reason),
+            })
+        # A count with no accompanying names still has to surface. Reporting
+        # "some file failed" is poor, but it beats reporting none did.
+        unnamed = int(result.get("failed") or 0) - len(
+            list(result.get("failed_files") or [])
+        )
+        for _ in range(max(0, unnamed)):
+            failures.append({
+                "mount": mount_uid,
+                "file": "(unnamed by the ingest walker)",
+                "action": "create_sidecar",
+                "reason": "the walker counted a failure it did not name",
+            })
+
     for event in events:
         if event.get("action") == "update_sidecar_metadata":
-            ok, _err = walker._apply_update_sidecar_metadata(root, event)
-            updated += 1 if ok else 0
+            ok, err = walker._apply_update_sidecar_metadata(root, event)
+            if ok:
+                updated += 1
+            else:
+                failures.append({
+                    "mount": mount_uid,
+                    "file": str(
+                        event.get("path")
+                        or event.get("source_path")
+                        or event.get("sidecar")
+                        or "(unnamed by the delta event)"
+                    ),
+                    "action": "update_sidecar_metadata",
+                    "reason": str(err or "unreported reason"),
+                })
     return {
         "sidecars_created": created,
         "sidecars_updated": updated,
+        "sidecar_failures": failures,
         "deferred": [event for event in events
                      if event.get("action") in ("surface_to_user", "judgment")],
     }
@@ -2226,7 +2737,7 @@ def _reconcile_locked(root, mount_uid=None, *, search_roots=None, resolve_path=N
               "projections_missing": 0, "projections_created": 0,
               "projections_tampered": [], "orphan_sidecars": [],
               "affected_files": [], "sidecars_created": 0,
-              "sidecars_updated": 0, "mounts": []}
+              "sidecars_updated": 0, "sidecar_failures": [], "mounts": []}
     dirty = False
 
     for uid in targets:
@@ -2323,6 +2834,9 @@ def _reconcile_locked(root, mount_uid=None, *, search_roots=None, resolve_path=N
                 entry.update(sidecar_stats)
                 report["sidecars_created"] += sidecar_stats["sidecars_created"]
                 report["sidecars_updated"] += sidecar_stats["sidecars_updated"]
+                report["sidecar_failures"].extend(
+                    sidecar_stats.get("sidecar_failures") or []
+                )
 
                 authority = _mount_authority_snapshot(folder)
                 raw["projection_uids"] = sorted(authority)
@@ -2674,6 +3188,8 @@ def main(argv=None) -> int:
 
     p_adopt = subs.add_parser("adopt", parents=[common], help="flip the same mount to adopted")
     p_adopt.add_argument("mount_uid")
+    p_adopt.add_argument("--dry-run", action="store_true",
+                         help="report what would be written; change nothing")
 
     p_reconcile = subs.add_parser("reconcile", parents=[common], help="re-find moved folders; repair what moved")
     p_reconcile.add_argument("mount_uid", nargs="?", default=None)
@@ -2712,15 +3228,21 @@ def main(argv=None) -> int:
             return 0
 
         if args.command == "adopt":
-            report = adopt(root, args.mount_uid, executive=args.executive)
+            report = adopt(root, args.mount_uid, executive=args.executive,
+                           dry_run=args.dry_run)
             if args.json:
                 print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
             else:
-                print(f"[ADOPTED] {report.mount_uid}  {report.name}")
+                banner = "[WOULD ADOPT]" if report.dry_run else "[ADOPTED]"
+                print(f"{banner} {report.mount_uid}  {report.name}")
                 print(f"    {report.path}")
-                print(f"    {report.sidecars_created} sidecar(s) written, "
+                written = "would be written" if report.dry_run else "written"
+                print(f"    {report.sidecars_created} sidecar(s) {written}, "
                       f"{report.sidecars_existing} already governed, "
                       f"{report.files_ignored} ignored")
+                if report.dry_run:
+                    print("    DRY RUN — nothing was written. The folder, the "
+                          "vault and the registry are untouched.")
                 if report.already_adopted:
                     print(f"    already adopted {report.adopted_at}; the uid and the "
                           "adoption date are unchanged")
@@ -2753,6 +3275,9 @@ def main(argv=None) -> int:
                         print(f"      sidecars: {entry['sidecars_created']} written for "
                               f"new files, {entry['sidecars_updated']} refreshed for "
                               f"changed ones")
+                    for bad in entry.get("sidecar_failures") or []:
+                        print(f"      ⚠ NOT sidecarred: {bad['file']} "
+                              f"({bad['action']}) — {bad['reason']}")
                     for bad in entry.get("projections_unresolved") or []:
                         print(f"      ⚠ {bad['uid']}: {bad['field']} points at "
                               f"{bad['points_at']} — nothing is there")
@@ -2774,10 +3299,15 @@ def main(argv=None) -> int:
             # A dangling pointer is a failure even when every move resolved.
             # Reporting success beside a projection that points at nothing is
             # the whole defect, and an exit code is the half a script reads.
+            # `sidecar_failures` belongs in this list for exactly the reason
+            # the comment above gives. A named file with no sidecar is the
+            # same class as a pointer at nothing, and this command was
+            # returning 0 over it.
             return 1 if (report.ambiguous or report.lost
                          or report.unsearched
                          or report.projections_unresolved
-                         or report.orphan_sidecars) else 0
+                         or report.orphan_sidecars
+                         or report.sidecar_failures) else 0
 
         if args.command == "unmount":
             out = unmount(root, args.mount_uid, unmounted_by=args.executive)

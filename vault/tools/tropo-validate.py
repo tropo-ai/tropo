@@ -148,6 +148,7 @@ if str(_TROPO_SCRIPTS) not in sys.path:
 
 import yaml  # v1.33.0 Stream H §3.1 PyYAML AST walk (R3 sa.skeptic-078 + sa.cold-boot-181 absorption)
 
+
 # d996b941 L0c: shared identity resolver — must hard-fail on import (AC-L0c-fail)
 from lib._identity import _resolve_principal_uid, _get_principal_class  # noqa: E402
 
@@ -155,6 +156,20 @@ from lib._identity import _resolve_principal_uid, _get_principal_class  # noqa: 
 # ``from lib`` because several regression harnesses pre-import the separate
 # namespace package at .tropo/scripts/lib before importing this module.
 import importlib.util as _importlib_util
+
+# The YAML entry point, loaded by path for the same reason as the helpers below.
+# 88% of this validator's runtime was PyYAML's pure-Python scanner (measured
+# 2026-08-09, talos-t40); fast_yaml routes to libyaml's C scanner where the
+# machine has it and falls back silently where it does not.
+_fast_yaml_spec = _importlib_util.spec_from_file_location(
+    "tropo_fast_yaml",
+    Path(__file__).resolve().parent / "lib" / "fast_yaml.py",
+)
+if _fast_yaml_spec is None or _fast_yaml_spec.loader is None:
+    raise ImportError("fast_yaml helper could not be loaded")
+fast_yaml = _importlib_util.module_from_spec(_fast_yaml_spec)
+_fast_yaml_spec.loader.exec_module(fast_yaml)
+
 _mounted_projection_trust_spec = _importlib_util.spec_from_file_location(
     "tropo_mounted_projection_trust",
     Path(__file__).resolve().parent / "lib" / "mounted_projection_trust.py",
@@ -623,7 +638,7 @@ def check_uid_refs_are_strings(vault: Path) -> tuple[list[str], int, int]:
             if fm_str is None:
                 continue
             try:
-                fm_parsed = yaml.safe_load(fm_str)
+                fm_parsed = fast_yaml.safe_load(fm_str)
             except Exception:
                 continue
             if not isinstance(fm_parsed, dict):
@@ -649,6 +664,11 @@ def check_uid_refs_are_strings(vault: Path) -> tuple[list[str], int, int]:
                             int_ref_count += 1
 
     return findings, checked, int_ref_count
+
+
+def _is_recipient_package(vault: Path) -> bool:
+    """A built/customer box carries package data the source Studio does not."""
+    return (vault / ".tropo" / "update-source.json").is_file()
 
 
 def check_uid_collision(vault: Path) -> tuple[list[str], int, int]:
@@ -677,7 +697,7 @@ def check_uid_collision(vault: Path) -> tuple[list[str], int, int]:
             if fm_str is None:
                 continue
             try:
-                fm_parsed = yaml.safe_load(fm_str)
+                fm_parsed = fast_yaml.safe_load(fm_str)
             except Exception:
                 continue
             if not isinstance(fm_parsed, dict):
@@ -692,10 +712,12 @@ def check_uid_collision(vault: Path) -> tuple[list[str], int, int]:
 
     # (b) index duplicate UIDs — ADR-047 requires zero overlap both within
     # and ACROSS the current/archive surfaces.
-    index_paths = (
+    index_paths = [
         vault / "vault" / index_surfaces.CURRENT_INDEX_NAME,
         vault / "vault" / index_surfaces.ARCHIVE_INDEX_NAME,
-    )
+    ]
+    if _is_recipient_package(vault) and not index_paths[1].is_file():
+        index_paths = index_paths[:1]
     for index_path in index_paths:
         if not index_path.is_file():
             raise index_surfaces.IndexSurfaceRefusal(
@@ -722,11 +744,15 @@ def check_uid_collision(vault: Path) -> tuple[list[str], int, int]:
         for rec in index_surfaces.read_jsonl_strict(index_paths[0])
         if rec.get("uid")
     }
-    archive_uids = {
-        rec.get("uid")
-        for rec in index_surfaces.read_jsonl_strict(index_paths[1])
-        if rec.get("uid")
-    }
+    archive_uids = (
+        {
+            rec.get("uid")
+            for rec in index_surfaces.read_jsonl_strict(index_paths[1])
+            if rec.get("uid")
+        }
+        if len(index_paths) > 1
+        else set()
+    )
     for uid in sorted(current_uids & archive_uids):
         findings.append(
             f"[WARN] index duplicate: uid {uid!r} appears in BOTH "
@@ -791,10 +817,16 @@ def check_index_union_integrity(vault: Path) -> tuple[list[str], int, int]:
     rows: list[tuple[str, dict]] = []
     try:
         with index_surfaces.index_write_lock(vault, recover=False):
-            for surface_name in (
+            surface_names = [
                 index_surfaces.CURRENT_INDEX_NAME,
                 index_surfaces.ARCHIVE_INDEX_NAME,
+            ]
+            if (
+                _is_recipient_package(vault)
+                and not (vault / 'vault' / index_surfaces.ARCHIVE_INDEX_NAME).is_file()
             ):
+                surface_names = surface_names[:1]
+            for surface_name in surface_names:
                 path = vault / 'vault' / surface_name
                 if not path.is_file():
                     findings.append(
@@ -1502,7 +1534,7 @@ def check_uid_cross_references(vault: Path, all_uids: set[str],
 
         # PyYAML parse — yields a real AST instead of regex-line-scanned strings.
         try:
-            parsed = yaml.safe_load(fm)
+            parsed = fast_yaml.safe_load(fm)
         except yaml.YAMLError as exc:
             # Defer-to-existing kernel-file-integrity check class for malformed
             # frontmatter; surface WARN per spec §3.1 v0.5.
@@ -1982,6 +2014,152 @@ def check_kb_article_typing(vault: Path) -> tuple[list[str], int, int]:
     return findings, total_checked, untyped
 
 
+#: Ceiling for a kernel pointer stub, per S4 dev-spec 22289459. Named, and read
+#: by the guard AND its test, so the number cannot be bumped in one place and
+#: asserted in the other (velocity item 4's rule).
+KERNEL_STUB_CEILING_BYTES = 4096
+
+#: The only two surfaces permitted to carry the full boot procedure. Exact paths,
+#: as the acceptance criterion requires — "the guard checks those exact paths,
+#: not a directory-count shortcut", because a count is satisfied by any two
+#: files and this claim is about WHICH two.
+SANCTIONED_PROCEDURE_SURFACES = (
+    "vault/playbooks/99341618.md",
+    ".tropo/boot-fast-path.md",
+)
+
+#: The boot procedure's own milestone names. Used as the signature instead of
+#: "has Group headings", because playbooks are group-and-milestone declarations
+#: by capsule and a heading scan flags every one of them. These six names belong
+#: to the activation procedure specifically.
+BOOT_MILESTONE_NAMES = (
+    "Boot Config Chain Complete",
+    "Identity Gates Clear",
+    "Context Loaded",
+    "Operationally Grounded",
+    "Diagnostic Complete",
+    "Agent Active",
+)
+
+#: How many of the six a file must carry before it counts as a copy of the
+#: procedure rather than a document that mentions it. Four, so that dropping or
+#: renaming one milestone cannot hide a copy, while a passing reference to one or
+#: two does not raise an error.
+BOOT_PROCEDURE_SIGNATURE_THRESHOLD = 4
+
+#: Where a procedure copy would actually be load-bearing: surfaces an agent reads
+#: on the boot path. Deliberately NOT the whole studio. The architecture spec
+#: (78c2126d) describes the milestones, reflections quote them, and the rendered
+#: nav projects them — none of those is a surface anyone boots from, and erroring
+#: on them would make this guard noise within a week.
+BOOT_SURFACE_ROOTS = (".tropo", ".tropo-studio", "vault/playbooks")
+
+#: Frontmatter types that declare a file to BE a kernel pointer.
+KERNEL_POINTER_TYPES = ("os-config-pointer", "playbook-pointer")
+
+
+def check_kernel_pointer_stub(vault: Path) -> tuple[list[str], int, int]:
+    """S4 single-source doctrine: two procedure surfaces, and stubs that stay stubs.
+
+    Dev-spec 22289459 (Argus A147's locked S4), Talos T40 building. Three
+    assertions, all ERROR:
+
+    1. THE TWO-SOURCE GUARD. The full 6-group procedure exists at
+       `vault/playbooks/99341618.md` and `.tropo/boot-fast-path.md` and nowhere
+       else on the boot path. Absence is reported as loudly as duplication: a
+       sanctioned surface that has gone missing is not a studio with fewer
+       copies, it is a studio whose canonical is gone.
+    2. THE STUB CEILING. Every declared kernel pointer stays under
+       `KERNEL_STUB_CEILING_BYTES`. A pointer that grows is a pointer becoming a
+       third copy by accretion.
+    3. NO PROCEDURE IN A STUB. No Group headings, no milestone procedure.
+
+    WHY THIS CHECK EXISTS AT ALL: the drift it forbids was previously caught by
+    hand. A97 found retired channel instructions still shipping in the Tier-1 and
+    Tier-2 pointers' degraded-mode blocks — low-traffic prose that a per-entry
+    audit does not read, corrected only because one agent happened to look. The
+    acceptance criterion asks for that class to become impossible to hold
+    silently: add one group heading to any stub and this ERRORs by name.
+
+    Returns (findings, checked, defects).
+    """
+    findings: list[str] = []
+    checked = 0
+
+    # --- 1. Exactly two procedure surfaces, and exactly THOSE two -------------
+    carriers: list[str] = []
+    for root in BOOT_SURFACE_ROOTS:
+        base = vault / root
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*.md")):
+            checked += 1
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            carried = sum(1 for name in BOOT_MILESTONE_NAMES if name in text)
+            if carried >= BOOT_PROCEDURE_SIGNATURE_THRESHOLD:
+                carriers.append(path.relative_to(vault).as_posix())
+
+    sanctioned = set(SANCTIONED_PROCEDURE_SURFACES)
+    if (
+        _is_recipient_package(vault)
+        and not (vault / ".tropo" / "boot-fast-path.md").is_file()
+    ):
+        # Fresh boxes deliberately omit per-Studio derived boot-fast-path bytes
+        # and use the shipped canonical playbook until their first rebuild.
+        sanctioned.remove(".tropo/boot-fast-path.md")
+    for extra in sorted(set(carriers) - sanctioned):
+        findings.append(
+            f'[ERROR] {extra}: carries the full boot procedure, but S4 sanctions '
+            f'exactly two surfaces ({", ".join(SANCTIONED_PROCEDURE_SURFACES)}). '
+            'A third copy is the drift class this check exists to make impossible '
+            '(dev-spec 22289459).'
+        )
+    for missing in sorted(sanctioned - set(carriers)):
+        findings.append(
+            f'[ERROR] {missing}: is a SANCTIONED boot-procedure surface and does '
+            'not carry the procedure. Fewer copies is not the goal — one of the '
+            'two surfaces every agent boots from is empty or gone.'
+        )
+
+    # --- 2 + 3. Stubs stay stubs ---------------------------------------------
+    group_heading = re.compile(r'^#{1,6}[ \t]+Group [0-9]', re.MULTILINE)
+    for root in BOOT_SURFACE_ROOTS:
+        base = vault / root
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*.md")):
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            declared = get_scalar(split_frontmatter(text) or "", "type")
+            if declared not in KERNEL_POINTER_TYPES:
+                continue
+            relative = path.relative_to(vault).as_posix()
+            size = len(text.encode("utf-8"))
+            if size > KERNEL_STUB_CEILING_BYTES:
+                findings.append(
+                    f'[ERROR] {relative}: kernel pointer is {size} bytes, over the '
+                    f'{KERNEL_STUB_CEILING_BYTES}-byte stub ceiling. A pointer that '
+                    'grows becomes a third copy of the procedure by accretion '
+                    '(dev-spec 22289459). Cure: demote the content-bearing prose to '
+                    'the canonical it points at.'
+                )
+            headings = group_heading.findall(text)
+            if headings:
+                findings.append(
+                    f'[ERROR] {relative}: kernel pointer carries {len(headings)} '
+                    'Group heading(s) — that is boot PROCEDURE in a stub, which is '
+                    'the exact drift A97 had to hand-fix. Cure: the procedure lives '
+                    f'at {SANCTIONED_PROCEDURE_SURFACES[0]}.'
+                )
+
+    return findings, checked, len(findings)
+
+
 def check_canonical_reference_shape(vault: Path) -> tuple[list[str], int, int]:
     """V1 (v1.54) — verify substrate entries referencing canonical primitives are well-formed.
 
@@ -2021,7 +2199,7 @@ def check_canonical_reference_shape(vault: Path) -> tuple[list[str], int, int]:
             continue
         try:
             import yaml as _yaml
-            fm = _yaml.safe_load(text[4:end])
+            fm = fast_yaml.safe_load(text[4:end])
         except Exception:
             continue
         if not isinstance(fm, dict):
@@ -2094,7 +2272,7 @@ def read_vault_entry_from_path(path: Path) -> dict | None:
         if end < 0:
             return None
         import yaml as _yaml
-        fm = _yaml.safe_load(text[4:end])
+        fm = fast_yaml.safe_load(text[4:end])
         return fm if isinstance(fm, dict) else None
     except Exception:
         return None
@@ -2257,7 +2435,7 @@ def check_charter_conformance(vault: Path) -> tuple[list[str], int, int]:
         # made top-level `role:` appear as substring → false PASS). Parse via PyYAML
         # for true structured key-presence checks.
         try:
-            fm_dict = yaml.safe_load(fm_text)
+            fm_dict = fast_yaml.safe_load(fm_text)
         except yaml.YAMLError:
             continue
         if not isinstance(fm_dict, dict):
@@ -2845,7 +3023,7 @@ def check_article_source_required_fields(vault: Path) -> tuple[list[str], int, i
 
         # Parse full YAML for shared-module input (it reads nested fields via dict access)
         try:
-            fm_dict = yaml.safe_load(fm_raw) or {}
+            fm_dict = fast_yaml.safe_load(fm_raw) or {}
             if not isinstance(fm_dict, dict):
                 continue
         except yaml.YAMLError:
@@ -2898,7 +3076,7 @@ def check_ship_artifact_required_fields(vault: Path) -> tuple[list[str], int, in
 
         # Parse full YAML for shared-module input
         try:
-            fm_dict = yaml.safe_load(fm_raw) or {}
+            fm_dict = fast_yaml.safe_load(fm_raw) or {}
             if not isinstance(fm_dict, dict):
                 continue
         except yaml.YAMLError as e:
@@ -2957,7 +3135,7 @@ def check_publish_pipeline_md_schema(vault: Path) -> tuple[list[str], int, int]:
 
         # Parse full YAML dict for nested-field access (selection_rules + cleanup_rules)
         try:
-            fm = yaml.safe_load(fm_raw) or {}
+            fm = fast_yaml.safe_load(fm_raw) or {}
             if not isinstance(fm, dict):
                 continue
         except yaml.YAMLError as e:
@@ -3214,7 +3392,7 @@ def check_cascade_spec_validity(vault: Path) -> tuple[list[str], int, int]:
         if fm_text is None:
             continue
         try:
-            fm = yaml.safe_load(fm_text)
+            fm = fast_yaml.safe_load(fm_text)
         except Exception:
             continue
         if not isinstance(fm, dict):
@@ -3572,7 +3750,7 @@ def check_loop_registry_fields(vault: Path) -> tuple[list[str], int, int]:
         # is a fabrication smell (loop.capsule v1.3 §2 last_run_cost + §7 Check 8).
         if 'last_run_cost:' in fm_text:
             try:
-                parsed = yaml.safe_load(fm_text) or {}
+                parsed = fast_yaml.safe_load(fm_text) or {}
             except Exception:
                 parsed = None
             if isinstance(parsed, dict):
@@ -3665,7 +3843,7 @@ def check_vc_true_has_verification_command(vault: Path) -> tuple[list[str], int,
             import shlex as _shlex
             _uid20 = get_scalar(fm_text, 'uid') or f.stem
             try:
-                _parsed20 = yaml.safe_load(fm_text) or {}
+                _parsed20 = fast_yaml.safe_load(fm_text) or {}
             except Exception as _e20:
                 findings.append(
                     f'[ERROR] vault/files/{f.name} — vc:true step {_uid20} declares a verification_command '
@@ -5830,7 +6008,7 @@ def check_agent_identity_coherence(vault: Path, all_uids: set[str]) -> tuple[lis
         findings.append('[INFO] .tropo-studio/registries/agent-registry.yaml — not found; SKIP identity-coherence check')
         return findings, 0, 0
     try:
-        reg = yaml.safe_load(reg_path.read_text()) or {}
+        reg = fast_yaml.safe_load(reg_path.read_text()) or {}
     except (OSError, yaml.YAMLError) as exc:
         findings.append(f'[WARN] agent-registry.yaml — unreadable/parse failed ({exc}); SKIP identity-coherence check')
         return findings, 0, 0
@@ -5943,7 +6121,7 @@ def _load_meta_status_rollups(vault: Path) -> tuple[dict[str, dict[str, list[str
         if not fm:
             continue
         try:
-            parsed = yaml.safe_load(fm)
+            parsed = fast_yaml.safe_load(fm)
         except yaml.YAMLError:
             continue
         if not isinstance(parsed, dict):
@@ -6213,7 +6391,7 @@ def check_token_budget_per_class(vault: Path) -> tuple[list[str], int, int]:
         return findings, 0, 0
 
     try:
-        table = yaml.safe_load(budget_path.read_text()) or {}
+        table = fast_yaml.safe_load(budget_path.read_text()) or {}
     except (OSError, yaml.YAMLError) as exc:
         findings.append(f'[WARN] token-budget-table.yaml — unreadable/parse failed ({exc}); SKIP')
         return findings, 0, 0
@@ -6290,7 +6468,7 @@ def check_meta_status_m1_m2(vault: Path) -> tuple[list[str], int, int]:
         if not fm:
             continue
         try:
-            parsed = yaml.safe_load(fm)
+            parsed = fast_yaml.safe_load(fm)
         except yaml.YAMLError:
             continue
         if not isinstance(parsed, dict):
@@ -6428,7 +6606,7 @@ def check_meta_status_m1_m2(vault: Path) -> tuple[list[str], int, int]:
                 if not fm2:
                     continue
                 try:
-                    parsed2 = yaml.safe_load(fm2)
+                    parsed2 = fast_yaml.safe_load(fm2)
                 except yaml.YAMLError:
                     continue
                 if not isinstance(parsed2, dict):
@@ -6651,7 +6829,7 @@ def check_enforced_enum_compliance(vault: Path) -> tuple[list[str], int, int, in
         if not fm:
             continue
         try:
-            parsed = yaml.safe_load(fm)
+            parsed = fast_yaml.safe_load(fm)
         except yaml.YAMLError:
             continue
         if not isinstance(parsed, dict):
@@ -6696,7 +6874,7 @@ def check_enforced_enum_compliance(vault: Path) -> tuple[list[str], int, int, in
             if not fm:
                 continue
             try:
-                parsed = yaml.safe_load(fm)
+                parsed = fast_yaml.safe_load(fm)
             except yaml.YAMLError:
                 continue
             if not isinstance(parsed, dict):
@@ -6771,7 +6949,7 @@ def check_enforced_enum_coherence(vault: Path) -> tuple[list[str], int, int]:
         if not fm:
             continue
         try:
-            parsed = yaml.safe_load(fm)
+            parsed = fast_yaml.safe_load(fm)
         except yaml.YAMLError:
             continue
         if not isinstance(parsed, dict):
@@ -7395,6 +7573,392 @@ def check_piece1_inline_fixtures() -> tuple[list[str], int, int]:
 # v1.70 S3.5.2 — Boot-Cost Gate (spec 5e12ab9c)
 # ---------------------------------------------------------------------------
 
+def _load_compact_continue_contract(vault: Path):
+    """Read TRIGGER_LINE and TRIGGER_SURFACES out of the tool without running it.
+
+    AST literal evaluation, not import: the validator must be able to read the
+    contract from a tool it refuses to execute, and a tool that has to be
+    imported to be validated is a tool that can validate itself by side effect.
+    """
+    import ast
+
+    tool = vault / 'vault' / 'tools' / 'tropo-compact-continue.py'
+    if not tool.is_file():
+        return None, None, f'{tool.relative_to(vault)} not found'
+    try:
+        tree = ast.parse(tool.read_text(errors='replace'))
+    except SyntaxError as exc:
+        return None, None, f'tool does not parse: {exc}'
+    trigger = None
+    surfaces = None
+    for node in tree.body:
+        # Both plain and annotated module-level assignments; the tool declares
+        # TRIGGER_SURFACES with a `: dict` annotation.
+        if isinstance(node, ast.Assign):
+            names = [getattr(t, 'id', None) for t in node.targets]
+            value = node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            names = [getattr(node.target, 'id', None)]
+            value = node.value
+        else:
+            continue
+        for name in names:
+            if name == 'TRIGGER_LINE':
+                try:
+                    trigger = ast.literal_eval(value)
+                except ValueError:
+                    return None, None, 'TRIGGER_LINE is not a literal'
+            elif name == 'TRIGGER_SURFACES':
+                try:
+                    surfaces = ast.literal_eval(value)
+                except ValueError:
+                    return None, None, 'TRIGGER_SURFACES is not a literal'
+    if not trigger:
+        return None, None, 'TRIGGER_LINE missing from the tool'
+    if not isinstance(surfaces, dict) or not surfaces:
+        return None, None, 'TRIGGER_SURFACES missing or empty'
+    return trigger, surfaces, ''
+
+
+def _normalize_trigger_text(text: str) -> str:
+    """Collapse markdown quoting and wrapping so a copy compares semantically.
+
+    The trigger is one sentence pair that surfaces render differently: a
+    blockquote in one root doc, a JSON string in a hook, a wrapped paragraph in
+    a template. Comparing raw bytes would fail on formatting and teach everyone
+    to ignore the check; comparing this normalization still fails on any word,
+    path, or flag that changed.
+    """
+    import re as _re
+
+    unescaped = text.replace('\\n', ' ').replace('\\"', '"')
+    stripped = _re.sub(r'^[ \t]*>[ \t]?', '', unescaped, flags=_re.M)
+    return _re.sub(r'\s+', ' ', stripped).strip()
+
+
+def check_compact_continue_trigger_copy(vault: Path) -> tuple[list[str], int, int]:
+    """Compact-Continue trigger copy + no compact-to-born routing (d5f8fe55 §1/§7).
+
+    One canonical trigger lives in the tool. Every declared live and shipped
+    harness surface must carry it exactly (modulo markdown quoting), and no boot
+    or retirement surface may tell a compacted session to activate or run
+    ``born`` — that is the phantom-generation P0 this stream exists to close.
+
+    Returns (findings, total_checked, defects).
+    """
+    import re as _re
+
+    findings: list[str] = []
+    total_checked = 0
+    defects = 0
+
+    trigger, surfaces, error = _load_compact_continue_contract(vault)
+    if error:
+        return ([f'[FAIL] Compact-Continue trigger contract unreadable: {error}'], 0, 1)
+
+    wanted = _normalize_trigger_text(trigger)
+    recipient_relocations = {
+        "vault/templates/root-docs/CLAUDE.md": "CLAUDE.md",
+        "vault/templates/root-docs/AGENTS.md": "AGENTS.md",
+        "vault/templates/root-docs/START-TROPO.md": "START-TROPO.md",
+        "vault/templates/root-docs/GEMINI.md": "GEMINI.md",
+        "vault/templates/ide-configs/.cursorrules": ".cursorrules",
+        "vault/templates/harness-configs/.claude/settings.json":
+            ".claude/settings.json",
+        "vault/templates/harness-configs/.gemini/settings.json":
+            ".gemini/settings.json",
+    }
+    for rel, kind in sorted(surfaces.items()):
+        total_checked += 1
+        path = vault / rel
+        if (
+            not path.is_file()
+            and _is_recipient_package(vault)
+            and rel in recipient_relocations
+        ):
+            path = vault / recipient_relocations[rel]
+        if not path.is_file():
+            findings.append(
+                f'[FAIL] {rel} — declared Compact-Continue surface is missing; a '
+                f'harness listed in TRIGGER_SURFACES with no file delivers no trigger'
+            )
+            defects += 1
+            continue
+        try:
+            text = path.read_text(errors='replace')
+        except OSError as exc:
+            findings.append(f'[FAIL] {rel} — unreadable: {exc}')
+            defects += 1
+            continue
+        if wanted not in _normalize_trigger_text(text):
+            findings.append(
+                f'[FAIL] {rel} — does not carry the canonical trigger verbatim '
+                f'({kind} surface). Copy TRIGGER_LINE from '
+                f'vault/tools/tropo-compact-continue.py; wording drift here means '
+                f'a compacted session gets different instructions per harness'
+            )
+            defects += 1
+
+    # Routing: no surface may send a compacted session to birth/activation.
+    routing_targets = [
+        'vault/playbooks/99341618.md',
+        'vault/playbooks/e2c7d185.md',
+        '.tropo/playbooks/agent-activation.playbook.md',
+        '.tropo/playbooks/agent-retire.playbook.md',
+        '.tropo/boot-config.md',
+        '.tropo/boot-fast-path.md',
+        '.tropo/boot-digest.md',
+        *surfaces,
+    ]
+    patterns = [
+        _re.compile(p, _re.I)
+        for p in (
+            r'compact\w*[^.\n]{0,80}\brun\s+`?born`?',
+            r'compact\w*[^.\n]{0,80}\blineage\.py\s+born',
+        )
+    ]
+    for rel in sorted(set(routing_targets)):
+        path = vault / rel
+        if not path.is_file():
+            continue
+        total_checked += 1
+        try:
+            text = path.read_text(errors='replace')
+        except OSError:
+            continue
+        # The trigger itself says "never run `born`", so scanning raw text would
+        # flag every surface that carries it correctly. Remove the canonical
+        # line, then ignore negated phrasing — a document is allowed to forbid
+        # what this check forbids.
+        scan_text = _normalize_trigger_text(text).replace(wanted, ' ')
+        for pattern in patterns:
+            for match in pattern.finditer(scan_text):
+                # A prohibition is not a route. The negation has to sit
+                # immediately before the verb — "never run born", "do not run
+                # born" — so that a sentence like "do not activate; run born"
+                # is still caught. The window is deliberately tight: a wide one
+                # lets any nearby "not" launder a real instruction.
+                span = match.group(0)
+                verb = _re.search(r'\b(run|lineage\.py)\b', span)
+                verb_at = match.start() + (verb.start() if verb else 0)
+                window = scan_text[max(0, verb_at - 10):verb_at].lower()
+                if 'never' in window or 'not ' in window or "n't " in window:
+                    continue
+                findings.append(
+                    f'[FAIL] {rel} — routes a compacted session toward birth: '
+                    f'{match.group(0)[:80]!r}. Compaction is not retirement and '
+                    f'not a new generation (d5f8fe55)'
+                )
+                defects += 1
+                break
+            else:
+                continue
+            break
+
+    return findings, total_checked, defects
+
+
+SUPPORTED_PYTHON_FLOOR = (3, 9)
+
+
+def check_shipped_python_floor(vault: Path) -> tuple[list[str], int, int]:
+    """Ship-scoped Python must run on the oldest interpreter a Studio presents.
+
+    The demonstrated failure (2026-08-12, gate-1 walk): `tropo-import-walker.py`
+    grew `mount_uid: str | None` — PEP-604, evaluated at def time, 3.10+. Every
+    CI box and every agent VM ran 3.12, so it was green everywhere except the
+    place it mattered: Mike's Mac ships python3 3.9.6 and the walk stopped dead
+    until Metis added postponed annotations mid-session.
+
+    A tool is clean when it either defers annotation evaluation with
+    ``from __future__ import annotations`` or declares a higher floor with
+    ``python_floor:`` in its frontmatter. Deliberately narrow: PEP-604 unions in
+    annotation position only, which is the class that actually broke a
+    deployment target. PEP-585 builtin generics evaluate fine on 3.9.
+
+    Returns (findings, total_checked, defects).
+    """
+    import ast as _ast
+
+    findings: list[str] = []
+    total_checked = 0
+    defects = 0
+
+    def _declares_higher_floor(text: str) -> bool:
+        match = re.search(r'^python_floor:\s*[\'"]?(\d+)\.(\d+)', text, re.M)
+        if not match:
+            return False
+        return (int(match.group(1)), int(match.group(2))) > SUPPORTED_PYTHON_FLOOR
+
+    def _has_postponed_annotations(tree) -> bool:
+        for node in tree.body:
+            if isinstance(node, _ast.ImportFrom) and node.module == '__future__':
+                if any(alias.name == 'annotations' for alias in node.names):
+                    return True
+        return False
+
+    def _pep604_annotation_lines(tree) -> list[int]:
+        lines: list[int] = []
+
+        def scan(annotation) -> None:
+            if annotation is None:
+                return
+            for node in _ast.walk(annotation):
+                if isinstance(node, _ast.BinOp) and isinstance(node.op, _ast.BitOr):
+                    lines.append(getattr(annotation, 'lineno', 0))
+                    return
+
+        for node in _ast.walk(tree):
+            if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                for arg in (
+                    *node.args.args,
+                    *node.args.kwonlyargs,
+                    *getattr(node.args, 'posonlyargs', []),
+                ):
+                    scan(arg.annotation)
+                scan(node.returns)
+            elif isinstance(node, _ast.AnnAssign):
+                scan(node.annotation)
+        return sorted(set(lines))
+
+    tools_dir = vault / 'vault' / 'tools'
+    if not tools_dir.is_dir():
+        return findings, total_checked, defects
+
+    for path in sorted(tools_dir.glob('*.py')):
+        try:
+            text = path.read_text(errors='replace')
+        except OSError:
+            continue
+        if not re.search(r'^extraction_scope:\s*ship\s*$', text, re.M):
+            continue
+        total_checked += 1
+        try:
+            tree = _ast.parse(text)
+        except SyntaxError as exc:
+            findings.append(f'[FAIL] {path.relative_to(vault)} — does not parse: {exc}')
+            defects += 1
+            continue
+        if _has_postponed_annotations(tree) or _declares_higher_floor(text):
+            continue
+        lines = _pep604_annotation_lines(tree)
+        if lines:
+            shown = ', '.join(str(n) for n in lines[:5])
+            findings.append(
+                f'[FAIL] {path.relative_to(vault)} — PEP-604 union annotation(s) at '
+                f'line(s) {shown} with no postponed annotations and no declared '
+                f'python_floor. This ships to Studios whose python3 is '
+                f'{SUPPORTED_PYTHON_FLOOR[0]}.{SUPPORTED_PYTHON_FLOOR[1]}, where the '
+                f'def fails at import. Cure: add `from __future__ import annotations` '
+                f'before executable code, or declare `python_floor:` in frontmatter'
+            )
+            defects += 1
+
+    return findings, total_checked, defects
+
+
+def check_ship_python_interpreter_floor(vault: Path) -> tuple[list[str], int, int]:
+    """Ship-scoped Python must run on the oldest interpreter a Studio presents.
+
+    Field failure this exists for: `tropo-import-walker.py` gained
+    `mount_uid: str | None` (PEP-604) with no postponed annotations, which
+    raised its floor to 3.10 silently. Every CI box and dev VM here runs 3.12,
+    so nothing caught it until the tool ran on Mike's Mac mid-walk — default
+    python3 is 3.9.6 there, with no newer interpreter installed, and the gate-1
+    manual walk stopped dead (talos-t41 defect, metis-g107 fix, 2026-08-12).
+
+    The rule is narrow, matching the demonstrated class: a shipped tool whose
+    ANNOTATIONS use `X | Y` must either carry ``from __future__ import
+    annotations`` before executable code, or declare a higher floor explicitly
+    via ``python_floor:`` in its frontmatter. Runtime PEP-604 (isinstance
+    unions, typing at call time) is out of scope — annotations are where this
+    class actually bites, because postponing them is a one-line fix.
+
+    Returns (findings, total_checked, defects).
+    """
+    import ast
+
+    findings: list[str] = []
+    total_checked = 0
+    defects = 0
+
+    def _has_postponed_annotations(tree) -> bool:
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom) and node.module == '__future__':
+                if any(alias.name == 'annotations' for alias in node.names):
+                    return True
+        return False
+
+    def _pep604_annotation_lines(tree) -> list[int]:
+        lines: list[int] = []
+
+        def scan(annotation) -> None:
+            if annotation is None:
+                return
+            for sub in ast.walk(annotation):
+                if isinstance(sub, ast.BinOp) and isinstance(sub.op, ast.BitOr):
+                    lines.append(getattr(annotation, 'lineno', 0))
+                    return
+
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for arg in (
+                    *node.args.args,
+                    *node.args.kwonlyargs,
+                    *getattr(node.args, 'posonlyargs', []),
+                ):
+                    scan(arg.annotation)
+                scan(node.returns)
+            elif isinstance(node, ast.AnnAssign):
+                scan(node.annotation)
+        return sorted(set(lines))
+
+    tools_dir = vault / 'vault' / 'tools'
+    if not tools_dir.is_dir():
+        return findings, total_checked, defects
+
+    for path in sorted(tools_dir.glob('*.py')):
+        try:
+            text = path.read_text(errors='replace')
+        except OSError:
+            continue
+        # Tool frontmatter lives inside the module docstring, after the shebang,
+        # so the markdown splitter does not see it.
+        block = re.search(r'^---\n(.*?)\n---\s*$', text, re.S | re.M)
+        fm_text = block.group(1) if block else None
+        if fm_text is None or get_scalar(fm_text, 'extraction_scope') != 'ship':
+            continue
+        total_checked += 1
+        try:
+            tree = ast.parse(text)
+        except SyntaxError as exc:
+            findings.append(f'[FAIL] {path.relative_to(vault)} — does not parse: {exc}')
+            defects += 1
+            continue
+        if _has_postponed_annotations(tree):
+            continue
+        declared_floor = str(get_scalar(fm_text, 'python_floor') or '').strip()
+        if declared_floor:
+            try:
+                major, minor = (int(part) for part in declared_floor.split('.')[:2])
+                if (major, minor) >= (3, 10):
+                    continue
+            except ValueError:
+                pass
+        offending = _pep604_annotation_lines(tree)
+        if offending:
+            findings.append(
+                f'[FAIL] {path.relative_to(vault)} — PEP-604 union annotation(s) at '
+                f'line(s) {", ".join(str(n) for n in offending[:5])} with neither '
+                f'`from __future__ import annotations` nor `python_floor: 3.10+`. '
+                f'This ships a tool that cannot run on Python 3.9, which is the '
+                f'default interpreter on a stock macOS Studio'
+            )
+            defects += 1
+
+    return findings, total_checked, defects
+
+
 def check_boot_derivation_fresh(vault: Path) -> tuple[list[str], int, int]:
     """v1.70 S3.5.2 — Drift-gate for compressed boot artifacts.
 
@@ -7440,7 +8004,7 @@ def check_boot_derivation_fresh(vault: Path) -> tuple[list[str], int, int]:
 
             # Full YAML parse required for nested fingerprint objects
             try:
-                fm = yaml.safe_load(fm_text)
+                fm = fast_yaml.safe_load(fm_text)
             except Exception as e:
                 findings.append(f'[FAIL] {rel} — YAML parse failed: {e}')
                 defects += 1
@@ -7753,7 +8317,7 @@ def check_identity_refs_resolve(vault: Path, release_mode: bool = False,
                 fm_text = split_frontmatter(f.read_text(errors='replace'))
                 if not fm_text: continue
                 
-                fm = yaml.safe_load(fm_text)
+                fm = fast_yaml.safe_load(fm_text)
                 if not isinstance(fm, dict): continue
                 
                 total_checked += 1
@@ -7836,7 +8400,7 @@ def check_node_private_by_construction(vault: Path) -> tuple[list[str], int, int
                 fm_text = split_frontmatter(f.read_text(errors='replace'))
                 if not fm_text: continue
                 
-                fm = yaml.safe_load(fm_text)
+                fm = fast_yaml.safe_load(fm_text)
                 if not isinstance(fm, dict): continue
                 
                 # Prototype nodes use type: <flat> + entity_prototype: true, new nodes use type: node
@@ -7974,7 +8538,7 @@ def check_undispositioned_backlog(vault: Path, stale_days: int = 45) -> tuple[li
         if fm_text is None:
             continue
         try:
-            fm = yaml.safe_load(fm_text)
+            fm = fast_yaml.safe_load(fm_text)
         except Exception:
             continue
         if not isinstance(fm, dict):
@@ -8080,7 +8644,7 @@ def check_archived_forward_pointer(vault: Path) -> tuple[list[str], int, int]:
         if fm_text is None:
             continue
         try:
-            fm = yaml.safe_load(fm_text)
+            fm = fast_yaml.safe_load(fm_text)
         except Exception:
             continue
         if not isinstance(fm, dict):
@@ -9090,7 +9654,7 @@ def check_vault_capsule_types(vault: Path) -> tuple[list[str], int, int]:
         if fm_text is None:
             continue
         try:
-            fm = yaml.safe_load(fm_text)
+            fm = fast_yaml.safe_load(fm_text)
         except yaml.YAMLError:
             continue
         if not isinstance(fm, dict):
@@ -9324,7 +9888,7 @@ def check_vault_manifest_governed_write_gate(
             if fm_text is None:
                 continue
             try:
-                fm = yaml.safe_load(fm_text)
+                fm = fast_yaml.safe_load(fm_text)
             except yaml.YAMLError:
                 continue
             if not isinstance(fm, dict) or fm.get('type') != 'vault':
@@ -9378,7 +9942,7 @@ def check_vault_manifest_governed_write_gate(
                     live_fm = None
                     if live_fm_text is not None:
                         try:
-                            parsed = yaml.safe_load(live_fm_text)
+                            parsed = fast_yaml.safe_load(live_fm_text)
                             if isinstance(parsed, dict):
                                 live_fm = parsed
                         except yaml.YAMLError:
@@ -9801,7 +10365,7 @@ def check_dev_spec_activation_coupling(vault: Path, customer_mode: bool = False)
         if fm_text is None:
             continue
         try:
-            fm = yaml.safe_load(fm_text)
+            fm = fast_yaml.safe_load(fm_text)
         except yaml.YAMLError:
             continue
         if not isinstance(fm, dict):
@@ -10226,24 +10790,36 @@ _KNOWN_PIPELINE_EVENT_POLLUTION_IDS = frozenset({
 
 
 def check_every_agent_can_still_boot(vault: Path) -> tuple[list[str], int, int]:
-    """Can every agent in the fleet still be born?
+    """Can every agent in the fleet still be born? Asked of the LINEAGE, natively.
 
-    WHY THIS EXISTS (metis-g97, 2026-07-29): the G2 hardening made predecessor
-    derivation require a keyed predecessor, but only two activation entries were
-    ever retrofitted with keys. That left 19 agents unable to hand off to a
-    successor -- argus, vela, orpheus, po, cosmo, stratus, pipeline-runtime,
-    every sa.* and every coordinator. It shipped silently and sat for three days,
-    because agent BIRTH is the only operation that trips it and only one agent
-    had been born since.
+    REWRITTEN 2026-08-09 (talos-t40) for S4 dev-spec 22289459, Argus A147's leg 2.
 
-    That is the expensive failure shape: a gate on the boot path fails at the one
-    moment nobody is home, and the agent who could fix it is the agent who cannot
-    start. Nothing in the studio asked this question, so nobody could see it.
-    Now something asks it on every validate run.
+    WHY THIS EXISTS (metis-g97, 2026-07-29): a hardening made predecessor
+    derivation require a keyed predecessor and left 19 agents unable to hand off.
+    It shipped silently and sat three days, because birth is the only operation
+    that trips it. That is the expensive shape — a gate on the boot path fails at
+    the one moment nobody is home, and the agent who could fix it is the agent
+    who cannot start.
 
-    A live agent whose current generation is still active is NOT a defect -- that
-    is ADR-016 holding correctly. Only a terminal predecessor that cannot produce
-    a successor counts.
+    WHY IT IS REWRITTEN: it answered that question by walking `type: activation`
+    entries through the authority chain. Births stopped going through activation
+    entries at the 2026-08-06 lifecycle cutover — `tropo-lineage.py` appends to
+    `agents/<slug>/lineage.jsonl` and touches no index, no mint, no card and no
+    registry. So the check was interrogating a retired authority about an
+    operation that no longer consults it, and A147 measured it at 53.7 SECONDS
+    per boot to do so.
+
+    IT NOW ASKS THE TOOL, RATHER THAN MODELLING IT. `next_generation` and
+    `read_lines` are imported from `tropo-lineage.py` itself, so the check and
+    the birth cannot disagree about what a lineage says — the failure mode where
+    an instrument is aimed one gate off from the mechanism it measures. There is
+    exactly one thing `born` refuses on: a lineage file it cannot READ, because
+    guessing a generation out of an unparseable file is the one genuinely
+    destructive move. That refusal is therefore the only BLOCKED condition here.
+
+    An unretired predecessor is NOT blocked. Mike's standing rule, 2026-08-02:
+    a failed identity check marks a generation and lets it work, it never refuses
+    existence. It is reported as a note.
 
     Returns (findings, agents_checked, blocked_count).
     """
@@ -10253,148 +10829,80 @@ def check_every_agent_can_still_boot(vault: Path) -> tuple[list[str], int, int]:
     tools = vault / 'vault' / 'tools'
     if str(tools) not in _sys.path:
         _sys.path.insert(0, str(tools))
+
+    lineage_tool = tools / 'tropo-lineage.py'
+    if not lineage_tool.is_file():
+        return ([f'lineage tool missing at {lineage_tool}; cannot ask'], 0, 1)
     try:
-        from lib import authority_chain as _ac
+        import importlib.util as _ilu
+        _spec = _ilu.spec_from_file_location('tropo_lineage_for_health', lineage_tool)
+        _lineage = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_lineage)
     except Exception as exc:  # pragma: no cover - import surface only
-        return ([f'authority chain unavailable: {exc}'], 0, 0)
+        return ([f'lineage tool unloadable: {exc}'], 0, 1)
 
-    try:
-        records = _ac.load_canonical_activation_entries(vault)
-    except Exception as exc:
-        return ([f'activation entries unreadable: {exc}'], 0, 1)
-
-    by_agent: dict[str, list] = {}
-    for record in records:
-        if record.agent and record.activation_type == 'activation':
-            by_agent.setdefault(record.agent, []).append(record)
-
-    # An ENDED lineage is not a broken one. Never ask about it again.
-    #
-    # An agent whose unified entry declares `superseded_by:` has been formally
-    # retired with no successor to come. Asking "can this lineage produce a
-    # successor?" of a lineage somebody deliberately ended produces a permanent
-    # red line — and a health check that is permanently red teaches the crew to
-    # ignore the one instrument that would have caught a real blocker.
-    #
-    # This is the tropo agent, and it is worth naming because the failure is not
-    # the one it looks like. The tropo agent was renamed to Po and retired on
-    # 2026-08-01 by argus-a143, carrying Mike's verbatim ruling and the explicit
-    # sentence "no T2 is to be born". THE ANSWER HAS BEEN WRITTEN DOWN SINCE
-    # THEN. The data was never wrong. This check simply never read it, and so
-    # kept reporting a decided question as an open defect — which agent after
-    # agent then dutifully raised with Mike as a loose end. Mike, 2026-08-03:
-    # "I never want to hear about this issue again."
-    #
-    # The general lesson, which is the same one this whole session is about: an
-    # instrument that cannot see a decision will keep re-litigating it, and the
-    # cost lands on the human every single time.
-    ended: dict[str, str] = {}
-    agents_root = vault / 'vault' / 'agents'
-    if agents_root.is_dir():
-        for path in sorted(agents_root.glob('*.md')):
+    # Agents whose unified entry is deliberately ended/superseded do not need a
+    # successor. Read from the entry, never from git history.
+    ended: set[str] = set()
+    agents_dir = vault / 'vault' / 'agents'
+    if agents_dir.is_dir():
+        for entry in sorted(agents_dir.glob('*.md')):
             try:
-                fm = split_frontmatter(path.read_text(errors='replace'))
+                fm = split_frontmatter(entry.read_text(encoding='utf-8', errors='replace'))
             except OSError:
-                continue  # unreadable is UNCHECKED, never "ended" — never silently skip
-            if not fm or (get_scalar(fm, 'type') or '') != 'agent':
                 continue
+            if not fm:
+                continue
+            state = (get_scalar(fm, 'state') or '').strip().lower()
+            status = (get_scalar(fm, 'status') or '').strip().lower()
             slug = (get_scalar(fm, 'agent') or '').strip()
-            superseded = (get_scalar(fm, 'superseded_by') or '').strip()
-            if slug and superseded:
-                ended[slug] = superseded
+            if slug and (state in {'ended', 'superseded'} or status == 'superseded'):
+                ended.add(slug)
+
+    lineage_root = vault / 'agents'
+    if not lineage_root.is_dir():
+        return ([], 0, 0)
 
     checked = 0
     blocked = 0
-    for agent in sorted(by_agent):
+    for path in sorted(lineage_root.glob('*/lineage.jsonl')):
+        agent = path.parent.name
         if agent in ended:
-            continue  # deliberately ended; superseded_by names the successor role
-        lineage = by_agent[agent]
-        latest = max(
-            lineage, key=lambda r: (r.activated_at, r.generation, r.uid)
-        )
-        # 163b3923 R3 — a still-active predecessor IS ADR-016 working, but
-        # skipping those agents entirely made this check structurally unable to
-        # see a whole class of birth blocker. It hid two on 2026-07-31 alone:
-        # Po P2 (activation open 29 days after a session that ended without
-        # ceremony) and Vela V72 (a live agent whose own activation frontmatter
-        # was unparseable, poisoning her lineage for fifteen hours). Both were
-        # found by hand, one by a control probe on an agent expected to pass.
-        #
-        # So probe them too, and separate the outcomes: a refusal that is ONLY
-        # "predecessor must be terminal" is ADR-016 holding and is reported as
-        # latent, not blocked. Any OTHER refusal is a real birth blocker that
-        # will fire the moment that agent retires, and is reported now.
-        predecessor_live = str(latest.status).strip().lower() not in {
-            'retired', 'retiring', 'stale', 'closed'
-        }
-        if predecessor_live:
-            try:
-                _ac.derive_new_activation_predecessor(
-                    records,
-                    agent=agent,
-                    agent_class=(
-                        latest.canonical_agent_class
-                        or latest.agent_class
-                        or 'executive'
-                    ),
-                    generation=_next_probe_generation(latest.generation),
-                )
-            except Exception as exc:
-                detail = str(exc)
-                if 'must be terminal' not in detail:
-                    # Something other than liveness blocks this birth. It is
-                    # already true and will fire the moment they retire.
-                    blocked += 1
-                    findings.append(
-                        f'{agent} ({latest.generation}+1) LATENT BIRTH BLOCKER '
-                        f'(predecessor still {latest.status}; this fires when '
-                        f'they retire): {detail}'
-                    )
-                elif (
-                    _agent_class_has_a_birth_lifecycle(latest)
-                    and _activation_is_past_stale_threshold(latest)
-                ):
-                    # "Predecessor must be terminal" is ADR-016 holding when the
-                    # agent is genuinely working. Long past its own stale
-                    # threshold it means the opposite: the session ended without
-                    # ceremony and the activation was never closed, so the
-                    # successor is blocked by an open record nobody will close
-                    # on their own. This is exactly Po P2 — 29 days open, no
-                    # events, no commits, no reflection — which sat unseen
-                    # because this check skipped live predecessors entirely.
-                    blocked += 1
-                    findings.append(
-                        f'{agent} ({latest.generation}+1) STALE OPEN ACTIVATION: '
-                        f'predecessor {latest.uid} is status:{latest.status} but '
-                        f'past its own stale threshold (activated '
-                        f'{latest.activated_at}). Its session ended without '
-                        f'closing. SELF-CLEARING: booting {agent} now sweeps this '
-                        f'record automatically (metis-g100, 2026-08-03) — just '
-                        f'activate them. To clear it without a boot: '
-                        f'40b2f455.py close --activation-uid {latest.uid} '
-                        f'--target-status retired --abandoned --authorized-by <you>.'
-                    )
             continue
         checked += 1
-        probe = f'{latest.generation}+1' if latest.generation else 'next'
-        # Probe with the CANONICAL class, not the entry's declared one: a class
-        # mismatch is a different defect and must not masquerade as a boot block.
-        probe_class = (
-            latest.canonical_agent_class or latest.agent_class or 'executive'
-        )
         try:
-            _ac.derive_new_activation_predecessor(
-                records,
-                agent=agent,
-                agent_class=probe_class,
-                generation=_next_probe_generation(latest.generation),
-            )
-        except Exception as exc:
+            lines = _lineage.read_lines(path)
+        except SystemExit as exc:
+            # The one refusal `born` actually makes, reported in its own words.
             blocked += 1
             findings.append(
-                f'{agent} ({probe}) LINEAGE DEFECT (birth is NOT blocked): {exc}'
+                f'{agent}: lineage unreadable — birth WOULD refuse here. {exc}'
             )
-    return (findings, checked, blocked)
+            continue
+        except Exception as exc:
+            blocked += 1
+            findings.append(f'{agent}: lineage could not be read: {exc}')
+            continue
+
+        try:
+            successor = _lineage.next_generation(lines)
+        except Exception as exc:
+            blocked += 1
+            findings.append(f'{agent}: successor generation underivable: {exc}')
+            continue
+
+        live = _lineage.current(lines)
+        if live and not live.get('retired'):
+            # A note, never a block. Reported so a human can see two live
+            # generations if that is what it is, which is a real governance
+            # question — just not one that may stop a birth.
+            findings.append(
+                f'{agent}: {live.get("gen")} is still open; the next birth would '
+                f'issue {successor} alongside it (ADR-016 note, NOT a block — '
+                'the usual cause is a session that ended without closing)'
+            )
+
+    return findings, checked, blocked
 
 
 def _agent_class_has_a_birth_lifecycle(record) -> bool:
@@ -11240,67 +11748,12 @@ def main() -> int:
                              "receipt's recorded verification_command and compares exit_code + "
                              'output_sha256 against what was recorded, flagging drift/tamper. '
                              'Off by default (real command re-execution; not a routine-pass default).')
-    parser.add_argument('--fleet-boot-health', action='store_true',
-                        help='Run ONLY the fleet birth-health check and print one line. '
-                             'For the Group 5 boot step: every agent asks, every boot, '
-                             'whether any lineage in the fleet has stopped being able to '
-                             'produce a successor. This check has existed since 2026-07-29 '
-                             'and correctly reported metis, po and tropo as blocked — to '
-                             'nobody, because it only ran inside a full validate that nobody '
-                             'ran. An instrument that reports where no one is looking is the '
-                             'same as no instrument (metis-g100, 2026-08-03).')
     args = parser.parse_args()
 
     vault = resolve_vault_root(args.vault_path)
     if vault is None:
         print('ERROR: Could not resolve vault root.', file=sys.stderr)
         return 2
-
-    # --- Fleet birth health, standalone (metis-g100) ---
-    if args.fleet_boot_health:
-        try:
-            findings, checked, blocked = check_every_agent_can_still_boot(vault)
-        except Exception as exc:
-            print(f'⚠️  Fleet birth health: check failed to run ({exc})')
-            return 1
-        if blocked == 0:
-            print(f'✅ Fleet birth health: {checked} lineage(s) can produce a successor.')
-            return 0
-        # Severity language corrected metis-g101 2026-08-04. This said "CANNOT
-        # produce a successor", which stopped being true when G100 converted
-        # birth from refuse-on-failed-check to record-and-proceed.
-        #
-        # The first correction written here was ALSO wrong, and only a probe
-        # caught it. It claimed the successor would be "born provisional" --
-        # true for argus, but on a planted lineage whose predecessor carried an
-        # unknown agent_class the mint issued a CLEAN entry, no findings at all.
-        # The check and the mint do not share a rule set: this walk is stricter
-        # than birth, and some of what it reports birth simply does not consult.
-        #
-        # So the only claim made here is the one that is verified in both
-        # directions and pinned by test_fleet_health_language.py: the birth is
-        # NOT BLOCKED. Whether it also comes out provisional is the mint's
-        # business to report, not this check's to predict.
-        #
-        # It matters because of who reads this line. Boot step 5.1.9 puts it in
-        # front of a human in every agent's startup signal, and Mike's standing
-        # bar is "I NEVER EVER want to see my agents telling me they are failing
-        # to boot." An alarm that overstates by a whole category is how a real
-        # finding gets discounted -- and this instrument already spent thirty
-        # days being right about Po while nobody acted.
-        #
-        # Findings are unchanged and still surface; only the claim about their
-        # consequence is corrected. Exit code deliberately left non-zero: CI
-        # should still see these, and changing that is a separate decision with
-        # its own blast radius.
-        print(
-            f'🟡 Fleet birth health: {blocked} of {checked} lineage(s) carry a '
-            'lineage defect. Birth is NOT blocked — the mint records what it '
-            'cannot prove and proceeds. These are repairs, not emergencies.'
-        )
-        for line in findings:
-            print(f'   • {line}')
-        return 1
 
     # --- v1.70 S3.5.2: Write Fingerprints Mode ---
     if args.write_fingerprints is not None:
@@ -11337,7 +11790,7 @@ def main() -> int:
                 if not fm_raw:
                     print(f'  [SKIP] {f.name} — no frontmatter')
                     continue
-                fm = yaml.safe_load(fm_raw)
+                fm = fast_yaml.safe_load(fm_raw)
                 if not isinstance(fm, dict):
                     print(f'  [SKIP] {f.name} — malformed frontmatter')
                     continue
@@ -12409,6 +12862,53 @@ def main() -> int:
         print('[PASS] blocked-task parity across vault/00-index.jsonl and vault/00-index.sqlite (or a surface not present)')
         total_passes += 1
 
+    # --- Compact-Continue trigger copy + boot routing (dev-spec d5f8fe55) ---
+    print('\n--- Compact-Continue Trigger Copy (d5f8fe55 §1/§7; ERROR) ---')
+    try:
+        cc_findings, cc_checked, cc_defects = check_compact_continue_trigger_copy(vault)
+        if cc_defects == 0:
+            print(f'[PASS] {cc_checked} surface(s) carry the canonical trigger; '
+                  f'no compact-to-born routing')
+            total_passes += 1
+        else:
+            print(f'[FAIL] {cc_checked} surface(s) checked; {cc_defects} trigger '
+                  f'defect(s) detected')
+        for line in cc_findings[:20]:
+            print(f'  {line}')
+            if '[FAIL]' in line: total_fails += 1
+            elif '[WARN]' in line: total_warnings += 1
+        if len(cc_findings) > 20:
+            print(f'  ... and {len(cc_findings)-20} more')
+            for line in cc_findings[20:]:
+                if '[FAIL]' in line: total_fails += 1
+                elif '[WARN]' in line: total_warnings += 1
+    except Exception as e:
+        import traceback as _tb
+        print(f'[FAIL] compact-continue trigger-copy check CRASHED: {e}')
+        _tb.print_exc()
+        total_fails += 1
+
+    # --- Ship-scoped Python interpreter floor (field failure 2026-08-12) ---
+    print('\n--- Ship Python Interpreter Floor (PEP-604 vs py3.9 Studios; ERROR) ---')
+    try:
+        pf_findings, pf_checked, pf_defects = check_ship_python_interpreter_floor(vault)
+        if pf_defects == 0:
+            print(f'[PASS] {pf_checked} ship-scoped tool(s) run on the oldest '
+                  f'supported interpreter')
+            total_passes += 1
+        else:
+            print(f'[FAIL] {pf_checked} ship-scoped tool(s) checked; {pf_defects} '
+                  f'would not run on Python 3.9')
+        for line in pf_findings[:20]:
+            print(f'  {line}')
+            if '[FAIL]' in line: total_fails += 1
+            elif '[WARN]' in line: total_warnings += 1
+    except Exception as e:
+        import traceback as _tb
+        print(f'[FAIL] ship python interpreter floor check CRASHED: {e}')
+        _tb.print_exc()
+        total_fails += 1
+
     # --- v1.70 Check 34: Boot-Derivation Freshness (Drift-Gate) ---
     print('\n--- Boot-Derivation Freshness (Check 34; spec 5e12ab9c; ERROR) ---')
     try:
@@ -13114,7 +13614,7 @@ def main() -> int:
                 if not m:
                     continue
                 if _yaml_ok:
-                    fm = _yaml.safe_load(m.group(1)) or {}
+                    fm = fast_yaml.safe_load(m.group(1)) or {}
                 else:
                     fm_text = m.group(1)
                     fm = {}
@@ -13141,7 +13641,7 @@ def main() -> int:
                     if not m:
                         continue
                     if _yaml_ok:
-                        fm = _yaml.safe_load(m.group(1)) or {}
+                        fm = fast_yaml.safe_load(m.group(1)) or {}
                     else:
                         fm = {}
                         for line in m.group(1).splitlines():
@@ -13843,12 +14343,21 @@ def main() -> int:
     try:
         fb_findings, fb_checked, fb_blocked = check_every_agent_can_still_boot(vault)
         if fb_checked == 0:
-            print('[INFO] No agents with a terminal latest activation — skipping')
+            print('[INFO] No agent lineages found — skipping')
         elif fb_blocked == 0:
-            print(f'[PASS] {fb_checked} agent(s) checked — every lineage can still produce a successor')
+            # Notes are printed even on a pass. An unretired predecessor is a
+            # real governance question and must not vanish just because it is
+            # correctly not a blocker (S4 leg 2, talos-t40 2026-08-09).
+            print(f'[PASS] {fb_checked} lineage(s) checked — every one can still '
+                  'produce a successor')
             total_passes += 1
+            for line in fb_findings[:25]:
+                print(f'  [INFO] {line}')
+            if len(fb_findings) > 25:
+                print(f'  [INFO] ... and {len(fb_findings) - 25} more note(s)')
         else:
-            print(f'[ERROR] {fb_checked} agent(s) checked; {fb_blocked} CANNOT BOOT a successor')
+            print(f'[ERROR] {fb_checked} lineage(s) checked; {fb_blocked} cannot '
+                  'produce a successor')
             total_fails += fb_blocked
             for line in fb_findings[:25]:
                 print(f'  {line}')
@@ -13856,6 +14365,27 @@ def main() -> int:
                 print(f'  ... and {len(fb_findings) - 25} more')
     except Exception as e:
         print(f'[FAIL] fleet-boot-health check CRASHED: {e}')
+        total_fails += 1
+
+    # --- S4 Single-Source Doctrine (22289459): kernel pointers stay stubs ---
+    print('\n--- Kernel Pointer Stub (S4 22289459; two procedure surfaces, stubs stay stubs; ERROR) ---')
+    try:
+        ks_findings, ks_checked, ks_defects = check_kernel_pointer_stub(vault)
+        if not ks_findings:
+            print(f'[PASS] {ks_checked} boot-surface file(s) checked — the procedure '
+                  'lives at exactly its two sanctioned surfaces and every kernel '
+                  'pointer is still a stub')
+            total_passes += 1
+        else:
+            print(f'[ERROR] {ks_checked} boot-surface file(s) checked; '
+                  f'{ks_defects} single-source defect(s)')
+            for line in ks_findings[:25]:
+                print(f'  {line}')
+            if len(ks_findings) > 25:
+                print(f'  ... and {len(ks_findings) - 25} more')
+            total_fails += ks_defects
+    except Exception as e:
+        print(f'[FAIL] kernel-pointer-stub check CRASHED: {e}')
         total_fails += 1
 
     # --- Governed Autonomy S2 (bba40cd7): Mint Provenance Fail-Loud Floor (ERROR) ---

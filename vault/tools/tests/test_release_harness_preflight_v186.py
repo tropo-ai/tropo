@@ -146,40 +146,31 @@ class ReleaseHarnessPreflightV186(unittest.TestCase):
             "release extraction must remain a positive ship-scope filter",
         )
 
-    def test_build_accepts_only_non_growing_studio_validator_debt(self):
-        passing = SimpleNamespace(returncode=0, stdout="PASS — studio debt DOWN 4", stderr="")
-        with (
-            patch.object(build.os.path, "isfile", return_value=True),
-            patch.object(build.subprocess, "run", return_value=passing) as run,
-        ):
-            self.assertTrue(build._rebuild_result_clears_release_gate(8))
-        self.assertIn(
-            "test_post_migration_release_clean.py",
-            run.call_args.args[0][1],
+    def test_build_validation_receipt_is_post_rebuild_and_parse_bound(self):
+        passing = SimpleNamespace(
+            returncode=0,
+            stdout=(
+                "Result: 85 passed, 280 failed "
+                "(recorded studio debt: 283, from 2026-08-09)\nPASS\n"
+            ),
+            stderr="",
         )
-        # Metis and I fixed this concurrently and both fixes are right about the
-        # problem: a copy of the literal (420) was stranded when the build moved
-        # to 1080, so this went red on the release path the bump was for. Hers
-        # was `assertGreaterEqual(..., 420)`; this keeps her intent — never
-        # strand on a future bump — and gives up nothing, because the value is
-        # now defined once and read twice. A floor would also pass on a typo'd
-        # 100000. Metis: revert to the floor in one line if you disagree.
-        self.assertEqual(
-            run.call_args.kwargs["timeout"],
-            build.STUDIO_DEBT_RATCHET_TIMEOUT_S,
-        )
-
-        failing = SimpleNamespace(returncode=1, stdout="FAIL — studio debt UP 1", stderr="")
         with (
-            patch.object(build.os.path, "isfile", return_value=True),
-            patch.object(build.subprocess, "run", return_value=failing),
+            patch.object(build.subprocess, "run", return_value=passing),
+            patch.object(
+                build, "_validator_tree_snapshot",
+                return_value=("a" * 64, 123),
+            ),
+            patch.object(
+                build, "_write_validation_receipt",
+                return_value=Path("/tmp/receipt.json"),
+            ),
         ):
-            self.assertFalse(build._rebuild_result_clears_release_gate(8))
-
-        with patch.object(build, "_studio_validator_debt_ratchet_clear") as ratchet:
-            self.assertTrue(build._rebuild_result_clears_release_gate(0))
-            self.assertFalse(build._rebuild_result_clears_release_gate(1))
-            ratchet.assert_not_called()
+            receipt = build._run_post_rebuild_validation("b" * 32)
+        self.assertTrue(receipt["clear"])
+        self.assertEqual(receipt["phase"], "post-rebuild")
+        self.assertEqual(receipt["tree_sha256"], "a" * 64)
+        self.assertEqual(receipt["summary"], {"passed": 85, "failed": 280})
 
     def test_release_l0_gate_excludes_explicit_non_ship_cockpit_projects(self):
         with tempfile.TemporaryDirectory(prefix="v186-l0-scope-") as temporary:

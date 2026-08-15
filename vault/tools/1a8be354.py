@@ -67,6 +67,7 @@ reads_scope:
 - vault/tools/lib/public_snapshot.py
 - vault/tools/lib/release_receipt.py
 - vault/tools/lib/event_identity.py
+- vault/tools/lib/tropo_roots.py
 - vault/tools/tropo-publish-release.py
 - vault/tools/tropo-check-publish-state.py
 network_access: false
@@ -181,6 +182,7 @@ SOURCE_BINDING_PATHS = (
     Path("vault/tools/lib/public_snapshot.py"),
     Path("vault/tools/lib/release_receipt.py"),
     Path("vault/tools/lib/event_identity.py"),
+    Path("vault/tools/lib/tropo_roots.py"),
     Path("vault/tools/tropo-publish-release.py"),
     Path("vault/tools/tropo-check-publish-state.py"),
 )

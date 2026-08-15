@@ -189,6 +189,44 @@ def load_index_uids(index_path: Path) -> set[str]:
     return uids
 
 
+UPDATE_SOURCE_REL = Path(".tropo") / "update-source.json"
+UPDATE_SOURCE_SCHEMA = "tropo.update-source/v1"
+
+
+def is_recipient_studio(vault: Path) -> bool:
+    """Is this a distributed box, or the Argo source Studio?
+
+    Answered from an IMMUTABLE PACKAGE DATUM, never from a guess. The release
+    build writes `.tropo/update-source.json` into every box and REFUSES to build
+    without it (build-release step 3g), so the file is present in a recipient
+    Studio by construction and absent from Argo source by construction — it is
+    generated into the build directory and never into this tree.
+
+    Why this matters enough to detect rather than ask for a flag: the first
+    command the written newcomer path tells a brand-new owner to run is this
+    rebuild. In v1.86 it invoked Argo-strict validation on a customer box,
+    printed 284 failures and "do not ship against a broken substrate", and the
+    same validator in customer mode reported ZERO. A first hour that opens by
+    telling someone their studio is broken is a lie about their studio
+    (v1.86 cold-walk finding 2, `ae5e743c`; fixed under `e52826c5`).
+
+    Deliberately NOT used for this decision: `.git` presence, hostname,
+    environment variables, or caller memory of a flag. Each of those is a guess
+    about who is running, and each is wrong in some real case — a customer who
+    versions their Studio in git is still a customer.
+
+    Absence is treated as source-Studio (strict). That is the safe direction: a
+    box missing this file is already a reported configuration gap on the update
+    path, and strict validation over-reports rather than under-reports.
+    """
+    marker = vault / UPDATE_SOURCE_REL
+    try:
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(payload, dict) and payload.get("schema_id") == UPDATE_SOURCE_SCHEMA
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description='Comprehensive substrate refresh — index + rehydrate + stale-cascade cleanup (v1.15.1).',
@@ -204,6 +242,11 @@ def main() -> int:
                              're-derive + upsert ONLY this entry into the live vault/00-index.sqlite, '
                              'skipping the full validate/rehydrate/relations orchestration. '
                              'Non-authoritative + self-healing per fc114e57 (brief d7b3f1a9 §4).')
+    parser.add_argument('--skip-validator', action='store_true',
+                        help='Skip this wrapper pre-step only when an invoking build will run '
+                             'one authoritative post-rebuild validation.')
+    parser.add_argument('--validator-run-id', metavar='ID',
+                        help='32-hex build-attempt id required with --skip-validator.')
     args = parser.parse_args()
 
     # v1.62 default-flip (Vela V55 2026-05-29): APPLY is now the default; --dry-run for preview.
@@ -214,6 +257,13 @@ def main() -> int:
     # existing callers + muscle memory keep working. Caller-audit 2026-05-29: build-release is the
     # sole programmatic caller and passes --apply, so the flip is backward-compatible.
     args.apply = not args.dry_run
+
+    if args.skip_validator and not re.fullmatch(
+        r'[0-9a-f]{32}', str(args.validator_run_id or '')
+    ):
+        print('ERROR: --skip-validator requires --validator-run-id <32-hex>.',
+              file=sys.stderr)
+        return 2
 
     vault = resolve_vault_root(args.vault_path)
     if vault is None:
@@ -245,10 +295,20 @@ def main() -> int:
     # than by a silent stale index. The FAIL is still surfaced as a non-zero exit at the end.
     print('\n[1/5] Running tropo-validate.py (v1.30.0 Stream C-a pre-step)...')
     _validator_failed = False
-    if not TROPO_VALIDATE.exists():
+    _recipient_box = is_recipient_studio(vault)
+    if _recipient_box:
+        print('  · recipient Studio detected — validating in customer mode')
+    if args.skip_validator:
+        print(
+            '  ✓ Validator pre-step deferred to invoking build POST-rebuild '
+            f'(run_id={args.validator_run_id}); no validator launched here.'
+        )
+    elif not TROPO_VALIDATE.exists():
         print(f'  WARNING: {TROPO_VALIDATE} not found; skipping validator pre-step.', file=sys.stderr)
     else:
         validate_cmd = [sys.executable, str(TROPO_VALIDATE), '--vault-path', str(vault)]
+        if _recipient_box:
+            validate_cmd.append('--customer')
         try:
             validate_result = subprocess.run(
                 validate_cmd, capture_output=True, text=True,

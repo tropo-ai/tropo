@@ -44,7 +44,12 @@ __cycle_root__ = "e8a3f491"
 
 # Re-exports for convenience — callers can `from lib.ship_extract import X` for common operations
 from .manifest_walker import read_manifest_root_uid, load_manifest_entries
-from .source_mode_dispatch import resolve_source_path, should_exclude_kernel
+from .source_mode_dispatch import (
+    is_generated_bytecode,
+    prune_bytecode,
+    resolve_source_path,
+    should_exclude_kernel,
+)
 from .cleanup_engine import apply_cleanup_rules, apply_uid_rewrite_template
 from .validator import validate_manifest_basic
 from .output_writer import sha256_file, copy_file
@@ -52,6 +57,8 @@ from .output_writer import sha256_file, copy_file
 __all__ = [
     'read_manifest_root_uid',
     'load_manifest_entries',
+    'is_generated_bytecode',
+    'prune_bytecode',
     'resolve_source_path',
     'should_exclude_kernel',
     'apply_cleanup_rules',

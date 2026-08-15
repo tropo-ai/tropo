@@ -82,6 +82,12 @@ if str(_TROPO_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_TROPO_SCRIPTS))
 from lib._identity import _resolve_principal_uid, _get_principal_class  # noqa: E402
 
+# Governed-skip obligation resolver (d9ca03fd / d7db77d8). vault/tools on path.
+_TOOLS_DIR = Path(__file__).resolve().parent
+if str(_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TOOLS_DIR))
+from lib import pipeline_obligations as _obligations  # noqa: E402
+
 # ---------------------- constants ----------------------
 
 VAULT_ROOT = Path(__file__).resolve().parents[2]
@@ -388,6 +394,9 @@ _UID_BEARING_KEYS = frozenset({
     "children", "depends_on_steps", "next_steps", "closes", "related_substrate",
     "triggered_doc_spec_uids", "triggered_test_spec_uids",
     "triggered_doc_activation_uids", "triggered_test_activation_uids",
+    "triggered_by_activation", "triggered_by_dev_cycle",
+    "triggered_by_release_pipeline", "triggered_spec_uid",
+    "triggered_activation_uid", "release_plan_uid", "release_pipeline_run_uid",
 })
 
 
@@ -438,6 +447,46 @@ def write_vault_entry(uid: str, frontmatter: dict, body: str) -> Path:
 
 
 # ---------------------- pipeline definition resolution ----------------------
+
+def _declarations_from_snapshot(run_folder: Path):
+    """This run's steps AND their parsed declarations, from its own snapshot.
+
+    Returns (step_uids, nodes) or None when the run predates snapshots, so
+    legacy runs keep working unchanged — which is why this is a fallback rather
+    than a hard requirement.
+
+    The nodes are parsed from the PINNED BYTES, not re-read from the vault. That
+    is the difference between a snapshot that describes a run and one that
+    governs it: with the sources edited the run still sees what it started
+    under, and with the sources deleted it still runs at all.
+
+    A snapshot that EXISTS but does not verify raises rather than falling back.
+    Quietly reverting to the live vault would be the contract swap §1 forbids,
+    arriving through the error path instead of the front door.
+    """
+    path = run_folder / "declaration-snapshot.json"
+    if not path.is_file():
+        return None
+    from lib import ignition as _ig
+
+    loaded = _ig.load_snapshot(path)  # verifies digests; refuses a tampered file
+    nodes: dict = {}
+    for uid, text in (loaded["declarations"] or {}).items():
+        parts = text.split("---", 2)
+        if len(parts) < 3:
+            continue
+        try:
+            frontmatter = yaml.safe_load(parts[1]) or {}
+        except Exception as exc:
+            raise ValidationError(
+                f"declaration snapshot for {uid} does not parse: {exc}. The run "
+                "cannot execute a contract it cannot read, and falling back to "
+                "the live entry would substitute a different one."
+            ) from exc
+        if isinstance(frontmatter, dict):
+            nodes[uid] = frontmatter
+    return list(loaded["declared_steps"]), nodes
+
 
 def resolve_workflow_node_tree(root_uid: str) -> dict:
     """Walks pipeline definition recursively. Returns dict mapping step_uid -> step frontmatter."""
@@ -636,6 +685,14 @@ def derive_state(events: list[dict]) -> dict:
             # (Vela V56 00000668 2026-06-01 — closes the asserted-natural_verdict status hole)
             if state["step_status"].get(step) == "verified":
                 state["step_status"][step] = "completed"
+        elif et == "tropo.release.package_superseded":
+            for invalidated in (ev.get("data") or {}).get(
+                "invalidated_steps", []
+            ):
+                if invalidated in state["step_status"]:
+                    state["step_status"][invalidated] = "declared"
+                    state["step_spans"].pop(invalidated, None)
+            state["current_step"] = None
         elif et == "step_failed" and step:
             state["step_status"][step] = "failed"
         elif et == "step_skipped" and step:
@@ -667,6 +724,43 @@ def derive_state(events: list[dict]) -> dict:
                 state["run_status"] = new_status
         if step:
             state["last_step_event"][step] = ev
+    return state
+
+
+_GOVERNED_TERMINAL_RUN_STATUSES = frozenset({"cancelled", "superseded"})
+_GOVERNED_TERMINAL_ACTIVATION_STATUSES = frozenset(
+    {"cancelled", "superseded"}
+)
+
+
+def _governed_terminal_lifecycle(activation: dict,
+                                 pipeline_run: dict) -> tuple[str | None, str | None]:
+    """Return the governed stop-state for ordinary mutations, if any."""
+    afm = activation.get("frontmatter") or {}
+    rfm = pipeline_run.get("frontmatter") or {}
+    run_status = str(rfm.get("status") or "").strip().lower()
+    if run_status in _GOVERNED_TERMINAL_RUN_STATUSES:
+        return run_status, "pipeline-run.status"
+    activation_status = str(afm.get("status") or "").strip().lower()
+    if activation_status in _GOVERNED_TERMINAL_ACTIVATION_STATUSES:
+        return activation_status, "activation.status"
+    return None, None
+
+
+def _apply_governed_lifecycle(activation: dict, pipeline_run: dict,
+                              state: dict) -> dict:
+    """Overlay terminal governed lifecycle onto the event replay projection.
+
+    Events remain authoritative for normal completion and recovery. A governed
+    cancellation/supersession is authoritative over an incomplete historical
+    event prefix and cannot be replayed back into an active run.
+    """
+    governed_status, governed_source = _governed_terminal_lifecycle(
+        activation, pipeline_run)
+    if governed_status:
+        state["run_status"] = governed_status
+        state["governed_terminal"] = True
+        state["governed_lifecycle_source"] = governed_source
     return state
 
 
@@ -711,7 +805,12 @@ def write_run_state_json(run_folder: Path, pipeline_run_entry: dict, state: dict
         "step_status": state.get("step_status", {}),
         "skip_authorizations": state.get("skip_authorizations", {}),
         "pause_resumed_pending": sorted(state.get("pause_resumed_pending", set())),
-        "eligible_steps": compute_eligible_steps(state, get_step_declarations(read_events(run_folder))),
+        "eligible_steps": compute_eligible_steps(
+            state,
+            get_step_declarations(read_events(run_folder)),
+            events=read_events(run_folder),
+            activation_uid=activation_uid,
+        ),
         "last_event_ts": state.get("last_event_ts"),
         "last_segment_path": str(current_jsonl_path(run_folder).relative_to(VAULT_ROOT)),
         "run_status": state.get("run_status"),
@@ -751,8 +850,22 @@ def get_step_declarations(events: list[dict]) -> dict[str, dict]:
     return decls
 
 
-def compute_eligible_steps(state: dict, step_declarations: dict[str, dict]) -> list[str]:
-    """Compute set of step UIDs eligible to start (§7 spec)."""
+def compute_eligible_steps(state: dict, step_declarations: dict[str, dict],
+                           events: list[dict] | None = None,
+                           activation_uid: str | None = None) -> list[str]:
+    """Compute set of step UIDs eligible to start (§7 spec).
+
+    Dependency readiness goes through the single obligation resolver
+    (d9ca03fd / d7db77d8) when a replay index can be built; the prior
+    inline skip rule remains as the no-events fallback.
+    """
+    if state.get("run_status") != "active":
+        return []
+    replay = None
+    if events is not None and activation_uid:
+        replay = _obligations.build_activation_replay_index(
+            events, step_declarations, activation_uid
+        )
     eligible = []
     for step_id, decl in step_declarations.items():
         status = state["step_status"].get(step_id, "declared")
@@ -768,13 +881,27 @@ def compute_eligible_steps(state: dict, step_declarations: dict[str, dict]) -> l
             dep_uid = str(dep_uid)
             dep_status = state["step_status"].get(dep_uid)
             dep_decl = step_declarations.get(dep_uid, {})
-            # Satisfied iff: verified, OR skipped (with auth),
-            # OR vc:false + completed (completed is terminal for vc:false;
-            # auto-receipt fires immediately but state query may race the write).
-            # vc-conditional (v1.63 Argus A92 GO event 812).
-            if dep_status == "verified":
-                continue
+            # vc:false + completed remains a terminal satisfaction for eligibility
+            # (auto-receipt race); not a skip outcome.
             if dep_status == "completed" and not dep_decl.get("verification_class"):
+                continue
+            if replay is not None:
+                obl = _obligations.resolve_obligation(
+                    kind="dependency",
+                    replay=replay,
+                    step_status=state["step_status"],
+                    consumer_step=step_id,
+                    producer_step=dep_uid,
+                )
+                if obl["disposition"] in (
+                    _obligations.SATISFIED,
+                    _obligations.SATISFIED_BY_SKIP,
+                ):
+                    continue
+                all_deps_satisfied = False
+                break
+            # Fallback when no event stream is available (legacy callers).
+            if dep_status == "verified":
                 continue
             if dep_status == "skipped" and dep_uid in state["skip_authorizations"]:
                 continue
@@ -1097,6 +1224,46 @@ def evaluate_criterion(
             "substrate_state_at_check": None}
 
 
+def _evaluate_criteria_with_obligations(
+    criteria: list[str],
+    ctx: dict,
+    snapshot: dict,
+    events: list[dict],
+    state: dict,
+    decls: dict[str, dict],
+    activation_uid: str,
+    consumer_step: str,
+) -> list[dict]:
+    """Evaluate exit criteria through the single obligation resolver (d9ca03fd).
+
+    Substrate evaluation still runs; when it fails or errors because a producer
+    was authorized-skipped, the disposition becomes waived_by_skip /
+    satisfied_by_skip rather than a hard error. Unauthorized skip remains error.
+    """
+    replay = _obligations.build_activation_replay_index(events, decls, activation_uid)
+    results = []
+    for criterion in criteria:
+        raw = evaluate_criterion(criterion, ctx, snapshot, run_events=events)
+        obl = _obligations.resolve_obligation(
+            kind="criterion",
+            replay=replay,
+            step_status=state.get("step_status") or {},
+            consumer_step=consumer_step,
+            criterion=criterion,
+            raw_verdict=raw.get("verdict"),
+        )
+        row = _obligations.criterion_result_from_obligation(obl)
+        # Preserve substrate detail when the obligation did not override.
+        if obl["disposition"] == _obligations.SATISFIED:
+            row["rationale"] = raw.get("rationale") or row["rationale"]
+            row["substrate_state_at_check"] = raw.get("substrate_state_at_check")
+        elif obl["disposition"] == _obligations.UNSATISFIED and raw.get("rationale"):
+            row["rationale"] = raw.get("rationale")
+            row["substrate_state_at_check"] = raw.get("substrate_state_at_check")
+        results.append(row)
+    return results
+
+
 # ---------------------- pipeline-run discovery ----------------------
 
 def find_pipeline_run_for(activation_uid: str) -> dict | None:
@@ -1136,6 +1303,9 @@ def build_run_context_uids(pipeline_run_entry: dict, activation_uid: str) -> dic
       triggering_dev_spec  — (test/doc-pipeline activations ONLY) the dev-spec that triggered
                              this cascade — the "reverse" of dev_spec, read from the SAME
                              pipeline_uid/activation_root/dev-cycle chain described below.
+      release_plan         — (release-opened legs ONLY) the parent locked release-plan UID
+      release_pipeline_run — (release-opened legs ONLY) the parent release pipeline-run UID
+      triggering_release_activation — (release-opened legs ONLY) the release activation UID
     Plus any literal 8-hex UID resolves directly.
 
     §10 DSL rider fix (Talos 2026-07-04, 4f87d056/0fa72100): a doc/test-pipeline's OWN
@@ -1161,6 +1331,59 @@ def build_run_context_uids(pipeline_run_entry: dict, activation_uid: str) -> dic
     activation_entry = read_vault_entry(activation_uid)
     if activation_entry:
         afm = activation_entry["frontmatter"]
+        pipeline_uid = str(fm.get("pipeline") or "")
+        triggered_spec_uid = str(
+            afm.get("triggered_spec_uid") or fm.get("triggered_spec_uid") or ""
+        )
+        triggered_pipeline_class = str(
+            afm.get("triggered_pipeline_class")
+            or fm.get("triggered_pipeline_class")
+            or ""
+        )
+        explicit_spec_handle = None
+        if (
+            pipeline_uid == _TEST_PIPELINE_UID
+            and triggered_pipeline_class == "test-pipeline"
+        ):
+            explicit_spec_handle = "test_spec"
+            expected_spec_type = "test-spec"
+        elif (
+            pipeline_uid == _DOC_PIPELINE_UID
+            and triggered_pipeline_class == "doc-pipeline"
+        ):
+            explicit_spec_handle = "doc_spec"
+            expected_spec_type = "doc-spec"
+        else:
+            expected_spec_type = None
+        if explicit_spec_handle and re.fullmatch(r"[0-9a-f]{8}", triggered_spec_uid):
+            explicit_spec = read_vault_entry(triggered_spec_uid)
+            if (
+                explicit_spec
+                and str(explicit_spec["frontmatter"].get("type") or "")
+                == expected_spec_type
+            ):
+                ctx[explicit_spec_handle] = triggered_spec_uid
+
+        release_plan_uid = str(
+            afm.get("release_plan_uid") or fm.get("release_plan_uid") or ""
+        )
+        release_run_uid = str(
+            afm.get("release_pipeline_run_uid")
+            or fm.get("release_pipeline_run_uid")
+            or ""
+        )
+        release_activation_uid = str(
+            afm.get("triggered_by_activation")
+            or fm.get("triggered_by_activation")
+            or ""
+        )
+        if re.fullmatch(r"[0-9a-f]{8}", release_plan_uid):
+            ctx["release_plan"] = release_plan_uid
+        if re.fullmatch(r"[0-9a-f]{8}", release_run_uid):
+            ctx["release_pipeline_run"] = release_run_uid
+        if re.fullmatch(r"[0-9a-f]{8}", release_activation_uid):
+            ctx["triggering_release_activation"] = release_activation_uid
+
         dev_spec_uid = afm.get("dev_spec_uid")
         if dev_spec_uid:
             ctx["dev_spec"] = dev_spec_uid
@@ -1179,7 +1402,7 @@ def build_run_context_uids(pipeline_run_entry: dict, activation_uid: str) -> dic
                     ctx["triggered_doc_activation"] = doc_acts[0]
                 if test_acts:
                     ctx["triggered_test_activation"] = test_acts[0]
-        else:
+        elif explicit_spec_handle not in ctx:
             # This activation IS the triggered doc/test-pipeline run — reverse-resolve
             # its own spec handle + the triggering dev-spec handle (see docstring).
             cycle_context = str(afm.get("cycle_context") or "")
@@ -1223,6 +1446,45 @@ def build_run_context_uids(pipeline_run_entry: dict, activation_uid: str) -> dic
 
 # ---------------------- bootstrap (action) ----------------------
 
+def _run_has_events(run_folder: "Path | None") -> bool:
+    """Has this run been bootstrapped already?
+
+    Under v2 the run ENTRY exists before bootstrap — the lock creates it — so
+    the entry's existence stopped being evidence of anything. Events are: a run
+    with events has had its contract locked, and re-bootstrapping would rewrite
+    a contract already in flight.
+    """
+    if run_folder is None or not run_folder.is_dir():
+        return False
+    for path in run_folder.glob("*.jsonl"):
+        try:
+            if path.stat().st_size > 0:
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _pipeline_default_trust(pipeline_def, nodes, pipeline_uid):
+    """The root's default trust gradient, from the snapshot when the live entry is gone.
+
+    A run whose definition has been deleted must still resolve its own defaults;
+    reaching for `pipeline_def["frontmatter"]` unconditionally was an
+    UnboundLocalError on the snapshot path and would have been a crash on the
+    delete-the-sources case even if it had been defined.
+    """
+    # Snapshot first, for the same reason as the metadata above: a root edited
+    # after the lock must not change the trust gradient a started run executes
+    # under.
+    root = (nodes or {}).get(pipeline_uid) or {}
+    value = root.get("default_trust_gradient")
+    if value:
+        return value
+    if pipeline_def is not None:
+        return pipeline_def["frontmatter"].get("default_trust_gradient")
+    return None
+
+
 def action_bootstrap(activation_uid: str, contract_input_path: str | None, dry_run: bool) -> str:
     activation = read_vault_entry(activation_uid)
     if activation is None:
@@ -1236,25 +1498,74 @@ def action_bootstrap(activation_uid: str, contract_input_path: str | None, dry_r
     # Reject if a pipeline-run already exists for this activation — unless the prior run
     # was superseded via contract-modification (E5 fix v1.53): an amended contract requires
     # a fresh bootstrap; the prior run entry is preserved with activation_superseded:true.
+    # V2: THE LOCK ALREADY OPENED THE RUN (argus-a147, third pass).
+    #
+    # This refused outright whenever a pipeline-run existed, which under v2 is
+    # ALWAYS — the dev and release locks create the run, its folder and its
+    # declaration snapshot as part of the ignition transaction. So v2 bootstrap
+    # could never succeed, and the snapshot-reading branch I added below was
+    # unreachable code referencing a `run_folder` that did not exist yet. My
+    # tests called the helpers rather than this function, so neither showed up.
+    #
+    # The correct v2 flow: adopt the run the lock opened. Derive its folder from
+    # its own frontmatter, seed the contract from the SNAPSHOT, mint nothing.
+    # "Cannot bootstrap twice" becomes a statement about EVENTS — a run with
+    # events has already been bootstrapped — rather than about the run entry,
+    # which is now expected to exist before bootstrap runs.
     existing = find_pipeline_run_for(activation_uid)
+    adopted_run = None
     if existing is not None:
         efm = existing["frontmatter"]
         if efm.get("activation_superseded") and efm.get("supersession_reason") == "contract-modification":
             print(f"[INFO] prior pipeline-run {efm.get('uid')!r} superseded via contract-modification; "
                   "allowing re-bootstrap", file=sys.stderr)
         else:
-            raise ValidationError(
-                f"pipeline-run entry {efm.get('uid')!r} already exists for "
-                f"activation {activation_uid!r}; cannot bootstrap twice")
+            candidate_folder = run_folder_for(efm)
+            if _run_has_events(candidate_folder):
+                raise ValidationError(
+                    f"pipeline-run entry {efm.get('uid')!r} for activation "
+                    f"{activation_uid!r} already has events; it has been "
+                    "bootstrapped once and a contract is not re-locked in place."
+                )
+            adopted_run = existing
 
     pipeline_uid = afm.get("pipeline_uid")
     if not pipeline_uid:
         raise ValidationError(f"activation entry missing pipeline_uid field")
+    # SNAPSHOT FIRST, vault only as the pre-snapshot fallback (argus-a147,
+    # second pass). A run that has a declaration snapshot must take its steps
+    # from THERE and nowhere else: that is what §1's "executes only its
+    # immutable declaration snapshot" means operationally. Reading the live
+    # entries when a snapshot exists made the snapshot an artifact nobody
+    # consulted — it described the run without governing it, and a run whose
+    # source nodes had been edited or deleted would either execute the new
+    # definition or fail to start.
+    # The folder comes from the adopted run's own frontmatter. A legacy
+    # activation with no run has none, and keeps the create-from-live path.
+    adopted_folder = (run_folder_for(adopted_run["frontmatter"])
+                      if adopted_run is not None else None)
+    # Read for its default_trust_gradient below. May legitimately be None on the
+    # snapshot path: the whole point is that the run survives its definition
+    # being deleted, so the default is applied from the SNAPSHOT's own root
+    # declaration when the live entry is gone.
     pipeline_def = read_vault_entry(pipeline_uid)
-    if pipeline_def is None:
-        raise ValidationError(f"pipeline_uid {pipeline_uid!r} does not resolve")
-    nodes = resolve_workflow_node_tree(pipeline_uid)
-    step_uids = collect_step_nodes(nodes)
+    from_snapshot = (_declarations_from_snapshot(adopted_folder)
+                     if adopted_folder is not None else None)
+    if from_snapshot is not None:
+        step_uids, nodes = from_snapshot
+        missing = [uid for uid in step_uids if uid not in nodes]
+        if missing:
+            raise ValidationError(
+                f"declaration snapshot declares step(s) {', '.join(missing)} but "
+                "stores no declaration for them. A run cannot execute a step it "
+                "has only the name of."
+            )
+    else:
+        pipeline_def = read_vault_entry(pipeline_uid)
+        if pipeline_def is None:
+            raise ValidationError(f"pipeline_uid {pipeline_uid!r} does not resolve")
+        nodes = resolve_workflow_node_tree(pipeline_uid)
+        step_uids = collect_step_nodes(nodes)
     if not step_uids:
         raise ValidationError(f"pipeline {pipeline_uid!r} has no leaf step WorkflowNodes")
 
@@ -1269,7 +1580,9 @@ def action_bootstrap(activation_uid: str, contract_input_path: str | None, dry_r
             "verification_class": bool(sfm.get("verification_class", False)),
             "depends_on_steps": sfm.get("depends_on_steps") or [],
             "exit_criteria": sfm.get("exit_criteria") or [],
-            "trust_level": sfm.get("trust_level") or pipeline_def["frontmatter"].get("default_trust_gradient") or "auto-with-verification",
+            "trust_level": (sfm.get("trust_level")
+                            or _pipeline_default_trust(pipeline_def, nodes, pipeline_uid)
+                            or "auto-with-verification"),
             "retry_policy": sfm.get("retry_policy") or {"max_retries": 0, "backoff": "linear"},
             "timeout_hours": sfm.get("timeout_hours") or 24,
             "compensation_step_id": sfm.get("compensation_step_id"),
@@ -1323,7 +1636,13 @@ def action_bootstrap(activation_uid: str, contract_input_path: str | None, dry_r
 
     contract = {
         "pipeline_uid": pipeline_uid,
-        "pipeline_version": pipeline_def["frontmatter"].get("version") or "0.0.0",
+        # From the SNAPSHOT's root declaration when the live entry is gone; the
+        # run must be able to state the contract version it is executing even
+        # after its definition has been deleted.
+        "pipeline_version": (
+            ((nodes or {}).get(pipeline_uid) or {}).get("version")
+            or (pipeline_def["frontmatter"].get("version") if pipeline_def else None)
+            or "0.0.0"),
         "cycle_context": afm.get("cycle_context") or "",
         "steps_locked": steps_locked,
         "skips_authorized_upfront": responses.get("skips_authorized_upfront", []),
@@ -1409,12 +1728,44 @@ def action_bootstrap(activation_uid: str, contract_input_path: str | None, dry_r
 
     # Mint pipeline-run UID + create run-folder
     existing_uids = load_existing_uids()
-    pipeline_run_uid = mint_uid(existing_uids)
-    pipeline_name = pipeline_def["frontmatter"].get("name", "pipeline").lower().replace(" ", "-").replace("/", "-")
+    # ADOPT the run the lock opened; mint only for a legacy activation that has
+    # none (argus-a147: "It must not mint another run"). Minting here produced a
+    # SECOND run and a second folder, so bootstrap wrote its events somewhere the
+    # lock's snapshot did not live — the run and its contract came apart.
+    # Bound before the branch, not inside it. I added the adopt path and set
+    # this only on that side, so bootstrapping any activation WITHOUT a
+    # lock-created run — every activation opened through e337f1dd.py — hit an
+    # UnboundLocalError at the `if not run_folder_rel` below. Latent because
+    # every bootstrap since has come from the lock, which adopts.
+    run_folder_rel = ""
+    if adopted_run is not None:
+        pipeline_run_uid = adopted_run["frontmatter"].get("uid")
+        run_folder_rel = str(adopted_run["frontmatter"].get("run_folder") or "")
+    else:
+        pipeline_run_uid = mint_uid(existing_uids)
+    # SNAPSHOT ROOT WINS when there is one (argus-a147's live-root-leak check,
+    # handed to A148). My first version preferred the live entry whenever it
+    # existed and fell back to the snapshot only when it was gone — so a run
+    # whose root was EDITED after the lock took the edited name, version and
+    # trust gradient into its contract metadata. The run executed the pinned
+    # steps while describing itself with post-lock values, which is the contract
+    # swap §1 forbids, leaking in through the metadata rather than the steps.
+    #
+    # Deleting the root was covered and editing it was not, because the test
+    # deleted. Same shape as every other miss this round: I proved the hard case
+    # and left the ordinary one open.
+    _snapshot_root = (nodes or {}).get(pipeline_uid) if from_snapshot is not None else None
+    _root_fm = _snapshot_root if _snapshot_root else (
+        pipeline_def["frontmatter"] if pipeline_def else {})
+    pipeline_name = str(_root_fm.get("name", "pipeline")).lower().replace(" ", "-").replace("/", "-")
     pipeline_name = re.sub(r"[^a-z0-9-]", "", pipeline_name) or "pipeline"
-    run_folder_rel = f"vault/pipeline-runs/{pipeline_name}-{pipeline_run_uid}-{TODAY}"
+    if not run_folder_rel:
+        run_folder_rel = f"vault/pipeline-runs/{pipeline_name}-{pipeline_run_uid}-{TODAY}"
     run_folder_abs = VAULT_ROOT / run_folder_rel
-    run_folder_abs.mkdir(parents=True, exist_ok=False)
+    # exist_ok when adopting: the lock already created this folder and put the
+    # declaration snapshot in it. Refusing here would reject the very run
+    # bootstrap is supposed to take up.
+    run_folder_abs.mkdir(parents=True, exist_ok=adopted_run is not None)
     (run_folder_abs / "artifacts").mkdir()
 
     activation_root = afm.get("activation_root_project") or afm.get("member_of") or []
@@ -1431,10 +1782,10 @@ def action_bootstrap(activation_uid: str, contract_input_path: str | None, dry_r
     pr_frontmatter = {
         "uid": pipeline_run_uid,
         "type": "pipeline-run",
-        "title": f"{pipeline_def['frontmatter'].get('name', 'pipeline')} — Run {TODAY}",  # R2 nav render-safety (argus-a110 2026-06-12)
-        "name": f"{pipeline_def['frontmatter'].get('name', 'pipeline')} — Run {TODAY}",
+        "title": f"{_root_fm.get('name', 'pipeline')} — Run {TODAY}",  # R2 nav render-safety (argus-a110 2026-06-12)
+        "name": f"{_root_fm.get('name', 'pipeline')} — Run {TODAY}",
         "pipeline": pipeline_uid,
-        "pipeline_version": pipeline_def["frontmatter"].get("version") or "0.0.0",
+        "pipeline_version": _root_fm.get("version") or "0.0.0",
         "pipeline_step_fingerprint": _compute_step_fingerprint(set(step_uids)),  # d3a58cdf item 2
         "substrate_authored_by": activation_uid,
         "status": "active",
@@ -1461,6 +1812,12 @@ def action_bootstrap(activation_uid: str, contract_input_path: str | None, dry_r
     if responses.get("supersedes_activation"):
         pr_frontmatter["supersedes_activation"] = responses["supersedes_activation"]
         pr_frontmatter["supersession_reason"] = responses.get("supersession_reason")
+    if adopted_run is not None:
+        # The ignition lock authored this run's immutable identity before
+        # bootstrap. Add runtime fields around that record; never replace its
+        # provenance (digest, activation/spec binding, creator, or run folder).
+        # Existing values win on overlap because they are the locked facts.
+        pr_frontmatter = {**pr_frontmatter, **adopted_run["frontmatter"]}
     body = f"""# {pr_frontmatter['name']}
 
 *v2.0-shape pipeline-run instance authored by pipeline-runtime.py 2026-05-20.*
@@ -1589,190 +1946,298 @@ def collect_contract_responses(contract_input_path: str | None, steps_locked: li
 
 # ---------------------- shared bootstrap state ----------------------
 
-def _auto_heal_stale_def(
-    pr: dict, run_folder: Path, events: list[dict], activation_uid: str, dry_run: bool = False,
-) -> tuple[list[dict], dict]:
-    """B1 (v1.54) — auto-heal active pipeline-run whose def-snapshot is stale.
+def _report_definition_drift(
+    pr: dict, run_folder: Path, events: list[dict], activation_uid: str,
+) -> None:
+    """A started run executes its OWN snapshot. Drift is named, never healed.
 
-    When a pipeline def is amended (new steps added, versions bumped) after a run
-    was bootstrapped, the run's step_declared set becomes stale. This function
-    detects the delta and emits step_declared events for any steps the current def
-    declares that the run has not yet seen — silently, without manual ceremony.
+    REPLACES `_auto_heal_stale_def` (0a0a6777 §1, Mike-locked; Talos T40).
 
-    Design against the v1.52 notify-step case: b67c75e2 missed trigger notify-step
-    37996741 added to dev-pipeline def cd1fcd25 post-bootstrap. Auto-heal would have
-    emitted step_declared for 37996741 transparently at next engine tick.
+    CORRECTED 2026-08-09, same day it was written. My first version RAISED on
+    drift. That was wrong against the locked spec in a way the spec states twice:
 
-    Returns updated (events, state) tuple; no-ops if def is current or auto-heal fails.
-    Self-Healing Path 1 posture: fix-on-see, no surfacing to owner.
+      §1  "A started run executes only its immutable declaration snapshot."
+      AC10 "Runtime never auto-heals a started run from current definitions;
+            migration manifest 882887c7 records all seven ... as FINISH-V1,
+            retire-and-supersede-v2, or cancel-with-reason."
 
-    dry_run (aaf96178 fix, Talos 2026-07-05): load_run() runs this on EVERY action
-    invocation, including previews. Pre-fix, a stale def would silently write
-    step_declared events + a pipeline-run frontmatter bump even when the caller
-    passed --dry-run to a downstream action — a second, more obscure instance of
-    the same "safety flag doesn't actually prevent the write" class the ticket was
-    filed for. When dry_run is set, this computes the same healed step set and
-    returns it as IN-MEMORY events (so the calling action's own dry-run preview is
-    accurate) but never calls append_event / write_vault_entry.
+    A run holding a snapshot is INSULATED from definition change — that is what a
+    snapshot is for. Refusing it inverts the guarantee: it turns "the definition
+    moved" from something the run is protected against into something that bricks
+    it. And it makes `finish-v1` unreachable, so a disposition the locked manifest
+    is required to offer could never be honored.
+
+    I found this because the refusal turned 8 green tests red (the dry-run banner
+    suite, whose fixtures are legacy dev runs). My first instinct was to update
+    their expectations to match the new behaviour, which would have buried a
+    spec violation under a test edit.
+
+    The real division of labour, which is also Argus A147's boundary-2 language:
+      - HAS a snapshot        -> execute the snapshot; drift is informational.
+      - has NO snapshot       -> nothing to execute but the current definition,
+                                 which is the silent-contract-swap case: refuse.
+      - incompatible v1-on-v2 -> the FREEZE manifest's job, not this function's.
+
+    So this reports and never raises. The prohibition the spec actually makes is
+    on HEALING, and healing is what is gone.
+
+    The old function detected that the current pipeline definition declared steps
+    the run had never seen, and silently emitted `step_declared` for them. It was
+    written for a real failure — a notify step added to the dev-pipeline after
+    bootstrap that no run ever saw — and it fixed that failure by editing the
+    contract of a run already in flight.
+
+    That is the behaviour the two-pipeline split removes. A run whose declared
+    steps can change underneath it cannot be verified against anything: dev
+    completion binds AC evidence to one unchanged tested-tree SHA, and a contract
+    that moves makes that binding a statement about nothing.
+
+    So drift now RAISES, and the message says what to do instead: retire or
+    supersede the definition and start a new run. The information the auto-heal
+    used to act on silently is still computed and still surfaced — losing the
+    detection would trade one silent failure for another.
+
+    Deliberately read-only. It emits nothing and writes nothing, which is also
+    why `load_run`'s `dry_run` no longer threads anywhere: the aaf96178 class
+    ("a safety flag that does not actually prevent the write") cannot exist in a
+    function that never writes.
     """
     pr_fm = pr["frontmatter"]
     pipeline_uid = pr_fm.get("pipeline")
     if not pipeline_uid:
-        return events, derive_state(events)
+        return
 
-    # Staleness detection: compare recorded pipeline_version vs current def version
     pipeline_def = read_vault_entry(pipeline_uid)
     if pipeline_def is None:
-        return events, derive_state(events)
+        # A missing definition is not drift and must not be reported as such.
+        # The run still owns its snapshot; that is the point of the snapshot.
+        return
 
-    recorded_version = pr_fm.get("pipeline_version") or ""
-    current_version = pipeline_def["frontmatter"].get("version") or ""
+    declared = set(get_step_declarations(events).keys())
+    if not declared:
+        # No snapshot. This is the ONLY genuinely unsafe case: with nothing of
+        # its own to execute, the run would silently acquire whatever the
+        # definition says today — the exact contract-swap §1 forbids. A run that
+        # has not bootstrapped yet is legal, so this is left to the bootstrap
+        # path and the freeze rather than raised here.
+        return
 
-    # d3a58cdf item 2 — fingerprint-first staleness check.
-    # D1 (v1.63) removed the version-equality early-return (version string can lie when
-    # an author adds a step without bumping the version). The fingerprint is a COMPUTED
-    # fact from the sorted leaf-step UID set — it detects additions AND removals without
-    # trusting any hand-maintained field. Fast O(log n) compare before the expensive
-    # tree resolve; fall through to full set-diff only if fingerprints differ.
-    declared_step_uids = set(get_step_declarations(events).keys())
-    recorded_fingerprint = pr_fm.get("pipeline_step_fingerprint") or ""
-
-    # Cheap fingerprint path: resolve tree once, check fingerprint first
     try:
-        nodes = resolve_workflow_node_tree(pipeline_uid)
-        current_step_uids = set(collect_step_nodes(nodes))
-    except Exception as e:
-        print(f"[WARN] B1 auto-heal: could not resolve current step list for {pipeline_uid!r}: {e}",
-              file=sys.stderr)
-        return events, derive_state(events)
+        current = set(collect_step_nodes(resolve_workflow_node_tree(pipeline_uid)))
+    except Exception as exc:
+        # Cannot resolve the current tree. Say so, but do not accuse the run of
+        # drifting from a definition we could not read — "I cannot see" is a
+        # third outcome and must not be folded into either verdict.
+        print(
+            f"[WARN] definition-drift check: could not resolve the current step "
+            f"list for {pipeline_uid!r}: {exc}. The run's own snapshot is "
+            "unaffected and still governs.",
+            file=sys.stderr,
+        )
+        return
 
-    current_fingerprint = _compute_step_fingerprint(current_step_uids)
-    if recorded_fingerprint and recorded_fingerprint == current_fingerprint:
-        # Fingerprints match — def has not changed; no heal needed, skip even version update.
-        return events, derive_state(events)
+    added = sorted(current - declared)
+    removed = sorted(declared - current)
+    if not added and not removed:
+        return
 
-    new_steps = [uid for uid in collect_step_nodes(nodes) if uid not in declared_step_uids]
-
-    if not new_steps:
-        # Fingerprint changed (e.g. step removed) but no new steps to declare.
-        if dry_run:
-            print(f"[DRY-RUN] auto-heal: would update pipeline-run {pr_fm.get('uid')!r} "
-                  f"pipeline_version/pipeline_step_fingerprint ({recorded_version!r} → {current_version!r}); "
-                  f"no new steps to declare", file=sys.stderr)
-            return events, derive_state(events)
-        # Update fingerprint + version record so future ticks don't re-evaluate.
-        pr_fm["pipeline_version"] = current_version
-        pr_fm["pipeline_step_fingerprint"] = current_fingerprint
-        pr_fm["modified"] = TODAY
-        pr_fm["modified_by"] = SCRIPT_NAME
-        write_vault_entry(pr_fm["uid"], pr_fm, pr.get("body", ""))
-        return events, derive_state(events)
-
-    print(f"[{'DRY-RUN' if dry_run else 'INFO'}] B1 auto-heal: def {pipeline_uid!r} updated "
-          f"{recorded_version!r} → {current_version!r}; "
-          f"{'would declare' if dry_run else 'declaring'} {len(new_steps)} new step(s): {new_steps}",
-          file=sys.stderr)
-
-    # Build step declarations from current def (v3.0 schema defaults)
-    contract_parent = None
-    for ev in events:
-        if ev.get("event") == "activation_contract_locked":
-            contract_parent = ev.get("span_id")
-            break
-
-    new_step_data: list[tuple[str, dict]] = []
-    for step_uid in new_steps:
-        sfm = nodes.get(step_uid, {})
-        step_data = {
-            "step_id": step_uid,
-            "step_owner_role": sfm.get("step_owner_role") or "unspecified",
-            "step_verifier_role": sfm.get("step_verifier_role") or "same-as-executor",
-            "verification_class": bool(sfm.get("verification_class", False)),
-            "depends_on_steps": sfm.get("depends_on_steps") or [],
-            "exit_criteria": sfm.get("exit_criteria") or [],
-            "trust_level": sfm.get("trust_level") or pipeline_def["frontmatter"].get("default_trust_gradient") or "auto-with-verification",
-            "retry_policy": sfm.get("retry_policy") or {"max_retries": 0, "backoff": "linear"},
-            "timeout_hours": sfm.get("timeout_hours") or 24,
-            "compensation_step_id": sfm.get("compensation_step_id"),
-            "instructions_ref": sfm.get("instructions_ref"),
-            # Parity fix (Vela V64 diagnosis 2026-07-09, event 00006024 → 974b08ad):
-            # this auto-heal builder was constructed independently of the normal
-            # declaration path above (~L1072-1081, the v1.66 S1 fix per Argus A102
-            # design-lock + finding 7c4e9a1b) and never picked up the same two
-            # fields. Any step declared via auto-heal (a fingerprint-drift mid-run)
-            # silently lost verification_command + verdict_cwd regardless of what
-            # the step's own vault frontmatter declared — action_step_complete and
-            # action_verify_step both read decl.get("verification_command") and
-            # got None, so the declared command never ran and a vc:true step fell
-            # back to same-as-executor self-attestation. Same bug class as the one
-            # the normal path was already fixed for; the auto-heal path was simply
-            # never brought to parity.
-            "verification_command": sfm.get("verification_command"),
-            "verdict_cwd": sfm.get("verdict_cwd"),
-            "auto_healed": True,  # provenance marker
-        }
-        new_step_data.append((step_uid, step_data))
-
-    if dry_run:
-        # Return an in-memory preview event list (never written) so the calling
-        # action's own dry-run logic sees the healed step set.
-        preview_events = list(events)
-        for step_uid, step_data in new_step_data:
-            ev = make_event("step_declared", SCRIPT_NAME,
-                            step=step_uid, trace_id=activation_uid,
-                            parent_span_id=contract_parent, data=step_data)
-            preview_events.append(ev)
-        return preview_events, derive_state(preview_events)
-
-    for step_uid, step_data in new_step_data:
-        ev = make_event("step_declared", SCRIPT_NAME,
-                        step=step_uid,
-                        trace_id=activation_uid,
-                        parent_span_id=contract_parent,
-                        data=step_data)
-        append_event(run_folder, ev)
-
-    # Update pipeline-run frontmatter to record new version + fingerprint
-    pr_fm["pipeline_version"] = current_version
-    pr_fm["pipeline_step_fingerprint"] = current_fingerprint
-    pr_fm["modified"] = TODAY
-    pr_fm["modified_by"] = SCRIPT_NAME
-    write_vault_entry(pr_fm["uid"], pr_fm, pr.get("body", ""))
-
-    # Re-read events after appending + re-derive state
-    updated_events = read_events(run_folder)
-    updated_state = derive_state(updated_events)
-
-    # d3a58cdf item 3 — sync run.state.json immediately after the heal mutates
-    # run.jsonl, so the derived cache is never stale relative to the event log.
-    # Without this, a crash between load_run() and the enclosing action's final
-    # write_run_state_json() leaves the cache showing eligible_steps:[] against
-    # a run.jsonl that now has the new step_declared events.
-    write_run_state_json(run_folder, pr_fm, updated_state, activation_uid)
-
-    return updated_events, updated_state
+    parts = []
+    if added:
+        parts.append(f"declares {len(added)} step(s) this run never saw: {', '.join(added)}")
+    if removed:
+        parts.append(f"no longer declares {len(removed)} step(s) this run holds: {', '.join(removed)}")
+    print(
+        f"[INFO] definition drift for activation {activation_uid}: pipeline "
+        f"{pipeline_uid} " + " and ".join(parts) + ". This run continues on its "
+        "OWN declaration snapshot and is unaffected (0a0a6777 §1) — the drift is "
+        "reported because the old auto-heal used to act on it silently, and "
+        "losing the detection would trade one silent failure for another. To "
+        "move work onto the current definition, retire or supersede and start a "
+        "NEW run; this one is not edited either way.",
+        file=sys.stderr,
+    )
 
 
-def load_run(activation_uid: str, dry_run: bool = False) -> tuple[dict, dict, Path, list[dict], dict]:
+#: The governed migration manifest for the two-pipeline split. The frozen set is
+#: READ FROM IT rather than copied here, because a second list of the same seven
+#: UIDs is a second place for them to drift, and the manifest is already the
+#: record stage 8 acts on.
+MIGRATION_MANIFEST_UID = "882887c7"
+
+#: Dispositions that still require the old run to be finished under v1 rules. A
+#: row that has one is frozen from execution; a row whose disposition has been
+#: applied is not.
+_FROZEN_DISPOSITIONS = frozenset({"finish-v1", "retire-and-supersede-v2", "cancel-with-reason"})
+
+_MIGRATION_ROW_RE = re.compile(r"^\|\s*`([0-9a-f]{8})`\s*\|.*?\|\s*`?([a-z0-9-]+)`?\s*\|", re.M)
+
+
+def frozen_activations() -> dict[str, str]:
+    """{activation_uid: disposition} for every row of the migration manifest.
+
+    Argus A147's tightening on the two-pipeline build
+    (evt_a2267930c7a21c90_00000020): "all seven v1 activations are frozen from
+    execution during boundaries 2-7... A run never executes a contract the engine
+    no longer honors."
+
+    The seven were all `status: active` when this landed, so the freeze is
+    something to ENFORCE rather than something already true. Enforcing it in the
+    engine rather than by care is the point: "be careful" is not a mechanism, and
+    it fails at the one moment nobody is home.
+
+    Parsed from the manifest table rather than hard-coded. If a row is removed or
+    its disposition applied, the freeze lifts for that activation with no code
+    change and no chance of the two records disagreeing.
+
+    An unreadable or absent manifest returns None rather than an empty set, and
+    the caller fails CLOSED for old dev work — see `_refuse_frozen_activation`.
+
+    My first version returned an empty set here, i.e. a missing manifest silently
+    lifted the freeze on all seven. Argus A147 rejected that at the boundary-2
+    review and he was right: an unreadable manifest is the moment you know least
+    about which runs are safe, and answering "none of them are frozen" is the one
+    answer the evidence cannot support.
+    """
+    entry = read_vault_entry(MIGRATION_MANIFEST_UID)
+    if entry is None:
+        return None
+    body = entry.get("body") or ""
+    rows = {}
+    for uid, disposition in _MIGRATION_ROW_RE.findall(body):
+        if disposition in _FROZEN_DISPOSITIONS:
+            rows[uid] = disposition
+    return rows
+
+
+#: The dev-pipeline root whose v1 runs the freeze protects.
+DEV_PIPELINE_ROOT_UID = "cd1fcd25"
+
+#: The release-pipeline root. Only its runs may open doc/test legs (AC6): the
+#: cascade belongs to the release that will package it.
+RELEASE_PIPELINE_ROOT_UID = "634913c2"
+
+
+def _is_incompatible_v1_dev_run(activation_uid: str) -> str | None:
+    """Is this a cd1fcd25 run whose snapshot predates the v2 contract?
+
+    Returns a human reason when it is, else None. Used only when the migration
+    manifest cannot be read, to fail CLOSED narrowly instead of either extreme.
+    """
+    pr = find_pipeline_run_for(activation_uid)
+    if pr is None:
+        return None
+    fm = pr["frontmatter"]
+    if fm.get("pipeline") != DEV_PIPELINE_ROOT_UID:
+        return None  # unrelated pipeline: not this freeze's business
+
+    version = str(fm.get("pipeline_version") or "").strip()
+    major = version.split(".")[0]
+    if not major.isdigit():
+        return (f"its pipeline_version is {version!r}, which does not name a major "
+                "version, so it cannot be shown to be a v2 snapshot")
+    if int(major) < 2:
+        return (f"its pipeline_version is {version}, a v1 dev-pipeline snapshot, and "
+                "the engine now honors the v2 contract")
+    return None
+
+
+def _refuse_frozen_activation(activation_uid: str) -> None:
+    """A v1 activation may not execute while its migration row is unapplied.
+
+    CORRECTED on argus-a147's boundary-2 review (evt_a2267930c7a21c90_00000021).
+    My first version returned an empty frozen set when the manifest could not be
+    read, on the argument that a missing file must not become a studio-wide
+    outage. That reasoning was sound about the blast radius and wrong about the
+    direction: it made the safest-looking failure the one that lifts the freeze.
+
+    His correction is narrower than either of my options — fail closed for OLD
+    DEV WORK ONLY. With no readable manifest, a cd1fcd25 activation that cannot
+    prove it holds a v2 snapshot is refused; unrelated pipelines and valid v2
+    snapshots keep running. The blast radius stays small AND the incompatible
+    case stays refused, which is exactly the risk the freeze exists for.
+    """
+    frozen = frozen_activations()
+
+    if frozen is None:
+        reason = _is_incompatible_v1_dev_run(activation_uid)
+        if reason is None:
+            return  # unrelated pipeline, or a snapshot that proves it is v2
+        raise ValidationError(
+            f"FROZEN ACTIVATION {activation_uid}: migration manifest "
+            f"{MIGRATION_MANIFEST_UID} is missing or unreadable, and this is a "
+            f"dev-pipeline run that cannot be shown to be safe — {reason}. Refusing "
+            "narrowly rather than guessing: with no manifest, 'nothing is frozen' is "
+            "the one answer the evidence cannot support. Unrelated pipelines and "
+            "valid v2 snapshots are unaffected. Cure: restore the manifest, or apply "
+            "this run's disposition."
+        )
+
+    disposition = frozen.get(activation_uid)
+    if not disposition:
+        return
+    raise ValidationError(
+        f"FROZEN ACTIVATION {activation_uid}: this run was started under the v1 "
+        f"dev-pipeline definition and migration manifest {MIGRATION_MANIFEST_UID} "
+        f"records it as '{disposition}', not yet applied. The two-pipeline split "
+        "(0a0a6777) is mid-build, so the engine no longer honors the contract this "
+        "run holds — and a run must never execute a contract the engine no longer "
+        "honors (argus-a147). Cure: apply this row's disposition at build-order "
+        "stage 8, with the terminal evidence the manifest names. Do not edit the "
+        "run to make it tick."
+    )
+
+
+def load_run(activation_uid: str, dry_run: bool = False,
+             inspection: bool = False,
+             recovery: bool = False) -> tuple[dict, dict, Path, list[dict], dict]:
     """Returns (activation_entry, pipeline_run_entry, run_folder, events, state).
 
-    Includes B1 auto-heal: if pipeline def was amended since bootstrap, new steps
-    are declared transparently before returning to the caller.
+    NO LONGER AUTO-HEALS (0a0a6777 §1, Mike-locked; Talos T40 2026-08-09).
 
-    dry_run threads through to _auto_heal_stale_def (aaf96178 fix, Talos 2026-07-05):
-    every mutating action calls load_run() before its own dry-run gate, so without
-    this, a stale def would silently auto-heal-write even under --dry-run.
+    It used to. B1 (v1.54) detected that a run's declared-step set had fallen
+    behind an amended pipeline definition and silently emitted the missing
+    `step_declared` events — "Self-Healing Path 1 posture: fix-on-see, no
+    surfacing to owner", in its own words. That solved a real problem (a notify
+    step added post-bootstrap went unseen) by making a started run follow a
+    contract it never started under.
+
+    The two-pipeline spec forbids exactly that: "A started run executes only its
+    immutable declaration snapshot. Remove silent `_auto_heal_stale_def`
+    behavior; contract changes require explicit retirement/supersession and a new
+    run." A run whose steps can change underneath it has no contract to verify
+    against, which is the whole premise of binding dev completion to one tested
+    tree SHA.
+
+    `dry_run` is retained in the signature and now genuinely does nothing here,
+    because nothing in this path writes. It stays because every mutating action
+    passes it positionally-by-keyword today, and removing a parameter to prove a
+    point is how you break twelve call sites for a comment.
     """
     activation = read_vault_entry(activation_uid)
     if activation is None:
         raise ValidationError(f"activation_uid {activation_uid!r} does not resolve")
+    # Migration freeze before anything else: a frozen run must not even be
+    # loaded into an action, let alone reach the drift check below.
+    _refuse_frozen_activation(activation_uid)
     pr = find_pipeline_run_for(activation_uid)
     if pr is None:
         raise ValidationError(f"no pipeline-run entry yet for activation {activation_uid!r}; run --action bootstrap first")
+    governed_status, governed_source = _governed_terminal_lifecycle(
+        activation, pr)
+    if governed_status and not (inspection or recovery):
+        raise ContractError(
+            f"run {pr['frontmatter'].get('uid')!r} is governed "
+            f"{governed_status!r} by {governed_source}; cancelled, superseded, "
+            "run/activation records are read-only and cannot advance"
+        )
     run_folder = run_folder_for(pr["frontmatter"])
     events = read_events(run_folder)
-    # B1 auto-heal: detect + reconcile stale def-snapshot silently
-    events, state = _auto_heal_stale_def(pr, run_folder, events, activation_uid, dry_run=dry_run)
+    # 0a0a6777 §1: a started run executes ONLY its immutable declaration
+    # snapshot. Drift is reported, never healed.
+    _report_definition_drift(pr, run_folder, events, activation_uid)
+    state = derive_state(events)
+    if not dry_run:
+        state = _apply_governed_lifecycle(activation, pr, state)
     return activation, pr, run_folder, events, state
 
 
@@ -1826,10 +2291,18 @@ def _run_verification_command(command_str: str, cwd: str, timeout: int = 120) ->
     import hashlib as _hashlib
     import shlex as _shlex
 
+    from lib import tested_tree as _tt
+
     started_at = now_iso()
     cmd_str = str(command_str)
     cmd_parts = _shlex.split(cmd_str)
     argv = ([sys.executable] + cmd_parts) if cmd_parts and cmd_parts[0].endswith(".py") else cmd_parts
+
+    # Boundary-3 (argus-a147): capture tree identity on BOTH sides of execution.
+    # One reading before would miss the case the ruling calls out — a tree that
+    # moves while the command runs, where each endpoint is individually clean and
+    # no single commit describes what actually ran.
+    _tree_before = _tt.read_tree_identity(cwd or VAULT_ROOT)
     try:
         result = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, cwd=cwd)
         verdict = "pass" if result.returncode == 0 else "fail"
@@ -1841,6 +2314,21 @@ def _run_verification_command(command_str: str, cwd: str, timeout: int = 120) ->
     except Exception as e:
         verdict, exit_code, combined_output, stdout_tail = "error", None, "", str(e)
     finished_at = now_iso()
+    _tree_after = _tt.read_tree_identity(cwd or VAULT_ROOT)
+    _identity = _tt.bind_execution(_tree_before, _tree_after)
+    if not _identity.is_bindable:
+        # WARN, never invent (deb77758). The command ran and its result stands;
+        # what this receipt cannot do is claim a tree it cannot substantiate, so
+        # it will not satisfy the terminal. Refusing to RUN here would sit on the
+        # hottest path in the studio and prevent no harm at this moment — the
+        # harm is a mixed-provenance close, and that is where the refusal fires.
+        print(
+            f"[WARN] verification receipt for {cmd_str!r} carries NO tested_commit_sha "
+            f"({_identity.state}: {_identity.detail}). The result is recorded and the "
+            "work proceeds, but this receipt cannot serve as terminal evidence "
+            "(0a0a6777 AC3). Cure: commit the test subject and re-run.",
+            file=sys.stderr,
+        )
     return {
         "command": cmd_str,
         "cwd": cwd,  # required for spot re-derivation to re-run faithfully (tropo-validate.py --thorough)
@@ -1851,6 +2339,7 @@ def _run_verification_command(command_str: str, cwd: str, timeout: int = 120) ->
         "runtime_version": RUNTIME_VERSION,
         "verdict": verdict,
         "stdout_tail": stdout_tail,
+        **_tt.provenance_fields(_identity),
     }
 
 
@@ -1859,7 +2348,7 @@ def action_step_start(activation_uid: str, step_uid: str, actor: str, dry_run: b
     decls = get_step_declarations(events)
     if step_uid not in decls:
         raise ValidationError(f"step {step_uid!r} not in activation contract")
-    eligible = compute_eligible_steps(state, decls)
+    eligible = compute_eligible_steps(state, decls, events=events, activation_uid=activation_uid)
     if step_uid not in eligible:
         raise ContractError(
             f"step {step_uid!r} not eligible (status={state['step_status'].get(step_uid)!r}; "
@@ -1889,11 +2378,61 @@ def action_step_start(activation_uid: str, step_uid: str, actor: str, dry_run: b
     return f"started:{step_uid}"
 
 
+#: The release-pipeline step that DECLARES the wait (finalize-release-history).
+#: Everything that produces or freezes the package depends on it, so gating this
+#: one step is sufficient and keeps the gate at the point the graph names.
+RELEASE_WAIT_STEP_UID = "2e9b1db7"
+
+
+def _release_leg_records(events: list[dict]) -> dict:
+    """Delegates to lib/release_legs so the build reads the same answer.
+
+    Stage 6 gave this a second reader: the package build must consult leg
+    state before freezing, and if it derived its own the two could disagree —
+    a package frozen against legs this engine still considered open. Moved to
+    the library and delegated here rather than copied there.
+    """
+    from lib import release_legs as _legs
+
+    return _legs.leg_records_from_events(events)
+
+
+def _assert_release_legs_settled(activation_uid: str, pr: dict, step_uid: str,
+                                 events: list[dict]) -> None:
+    """Refuse to complete the wait step until both legs have settled.
+
+    Only fires for the declared wait step on a RELEASE run, so dev runs and
+    every other step are untouched — a gate on a hot path it does not belong to
+    is the cost deb77758 warns about.
+    """
+    if step_uid != RELEASE_WAIT_STEP_UID:
+        return
+    if str((pr.get("frontmatter") or {}).get("pipeline") or "") != RELEASE_PIPELINE_ROOT_UID:
+        return
+
+    from lib import release_legs as _legs
+
+    run_uid = str((pr.get("frontmatter") or {}).get("uid") or "")
+    _legs.assert_ready_to_freeze(run_uid, _release_leg_records(events),
+                                 read_vault_entry)
+
+
 def action_step_complete(activation_uid: str, step_uid: str, artifact_links: list[str], actor: str,
                           natural_verdict: str | None = None, dry_run: bool = False) -> str:
     activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     if state["step_status"].get(step_uid) != "started":
         raise ContractError(f"step {step_uid!r} not in 'started' status (got {state['step_status'].get(step_uid)!r})")
+
+    # AC6 WAIT-BEFORE-PACKAGE (0a0a6777). The declared wait step cannot complete
+    # until both release legs have settled, and everything downstream of it
+    # depends on it — so the package cannot be frozen early.
+    #
+    # This has a CALLER because the gate having none is the defect I shipped in
+    # the very commit that fixed its twin: I wired the trigger belt into the
+    # engine and left assert_ready_to_freeze as a library only the tests
+    # invoked. A helper nobody calls is not a gate, however well tested.
+    _assert_release_legs_settled(activation_uid, pr, step_uid, events)
+
     parent = find_event_span(events, "step_started", step_uid)
     data: dict = {"artifact_links": artifact_links}
     decls = get_step_declarations(events)
@@ -2196,8 +2735,10 @@ def action_verify_step(activation_uid: str, step_uid: str, actor: str, dry_run: 
                 else:
                     ctx = build_run_context_uids(pr, activation_uid)
                     snapshot = build_snapshot(criteria, ctx)
-                    per_criterion = [evaluate_criterion(c, ctx, snapshot, run_events=events)
-                                     for c in criteria]
+                    per_criterion = _evaluate_criteria_with_obligations(
+                        criteria, ctx, snapshot, events, state, decls,
+                        activation_uid, consumer_step=step_uid,
+                    )
                     verdict = "pass"
                     if any(p["verdict"] == "error" for p in per_criterion):
                         verdict = "error"
@@ -2205,13 +2746,23 @@ def action_verify_step(activation_uid: str, step_uid: str, actor: str, dry_run: 
                         verdict = "fail"
                     total = len(per_criterion)
                     passes = sum(1 for p in per_criterion if p["verdict"] == "pass")
+                    skip_carried = sum(
+                        1 for p in per_criterion
+                        if p.get("disposition") in (
+                            _obligations.SATISFIED_BY_SKIP,
+                            _obligations.WAIVED_BY_SKIP,
+                        )
+                    )
                     rubric = {"exit_criteria_coverage": passes / total}
                     data = {
                         "verifier_role_resolved": decl.get("step_verifier_role") or "same-as-executor",
                         "verdict": verdict,
                         "per_criterion": per_criterion,
                         "rubric_scores": rubric,
-                        "overall_rationale": f"{passes}/{total} criteria pass",
+                        "overall_rationale": (
+                            f"{passes}/{total} criteria pass"
+                            + (f" ({skip_carried} carried by authorized skip)" if skip_carried else "")
+                        ),
                     }
     if dry_run:
         return _dry_run_report(
@@ -2222,8 +2773,67 @@ def action_verify_step(activation_uid: str, step_uid: str, actor: str, dry_run: 
     ev = make_event("verification_receipt", actor, step=step_uid,
                     trace_id=activation_uid, parent_span_id=parent, data=data)
     append_event(run_folder, ev)
+    # AC7: a Verify instrument also records the canonical release-verification
+    # receipt naming the package it tested. No-op for every other step.
+    emit_release_verification_receipt(run_folder, pr, step_uid, actor,
+                                      data.get("verdict", "unknown"))
     write_run_state_json(run_folder, pr["frontmatter"], derive_state(read_events(run_folder)), activation_uid)
     return data.get("verdict", "unknown")
+
+
+def emit_release_verification_receipt(run_folder, pr: dict, step_uid: str,
+                                      actor: str, verdict: str,
+                                      execution_mode: str = "machine",
+                                      evidence_ref: str = "") -> bool:
+    """Write the one canonical AC7 receipt when a Verify instrument completes.
+
+    A148 addendum 26 item 3: the receipt VOCABULARY existed and nothing in
+    production emitted one, so "four instruments passed against this package"
+    was a shape with no producer. The Publish gate would have read an empty set
+    forever.
+
+    Only fires for the four declared instrument nodes on a release run. Every
+    other step and every dev run is untouched — a gate on a hot path it does
+    not belong to is a cost with no matching harm.
+
+    Returns True when a receipt was written.
+    """
+    from lib import release_package as _pkg, release_verify as _rv
+
+    instrument = _rv.instrument_for_node(step_uid)
+    if instrument is None:
+        return False
+    fm = pr.get("frontmatter") or {}
+    if str(fm.get("pipeline") or "") != RELEASE_PIPELINE_ROOT_UID:
+        return False
+
+    events = read_events(run_folder)
+    frozen = _pkg.active_frozen_payload(events, str(fm.get("uid") or ""))
+    if not frozen or not str(frozen.get("package_sha256") or ""):
+        raise ContractError(
+            f"step {step_uid} is the {instrument} instrument but this run has "
+            f"no frozen package. A verification receipt has to name the bytes "
+            f"it tested, and there are none yet."
+        )
+
+    now = now_iso()
+    receipt = {
+        "receipt_kind": _rv.RECEIPT_KIND,
+        "instrument": instrument,
+        "release_run_uid": str(fm.get("uid") or ""),
+        "package_sha256": str(frozen["package_sha256"]),
+        "verdict": "pass" if str(verdict) in ("pass", "passed") else "fail",
+        "executor_or_attester": actor,
+        "execution_mode": execution_mode,
+        "evidence_ref": evidence_ref or f"{step_uid}@{now}",
+        "started_at": now,
+        "completed_at": now,
+    }
+    _rv.validate_receipt(receipt)
+    append_event(run_folder, make_event(
+        _rv.RECEIPT_KIND, actor, step=step_uid,
+        data=receipt, trace_id=str(fm.get("uid") or step_uid)))
+    return True
 
 
 def action_step_fail(activation_uid: str, step_uid: str, actor: str, failure_phase: str,
@@ -2265,14 +2875,28 @@ def action_skip_request(activation_uid: str, step_uid: str, actor: str, reason: 
 def action_authorize_skip(activation_uid: str, step_uid: str, authorized_by: str,
                           conditions: str, actor: str, dry_run: bool = False) -> str:
     activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
-    # Validate authorizer resolves to type:principal
-    authorizer = read_vault_entry(authorized_by)
-    if authorizer is not None:
+    # Principal identity (d7db77d8): 8-hex UIDs must resolve to principal/human;
+    # non-UID labels remain accepted when non-empty (historical runs used labels).
+    if not (authorized_by or "").strip():
+        raise SkipAuthError("authorized_by is required")
+    if re.fullmatch(r"[0-9a-f]{8}", str(authorized_by).strip()):
+        authorizer = read_vault_entry(authorized_by)
+        if authorizer is None:
+            raise SkipAuthError(
+                f"authorized_by {authorized_by!r} does not resolve to a vault entry"
+            )
         atype = authorizer["frontmatter"].get("type")
         if atype not in ("principal", "human"):
-            raise SkipAuthError(f"authorized_by {authorized_by!r} resolves to type:{atype!r}, "
-                                f"not type:principal (or type:human at v1.47.0+)")
+            raise SkipAuthError(
+                f"authorized_by {authorized_by!r} resolves to type:{atype!r}, "
+                f"not type:principal (or type:human at v1.47.0+)"
+            )
     parent = find_event_span(events, "skip_request", step_uid)
+    if parent is None:
+        raise SkipAuthError(
+            f"no prior skip_request for step {step_uid!r} — "
+            "authorization requires an ordered request span (d7db77d8)"
+        )
     if dry_run:
         return _dry_run_report("authorize-skip",
                                 f"would emit skip_authorization for {step_uid!r} (authorized_by={authorized_by!r})")
@@ -2286,9 +2910,12 @@ def action_authorize_skip(activation_uid: str, step_uid: str, authorized_by: str
 
 def action_apply_skip(activation_uid: str, step_uid: str, actor: str, dry_run: bool = False) -> str:
     activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
-    auth_span = state["skip_authorizations"].get(step_uid)
-    if auth_span is None:
-        raise SkipAuthError(f"no prior skip_authorization event for step {step_uid!r}")
+    decls = get_step_declarations(events)
+    replay = _obligations.build_activation_replay_index(events, decls, activation_uid)
+    try:
+        auth_span = _obligations.require_ordered_skip_chain(replay, step_uid)
+    except ValueError as e:
+        raise SkipAuthError(str(e)) from e
     if dry_run:
         return _dry_run_report("apply-skip", f"would emit step_skipped for {step_uid!r}")
     ev = make_event("step_skipped", actor, step=step_uid,
@@ -2454,36 +3081,392 @@ def action_resume(activation_uid: str, confirmation_granted_by: str | None, acto
     return "resumed"
 
 
-def action_terminal_verify(activation_uid: str, actor: str, dry_run: bool = False) -> str:
-    """v1.46.0 minimum-viable: inline verifier walks log + emits verifier_findings.
-    Full sa.pipeline-verify dispatch defers to terminal-state-verifier substrate."""
+TESTED_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _git(vault_root: Path, *args: str) -> str:
+    out = subprocess.run(["git", *args], cwd=str(vault_root),
+                         capture_output=True, text=True, timeout=60)
+    if out.returncode != 0:
+        raise ValidationError(f"git {' '.join(args)} failed: {out.stderr.strip()}")
+    return out.stdout.strip()
+
+
+#: Event kinds whose provenance the terminal REQUIRES. A run's close rests on
+#: these, so a member of this set that cannot say which tree it exercised is the
+#: hole boundary 3 exists to shut.
+PROVENANCE_BEARING_EVENTS = ("verification_receipt", "mutation_evidence",
+                             "completion_receipt")
+
+
+def _tested_sha_evidence(events: list[dict]) -> set[str]:
+    """Every tested-tree SHA any evidence in this run already binds to."""
+    seen: set[str] = set()
+    for ev in events:
+        data = ev.get("data") or {}
+        for key in ("tested_commit_sha", "tested_sha", "tested_tree_sha", "final_commit"):
+            value = data.get(key)
+            if isinstance(value, str) and TESTED_SHA_RE.match(value):
+                seen.add(value)
+    return seen
+
+
+def unprovenanced_receipts(events: list[dict]) -> list[dict]:
+    """Required receipts that cannot say which tree they exercised.
+
+    THE HOLE THIS CLOSES (argus-a147, boundary 3). Until 2026-08-10 the terminal
+    only asked whether the SHAs it could see CONFLICTED. A receipt carrying no
+    SHA at all contributed nothing to that set and passed in silence — so a run
+    could close having verified half its ACs on an unidentifiable tree, and the
+    check designed to catch exactly that reported success.
+
+    "Every required receipt carries one identical SHA" is two claims, and the
+    second one is worthless without the first.
+    """
+    missing: list[dict] = []
+    for ev in events:
+        if ev.get("event") not in PROVENANCE_BEARING_EVENTS:
+            continue
+        data = ev.get("data") or {}
+        sha = data.get("tested_commit_sha", data.get("tested_sha"))
+        if not (isinstance(sha, str) and TESTED_SHA_RE.match(sha)):
+            missing.append({
+                "event": ev.get("event"),
+                "step": ev.get("step"),
+                "state": data.get("tested_tree_state", "absent"),
+                "detail": data.get("tested_tree_detail", "no provenance recorded"),
+            })
+    return missing
+
+
+def assert_one_unchanged_tested_sha(
+    vault_root: Path, events: list[dict], tested_sha: str | None,
+) -> str:
+    """AC3's binding: all evidence describes ONE tree, and it is still that tree.
+
+    Dev closure is a welded side effect of terminal verification (0a0a6777 §3),
+    and the weld is only worth anything if the evidence and the closure describe
+    the same thing. Three refusals, which are the spec's own three:
+
+    MISSING - no tested SHA at all. A close with nothing to bind to is a close
+    on somebody's word.
+
+    STALE - the supplied SHA is not the tree that exists now. Evidence gathered
+    against a different tree does not describe this one, and "it passed earlier"
+    is exactly the claim a tested-SHA binding exists to stop being sufficient.
+    An uncommitted tracked change counts: the tree under the evidence moved even
+    if HEAD did not.
+
+    THEATRE - the run's own evidence binds to more than one SHA. That is not a
+    stricter version of stale; it means the ACs were verified against different
+    trees and no single tree ever passed all of them. It is the failure that
+    looks most like success.
+    """
+    if not tested_sha:
+        raise ValidationError(
+            "TERMINAL VERIFY REFUSED: no tested-tree SHA supplied. Dev closure binds "
+            "every AC and mutation obligation to ONE 40-hex tested-tree SHA "
+            "(0a0a6777 AC3); a close with nothing to bind to is a close on "
+            "somebody's word. Pass --tested-sha <40-hex>."
+        )
+    if not TESTED_SHA_RE.match(tested_sha):
+        raise ValidationError(
+            f"TERMINAL VERIFY REFUSED: tested SHA {tested_sha!r} is not 40 hex "
+            "characters. An abbreviated or tagged reference is not a tree identity."
+        )
+
+    # THEATRE IS CHECKED BEFORE STALENESS, and the order is deliberate. Evidence
+    # binding to two trees is a defect in the RUN — intrinsic, true regardless of
+    # what the working tree looks like right now. Staleness is contingent on the
+    # environment. Checking the contingent one first meant a dirty tree masked
+    # the intrinsic one, and the theatre test could not reach its own branch.
+    # MISSING PROVENANCE, before conflict. A receipt that cannot name its tree is
+    # not a weaker form of a conflicting one — it is the case the conflict check
+    # is blind to, because absent evidence never disagrees with anything.
+    #
+    # Fail-closed, harm named (deb77758): a close whose ACs were verified on an
+    # unidentifiable tree is a green result that would be believed while wrong,
+    # and the release built on it cites provenance that was never established.
+    # That is irreversible once published; the receipt cannot be re-provenanced
+    # after the fact because the tree it ran against is not recoverable.
+    unprovenanced = unprovenanced_receipts(events)
+    if unprovenanced:
+        lines = [
+            f"  - {m['event']}"
+            + (f" (step {m['step']})" if m.get("step") else "")
+            + f": {m['state']} — {m['detail']}"
+            for m in unprovenanced[:6]
+        ]
+        raise ValidationError(
+            "TERMINAL VERIFY REFUSED (missing provenance): "
+            f"{len(unprovenanced)} required receipt(s) carry no tested_commit_sha, "
+            "so they cannot say which tree they exercised:\n"
+            + "\n".join(lines)
+            + ("\n  ..." if len(unprovenanced) > 6 else "")
+            + "\n\nEvery required AC, mutation and completion receipt must carry ONE "
+            "identical 40-hex SHA (0a0a6777 AC3). A receipt with no provenance never "
+            "disagrees with the others, so the conflict check cannot see it — which "
+            "is exactly how a run closes on evidence gathered against a tree nobody "
+            "can name. Cure: commit the test subject and re-run the affected "
+            "verifications on a clean tree."
+        )
+
+    prior = _tested_sha_evidence(events)
+    conflicting = sorted(prior - {tested_sha})
+    if conflicting:
+        raise ValidationError(
+            "TERMINAL VERIFY REFUSED (theatre): this run's evidence binds to more "
+            f"than one tested tree — {tested_sha} plus {', '.join(conflicting)}. "
+            "The ACs were verified against different trees, so no single tree ever "
+            "passed all of them. This is the failure that looks most like success."
+        )
+    head = _git(vault_root, "rev-parse", "HEAD")
+    if head != tested_sha:
+        raise ValidationError(
+            f"TERMINAL VERIFY REFUSED (stale): evidence binds to {tested_sha}, but "
+            f"the tree is now {head}. The evidence describes a different tree than "
+            "the one this close would record. Re-run the ACs against the current "
+            "tree, or close the tree that was actually tested."
+        )
+
+    dirty = _git(vault_root, "status", "--porcelain", "--untracked-files=no")
+    if dirty:
+        changed = [line[3:] for line in dirty.splitlines()[:5]]
+        raise ValidationError(
+            "TERMINAL VERIFY REFUSED (stale): tracked files are modified since "
+            f"{tested_sha}, so the tested tree no longer exists: "
+            + ", ".join(changed)
+            + (" ..." if len(dirty.splitlines()) > 5 else "")
+            + ". A tested-tree SHA that does not describe the working tree binds "
+            "the close to a tree nobody tested."
+        )
+
+    return tested_sha
+
+
+def action_terminal_verify(activation_uid: str, actor: str, dry_run: bool = False,
+                           tested_sha: str | None = None) -> str:
+    """Terminal verification. On a complete verdict, dev closure is WELDED here.
+
+    v1.46.0 shipped this as an inline verifier that walked the log and emitted
+    verifier_findings. 0a0a6777 §3 makes it the terminal contract of dev-pipeline
+    v2: there is no close WorkflowNode to run afterwards, because a close step is
+    skippable and a skippable close is how runs end up parked, half-closed, or
+    closed on evidence describing a tree that was never tested.
+
+    So a `complete` verdict here binds to one unchanged 40-hex tested-tree SHA
+    and invokes closure as a side effect. An incomplete verdict changes nothing
+    and closes nothing — the weld is on passing, not on running.
+    """
     activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     decls = get_step_declarations(events)
+    replay = _obligations.build_activation_replay_index(events, decls, activation_uid)
     gaps = []
+    skip_carried = []
+    recomputed = []
+    ctx = build_run_context_uids(pr, activation_uid)
     for step_id in decls:
+        obl = _obligations.resolve_obligation(
+            kind="step",
+            replay=replay,
+            step_status=state["step_status"],
+            consumer_step=step_id,
+            producer_step=step_id,
+        )
+        if obl["disposition"] in (
+            _obligations.SATISFIED,
+            _obligations.SATISFIED_BY_SKIP,
+        ):
+            if obl["disposition"] == _obligations.SATISFIED_BY_SKIP:
+                skip_carried.append({
+                    "step_id": step_id,
+                    "disposition": obl["disposition"],
+                    "authorization_span_id": obl.get("authorization_span_id"),
+                })
+            continue
+        # d7db77d8: revalidate already-complete runs instead of returning early.
+        # A step stuck at completed (verify errored before skip-awareness) is
+        # re-evaluated through the obligation resolver; a clean recompute counts.
         status = state["step_status"].get(step_id)
-        if status not in ("verified", "skipped"):
-            gaps.append({"step_id": step_id, "status": status})
+        if status == "completed":
+            decl = decls[step_id]
+            criteria = decl.get("exit_criteria") or []
+            if criteria and not decl.get("verification_command"):
+                snapshot = build_snapshot(criteria, ctx)
+                per_criterion = _evaluate_criteria_with_obligations(
+                    criteria, ctx, snapshot, events, state, decls,
+                    activation_uid, consumer_step=step_id,
+                )
+                if all(p["verdict"] == "pass" for p in per_criterion):
+                    skip_bits = [
+                        p for p in per_criterion
+                        if p.get("disposition") in (
+                            _obligations.SATISFIED_BY_SKIP,
+                            _obligations.WAIVED_BY_SKIP,
+                        )
+                    ]
+                    recomputed.append({
+                        "step_id": step_id,
+                        "per_criterion": per_criterion,
+                        "skip_carried": len(skip_bits),
+                    })
+                    for p in skip_bits:
+                        skip_carried.append({
+                            "step_id": step_id,
+                            "criterion": p.get("criterion"),
+                            "disposition": p.get("disposition"),
+                            "producer_step": p.get("producer_step"),
+                            "authorization_span_id": p.get("authorization_span_id"),
+                        })
+                    if not dry_run:
+                        # Append-only revalidation receipt (does not rewrite history).
+                        parent = events[-1]["span_id"] if events else None
+                        receipt = make_event(
+                            "verification_receipt", actor, step=step_id,
+                            trace_id=activation_uid, parent_span_id=parent,
+                            data={
+                                "verifier_role_resolved": "terminal-revalidate",
+                                "verdict": "pass",
+                                "per_criterion": per_criterion,
+                                "rubric_scores": {
+                                    "exit_criteria_coverage": 1.0,
+                                },
+                                "overall_rationale": (
+                                    "terminal-verify revalidation (d7db77d8); "
+                                    f"{len(skip_bits)} criteria carried by authorized skip"
+                                ),
+                            },
+                        )
+                        append_event(run_folder, receipt)
+                        events.append(receipt)
+                        state = derive_state(events)
+                    continue
+        gaps.append({
+            "step_id": step_id,
+            "status": status,
+            "disposition": obl["disposition"],
+            "rationale": obl.get("rationale"),
+        })
+    # Refresh state after any append-only revalidation receipts.
+    if not dry_run and recomputed:
+        state = derive_state(read_events(run_folder))
+        write_run_state_json(run_folder, pr["frontmatter"], state, activation_uid)
     verdict = "complete" if not gaps else "incomplete_gaps"
-    # If all gaps are skipped-with-auth, downgrade to incomplete_with_authorized_skips
-    if all(state["step_status"].get(g["step_id"]) == "skipped"
-           and g["step_id"] in state["skip_authorizations"] for g in gaps) and gaps:
-        verdict = "incomplete_with_authorized_skips"
     data = {
         "verdict": verdict,
         "gaps": gaps,
+        "skip_carried": skip_carried,
+        "revalidated_steps": [r["step_id"] for r in recomputed],
         "rubric_scores": {
             "step_completion_coverage": (len(decls) - len(gaps)) / max(len(decls), 1),
         },
     }
+    # AC3: a passing terminal verdict binds to one unchanged tested tree, and the
+    # binding is checked BEFORE anything is written. A refusal must leave the run
+    # exactly as it found it.
+    if verdict == "complete":
+        tested_sha = assert_one_unchanged_tested_sha(VAULT_ROOT, events, tested_sha)
+        data["tested_sha"] = tested_sha
+
     if dry_run:
-        return _dry_run_report("terminal-verify", f"would emit verifier_findings verdict={verdict!r} (gaps={gaps})")
+        return _dry_run_report(
+            "terminal-verify",
+            f"would emit verifier_findings verdict={verdict!r} (gaps={gaps})"
+            + (f" and WELD dev closure at tested_sha={tested_sha}" if verdict == "complete" else ""),
+        )
     parent = events[-1]["span_id"] if events else None
     ev = make_event("verifier_findings", actor,
                     trace_id=activation_uid, parent_span_id=parent, data=data)
     append_event(run_folder, ev)
     write_run_state_json(run_folder, pr["frontmatter"], derive_state(read_events(run_folder)), activation_uid)
+
+    if verdict != "complete":
+        # No weld on an incomplete verdict. Running the terminal step is not the
+        # same as passing it, and only passing closes anything.
+        return verdict
+
+    # ---- the weld ----------------------------------------------------------
+    # Journaled first, then applied. If the process dies between the two, the
+    # journal is what makes the transaction recoverable rather than a mystery.
+    journal = _write_close_journal(activation_uid, tested_sha, actor)
+    closed = run_close_out_hook(
+        activation, activation["frontmatter"].get("dev_spec_uid"), actor,
+        final_commit=tested_sha,
+    )
+    # THE CANONICAL CLOSE RECEIPT (argus-a147, stage-4 blocker 3).
+    #
+    # This used to carry the tested SHA and little else, and fan-in consumed it
+    # on that basis. A bare {"event": "dev_closed", "tested_sha": ...} line in
+    # any *.jsonl under any run folder satisfied it — so the release's provenance
+    # rested on a shape trivial to forge and impossible to cross-check.
+    #
+    # A receipt now states the WHOLE identity it is closing, so a consumer can
+    # verify every link resolves and agrees rather than trusting one field:
+    # which spec, which activation, which run, which root, which journal, which
+    # tree, and which typed evidence says the ACs passed. Any consumer that can
+    # only check one of those is checking nothing.
+    activation_fm = activation["frontmatter"]
+    dev_spec_uid = activation_fm.get("dev_spec_uid")
+    close_ev = make_event(
+        "dev_closed", actor, trace_id=activation_uid, parent_span_id=ev["span_id"],
+        data={
+            "receipt_kind": "canonical-dev-close",
+            "tested_sha": tested_sha,
+            "tested_commit_sha": tested_sha,
+            # The identity chain, every link named on the receipt itself.
+            "dev_spec_uid": dev_spec_uid,
+            "activation_uid": activation_uid,
+            "pipeline_run_uid": pr["frontmatter"].get("uid"),
+            "activation_root_uid": (activation_fm.get("activation_root_project")
+                                    or activation_fm.get("activation_root_uid")),
+            "pipeline_uid": pr["frontmatter"].get("pipeline"),
+            "closed": closed,
+            "journal": str(journal.relative_to(VAULT_ROOT)) if journal else None,
+            "welded_by": "terminal-verify",
+            "verdict": verdict,
+            "note": "Closure is a side effect of terminal verification passing "
+                    "(0a0a6777 AC3). There is no close WorkflowNode to skip.",
+        },
+    )
+    append_event(run_folder, close_ev)
+    write_run_state_json(run_folder, pr["frontmatter"], derive_state(read_events(run_folder)), activation_uid)
     return verdict
+
+
+#: Local, gitignored journal boundary for recoverable terminal transactions
+#: (0a0a6777 committed substrate: .tropo-studio/pipeline-close/).
+PIPELINE_CLOSE_JOURNAL_DIR = "pipeline-close"
+
+
+def _write_close_journal(activation_uid: str, tested_sha: str, actor: str) -> Path | None:
+    """Record the intent to close BEFORE closing, so a crash is recoverable.
+
+    A close that writes several records is a transaction, and a transaction with
+    no journal has no recovery — it has an operator guessing which half happened.
+    Local and gitignored on purpose: this is machine-local recovery state, not
+    substrate, and shipping one studio's in-flight transaction to another is the
+    class of defect the state-exclusion rule exists for.
+    """
+    try:
+        directory = VAULT_ROOT / ".tropo-studio" / PIPELINE_CLOSE_JOURNAL_DIR
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{activation_uid}.json"
+        path.write_text(json.dumps({
+            "activation_uid": activation_uid,
+            "tested_sha": tested_sha,
+            "actor": actor,
+            "opened_at": now_iso(),
+            "state": "opened",
+        }, indent=2) + "\n", encoding="utf-8")
+        return path
+    except OSError as exc:
+        # A journal we cannot write is a recovery path we do not have. Say so and
+        # refuse rather than closing something we could not record the intent for.
+        raise ValidationError(
+            f"TERMINAL VERIFY REFUSED: cannot write the close journal ({exc}). "
+            "The close is a multi-record transaction and without a journal a crash "
+            "midway leaves no way to tell which half happened."
+        )
 
 
 def action_human_signoff(activation_uid: str, verdict: str, notes: str, actor: str,
@@ -2685,6 +3668,12 @@ def _auto_bootstrap_triggered_pipeline(
     triggered_activation_uid: str,
     triggered_pipeline_uid: str,
     actor: str,
+    *,
+    triggered_by_activation: str | None = None,
+    triggered_spec_uid: str | None = None,
+    triggered_pipeline_class: str | None = None,
+    release_plan_uid: str | None = None,
+    release_pipeline_run_uid: str | None = None,
 ) -> str:
     """E6 (v1.53) — auto-write pipeline-run.capsule instance for triggered doc/test pipelines.
 
@@ -2726,7 +3715,11 @@ def _auto_bootstrap_triggered_pipeline(
             "pipeline": triggered_pipeline_uid,
             "pipeline_version": pdf.get("version") or "0.0.0",
             "substrate_authored_by": triggered_activation_uid,
-            "triggered_by_dev_pipeline": True,
+            "triggered_by_activation": triggered_by_activation,
+            "triggered_spec_uid": triggered_spec_uid,
+            "triggered_pipeline_class": triggered_pipeline_class,
+            "release_plan_uid": release_plan_uid,
+            "release_pipeline_run_uid": release_pipeline_run_uid,
             "status": "active",
             "state": "active",
             "current_stage": None,
@@ -2759,8 +3752,13 @@ def _auto_bootstrap_triggered_pipeline(
 
         (run_folder_abs / "definition.md").write_text(
             f"# Pipeline-Run Definition\n\nSee vault entry [{pr_uid}](../../files/{pr_uid}.md).\n")
+        parent_context = (
+            f"release-pipeline run {release_pipeline_run_uid}"
+            if release_pipeline_run_uid else "dev-pipeline"
+        )
         (run_folder_abs / "context.md").write_text(
-            f"# Run Context\n\nAuto-triggered by dev-pipeline at trigger-step. Actor: {actor}.\n")
+            f"# Run Context\n\nAuto-triggered by {parent_context} at trigger-step. "
+            f"Actor: {actor}.\n")
         (run_folder_abs / "thread.md").write_text(
             "# LLM Working Memory\n\n*Append-only by convention.*\n")
 
@@ -2780,6 +3778,70 @@ def _auto_bootstrap_triggered_pipeline(
         return ""
 
 
+_TRIGGER_STEP_CONTRACTS = {
+    "0cf86ea5": ("doc-pipeline", _DOC_PIPELINE_UID, "doc-spec"),
+    "4f64ec3c": ("test-pipeline", _TEST_PIPELINE_UID, "test-spec"),
+}
+
+
+def _prepare_release_triggered_spec(
+    triggered_spec_uid: str,
+    triggered_spec_body: str,
+    pipeline_class: str,
+    provenance,
+) -> tuple[dict, str]:
+    """Validate a trigger input and bind it to the existing release identity."""
+    match = _FRONTMATTER_RE.match(triggered_spec_body)
+    if not match:
+        raise ValidationError(
+            "triggered spec body must contain valid YAML frontmatter")
+    try:
+        frontmatter = yaml.safe_load(match.group(1)) or {}
+    except yaml.YAMLError as exc:
+        raise ValidationError(f"triggered spec frontmatter is invalid YAML: {exc}")
+    if not isinstance(frontmatter, dict):
+        raise ValidationError("triggered spec frontmatter must be a mapping")
+
+    expected_type = "doc-spec" if pipeline_class == "doc-pipeline" else "test-spec"
+    if str(frontmatter.get("uid") or "") != triggered_spec_uid:
+        raise ValidationError(
+            f"triggered spec UID mismatch: CLI names {triggered_spec_uid!r}, "
+            f"frontmatter names {frontmatter.get('uid')!r}")
+    if str(frontmatter.get("type") or "") != expected_type:
+        raise ValidationError(
+            f"{pipeline_class} requires type:{expected_type}; triggered spec "
+            f"{triggered_spec_uid} is type:{frontmatter.get('type')}")
+    if frontmatter.get("triggered_by_dev_cycle"):
+        raise ValidationError(
+            f"release-opened {expected_type} {triggered_spec_uid} declares "
+            "triggered_by_dev_cycle; AC6 provenance is release-run/plan, never "
+            "two owners"
+        )
+
+    bindings = {
+        "triggered_by_release_pipeline": provenance.activation_uid,
+        "release_plan_uid": provenance.release_plan_uid,
+        "release_pipeline_run_uid": provenance.release_run_uid,
+    }
+    for field, expected in bindings.items():
+        declared = frontmatter.get(field)
+        if declared is not None and str(declared) != expected:
+            raise ValidationError(
+                f"triggered spec {triggered_spec_uid} declares {field}="
+                f"{declared!r}, not resolved release provenance {expected!r}")
+        frontmatter[field] = expected
+
+    fm_yaml = yaml.dump(
+        _coerce_uid_fields_to_str(frontmatter),
+        Dumper=_NoAliasSafeDumper,
+        default_flow_style=False,
+        sort_keys=False,
+        allow_unicode=True,
+        width=200,
+    )
+    return frontmatter, f"---\n{fm_yaml}---\n{match.group(2)}"
+
+
 def action_trigger_step(
     activation_uid: str,
     step_uid: str,
@@ -2790,12 +3852,13 @@ def action_trigger_step(
     actor: str,
     dry_run: bool = False,
 ) -> dict:
-    """Three-pipeline coupling trigger-step handler.
+    """Release Assemble doc/test trigger-step handler.
 
-    Sequence (per Engine Extension spec 51d171f3 v0.2):
+    Sequence (0a0a6777 AC6, using the existing release-leg provenance):
     1. O_EXCL atomic create of triggered-spec file (race surface 1)
     2. Spawn pipeline-activate.py to open doc/test pipeline activation
-    3. fcntl.flock atomic append to dev-spec frontmatter (race surface 2)
+    3. Bind the spec, activation, and child run to the release activation/run/plan
+    4. Record the leg on the parent release run's event stream
     Returns: {"triggered_spec_uid": ..., "triggered_activation_uid": ...}
     """
     if not re.fullmatch(r"[0-9a-f]{8}", triggered_spec_uid):
@@ -2806,16 +3869,53 @@ def action_trigger_step(
         raise ValidationError(
             f"--pipeline-class must be doc-pipeline or test-pipeline; got {pipeline_class!r}")
 
-    activation = read_vault_entry(activation_uid)
-    if activation is None:
-        raise ValidationError(f"activation_uid {activation_uid!r} does not resolve")
-    dev_spec_uid = activation["frontmatter"].get("dev_spec_uid")
-    if not dev_spec_uid:
+    contract = _TRIGGER_STEP_CONTRACTS.get(step_uid)
+    if contract is None:
         raise ValidationError(
-            f"activation {activation_uid!r} missing dev_spec_uid; cannot fire trigger-step")
+            f"step {step_uid!r} is not a release doc/test trigger step")
+    expected_class, expected_pipeline_uid, _expected_spec_type = contract
+    if pipeline_class != expected_class or triggered_pipeline_uid != expected_pipeline_uid:
+        raise ValidationError(
+            f"trigger step {step_uid} requires class={expected_class!r} and "
+            f"pipeline={expected_pipeline_uid!r}; got class={pipeline_class!r}, "
+            f"pipeline={triggered_pipeline_uid!r}")
+
+    # AC6 RUNTIME BELT (0a0a6777; argus-a148 Stage-5 answer 2, Mike-locked).
+    #
+    # "Dev runs never trigger them." AC1 already takes the doc/test triggers out
+    # of the dev graph, and a graph edit only governs the paths that READ the
+    # graph — a leftover call site, a hand-run CLI, or a frozen v1 run still
+    # holds the old shape and would open a cascade anyway. Topology and runtime,
+    # not either alone.
+    #
+    # Provenance comes from the PARENT PIPELINE-RUN rather than the activation's
+    # own dev-cycle fields (contract §5: trigger provenance generalizes from
+    # dev-cycle to parent pipeline-run). That is also what makes the check
+    # possible: the activation cannot say which pipeline it belongs to in a way
+    # a dev activation would fail, but its run can.
+    from lib import release_legs as _legs
+
+    activation, parent_run, parent_run_folder, parent_events, parent_state = load_run(
+        activation_uid, dry_run=dry_run)
+    provenance = _legs.resolve_release_trigger_provenance(
+        activation["frontmatter"], parent_run["frontmatter"],
+        RELEASE_PIPELINE_ROOT_UID, read_vault_entry)
+    triggered_spec_fm, triggered_spec_body = _prepare_release_triggered_spec(
+        triggered_spec_uid, triggered_spec_body, pipeline_class, provenance)
+
+    declarations = get_step_declarations(parent_events)
+    eligible = compute_eligible_steps(
+        parent_state, declarations, events=parent_events,
+        activation_uid=activation_uid)
+    if step_uid not in declarations:
+        raise ValidationError(f"step {step_uid!r} not in activation contract")
+    if step_uid not in eligible:
+        raise ContractError(
+            f"trigger step {step_uid!r} is not eligible in release run "
+            f"{provenance.release_run_uid!r}")
 
     # B5 (v1.62): single-cascade idempotency — refuse a second trigger-step for the same
-    # pipeline-class on this dev-run. Exactly one doc activation + one test activation per run.
+    # pipeline-class on this release run. Exactly one live doc + test activation per run.
     # Closes the v1.61 phantom-duplicate class where re-fires created orphaned cascade activations.
     #
     # STATUS-AWARE FIX (Argus A129 ruling 2026-07-09, event 00006039 — v1.84.1 close-out
@@ -2832,27 +3932,37 @@ def action_trigger_step(
     # agree on what "done with this cascade" means. Same class as the terminal-state-awareness
     # fix already landed on the member_of D7 gate (a gate must not count a retired/superseded
     # record the same as a live one).
-    ds_entry = read_vault_entry(dev_spec_uid)
+    existing_acts = [
+        str((event.get("data") or {}).get("triggered_activation_uid"))
+        for event in parent_events
+        if (event.get("data") or {}).get("pipeline_class") == pipeline_class
+        and (event.get("data") or {}).get("triggered_activation_uid")
+    ]
+    # Preserve the historical B5 read path for a grandfathered fixture carrying
+    # dev-spec coupling fields, but release mode never writes those fields.
+    dev_spec_uid = activation["frontmatter"].get("dev_spec_uid")
+    ds_entry = read_vault_entry(str(dev_spec_uid)) if dev_spec_uid else None
     if ds_entry:
-        dsf = ds_entry["frontmatter"]
-        if pipeline_class == "doc-pipeline":
-            existing_acts = dsf.get("triggered_doc_activation_uids") or []
-        else:
-            existing_acts = dsf.get("triggered_test_activation_uids") or []
-        _b5_terminal_statuses = {"done", "retired", "archived", "shipped", "closed", "complete"}
-        _live_acts = []
-        for _act_uid in existing_acts:
-            _act_entry = read_vault_entry(_act_uid)
-            _act_status = ((_act_entry["frontmatter"].get("status") if _act_entry else None) or "").lower()
-            if _act_status not in _b5_terminal_statuses:
-                _live_acts.append(_act_uid)
-        if _live_acts:
-            raise ContractError(
-                f"B5 single-cascade refused: {pipeline_class} already triggered for this dev-run "
-                f"and still ACTIVE (activation(s): {_live_acts}). Each dev-run fires exactly one "
-                f"live doc + one live test cascade at a time. To re-trigger, retire the existing "
-                f"cascade activation first (status must reach one of {sorted(_b5_terminal_statuses)})."
-            )
+        key = ("triggered_doc_activation_uids"
+               if pipeline_class == "doc-pipeline"
+               else "triggered_test_activation_uids")
+        existing_acts.extend(str(uid) for uid in
+                             (ds_entry["frontmatter"].get(key) or []))
+    _b5_terminal_statuses = {"done", "retired", "archived", "shipped", "closed", "complete"}
+    _live_acts = []
+    for _act_uid in dict.fromkeys(existing_acts):
+        _act_entry = read_vault_entry(_act_uid)
+        _act_status = (
+            ((_act_entry or {}).get("frontmatter") or {}).get("status") or ""
+        ).lower()
+        if _act_status not in _b5_terminal_statuses:
+            _live_acts.append(_act_uid)
+    if _live_acts:
+        raise ContractError(
+            f"B5 single-cascade refused: {pipeline_class} already has a live "
+            f"activation in release run {provenance.release_run_uid}: {_live_acts}. "
+            "Retire the existing cascade activation before re-triggering."
+        )
 
     triggered_spec_path = VAULT_FILES / f"{triggered_spec_uid}.md"
 
@@ -2867,17 +3977,23 @@ def action_trigger_step(
     if dry_run:
         if triggered_spec_path.is_file():
             existing = read_vault_entry(triggered_spec_uid)
-            owner = existing["frontmatter"].get("triggered_by_dev_cycle") if existing else None
-            if existing and owner == activation_uid:
+            existing_fm = (existing or {}).get("frontmatter") or {}
+            owner = existing_fm.get("release_pipeline_run_uid")
+            same_release = (
+                str(owner or "") == provenance.release_run_uid
+                and str(existing_fm.get("release_plan_uid") or "")
+                == provenance.release_plan_uid
+            )
+            if existing and same_release:
                 spec_banner = (f"trigger-step idempotent: {triggered_spec_uid!r} already created "
-                                f"by this cycle")
+                                f"by this release run")
             elif owner is None:
                 spec_banner = (f"trigger-step would claim orphaned spec {triggered_spec_uid!r} "
-                                f"for cycle {activation_uid!r} (was unowned)")
+                                f"for release run {provenance.release_run_uid!r} (was unowned)")
             else:
                 raise ContractError(
-                    f"trigger-step collision: {triggered_spec_uid!r} owned by dev-cycle "
-                    f"{owner!r}, not {activation_uid!r}")
+                    f"trigger-step collision: {triggered_spec_uid!r} owned by release "
+                    f"run {owner!r}, not {provenance.release_run_uid!r}")
         else:
             spec_banner = (f"trigger-step would create spec {triggered_spec_uid!r} "
                             f"({len(triggered_spec_body)} bytes)")
@@ -2888,7 +4004,8 @@ def action_trigger_step(
         banner = _dry_run_report(
             "trigger-step",
             f"{spec_banner}; would activate pipeline {triggered_pipeline_uid!r} "
-            f"(class={pipeline_class!r}) and update dev-spec {dev_spec_uid!r}",
+            f"(class={pipeline_class!r}) for release plan "
+            f"{provenance.release_plan_uid!r}/run {provenance.release_run_uid!r}",
         )
         return {"dry_run": True, "triggered_spec_uid": triggered_spec_uid,
                 "triggered_activation_uid": "dry-run", "banner": banner}
@@ -2900,34 +4017,43 @@ def action_trigger_step(
             f.write(triggered_spec_body)
     except FileExistsError:
         existing = read_vault_entry(triggered_spec_uid)
-        if existing and existing["frontmatter"].get("triggered_by_dev_cycle") == activation_uid:
-            # Idempotent retry: same dev-pipeline activation already created this spec
-            print(f"[INFO] trigger-step idempotent: {triggered_spec_uid!r} already created by this cycle",
+        existing_fm = (existing or {}).get("frontmatter") or {}
+        same_release = (
+            str(existing_fm.get("release_pipeline_run_uid") or "")
+            == provenance.release_run_uid
+            and str(existing_fm.get("release_plan_uid") or "")
+            == provenance.release_plan_uid
+        )
+        if existing and same_release:
+            print(f"[INFO] trigger-step idempotent: {triggered_spec_uid!r} already created by this release",
                   file=sys.stderr)
-            existing_act_uid = existing["frontmatter"].get("triggered_activation_uid")
+            existing_act_uid = existing_fm.get("triggered_activation_uid")
             if existing_act_uid:
                 return {"triggered_spec_uid": triggered_spec_uid,
                         "triggered_activation_uid": existing_act_uid}
             raise ContractError(
-                f"trigger-step partial failure: {triggered_spec_uid!r} exists (same dev-cycle) but "
+                f"trigger-step partial failure: {triggered_spec_uid!r} exists (same release) but "
                 f"triggered_activation_uid field missing — spec authored but activation not yet spawned; "
                 f"manual recovery needed (delete {triggered_spec_uid}.md and retry)"
             )
-        owner = (existing["frontmatter"].get("triggered_by_dev_cycle") if existing else None)
+        owner = existing_fm.get("release_pipeline_run_uid")
         if owner is None:
-            # Orphaned spec (no dev-cycle owner) — claim it for this cycle.
-            # Per Argus A95 ruling (event 1147): None/unset triggered_by_dev_cycle means
-            # the spec was pre-authored standalone; the triggering cycle claims ownership.
-            # Only error when owned by a DIFFERENT cycle (a real conflict).
             print(f"[INFO] trigger-step: claiming orphaned spec "
-                  f"{triggered_spec_uid!r} for cycle {activation_uid!r} (was unowned)", file=sys.stderr)
-            fm = existing["frontmatter"].copy()
-            fm["triggered_by_dev_cycle"] = activation_uid
-            write_vault_entry(triggered_spec_uid, fm, existing.get("body", ""))
+                  f"{triggered_spec_uid!r} for release run "
+                  f"{provenance.release_run_uid!r} (was unowned)", file=sys.stderr)
+            orphan_body = (
+                f"---\n{yaml.dump(existing_fm, Dumper=_NoAliasSafeDumper, sort_keys=False)}"
+                f"---\n{existing.get('body', '')}"
+            )
+            claimed_fm, claimed_body = _prepare_release_triggered_spec(
+                triggered_spec_uid, orphan_body, pipeline_class, provenance)
+            write_vault_entry(
+                triggered_spec_uid, claimed_fm,
+                _FRONTMATTER_RE.match(claimed_body).group(2))
         else:
             raise ContractError(
-                f"trigger-step collision: {triggered_spec_uid!r} owned by dev-cycle "
-                f"{owner!r}, not {activation_uid!r}")
+                f"trigger-step collision: {triggered_spec_uid!r} owned by release run "
+                f"{owner!r}, not {provenance.release_run_uid!r}")
 
     # Spawn pipeline-activate.py for the triggered pipeline class.
     # Pass --rollback-manifest to a trigger-scoped path so pipeline-activate treats
@@ -2943,7 +4069,12 @@ def action_trigger_step(
             [sys.executable, str(activate_script),
              "--pipeline-uid", triggered_pipeline_uid,
              "--activated-by", actor,
-             "--cycle-context", f"triggered-by-dev-cycle:{activation_uid}",
+             "--cycle-context", f"triggered-by-release-run:{provenance.release_run_uid}",
+             "--triggered-by-activation", provenance.activation_uid,
+             "--triggered-spec-uid", triggered_spec_uid,
+             "--triggered-pipeline-class", pipeline_class,
+             "--release-plan-uid", provenance.release_plan_uid,
+             "--release-pipeline-run-uid", provenance.release_run_uid,
              "--rollback-manifest", str(trigger_manifest_path)],
             capture_output=True, text=True, timeout=30,
         )
@@ -2957,55 +4088,31 @@ def action_trigger_step(
         raise ContractError(
             f"pipeline-activate.py returned invalid activation UID: {triggered_activation_uid!r}")
 
-    # Race surface 2: fcntl.flock exclusive lock on dev-spec for atomic frontmatter append
-    dev_spec_path = VAULT_FILES / f"{dev_spec_uid}.md"
-    with open(str(dev_spec_path), "r+") as f:
-        deadline = time.time() + TRIGGER_LOCK_TIMEOUT_SECONDS
-        while True:
-            try:
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if time.time() >= deadline:
-                    raise ContractError(
-                        f"timeout waiting for fcntl lock on dev-spec {dev_spec_uid!r} "
-                        f"after {TRIGGER_LOCK_TIMEOUT_SECONDS}s")
-                time.sleep(0.05)
-        try:
-            content = f.read()
-            m = _FRONTMATTER_RE.match(content)
-            if not m:
-                raise ValidationError(f"dev-spec {dev_spec_uid!r} has no valid frontmatter")
-            dsf = yaml.safe_load(m.group(1)) or {}
-            body = m.group(2)
-
-            # Append spec UID + activation UID with idempotency guard
-            if pipeline_class == "doc-pipeline":
-                spec_list = dsf.setdefault("triggered_doc_spec_uids", [])
-                act_list = dsf.setdefault("triggered_doc_activation_uids", [])
-            else:
-                spec_list = dsf.setdefault("triggered_test_spec_uids", [])
-                act_list = dsf.setdefault("triggered_test_activation_uids", [])
-
-            if triggered_spec_uid not in spec_list:
-                spec_list.append(triggered_spec_uid)
-            if triggered_activation_uid not in act_list:
-                act_list.append(triggered_activation_uid)
-
-            dsf["modified"] = TODAY
-            dsf["modified_by"] = SCRIPT_NAME
-
-            fm_yaml = yaml.safe_dump(dsf, default_flow_style=False, sort_keys=False,
-                                     allow_unicode=True, width=200)
-            f.seek(0)
-            f.write(f"---\n{fm_yaml}---\n{body}")
-            f.truncate()
-        finally:
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    spec_entry = read_vault_entry(triggered_spec_uid)
+    if spec_entry is None:
+        raise ContractError(
+            f"triggered spec {triggered_spec_uid} disappeared after activation")
+    spec_fm = spec_entry["frontmatter"]
+    spec_fm["triggered_activation_uid"] = triggered_activation_uid
+    spec_fm["modified"] = TODAY
+    spec_fm["modified_by"] = SCRIPT_NAME
+    write_vault_entry(triggered_spec_uid, spec_fm, spec_entry.get("body", ""))
 
     # E6 (v1.53): auto-write pipeline-run.capsule instance for the triggered doc/test pipeline.
     # Dev-pipeline gets pipeline-run via explicit operator bootstrap; triggered pipelines get it here.
-    _auto_bootstrap_triggered_pipeline(triggered_activation_uid, triggered_pipeline_uid, actor)
+    triggered_run_uid = _auto_bootstrap_triggered_pipeline(
+        triggered_activation_uid, triggered_pipeline_uid, actor,
+        triggered_by_activation=provenance.activation_uid,
+        triggered_spec_uid=triggered_spec_uid,
+        triggered_pipeline_class=pipeline_class,
+        release_plan_uid=provenance.release_plan_uid,
+        release_pipeline_run_uid=provenance.release_run_uid,
+    )
+    if not triggered_run_uid:
+        raise ContractError(
+            f"triggered activation {triggered_activation_uid!r} opened, but its "
+            "pipeline-run did not bootstrap; release leg provenance is incomplete"
+        )
 
     # Emit step lifecycle events atomically (pipeline-run.capsule v2.0 §Check 14).
     # trigger-step is a single substrate-changing action; the full step lifecycle
@@ -3024,7 +4131,14 @@ def action_trigger_step(
     ev_completed = make_event("step_completed", actor, step=step_uid,
                               trace_id=activation_uid,
                               parent_span_id=ev_started["span_id"],
-                              data={"artifact_links": artifact_links})
+                              data={
+                                  "artifact_links": artifact_links,
+                                  "pipeline_class": pipeline_class,
+                                  "triggered_spec_uid": triggered_spec_uid,
+                                  "triggered_activation_uid": triggered_activation_uid,
+                                  "release_plan_uid": provenance.release_plan_uid,
+                                  "release_pipeline_run_uid": provenance.release_run_uid,
+                              })
     append_event(run_folder, ev_completed)
     # verification_receipt — verdict:pass (trigger-step has no human verify gate;
     # substrate writes above are the verifiable exit criterion)
@@ -3044,7 +4158,309 @@ def action_trigger_step(
     write_run_state_json(run_folder, pr["frontmatter"], derive_state(read_events(run_folder)), activation_uid)
 
     return {"triggered_spec_uid": triggered_spec_uid,
-            "triggered_activation_uid": triggered_activation_uid}
+            "triggered_activation_uid": triggered_activation_uid,
+            "triggered_pipeline_run_uid": triggered_run_uid}
+
+
+#: Entry types that carry a verdict, so "the ACs passed" is a claim the file
+#: can actually make. Mirrors tropo-lock-release-plan's EVIDENCE_TYPES: fan-in
+#: is the consumer, and closure writing evidence the consumer rejects would be
+#: a weld that produces a fan-in-shaped lie.
+ACCEPTANCE_EVIDENCE_TYPES = frozenset({
+    "completion-report", "test-spec", "release", "vela-test-plan",
+    "verification-report",
+})
+ACCEPTANCE_PASSING_VERDICTS = frozenset({
+    "pass", "passed", "complete", "done", "shipped", "green", "accepted",
+})
+
+
+def discover_acceptance_evidence(dev_spec_uid: str, activation_uid: str) -> list[str]:
+    """Typed PASSING evidence bound to this cycle, or an empty list.
+
+    Discovery rather than declaration, because the binding already exists in
+    substrate: a paired test-spec names the cycle that triggered it. Requiring
+    an author to also hand-list it would make the weld depend on a step someone
+    can forget, and a forgotten list is indistinguishable from no evidence.
+
+    Evidence already declared on the dev-spec is honored first — an explicit
+    binding is a stronger statement than a discovered one.
+    """
+    found: list[str] = []
+    spec = read_vault_entry(dev_spec_uid)
+    declared = (spec or {}).get("frontmatter", {}).get("acceptance_evidence") or []
+    for uid in [str(u) for u in declared]:
+        if _is_typed_passing_evidence(uid):
+            found.append(uid)
+
+    for path in sorted(VAULT_FILES.glob("*.md")):
+        uid = path.stem
+        if uid in found:
+            continue
+        entry = read_vault_entry(uid)
+        if entry is None:
+            continue
+        fm = entry["frontmatter"]
+        binds_here = (
+            str(fm.get("triggered_by_dev_cycle") or "") == str(activation_uid)
+            or str(fm.get("triggering_dev_spec") or "") == str(dev_spec_uid)
+        )
+        if binds_here and _is_typed_passing_evidence(uid, fm):
+            found.append(uid)
+    return found
+
+
+def _is_typed_passing_evidence(uid: str, fm: dict | None = None) -> bool:
+    if fm is None:
+        entry = read_vault_entry(uid)
+        if entry is None:
+            return False
+        fm = entry["frontmatter"]
+    if str(fm.get("type") or "") not in ACCEPTANCE_EVIDENCE_TYPES:
+        return False
+    verdict = str(fm.get("verdict") or fm.get("status") or "").strip().lower()
+    return verdict in ACCEPTANCE_PASSING_VERDICTS
+
+
+def _governed_completion_report_uid(activation_uid: str) -> str:
+    """One report per cycle, addressed by the cycle it reports on.
+
+    Derived rather than minted at random so a retry finds the report it already
+    wrote instead of creating a second one — the difference between an
+    idempotent transaction and a duplicating one.
+    """
+    return hashlib.sha256(f"completion-report:{activation_uid}".encode()).hexdigest()[:8]
+
+
+def ensure_releasable_dev_closure(
+    activation: dict, dev_spec_uid: str | None, actor: str,
+    run_folder: Path, events: list[dict], *, dry_run: bool = False,
+) -> dict:
+    """The fan-in weld: done dev-spec + governed report + typed evidence.
+
+    Before this, a real cycle finished with the run complete, the activation
+    retired and the root archived, while the dev-spec stayed `locked` with no
+    completion report and no acceptance evidence — the exact three bindings
+    `gather_row` requires. Fan-in then refused finished work, which is why
+    Compact-Continue's genuinely closed cycle could not be released.
+
+    Ordering is deliberate: the report is written BEFORE the dev-spec flip, so a
+    crash between them leaves a spec that is still `locked` — refused by fan-in,
+    and recoverable by retry — rather than a `done` spec pointing at a report
+    that does not exist, which reads as fannable and is not.
+    """
+    activation_uid = str(activation["frontmatter"].get("uid") or "")
+    if not dev_spec_uid:
+        return {"skipped": "no dev-spec on this activation"}
+
+    spec_entry = read_vault_entry(dev_spec_uid)
+    if spec_entry is None:
+        return {"skipped": f"dev-spec {dev_spec_uid} does not resolve"}
+
+    evidence = discover_acceptance_evidence(dev_spec_uid, activation_uid)
+    if not evidence:
+        raise ValidationError(
+            f"CLOSURE REFUSED: dev-spec {dev_spec_uid} has no typed PASSING "
+            f"acceptance evidence bound to activation {activation_uid}. The "
+            "completion report says the run ENDED; acceptance evidence says the "
+            "ACs PASSED, and closing without the second produces a cycle that "
+            "fans in looking identical to one that passed. Cure: land the paired "
+            f"test-spec at status:done with triggered_by_dev_cycle: {activation_uid}, "
+            f"or declare acceptance_evidence on {dev_spec_uid}."
+        )
+
+    report_uid = _governed_completion_report_uid(activation_uid)
+    plan = {
+        "dev_spec_uid": dev_spec_uid,
+        "completion_report_uid": report_uid,
+        "acceptance_evidence": evidence,
+    }
+    if dry_run:
+        return plan
+
+    spec_fm = spec_entry["frontmatter"]
+    already = (
+        str(spec_fm.get("status") or "") == "done"
+        and str(spec_fm.get("completion_report_uid") or "") == report_uid
+        and (VAULT_FILES / f"{report_uid}.md").is_file()
+        and list(spec_fm.get("acceptance_evidence") or []) == evidence
+    )
+    if already:
+        plan["converged"] = True
+        return plan
+
+    if not (VAULT_FILES / f"{report_uid}.md").is_file():
+        write_vault_entry(report_uid, {
+            "uid": report_uid,
+            "type": "completion-report",
+            "title": f"Completion report — {dev_spec_uid} (activation {activation_uid})",
+            "status": "done",
+            "verdict": "pass",
+            "state": "active",
+            "reports_on_dev_spec": dev_spec_uid,
+            "reports_on_activation": activation_uid,
+            "acceptance_evidence": list(evidence),
+            "created": TODAY,
+            "created_by": actor,
+            "modified": TODAY,
+            "modified_by": SCRIPT_NAME,
+        }, render_completion_report(activation_uid, run_folder, events))
+
+    spec_fm["status"] = "done"
+    spec_fm["completion_report_uid"] = report_uid
+    spec_fm["acceptance_evidence"] = list(evidence)
+    spec_fm["modified"] = TODAY
+    spec_fm["modified_by"] = SCRIPT_NAME
+    write_vault_entry(dev_spec_uid, spec_fm, spec_entry["body"])
+    return plan
+
+
+def assert_canonical_provenance_exists(
+    activation_uid: str, dev_spec_uid: str | None, run_uid: str, run_folder: Path,
+) -> None:
+    """Refuse to close a cycle whose tested tree nobody has named (2175f969).
+
+    The first live dogfood of the fan-in weld reached full terminal state — run
+    complete, activation retired, root archived, dev-spec done with its report
+    and evidence — and `gather_row` still refused, because the canonical
+    `dev_closed` receipt that binds those claims to a tested tree is written by
+    terminal-verify, which had never run. The instance was repairable; the
+    ORDER was not enforced, so every later cycle could reach terminal state
+    unfannable and discover it at release-lock time, when the cycle is closed
+    and the repair is archaeology.
+
+    Fail-closed by ruling. This may not invent provenance — a runtime cannot
+    know a tree was tested, and asserting it would be the false-completion class
+    the receipt exists to prevent — and it may not warn-and-close, because a
+    warning on a terminal act is a warning nobody is left to act on.
+
+    Zero-step cycles are not exempt. Naming the tested tree is one gesture, and
+    the cycle that hit this in production was exactly a zero-step cycle.
+    """
+    reader = _load_release_lock_reader()
+    if reader is None:
+        # The consumer's own reader is the authority on what it will accept. If
+        # it cannot be loaded, refuse rather than guess a weaker rule: a close
+        # that guesses is the thing being prevented.
+        raise ValidationError(
+            "CLOSE REFUSED: cannot load the release-lock reader to verify "
+            "canonical close provenance, so this close cannot know whether the "
+            "cycle it is about to make terminal is fannable."
+        )
+    try:
+        receipt = reader.read_canonical_close_receipt(
+            str(dev_spec_uid), str(activation_uid), str(run_uid), VAULT_FILES)
+        # THE RECEIPT MUST DESCRIBE THE TREE BEING CLOSED. The reader validates
+        # the identity chain — spec, activation, run, root — but any 40-hex
+        # string satisfies its SHA check, so a receipt from an earlier tree
+        # passes it while describing work that has since moved. Closing on that
+        # would bind a release to provenance for something else.
+        tested = str(receipt.get("tested_commit_sha") or receipt.get("tested_sha") or "")
+        head = ""
+        try:
+            head = _git(VAULT_ROOT, "rev-parse", "HEAD").strip()
+        except Exception:
+            head = ""  # no repository: the tree cannot be compared, not a defect
+        if head and tested and tested != head:
+            raise ValidationError(
+                f"CLOSE REFUSED: the canonical receipt names tested tree "
+                f"{tested[:12]}, but this working tree is {head[:12]}. The close "
+                f"would attest that the verified tree is the one being made "
+                f"terminal, and it is not.\n"
+                f"  Cure: re-run terminal-verify against the current tree, or "
+                f"check out {tested[:12]} if that is the tree you meant to close."
+            )
+    except ValidationError:
+        raise
+    except Exception as refusal:
+        raise ValidationError(
+            f"CLOSE REFUSED: no canonical dev-close receipt binds dev-spec "
+            f"{dev_spec_uid} / activation {activation_uid} / run {run_uid} to a "
+            f"tested tree, so closing now would produce a cycle that is done and "
+            f"cannot be released. Reader says: {refusal}\n"
+            f"  Cure: python3 vault/tools/9e7003b1.py --activation-uid "
+            f"{activation_uid} --actor <you> terminal-verify --tested-sha <40-hex>\n"
+            f"  A zero-step cycle runs the same gesture; there is no exemption, "
+            f"because a tree nobody named is a tree nobody tested."
+        ) from refusal
+
+
+def _load_release_lock_reader():
+    """The fan-in consumer's own receipt reader, loaded by path.
+
+    Read from the consumer rather than reimplemented here, so "what counts as
+    provenance" has one definition. A second copy would drift, and the drift
+    would be invisible until a release refused work this close had blessed.
+    """
+    try:
+        # Resolved next to THIS tool, not under VAULT_ROOT: the studio supplies
+        # the data being closed, the toolbelt supplies the code doing the
+        # closing. Reading the tool out of the operated studio broke every
+        # sandboxed run, where VAULT_ROOT is a fixture with no toolbelt.
+        spec = _ilu.spec_from_file_location(
+            "tropo_lock_release_plan_for_close_gate",
+            str(Path(__file__).resolve().parent / "tropo-lock-release-plan.py"),
+        )
+        if spec is None or spec.loader is None:
+            return None
+        module = _ilu.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.VAULT_FILES = VAULT_FILES
+        module.VAULT_ROOT = VAULT_ROOT
+        return module
+    except Exception as exc:
+        # Surfaced, not swallowed: a silent None here reads as "no reader
+        # available" and the caller refuses, which is safe — but it would hide
+        # a real import break behind a confusing refusal. This module aliases
+        # importlib as _ilu, and a bare `importlib.util` reference here raised
+        # NameError into exactly that silence.
+        print(f"[WARN] close gate could not load the release-lock reader: {exc}",
+              file=sys.stderr)
+        return None
+
+
+def action_converge_dev_closure(activation_uid: str, actor: str,
+                                dry_run: bool = False) -> dict:
+    """Make an ALREADY-CLOSED cycle fannable, without inventing history.
+
+    Cycles that closed before this weld existed are complete in every way the
+    runtime tracked at the time: run complete, activation retired, root
+    archived. Only the three fan-in bindings are absent. Re-running the whole
+    terminal transaction on them is not available — the gates are written for a
+    live run — so convergence reads the evidence that already exists and writes
+    only what was missing.
+
+    It cannot manufacture a pass: with no typed passing evidence it refuses,
+    exactly as a live closure would.
+    """
+    activation = read_vault_entry(activation_uid)
+    if activation is None:
+        raise ValidationError(f"activation {activation_uid} does not resolve")
+    afm = activation["frontmatter"]
+    dev_spec_uid = afm.get("dev_spec_uid")
+    run = _find_run_for_activation(activation_uid)
+    if run is None:
+        raise ValidationError(
+            f"no pipeline-run resolves for activation {activation_uid}, so there "
+            "is no canonical log to report from"
+        )
+    run_folder = run_folder_for(run["frontmatter"])
+    events = read_events(run_folder) if run_folder and run_folder.is_dir() else []
+    return ensure_releasable_dev_closure(
+        activation, dev_spec_uid, actor, run_folder, events, dry_run=dry_run)
+
+
+def _find_run_for_activation(activation_uid: str) -> dict | None:
+    for path in sorted(VAULT_FILES.glob("*.md")):
+        entry = read_vault_entry(path.stem)
+        if entry is None:
+            continue
+        fm = entry["frontmatter"]
+        if fm.get("type") != "pipeline-run":
+            continue
+        if str(fm.get("activation") or fm.get("substrate_authored_by") or "") == activation_uid:
+            return entry
+    return None
 
 
 def run_close_out_hook(activation: dict, dev_spec_uid: str | None, actor: str,
@@ -3184,6 +4600,278 @@ def action_close_out(activation_uid: str, actor: str, final_commit: str | None =
             "closed": closed}
 
 
+#: What each record type reads as once a release has closed over it.
+_TERMINAL_STATUSES = ("done", "closed", "archived", "retired", "shipped", "cancelled")
+
+
+def _reads_terminal(uid: str) -> bool:
+    """Does this entry actually read closed, right now, on disk?
+
+    Asked after stamping rather than inferred from the stamp returning without
+    error. The question closure has to answer is not "did we try" but "is it
+    closed", and those diverge exactly when it matters.
+    """
+    entry = read_vault_entry(uid)
+    if entry is None:
+        return False
+    status = str((entry.get("frontmatter") or {}).get("status") or "").lower()
+    return status in _TERMINAL_STATUSES
+
+
+def _stamp_terminal_status(uid: str, terminal: str, actor: str) -> bool:
+    """Move one governed entry to its terminal status. Idempotent."""
+    entry = read_vault_entry(uid)
+    if entry is None:
+        return False
+    current = str((entry.get("frontmatter") or {}).get("status") or "").lower()
+    if current in _TERMINAL_STATUSES:
+        return False
+    path = entry.get("path")
+    if not path:
+        return False
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+        end = text.find("\n---", 3)
+        if not text.startswith("---") or end < 0:
+            return False
+        head, tail = text[:end], text[end:]
+        if f"status: {current}" in head:
+            head = head.replace(f"status: {current}", f"status: {terminal}", 1)
+        else:
+            head = head + f"\nstatus: {terminal}"
+        head += f"\nclosed_by: {actor}\nclosed_at: '{now_iso()[:10]}'"
+        Path(path).write_text(head + tail, encoding="utf-8")
+        return True
+    except OSError:
+        return False
+
+
+def _load_and_bind_receipt(receipt_sha256: str, activation_uid: str,
+                           run_uid: str) -> dict:
+    """Load the v2 receipt and require it to name this exact release.
+
+    BLOCKER 5. Closure previously took a sha on the command line and never
+    read the receipt behind it, so it closed whatever run the activation
+    pointed at — a receipt for an entirely different release would have closed
+    this one just as willingly, and the records would have looked correct
+    afterwards.
+
+    All five identity fields must be present and the two that this call already
+    knows must agree. A receipt missing any of them cannot bind a closure to an
+    artefact, which is the only thing that makes closure evidence rather than
+    bookkeeping.
+    """
+    from lib import release_receipt as _rr
+
+    try:
+        receipts = _rr.load_release_receipts(VAULT_ROOT)
+    except _rr.ReleaseReceiptError as exc:
+        raise ContractError(f"release receipts are unreadable: {exc}") from exc
+
+    receipt = receipts.get(receipt_sha256)
+    if receipt is None:
+        raise ContractError(
+            f"no release receipt {receipt_sha256[:12]} exists. Closure records "
+            f"a publication; without the receipt there is nothing to record "
+            f"and nothing to bind the closed records to."
+        )
+
+    try:
+        receipt = _rr.assert_v2_authority(receipt, purpose="release closure")
+    except _rr.ReleaseReceiptError as exc:
+        raise ContractError(str(exc)) from exc
+
+    required = ("release_plan_uid", "release_entry_uid",
+                "release_activation_uid", "release_pipeline_run_uid",
+                "activation_root_uid")
+    missing = [field for field in required if not str(receipt.get(field) or "")]
+    if missing:
+        raise ContractError(
+            f"receipt {receipt_sha256[:12]} names no {', '.join(missing)}; a "
+            f"closure cannot be bound to a release it cannot identify"
+        )
+
+    for field, expected, label in (
+        ("release_activation_uid", activation_uid, "activation"),
+        ("release_pipeline_run_uid", run_uid, "run"),
+    ):
+        if str(receipt[field]) != expected:
+            raise ContractError(
+                f"receipt {receipt_sha256[:12]} names {label} "
+                f"{receipt[field]}, but this closure is for {expected}. A "
+                f"receipt from another release does not close this one."
+            )
+    return receipt
+
+
+def _all_release_plan_entries() -> list:
+    """Every release-plan entry, for the canonical reservation check."""
+    out = []
+    files = VAULT_ROOT / "vault" / "files"
+    if not files.is_dir():
+        return out
+    for path in files.glob("*.md"):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if "type: release-plan" not in text:
+            continue
+        entry = read_vault_entry(path.stem)
+        if entry is not None:
+            out.append(entry)
+    return out
+
+
+def _closure_event_exists(run_folder, receipt_sha256: str) -> bool:
+    """Is the closure event actually in the run right now?
+
+    Read back from the run rather than inferred from having called the
+    emitter. Exactly one is legal; more than one means something emitted twice
+    and this cannot say which is authoritative, so it reads false and the step
+    stays unrecorded rather than blessing a duplicate.
+    """
+    from lib import release_closure as _c
+
+    matches = [ev for ev in read_events(run_folder)
+               if _c._event_type(ev) == _c.CLOSED_EVENT
+               and str((ev.get("data") or {}).get("receipt_sha256") or "") == receipt_sha256]
+    return len(matches) == 1
+
+
+def action_close_release(activation_uid: str, actor: str, receipt_sha256: str,
+                          transaction_id: str, dry_run: bool = False) -> dict:
+    """AC8: close a release from its public receipt, recoverably.
+
+    The distinct sibling of `close-out`. That one closes a DEV cycle at its
+    ship and is idempotent by filling absent fields. This one closes a RELEASE
+    after the single outward act, and it cannot be idempotent that way: the
+    published event and the closure event each happen exactly once, so a
+    second run has to discover what already happened rather than redo it.
+
+    Every gate here refuses rather than proceeding on doubt, because the
+    release is already public by the time this runs. The worst outcome is not
+    a failed close — it is records that say a release closed cleanly when
+    nobody verified the bytes it shipped.
+    """
+    from lib import fan_in as _fan_in, release_closure as _closure
+
+    activation, pr, run_folder, events, state = load_run(
+        activation_uid, dry_run=dry_run, recovery=True)
+    run_uid = str((pr.get("frontmatter") or {}).get("uid") or "")
+    pipeline = str((pr.get("frontmatter") or {}).get("pipeline") or "")
+    if pipeline != RELEASE_PIPELINE_ROOT_UID:
+        raise ContractError(
+            f"close-release refuses run {run_uid}: it belongs to pipeline "
+            f"{pipeline or '(unset)'}, not the release pipeline "
+            f"{RELEASE_PIPELINE_ROOT_UID}. Dev cycles close through close-out."
+        )
+
+    if dry_run:
+        journal = _closure.read_journal(VAULT_ROOT, run_uid)
+        return {"run": run_uid, "dry_run": True,
+                "remaining": _closure.resume_point(journal)}
+
+    # Journal the intent BEFORE the first mutation. A close that writes several
+    # records is a transaction, and one with no journal has no recovery.
+    journal = _closure.open_or_resume_journal(
+        VAULT_ROOT, run_uid, receipt_sha256, transaction_id)
+
+    # BLOCKER 5: load the receipt this closure claims to be closing against and
+    # require it to name the same world. Previously nothing read the receipt at
+    # all — closure took a sha on the command line and closed whatever run the
+    # activation pointed at, so a receipt for another release would have closed
+    # this one just as happily.
+    receipt = _load_and_bind_receipt(receipt_sha256, activation_uid, run_uid)
+    plan_uid = str(receipt["release_plan_uid"])
+    entry_uid = str(receipt["release_entry_uid"])
+    root_uid = str(receipt["activation_root_uid"])
+
+    # BLOCKER 8: resume by remaining steps rather than replaying.
+    #
+    # Each step is (verify, perform). If the journal says done, the world is
+    # checked and the step skipped. If the world already proves the effect but
+    # the journal missed it — a crash between doing and journalling — that is
+    # recorded as recovered completion, not treated as a contradiction. Only a
+    # journal that claims done over a world that disagrees refuses.
+    #
+    # The previous version replayed from the top and turned the commonest
+    # recovery case, world-ahead-of-journal, into a refusal.
+    closed: list = []
+
+    def _close_substrate() -> None:
+        closed.extend(run_close_out_hook(
+            activation, activation["frontmatter"].get("dev_spec_uid"),
+            actor, final_commit=None) or [])
+        for uid, terminal in ((plan_uid, "done"), (entry_uid, "done"),
+                              (root_uid, "archived"), (run_uid, "done"),
+                              (activation_uid, "retired")):
+            if _stamp_terminal_status(uid, terminal, actor):
+                closed.append(uid)
+
+    def _substrate_is_closed() -> bool:
+        # All five, re-read. The earlier check omitted the entry and the root.
+        return all(_reads_terminal(uid) for uid in
+                   (plan_uid, entry_uid, root_uid, run_uid, activation_uid))
+
+    members = list((read_vault_entry(plan_uid) or {}).get(
+        "frontmatter", {}).get("dev_spec_uids") or [])
+
+    def _every_member_free() -> bool:
+        plans = [dict((e.get("frontmatter") or {}),
+                      uid=str((e.get("frontmatter") or {}).get("uid") or ""))
+                 for e in _all_release_plan_entries()]
+        return not any(_fan_in.find_conflicting_reservation(str(m), plans, "")
+                       for m in members)
+
+    def _emit_closure() -> None:
+        append_event(run_folder, make_event(
+            _closure.CLOSED_EVENT, actor,
+            data={"receipt_sha256": receipt_sha256,
+                  "transaction_id": transaction_id,
+                  "release_pipeline_run_uid": run_uid,
+                  "release_plan_uid": plan_uid,
+                  "release_entry_uid": entry_uid,
+                  "activation_root_uid": root_uid,
+                  "release_activation_uid": activation_uid},
+            trace_id=run_uid))
+
+    saga = [
+        ("receipt_verified", lambda: bool(receipt), lambda: None),
+        ("published_event_verified",
+         lambda: bool(_closure.assert_one_published_event(
+             read_events(run_folder), receipt_sha256)), lambda: None),
+        ("substrate_closed", _substrate_is_closed, _close_substrate),
+        ("reservations_released", _every_member_free, lambda: None),
+        ("closure_event_emitted",
+         lambda: _closure_event_exists(run_folder, receipt_sha256),
+         _emit_closure),
+    ]
+
+    recovered: list = []
+    for name, verify, perform in saga:
+        if name in journal.completed:
+            if not verify():
+                raise ContractError(
+                    f"close-release refuses run {run_uid}: the journal records "
+                    f"{name!r} as done and the world disagrees. Evidence is "
+                    f"preserved; this is not a state to guess past."
+                )
+            continue
+        if verify():
+            # World ahead of journal: the effect landed and the crash happened
+            # before the stamp. Recovery, not contradiction.
+            recovered.append(name)
+            journal = _closure.record_step(VAULT_ROOT, journal, name,
+                                           verify=verify)
+            continue
+        perform()
+        journal = _closure.record_step(VAULT_ROOT, journal, name, verify=verify)
+
+    return {"run": run_uid, "closed": closed, "receipt_sha256": receipt_sha256,
+            "transaction_id": transaction_id, "journal_state": journal.state}
+
+
 def action_complete_workflow(activation_uid: str, actor: str, dry_run: bool = False) -> str:
     activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
 
@@ -3242,7 +4930,12 @@ def action_complete_workflow(activation_uid: str, actor: str, dry_run: bool = Fa
         # here, so any recomputed step with an aggregate: criterion always errored —
         # caught live: mount-gate's 05d9ecc5 (a genuinely PASSING real test_aggregate
         # already in the log) errored at workflow_complete instead of reading it.
-        per_criterion = [evaluate_criterion(c, ctx, snapshot, events) for c in criteria]
+        # d9ca03fd: recompute also goes through the single obligation resolver so an
+        # authorized producer skip waives dependent criteria here too.
+        per_criterion = _evaluate_criteria_with_obligations(
+            criteria, ctx, snapshot, events, state, decls,
+            activation_uid, consumer_step=step_uid,
+        )
         verdict = "pass"
         if any(p["verdict"] == "error" for p in per_criterion):
             verdict = "error"
@@ -3287,12 +4980,53 @@ def action_complete_workflow(activation_uid: str, actor: str, dry_run: bool = Fa
     # coupling) have now run — a dry-run preview must fail exactly like a real
     # complete-workflow on a genuine gate failure (sys.exit(5) above already fires
     # identically either way). Only the terminal writes below are skipped.
+    # THE FAN-IN GATE RUNS BEFORE ANY TERMINAL WRITE. A cycle with no typed
+    # passing evidence must refuse while nothing has moved; discovering that
+    # after the run is complete and the activation retired would leave a closed
+    # cycle that can never be released and never be re-closed.
+    _dev_spec_uid = activation["frontmatter"].get("dev_spec_uid")
+    try:
+        # PROVENANCE BEFORE CLOSE (2175f969), checked before the bundle gate and
+        # before any terminal write, because the cheapest refusal is the one
+        # that happens while nothing has moved.
+        if _dev_spec_uid:
+            assert_canonical_provenance_exists(
+                activation_uid, _dev_spec_uid,
+                str(pr["frontmatter"].get("uid") or ""), run_folder)
+        _releasable = ensure_releasable_dev_closure(
+            activation, _dev_spec_uid, actor, run_folder, events, dry_run=True)
+    except ValidationError as refusal:
+        # Same shape as every other close gate: a parseable BLOCKED line and a
+        # non-zero exit, because build-release greps for the prefix and a raised
+        # exception was historically swallowed as exit 137.
+        print(f"BLOCKED: complete-workflow fan-in gate — {refusal}", file=sys.stderr)
+        print(f"BLOCKED: complete-workflow fan-in gate — {refusal}")
+        sys.exit(5)
+
+    # RETRY IS CONVERGENCE, NOT REPETITION. A second close of an already-complete
+    # run must say what it did rather than re-running a transaction whose gates
+    # assume a live run: "did not duplicate" is also true of a close that refused
+    # and changed nothing, and those are different outcomes for the caller.
+    if not dry_run and str(pr["frontmatter"].get("status") or "") == "complete":
+        converged = ensure_releasable_dev_closure(
+            activation, _dev_spec_uid, actor, run_folder, events)
+        print(f"  [converged] terminal bundle already present or completed: "
+              f"{converged}", file=sys.stderr)
+        return "workflow_complete (converged)"
+
     if dry_run:
+        _bundle = (
+            f", flip dev-spec {_releasable['dev_spec_uid']!r} to done, mint governed "
+            f"completion report {_releasable['completion_report_uid']!r}, and bind "
+            f"acceptance evidence {_releasable['acceptance_evidence']}"
+            if _releasable.get("dev_spec_uid") else ""
+        )
         return _dry_run_report(
             "complete-workflow",
             f"all close gates pass for {activation_uid!r} — would emit workflow_complete, "
             f"flip pipeline-run {pr['frontmatter'].get('uid')!r} status to complete, retire "
-            f"activation {activation_uid!r}, render completion-report.md, and run the close-out hook"
+            f"activation {activation_uid!r}, render completion-report.md, run the close-out "
+            f"hook{_bundle}"
         )
 
     parent = find_event_span(events, "human_signoff") or (events[-1]["span_id"] if events else None)
@@ -3338,6 +5072,14 @@ def action_complete_workflow(activation_uid: str, actor: str, dry_run: bool = Fa
     _close_out_uids = run_close_out_hook(activation, dev_spec_uid, actor)
     if _close_out_uids:
         print(f"  [close-out] marked done: {_close_out_uids}", file=sys.stderr)
+
+    # The releasable bundle (a54b9889 C0): report first, then the dev-spec flip.
+    _welded = ensure_releasable_dev_closure(
+        activation, dev_spec_uid, actor, run_folder, events)
+    if _welded.get("dev_spec_uid"):
+        print(f"  [fan-in] dev-spec {_welded['dev_spec_uid']} done; report "
+              f"{_welded['completion_report_uid']}; evidence "
+              f"{_welded['acceptance_evidence']}", file=sys.stderr)
 
     # C.5 — Stream C auto-emission: tropo.pipeline.closed (v1.58)
     # Sandbox-aware + fail-loud since 7627b589 -- see _emit_pipeline_event.
@@ -3470,9 +5212,10 @@ def render_completion_report(activation_uid: str, run_folder: Path, events: list
 
 
 def action_resume_from_log(activation_uid: str) -> dict:
-    activation, pr, run_folder, events, state = load_run(activation_uid)
+    activation, pr, run_folder, events, state = load_run(
+        activation_uid, inspection=True)
     decls = get_step_declarations(events)
-    eligible = compute_eligible_steps(state, decls)
+    eligible = compute_eligible_steps(state, decls, events=events, activation_uid=activation_uid)
     return {
         "pipeline_run_uid": pr["frontmatter"].get("uid"),
         "current_stage": state.get("current_stage"),
@@ -3613,7 +5356,12 @@ def build_parser() -> argparse.ArgumentParser:
     rs = sub.add_parser("resume")
     rs.add_argument("--confirmation-granted-by", default=None)
 
-    sub.add_parser("terminal-verify")
+    tv = sub.add_parser("terminal-verify")
+    tv.add_argument("--tested-sha", default=None,
+                    help="the 40-hex tested-tree SHA every AC and mutation obligation "
+                         "binds to. Required for a COMPLETE verdict: closure is welded "
+                         "to terminal verification (0a0a6777 AC3) and a close with "
+                         "nothing to bind to is a close on somebody's word.")
 
     # Gap-3 fix: amend exit_criteria on a declared step without re-bootstrapping
     asc = sub.add_parser("amend-step-criteria")
@@ -3648,6 +5396,15 @@ def build_parser() -> argparse.ArgumentParser:
                         help="close + archive the activation root for a shipped cycle (stamp final_commit)")
     co.add_argument("--final-commit", default=None,
                     help="ship SHA to stamp on the activation root (e.g. git rev-parse HEAD)")
+    # AC8 release closure: distinct from close-out because a release closes
+    # from its public receipt, and the published/closure events happen once.
+    cr = sub.add_parser("close-release",
+                        help="close a release run from its public receipt (recoverable saga)")
+    cr.add_argument("--receipt-sha256", required=True,
+                    help="sha-256 of the public release receipt this closure records")
+    cr.add_argument("--transaction-id", required=True,
+                    help="stable id for this closure attempt; a retry reuses it")
+
     sub.add_parser("resume-from-log")
 
     ms = sub.add_parser("mark-superseded")
@@ -3707,7 +5464,9 @@ def main() -> int:
                                     dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
         elif action == "terminal-verify":
-            result = action_terminal_verify(args.activation_uid, actor, dry_run=args.dry_run)
+            result = action_terminal_verify(args.activation_uid, actor,
+                                            dry_run=args.dry_run,
+                                            tested_sha=getattr(args, "tested_sha", None))
             print(result if not args.json else json.dumps({"verdict": result}))
         elif action == "amend-step-criteria":
             result = action_amend_step_criteria(
@@ -3749,6 +5508,12 @@ def main() -> int:
         elif action == "close-out":
             result = action_close_out(args.activation_uid, actor,
                                        final_commit=args.final_commit, dry_run=args.dry_run)
+            print(json.dumps(result))
+        elif action == "close-release":
+            result = action_close_release(args.activation_uid, actor,
+                                          receipt_sha256=args.receipt_sha256,
+                                          transaction_id=args.transaction_id,
+                                          dry_run=args.dry_run)
             print(json.dumps(result))
         elif action == "resume-from-log":
             # Read-only action (no mutating call sites) — --dry-run is accepted but has no

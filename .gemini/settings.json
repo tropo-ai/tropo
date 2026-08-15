@@ -1,0 +1,17 @@
+{
+  "contextFileName": "GEMINI.md",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compress",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf %s \"If this agent session was compacted or you no longer remember completing boot, do not activate and never run `born`. Run `python3 vault/tools/tropo-compact-continue.py --agent <slug>` before any other work.\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

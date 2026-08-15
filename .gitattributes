@@ -1,0 +1,41 @@
+# Tropo I5 enforcement (dev-spec 6ec30708, Option A RESOLVED 2026-07-06 — Argus A127).
+#
+# The Navigation block (<!-- nav-block:start --> ... <!-- nav-block:end -->) rendered
+# into vault/files/*.md bodies by tropo-generate-relations-header.py is index-derived
+# and viewer-relative (Siblings/Cited-by depend on the composed graph as THIS studio
+# sees it). A copy committed into a shared/tracked body is a signed I5 (dd16c90c,
+# derived-never-syncs) violation and a cross-studio merge-storm engine once shared.
+#
+# The `clean` filter below strips that region at the git boundary — on `git add`/
+# `git stage`, BEFORE content enters the object store. The working tree is untouched:
+# the region stays on disk for human/agent navigation and keeps regenerating on every
+# rebuild-vault render pass, exactly as before this rule existed.
+#
+# BOOTSTRAP NOTE (read before you assume this "just works" on a fresh clone): this
+# file alone does NOT install the filter command. `.gitattributes` is tracked and
+# travels with every clone, but the actual `filter.navblockstrip.clean` PROGRAM lives
+# in the LOCAL, never-committed `.git/config` — the exact same two-part gap the D2
+# field-aware merge driver has (see vault/tools/federation/README.md "Wiring"). Every
+# fresh clone/studio MUST run, once:
+#
+#     python3 vault/tools/tropo-navblock-strip.py --install
+#
+# Verify both halves are wired with:
+#
+#     python3 vault/tools/tropo-navblock-strip.py --verify-install
+#
+# tropo-validate.py's git-filter-install check (6ec30708 AC5) fails loud if either
+# half is missing — a missing install is the same silent-poison failure class as a
+# missing merge driver, and must be detected, not silently accepted.
+vault/files/*.md filter=navblockstrip
+
+# Coordination Protocol v1 (7ecb60c7, metis-g92 2026-07-23) — append-only logs
+# merge by union: independent timestamped lines, order-insensitive. Closes the
+# observed F4 conflict class (two writers appending to the same recycle log).
+# Event stream files deliberately NOT included pending Argus's ordering ruling.
+recycle/**/recycle.log merge=union
+
+# Lineage is append-only and per-agent. Two machines appending offline must
+# merge without a conflict; union concatenates and the reader tolerates order.
+# Same shape as recycle.log above (metis-g102, 2026-08-06).
+agents/**/lineage.jsonl merge=union

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 import shutil
 import sys
 import tempfile
@@ -145,9 +146,35 @@ class TestMutatingActionsNeverWriteUnderDryRun(DryRunNeverWritesTestCase):
         )
         self.assertEqual(outcome, "dry_run_banner")
 
-    def test_authorize_skip_banner_path(self):
-        outcome, _ = self.assert_dry_run_never_writes(
+    def test_authorize_skip_hard_errors_without_request_or_principal(self):
+        """d7db77d8: 8-hex authorized_by must resolve; prior skip_request required.
+
+        Fixture call shape uses a phantom 8-hex authorizer and has no prior
+        skip_request for this step — clean SkipAuthError before any write is
+        the correct dry-run outcome (aaf96178 case b).
+        """
+        outcome, err = self.assert_dry_run_never_writes(
             eng.action_authorize_skip, _ACT_1, "9d4f7e21", "deadbeef", "", "argus",
+        )
+        self.assertEqual(outcome, "hard_error")
+        self.assertIsInstance(err, eng.SkipAuthError)
+
+    def test_authorize_skip_banner_path_with_prior_request(self):
+        """Banner path: prior skip_request + non-UID authorizer label (historical form)."""
+        activation, pr, run_folder, events, state = eng.load_run(_ACT_1)
+        parent = events[-1]["span_id"] if events else None
+        req = eng.make_event(
+            "skip_request", "argus", step="9d4f7e21",
+            trace_id=_ACT_1, parent_span_id=parent,
+            data={"step_id": "9d4f7e21", "reason": "dry-run-gauntlet-seed"},
+        )
+        eng.append_event(run_folder, req)
+        eng.write_run_state_json(
+            run_folder, pr["frontmatter"],
+            eng.derive_state(eng.read_events(run_folder)), _ACT_1,
+        )
+        outcome, _ = self.assert_dry_run_never_writes(
+            eng.action_authorize_skip, _ACT_1, "9d4f7e21", "mike", "", "argus",
         )
         self.assertEqual(outcome, "dry_run_banner")
 
@@ -171,11 +198,19 @@ class TestMutatingActionsNeverWriteUnderDryRun(DryRunNeverWritesTestCase):
         )
         self.assertEqual(outcome, "hard_error")
 
-    def test_terminal_verify_banner_path(self):
-        outcome, _ = self.assert_dry_run_never_writes(
+    def test_terminal_verify_hard_errors_on_complete_without_tested_sha(self):
+        """d7db77d8 revalidation can clear stuck completed steps on this fixture.
+
+        When the obligation-aware walk reaches a complete verdict, AC3 still
+        requires --tested-sha before any write. Missing SHA is a clean
+        ValidationError — aaf96178 case b, not a silent write.
+        """
+        outcome, err = self.assert_dry_run_never_writes(
             eng.action_terminal_verify, _ACT_1, "argus",
         )
-        self.assertEqual(outcome, "dry_run_banner")
+        self.assertEqual(outcome, "hard_error")
+        self.assertIsInstance(err, eng.ValidationError)
+        self.assertIn("tested-tree SHA", str(err))
 
     def test_amend_step_criteria_banner_path(self):
         outcome, _ = self.assert_dry_run_never_writes(
@@ -215,10 +250,58 @@ class TestMutatingActionsNeverWriteUnderDryRun(DryRunNeverWritesTestCase):
 class TestCompleteWorkflowAndTriggerStep(DryRunNeverWritesTestCase):
     """Fixture: ad02f944 / 8917bc56 — the real v1.77 B3-ext / 9d4f7e21 case."""
 
+    def _establish_canonical_provenance(self, activation_uid: str) -> None:
+        """Write the dev-close receipt terminal-verify would have written.
+
+        Planted rather than produced by running terminal-verify, because this
+        suite's contract is "dry run writes nothing" and terminal-verify writes
+        a great deal. The receipt names the same chain the real one does, so the
+        gate is exercised on the shape it actually reads.
+        """
+        import json as _json
+
+        activation = eng.read_vault_entry(activation_uid)
+        afm = activation["frontmatter"]
+        run_uid = _PR_2
+        run = eng.read_vault_entry(run_uid)
+        folder = eng.run_folder_for(run["frontmatter"])
+        folder.mkdir(parents=True, exist_ok=True)
+        try:
+            head = eng._git(eng.VAULT_ROOT, "rev-parse", "HEAD").strip()
+        except Exception:
+            # This tmp vault is a file copy, not a repository. The gate compares
+            # the receipt's tree to HEAD only when there IS a HEAD, so a fixed
+            # SHA exercises the same path a repository-less studio takes.
+            head = "c" * 40
+        receipt = {
+            "event": "dev_closed",
+            "trace_id": activation_uid,
+            "span_id": "provenance-fixture",
+            "data": {
+                "receipt_kind": "canonical-dev-close",
+                "tested_sha": head,
+                "tested_commit_sha": head,
+                "dev_spec_uid": afm.get("dev_spec_uid"),
+                "activation_uid": activation_uid,
+                "pipeline_run_uid": run_uid,
+                "activation_root_uid": (afm.get("activation_root_project")
+                                        or afm.get("activation_root_uid")),
+                "verdict": "complete",
+            },
+        }
+        with (folder / "run.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(_json.dumps(receipt) + "\n")
+
     def test_complete_workflow_banner_path_and_b3ext_passes(self):
         """The item-2 regression case: complete-workflow --dry-run on ad02f944 must
         now pass B3-ext (9d4f7e21's real doc-leg-completed substrate) and reach the
-        terminal banner — not BLOCKED, and not a silent write."""
+        terminal banner — not BLOCKED, and not a silent write.
+
+        Provenance is established first since 2175f969: complete-workflow refuses
+        before a canonical dev-close receipt exists, and a dry run has to fail
+        exactly where the real close would. Without this the case would be
+        asserting a banner the production path can no longer reach."""
+        self._establish_canonical_provenance(_ACT_2)
         before = _tree_hash(self.tmp)
         result = eng.action_complete_workflow(_ACT_2, "talos", dry_run=True)
         after = _tree_hash(self.tmp)
@@ -227,6 +310,51 @@ class TestCompleteWorkflowAndTriggerStep(DryRunNeverWritesTestCase):
         self.assertIn("would emit workflow_complete", result,
                       "all close gates (including the fixed B3-ext branch-applicability "
                       "check on 9d4f7e21) must pass for the dry-run banner to be reached")
+
+    def _seed_release_trigger_parent(
+        self, activation_uid: str, run_uid: str, plan_uid: str,
+        *, dev_spec_uid: str | None = None,
+    ) -> None:
+        activation_fm = {
+            "uid": activation_uid, "type": "activation",
+            "activation_class": "pipeline", "status": "active", "state": "active",
+            "pipeline_uid": "634913c2", "pipeline_run_uid": run_uid,
+            "release_plan_uid": plan_uid,
+        }
+        if dev_spec_uid:
+            activation_fm["dev_spec_uid"] = dev_spec_uid
+        eng.write_vault_entry(activation_uid, activation_fm, "release activation fixture\n")
+        eng.write_vault_entry(
+            run_uid,
+            {
+                "uid": run_uid, "type": "pipeline-run", "status": "active",
+                "state": "active", "pipeline": "634913c2",
+                "activation": activation_uid,
+                "substrate_authored_by": activation_uid,
+                "release_plan_uid": plan_uid,
+                "run_folder": f"vault/pipeline-runs/{run_uid}",
+            },
+            "release run fixture\n",
+        )
+        eng.write_vault_entry(
+            plan_uid,
+            {
+                "uid": plan_uid, "type": "release-plan", "status": "locked",
+                "release_activation_uid": activation_uid,
+                "release_pipeline_run_uid": run_uid,
+            },
+            "release plan fixture\n",
+        )
+        folder = self.tmp / "vault" / "pipeline-runs" / run_uid
+        folder.mkdir(parents=True, exist_ok=True)
+        event = eng.make_event(
+            "step_declared", "fixture", trace_id=activation_uid,
+            parent_span_id=None, data={
+                "step_id": "0cf86ea5", "depends_on_steps": [],
+                "trust_level": "auto-with-verification",
+            },
+        )
+        (folder / "run.jsonl").write_text(json.dumps(event) + "\n", encoding="utf-8")
 
     def test_trigger_step_does_not_create_spec_file_under_dry_run(self):
         """THE trigger-step bug this ticket also fixed: pre-fix, this unconditionally
@@ -241,10 +369,15 @@ class TestCompleteWorkflowAndTriggerStep(DryRunNeverWritesTestCase):
         """
         synth_activation_uid = "11112222"
         synth_dev_spec_uid = "33334444"
-        eng.write_vault_entry(synth_activation_uid,
-                              {"uid": synth_activation_uid, "type": "activation",
-                               "activation_class": "pipeline", "dev_spec_uid": synth_dev_spec_uid},
-                              "synthetic fixture — dry-run trigger-step test\n")
+        # Parented to a RELEASE run since 2026-08-10 (0a0a6777 AC6): doc/test
+        # legs are opened from release-run provenance and action_trigger_step
+        # refuses a dev parent outright, so a dev-parented fixture would never
+        # reach the O_EXCL file-create path this test exists to cover.
+        synth_run_uid = "0e1c0002"
+        self._seed_release_trigger_parent(
+            synth_activation_uid, synth_run_uid, "b1a00002",
+            dev_spec_uid=synth_dev_spec_uid,
+        )
         eng.write_vault_entry(synth_dev_spec_uid,
                               {"uid": synth_dev_spec_uid, "type": "dev-spec"},
                               "synthetic fixture — dry-run trigger-step test\n")
@@ -255,7 +388,7 @@ class TestCompleteWorkflowAndTriggerStep(DryRunNeverWritesTestCase):
 
         before = _tree_hash(self.tmp)
         result = eng.action_trigger_step(
-            synth_activation_uid, "9d4f7e21", fresh_uid,
+            synth_activation_uid, "0cf86ea5", fresh_uid,
             "---\nuid: abcdef12\ntype: doc-spec\n---\nbody\n",
             "5a4337ff", "doc-pipeline", "talos", dry_run=True,
         )
@@ -293,16 +426,22 @@ class TestCompleteWorkflowAndTriggerStep(DryRunNeverWritesTestCase):
                               {"uid": synth_dev_spec_uid, "type": "dev-spec",
                                "triggered_doc_activation_uids": [synth_live_cascade_uid]},
                               "synthetic fixture — B5 collision test\n")
-        eng.write_vault_entry(synth_activation_uid,
-                              {"uid": synth_activation_uid, "type": "activation",
-                               "activation_class": "pipeline", "dev_spec_uid": synth_dev_spec_uid},
-                              "synthetic fixture — B5 collision test\n")
+        # Release-parented for the same reason as the test above: the B5 claim
+        # is about one live cascade per run, and a dev parent is now refused
+        # before B5 is ever consulted.
+        b5_run_uid = "0e1c0003"
+        self._seed_release_trigger_parent(
+            synth_activation_uid, b5_run_uid, "b1a00003",
+            dev_spec_uid=synth_dev_spec_uid,
+        )
 
-        outcome, _ = self.assert_dry_run_never_writes(
-            eng.action_trigger_step, synth_activation_uid, "9d4f7e21", "abcdef34",
-            "---\nuid: abcdef34\n---\nbody\n", "5a4337ff", "doc-pipeline", "talos",
+        outcome, error = self.assert_dry_run_never_writes(
+            eng.action_trigger_step, synth_activation_uid, "0cf86ea5", "abcdef34",
+            "---\nuid: abcdef34\ntype: doc-spec\n---\nbody\n",
+            "5a4337ff", "doc-pipeline", "talos",
         )
         self.assertEqual(outcome, "hard_error")
+        self.assertIn("B5 single-cascade refused", str(error))
 
 
 class TestHarnessSanityControl(unittest.TestCase):
@@ -328,7 +467,6 @@ class TestHarnessSanityControl(unittest.TestCase):
         eng.VAULT_ROOT = self.tmp
         eng.VAULT_FILES = dest_files
         eng.PIPELINE_RUNS_FOLDER = dest_runs
-
     def tearDown(self):
         for k, v in self._orig.items():
             setattr(eng, k, v)

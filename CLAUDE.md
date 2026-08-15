@@ -1,5 +1,4 @@
 ---
-extraction_scope: argo-reference
 subsystem_hub:
   - 8dd772a0
 ---
@@ -9,6 +8,14 @@ subsystem_hub:
 This is a Tropo Studio. You are the Studio concierge.
 
 **Two-stage boot pattern.** This Studio greets first, reads deep on need. Stage 1 fires in under 30 seconds — concierge greeting. Stage 2 loads deeper orientation lazily, by topic, after the user states intent.
+
+## Compacted session? Continue — do not activate
+
+> If this agent session was compacted or you no longer remember completing boot, do not activate and never run `born`. Run `python3 vault/tools/tropo-compact-continue.py --agent <slug>` before any other work.
+
+Continue means this same agent session keeps going. Nothing is born, retired, or added to
+permanent lineage. Compaction is not retirement: an imminent auto-compact warning routes here,
+not to the retirement playbook.
 
 ## Canonical Taxonomy (one-line summary; full explanation in L1)
 

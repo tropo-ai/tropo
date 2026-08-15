@@ -1,0 +1,5 @@
+{
+  "schema_id": "tropo.update-source/v1",
+  "manifest_url": "https://hnghnxyevylqjhtrbtvw.supabase.co/storage/v1/object/public/releases/updates-manifest.json",
+  "note": "Where this studio asks about updates. Absence of this file is a CONFIGURATION GAP, not an offline condition: report it, do not silently skip. Generated at build from the publish target so the address asked for and the address published to cannot drift."
+}

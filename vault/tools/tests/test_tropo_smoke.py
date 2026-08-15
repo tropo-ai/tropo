@@ -2914,6 +2914,47 @@ class AC7aThirdOutcomeTests(SmokeCase):
         self.assertProbeUnknown(result, "tsc")
         self.assertIn("not a green build", result.detail)
 
+    def test_a_studio_with_no_agents_yet_is_setup_required_not_failed(self):
+        """A box nobody has joined cannot attribute a mint, and that is not a break.
+
+        Metis's Fresh-Box walk (verdict 62a22664, follow-up efd333ab) got
+        `MINT: FAIL` on a healthy virgin box for the only reason a virgin box
+        can give: nobody has created the first agent yet. Reporting a
+        never-performed setup step as a failure tells a newcomer their studio is
+        broken on the first command they run.
+        """
+        studio = self.studio()
+        registry = studio / smoke.AGENT_REGISTRY_REL
+        registry.parent.mkdir(parents=True, exist_ok=True)
+        # The shape a shipped box actually has: the registry file is present
+        # from the skeleton and carries no `agents` key at all. An empty
+        # `agents: {}` does NOT reproduce it — mint accepts that as a mapping
+        # and never raises, which is how the first version of this case passed
+        # while testing nothing.
+        registry.write_text("schema_version: 2\n", encoding="utf-8")
+
+        result = smoke.probe_mint(studio)
+        self.assertProbeUnknown(result)
+        self.assertIn("no agent is registered", result.detail)
+        self.assertIn("first agent", result.cure)
+
+    def test_a_malformed_agent_registry_still_fails(self):
+        """The narrow exemption must not become a blanket one.
+
+        A registry that exists and cannot be read is a studio defect, not an
+        unperformed step, and the difference is the whole reason the classifier
+        reads the file instead of trusting mint's wording.
+        """
+        studio = self.studio()
+        registry = studio / smoke.AGENT_REGISTRY_REL
+        registry.parent.mkdir(parents=True, exist_ok=True)
+        registry.write_text("agents: [this is not a mapping\n", encoding="utf-8")
+
+        self.assertFalse(
+            smoke._mint_blocked_on_first_agent(studio, "agent registry has no agents mapping"),
+            "an unreadable registry was classified as an unperformed setup step",
+        )
+
     def test_ac7a_mint_reports_unknown_when_the_mint_gesture_times_out(self):
         studio = self.studio()
         with only_for("mint", 0.05):

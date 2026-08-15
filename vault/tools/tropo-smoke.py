@@ -24,11 +24,13 @@ created_by: talos-t37
 modified: '2026-07-31'
 modified_by: talos-t37
 schema_version: 2
+extraction_scope: ship
 governed_by: d5e1b4a3
 member_of:
 - 8dd772a0
 refs:
 - af6c53df
+- e52826c5
 - d78cc16a
 - 1f29bcfb
 ---
@@ -1709,6 +1711,51 @@ def _smoke_authored(path: Path) -> bool:
     )
 
 
+#: The agent registry mint reads for provenance.
+AGENT_REGISTRY_REL = ".tropo-studio/registries/agent-registry.yaml"
+
+
+def _mint_blocked_on_first_agent(studio: Path, diagnostic: str) -> bool:
+    """Is this a studio nobody has joined, or a studio with a broken registry?
+
+    Asks the registry rather than trusting the message: mint says "has no
+    agents mapping" for a virgin box, and the same words could later come from
+    a file that is present but wrong. A missing or empty-but-well-formed
+    registry is setup; anything unreadable is a defect and must keep failing.
+    """
+    if "agents mapping" not in (diagnostic or ""):
+        return False
+    registry = studio / AGENT_REGISTRY_REL
+    if not registry.exists():
+        return True
+    try:
+        text = registry.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return False  # unreadable is a defect, and a defect is a FAIL
+
+    # Read by line rather than by parser: this tool is stdlib-only by contract
+    # (AC3), because a smoke test that needs a third-party import cannot answer
+    # "can this studio work" on a studio where that import is what broke.
+    #
+    # Only two shapes count as setup: no `agents:` key at all, or one with an
+    # empty mapping under it. Anything else — including a key this cannot
+    # confidently read — falls through to FAIL, because guessing in the
+    # permissive direction is how a real defect gets labelled a setup step.
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if not line.startswith("agents:"):
+            continue
+        inline = line[len("agents:"):].strip()
+        if inline not in ("", "{}"):
+            return False
+        for following in lines[index + 1:]:
+            if not following.strip() or following.lstrip().startswith("#"):
+                continue
+            return following[:1] not in (" ", "\t")
+        return True
+    return True
+
+
 def probe_mint(studio: Path) -> ProbeResult:
     """Can a governed file be created AND indexed?
 
@@ -1794,6 +1841,30 @@ def probe_mint(studio: Path) -> ProbeResult:
                 f"as one, not a broken mint ({ran.diagnostic})",
                 f"python3 vault/tools/tropo-mint-id.py --type "
                 f"{SMOKE_MINT_TYPE} --author you",
+                0.0, evidence, checked=checked, not_checked=not_checked,
+            )
+        elif ran.rc != 0 and _mint_blocked_on_first_agent(studio, ran.diagnostic):
+            # A box nobody has joined yet has no agents to attribute a mint to.
+            # That is an UNPERFORMED SETUP STEP, not a broken chokepoint, and
+            # calling it FAIL told Metis's Fresh-Box walk that a healthy virgin
+            # box could not mint (verdict 62a22664, follow-up efd333ab). The
+            # distinction is narrow on purpose: a registry that exists and is
+            # unreadable or malformed still FAILS below, because that is a
+            # studio defect rather than a step nobody has taken.
+            not_checked = [
+                "whether a governed file can be written once an agent exists",
+                "whether the current index resolves that file",
+            ]
+            result = _unknown(
+                "mint",
+                "no agent is registered in this studio yet, so a mint has no "
+                "author to attribute provenance to, and whether this studio can "
+                "mint is UNKNOWN. That is a setup step nobody has performed, not "
+                "a broken mint: the chokepoint ran and refused honestly. "
+                f"Checked: {'; '.join(checked)}. NOT checked: "
+                f"{'; '.join(not_checked)}",
+                "create this Studio's first agent (see "
+                "vault/skills/tropo-create-executive-agent.md), then re-run",
                 0.0, evidence, checked=checked, not_checked=not_checked,
             )
         elif ran.rc != 0:

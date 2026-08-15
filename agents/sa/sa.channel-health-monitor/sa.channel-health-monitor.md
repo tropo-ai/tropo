@@ -13,8 +13,8 @@ spawnable_by:
   - fleet-ops
 commissioned: 2026-04-16
 commissioned_by: vela-v29
-modified: '2026-07-25'
-modified_by: "vela-v69"
+modified: '2026-08-12'
+modified_by: "metis-g107"
 governed_by: b4e2a718
 capsule_version: '1.4'
 extraction_scope: ship
@@ -45,10 +45,10 @@ pruning:
     start_byte: 30
     end_byte: 504
   judge_policy_uid: 341823aa
-  judge_version: 2.0.0
+  judge_version: 2.1.0
   judge_prompt_sha256: 855e18bd29d09ed8ecff16c006a3b0f18c39aa913207619978dda02fdc54f6db
   origin_studio: f1a7b3c2
-  judged_at: '2026-07-25T22:18:27Z'
+  judged_at: '2026-08-12T01:04:10Z'
   confidence: 0.95
   normalized_body_hash_judged: 5c7f879a775bf5ea8551d2e0f034e4ec0f1cc0db346acb5d5292aa4ab175d02c
 ---

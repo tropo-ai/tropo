@@ -118,6 +118,7 @@ contract failure.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import io
 import json
@@ -130,6 +131,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from contextlib import redirect_stdout
 from dataclasses import fields as dataclass_fields
@@ -511,6 +513,27 @@ class FolderCase(unittest.TestCase):
     def projections_in(self, root: Path) -> list:
         return sorted((root / "vault" / "files").glob("*.md"))
 
+    def source_projections_in(self, root: Path, mount_uid: str) -> list:
+        """Projections OF a source file — i.e. everything but the mount identity.
+
+        Mount Identity (7b1e0ae5 §3.2) added one governed entry that is not a
+        projection of any file: the mount project itself. It records no
+        ``source_path`` because it describes the mount, not a document, so cases
+        that assert "every projection has a resolvable source handle" must not
+        enumerate it. Excluded by UID, never by pattern, so a real projection
+        cannot hide behind the exclusion.
+        """
+        identity = root / "vault" / "files" / f"{mount_uid}.md"
+        self.assertPlanted(
+            identity.is_file(),
+            "mount identity absent, so this exclusion hides nothing real",
+        )
+        projections = [p for p in self.projections_in(root) if p != identity]
+        self.assertPlanted(
+            projections, "every projection was excluded; nothing left to assert on"
+        )
+        return projections
+
     def assertSourcesUnchanged(self, folder_path: Path, before: dict, when: str) -> None:
         after = self.source_digest(folder_path)
         self.assertEqual(
@@ -731,22 +754,219 @@ class AttachRequiresNothingTests(FolderCase):
         self.assertIsNone(record.adopted_at)
         self.assertIsNone(self.only_mount(root).adopted_at)
 
-    def test_attach_writes_no_sidecar_and_no_governed_entry(self) -> None:
-        """"No metadata, no governance, no identifiers" — the checkpoint's words.
+    def _seed_external_context(self, root: Path) -> Path:
+        """Seed the shipped external-context L0 so mount identity has a live parent."""
+        path = root / "vault" / "files" / f"{folder.EXTERNAL_CONTEXT_L0_UID}.md"
+        path.write_text(
+            f"---\nuid: {folder.EXTERNAL_CONTEXT_L0_UID}\ntype: project\n"
+            f"status: evergreen\nstate: active\ntitle: external-context\n"
+            f"member_of: []\nlifecycle: standing\nextraction_scope: ship\n"
+            f"---\n\n# external-context\n",
+            encoding="utf-8",
+        )
+        return path
 
-        ATTACHED is the state that must cost nothing. An implementation that
-        quietly projects governed entries at attach has collapsed the two
-        states back into one, from the other direction.
+    def test_attach_writes_mount_identity_but_no_content_projections(self) -> None:
+        """Mount Identity 7b1e0ae5 §3.2: identity at mount time; content at adopt.
+
+        ATTACHED still writes nothing into the folder and does not project
+        content files. It DOES write the governed mount project under
+        external-context so adopt/ingest never references a hole.
         """
         root = self.studio()
+        external = self._seed_external_context(root)
         cloud = self.cloud_folder()
         before = self.projections_in(root)
-        self.assertPlanted(before == [], "the fixture vault should start empty")
+        self.assertPlanted(
+            before == [external],
+            "the fixture vault should hold only the seeded external-context L0",
+        )
 
-        folder.mount(root, cloud, name="Marketing")
+        record = folder.mount(root, cloud, name="Marketing")
 
         self.assertEqual(self.sidecars_in(cloud), [])
-        self.assertEqual(self.projections_in(root), [])
+        identity = root / "vault" / "files" / f"{record.mount_uid}.md"
+        self.assertTrue(identity.is_file(), msg="mount must write governed identity")
+        text = identity.read_text(encoding="utf-8")
+        self.assertNotIn("<!-- REQUIRED:", text)
+        self.assertNotIn("<<MINT:", text)
+        if yaml is not None:
+            fm = yaml.safe_load(text.split("---", 2)[1])
+            self.assertEqual(fm.get("type"), "project")
+            self.assertEqual(fm.get("member_of"), [folder.EXTERNAL_CONTEXT_L0_UID])
+        else:
+            self.assertIn("type: project", text)
+            self.assertIn(folder.EXTERNAL_CONTEXT_L0_UID, text)
+        self.assertTrue(
+            folder._index_resolves_uid(root, record.mount_uid),
+            msg="mount identity must resolve in the index before adopt",
+        )
+        # Only external-context + mount identity — no content-file projections yet.
+        self.assertEqual(self.projections_in(root), sorted([external, identity]))
+
+    def test_mount_fails_loud_when_index_refuses_identity(self) -> None:
+        """7b1e0ae5 AC2: index refuse → mount fails; registry and folder untouched."""
+        root = self.studio()
+        self._seed_external_context(root)
+        cloud = self.cloud_folder()
+        before_digest = self.source_digest(cloud)
+        registry_path = root / folder.MOUNT_REGISTRY_REL
+        self.assertPlanted(
+            not registry_path.exists(),
+            "fixture must start with no mount registry",
+        )
+
+        with mock.patch.object(
+            folder,
+            "_freshen_projection_index",
+            side_effect=folder.FolderMountError("index refused identity"),
+        ):
+            with self.assertRaises(folder.FolderMountError) as raised:
+                folder.mount(root, cloud, name="Marketing")
+
+        self.assertIn("index", str(raised.exception).lower())
+        self.assertFalse(
+            registry_path.exists(),
+            msg="refused mount must not persist a registry row",
+        )
+        self.assertEqual(
+            [p for p in self.projections_in(root)
+             if p.stem != folder.EXTERNAL_CONTEXT_L0_UID],
+            [],
+            msg="refused mount must not leave a mount-identity file",
+        )
+        self.assertSourcesUnchanged(cloud, before_digest, "refused mount")
+        self.assertEqual(self.sidecars_in(cloud), [])
+
+    def test_adopt_repairs_identity_before_ingest_and_refuses_when_repair_fails(
+        self,
+    ) -> None:
+        """7b1e0ae5 AC2: adopt repairs before ingest; refused repair never ingests."""
+        root = self.studio()
+        self._seed_external_context(root)
+        cloud = self.cloud_folder()
+        record = folder.mount(root, cloud, name="Marketing")
+        identity = root / "vault" / "files" / f"{record.mount_uid}.md"
+        self.assertPlanted(identity.is_file(), "mount must have written identity")
+
+        # Punch a hole: delete identity + clear index surfaces.
+        identity.unlink()
+        (root / "vault" / "00-index.jsonl").write_text("", encoding="utf-8")
+        for companion in (
+            root / "vault" / "00-archive-index.jsonl",
+            root / "vault" / "00-index.sqlite",
+        ):
+            if companion.exists():
+                companion.unlink()
+
+        ingest_calls: list[str] = []
+        real_ingest = folder._ingest
+
+        def spy_ingest(*args, **kwargs):
+            self.assertTrue(
+                folder._index_resolves_uid(root, record.mount_uid),
+                msg="ingest must not run against an unresolvable mount identity",
+            )
+            ingest_calls.append("ok")
+            return real_ingest(*args, **kwargs)
+
+        with mock.patch.object(folder, "_ingest", side_effect=spy_ingest):
+            folder.adopt(root, record.mount_uid)
+
+        self.assertEqual(ingest_calls, ["ok"])
+        self.assertTrue(identity.is_file())
+        self.assertTrue(folder._index_resolves_uid(root, record.mount_uid))
+
+        # Second half: repair refusal must never reach ingest.
+        identity.unlink()
+        (root / "vault" / "00-index.jsonl").write_text("", encoding="utf-8")
+        # Flip registry back to attached so adopt re-enters the identity gate
+        # rather than short-circuiting as already-adopted.
+        registry = json.loads(
+            (root / folder.MOUNT_REGISTRY_REL).read_text(encoding="utf-8")
+        )
+        registry["mounts"][record.mount_uid]["state"] = folder.STATE_ATTACHED
+        registry["mounts"][record.mount_uid]["adopted_at"] = None
+        (root / folder.MOUNT_REGISTRY_REL).write_text(
+            json.dumps(registry, indent=2) + "\n", encoding="utf-8"
+        )
+        # Remove the mount anchor so adopt does not treat the folder as already tooled.
+        anchor = cloud / folder.MOUNT_ANCHOR_REL
+        if anchor.is_file():
+            anchor.unlink()
+
+        refused_calls: list[str] = []
+        with mock.patch.object(
+            folder,
+            "_freshen_projection_index",
+            side_effect=folder.FolderMountError("repair refused"),
+        ), mock.patch.object(
+            folder,
+            "_ingest",
+            side_effect=lambda *a, **k: refused_calls.append("ingest") or {},
+        ):
+            with self.assertRaises(folder.FolderMountError):
+                folder.adopt(root, record.mount_uid)
+
+        self.assertEqual(
+            refused_calls,
+            [],
+            msg="when identity repair refuses, _ingest must never be called",
+        )
+
+        # Mutation control: remove the require gate and the hole becomes ingestable.
+        # Re-open the hole on every index surface (sqlite is checked first).
+        if identity.is_file():
+            identity.unlink()
+        (root / "vault" / "00-index.jsonl").write_text("", encoding="utf-8")
+        for companion in (
+            root / "vault" / "00-archive-index.jsonl",
+            root / "vault" / "00-index.sqlite",
+        ):
+            if companion.exists():
+                companion.unlink()
+        self.assertPlanted(
+            not folder._index_resolves_uid(root, record.mount_uid),
+            "mutation control requires an open identity hole before adopt",
+        )
+
+        mutation_calls: list[str] = []
+        saw_hole_at_ingest = []
+
+        def mutant_ingest(*_a, **_k):
+            saw_hole_at_ingest.append(
+                not folder._index_resolves_uid(root, record.mount_uid)
+            )
+            mutation_calls.append("ingest")
+            return {
+                "created": 0,
+                "already_governed": 0,
+                "ignored": 0,
+                "failed": 0,
+                "failed_files": [],
+                "created_files": [],
+            }
+
+        with mock.patch.object(
+            folder, "require_mount_identity", lambda *a, **k: None
+        ), mock.patch.object(folder, "_ingest", side_effect=mutant_ingest):
+            # adopt may still fail later (anchor/state), but the gate absence is
+            # proven if ingest is reached while identity is still a hole.
+            try:
+                folder.adopt(root, record.mount_uid)
+            except folder.FolderMountError:
+                pass
+        self.assertEqual(
+            mutation_calls,
+            ["ingest"],
+            msg="mutation-removing require_mount_identity must go red: ingest "
+                "runs against an unresolvable identity",
+        )
+        self.assertEqual(
+            saw_hole_at_ingest,
+            [True],
+            msg="mutation red requires ingest to observe the unresolved identity",
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -769,6 +989,535 @@ class OneMountTwoStatesTests(FolderCase):
             "the fixture mount should be ATTACHED before adopt",
         )
         return root, cloud, record
+
+    def test_adopt_dry_run_predicts_the_write_and_performs_none_of_it(self):
+        """`adopt` is the one verb that writes into somebody's live cloud drive.
+
+        254a360b D2: Metis ran `adopt` against a real OneDrive folder of Mike's
+        and it put 114 sidecars into it before failing on something unrelated,
+        with no rollback and no way to have seen it coming. `mount`, `ingest`
+        and `reconcile` all had `--dry-run`; the only verb whose mistakes land
+        in a company cloud drive did not.
+
+        Two halves, and the second is the one that makes this more than a
+        no-op check. A preview that writes nothing is easy -- returning early
+        does it. A preview is only worth reading if what it predicts is what
+        adoption then does, so the same fixture is adopted for real afterwards
+        and the numbers must agree.
+        """
+        root, cloud, record = self.attached()
+
+        preview = folder.adopt(root, record.mount_uid, dry_run=True)
+
+        self.assertPlanted(
+            preview.sidecars_created > 0,
+            "the fixture folder held no un-sidecarred files, so a preview that "
+            "predicted nothing would pass without meaning anything",
+        )
+        self.assertEqual(
+            self.sidecars_in(cloud),
+            [],
+            "the preview wrote sidecars into the mounted folder -- the exact "
+            "harm it exists to let an operator avoid (254a360b D2)",
+        )
+        self.assertTrue(preview.dry_run)
+        self.assertEqual(
+            self.only_mount(root).state,
+            folder.STATE_ATTACHED,
+            "the preview flipped the mount to adopted; a preview must not "
+            "change the state it is previewing",
+        )
+        # Mount identity (7b1e0ae5) is written at attach; dry-run must not add
+        # content projections beyond that single governed mount project.
+        identity = root / "vault" / "files" / f"{record.mount_uid}.md"
+        self.assertEqual(
+            self.projections_in(root),
+            [identity],
+            "the preview projected content into the vault beyond mount identity",
+        )
+
+        real = folder.adopt(root, record.mount_uid)
+
+        self.assertEqual(
+            (real.sidecars_created, sorted(real.created_paths)),
+            (preview.sidecars_created, sorted(preview.created_paths)),
+            "the preview did not predict what adoption actually wrote, which "
+            "makes reading it before touching a live folder worse than useless",
+        )
+        self.assertFalse(real.dry_run)
+
+    def test_adopt_dry_run_is_wired_through_the_command_line(self) -> None:
+        """The library honouring `dry_run` is not the claim an operator relies on.
+
+        Nobody adopts a folder by importing this module. The flag has to be
+        declared on the adopt parser AND threaded into the call, and a flag
+        that parses but is never passed is the failure this suite has been
+        bitten by before: green helpers above an entry point that ignores them.
+        """
+        root, cloud, record = self.attached()
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = folder.main([
+                "adopt", record.mount_uid, "--root", str(root), "--dry-run",
+            ])
+
+        self.assertEqual(code, 0)
+        self.assertIn("WOULD ADOPT", output.getvalue())
+        self.assertEqual(
+            self.sidecars_in(cloud),
+            [],
+            "`adopt --dry-run` parsed the flag and wrote anyway",
+        )
+        self.assertEqual(
+            self.only_mount(root).state,
+            folder.STATE_ATTACHED,
+            "`adopt --dry-run` adopted the mount",
+        )
+
+    def cloud_with(self, count: int):
+        """An attached mount over `count` un-sidecarred files."""
+        root = self.studio()
+        cloud = self.cloud_folder(files={
+            f"note-{index:02d}.md": f"# note {index}\n\nbody {index}\n"
+            for index in range(count)
+        })
+        record = folder.mount(root, cloud, name="Marketing")
+        return root, cloud, record
+
+    def fail_ingest_after(self, cloud: Path, landed: int):
+        """Abort the sweep once `landed` sidecars are really on disk.
+
+        The clock is the FOLDER, not a call counter. `anchor_source_path` runs
+        several times per file -- the sidecar writer calls it again internally
+        for the marker and the parent -- so counting invocations aborts at an
+        unpredictable point, and the first version of this helper exhausted
+        its budget before a single sidecar existed.
+
+        Deliberately not injected at the per-file sidecar call either: the
+        walker catches exceptions there on purpose, so one unreadable file
+        cannot abort a whole folder. A fault planted at that seam is recorded
+        and walked past, which is a different scenario than interruption.
+        """
+        real = folder.walker.anchor_source_path
+
+        def flaky(*args, **kwargs):
+            if len(self.sidecars_in(cloud)) >= landed:
+                raise OSError("injected: the mount went away mid-ingest")
+            return real(*args, **kwargs)
+
+        return mock.patch.object(
+            folder.walker, "anchor_source_path", side_effect=flaky
+        )
+
+    def test_adopt_interrupted_reports_landed_pending_and_how_to_finish(self):
+        """Item 3 of A148's ruling (evt_a9360f18f56fe472_00000011).
+
+        The ruling is that adopt never rolls back an external write, because
+        deleting metadata out of OneDrive under storage we cannot assume
+        atomic rename or stable visibility for is the dangerous act, not the
+        recovery. What replaces rollback is telling the truth loudly: what
+        landed, what is pending, and the gesture that converges.
+
+        Before this, an ingest that threw took the summary buffer with it --
+        the operator got a traceback and no way to know what was already
+        sitting in the folder except to go and look.
+        """
+        root, cloud, record = self.cloud_with(6)
+
+        with self.fail_ingest_after(cloud, 2):
+            with self.assertRaises(folder.AdoptInterrupted) as caught:
+                folder.adopt(root, record.mount_uid)
+
+        interrupted = caught.exception
+        on_disk = {path.name for path in self.sidecars_in(cloud)}
+        self.assertPlanted(
+            0 < len(on_disk) < 6,
+            f"the injection did not stop the sweep part-way ({len(on_disk)} "
+            f"sidecars of 6), so there is no partial state to report on",
+        )
+        self.assertEqual(
+            {Path(name).name for name in interrupted.landed},
+            on_disk,
+            "the report's landed list does not match the folder it describes",
+        )
+        # Whatever stopped the ingest here also stops the folder being
+        # re-walked, so the remainder is genuinely unknowable. What must never
+        # happen is reporting it as EMPTY, which an operator would read as
+        # "it finished".
+        if interrupted.pending is None:
+            self.assertIn("UNFINISHED", str(interrupted))
+        else:
+            self.assertTrue(interrupted.pending)
+            self.assertEqual(
+                set(interrupted.landed) & set(interrupted.pending),
+                set(),
+                "a file cannot be both already written and still to do",
+            )
+        self.assertIn(record.mount_uid, interrupted.retry)
+        self.assertIn("adopt", interrupted.retry)
+        self.assertIn("Re-run", str(interrupted))
+
+    def test_adopt_converges_on_re_run_and_the_third_run_is_a_no_op(self):
+        """Items 4, 5 and 7 of the ruling, as one gesture.
+
+        A148: "Re-run is the recovery gesture." So the proof is not that the
+        failure was tidy, it is that running the same command again finishes
+        the job -- without duplicating what already landed, and without ever
+        deleting external sidecars as a compensating action.
+
+        The third run matters as much as the second. Convergence that is not
+        idempotent is just a second way to write.
+        """
+        root, cloud, record = self.cloud_with(6)
+        source_before = self.source_digest(cloud)
+
+        with self.fail_ingest_after(cloud, 2):
+            with self.assertRaises(folder.AdoptInterrupted) as caught:
+                folder.adopt(root, record.mount_uid)
+        partial = {path.name for path in self.sidecars_in(cloud)}
+        self.assertPlanted(
+            0 < len(partial) < 6,
+            "no partial state was produced, so convergence proves nothing",
+        )
+
+        second = folder.adopt(root, record.mount_uid)
+
+        self.assertEqual(
+            self.source_digest(cloud),
+            source_before,
+            "adoption modified the source files it was only supposed to "
+            "describe -- sidecars are metadata beside the file, never edits "
+            "to it",
+        )
+        survived = {path.name for path in self.sidecars_in(cloud)}
+        self.assertTrue(
+            partial <= survived,
+            f"the recovery run deleted sidecars that had already landed "
+            f"({sorted(partial - survived)}). A148 item 7: external sidecars "
+            f"are never removed as rollback",
+        )
+        self.assertEqual(len(survived), 6, "the re-run did not converge")
+        self.assertEqual(
+            self.only_mount(root).state,
+            folder.STATE_ADOPTED,
+            "convergence finished the writes but never marked the mount "
+            "adopted, so a fourth run would still think work remained",
+        )
+        self.assertEqual(
+            second.sidecars_created,
+            6 - len(partial),
+            "the recovery run re-created sidecars that were already there",
+        )
+
+        third = folder.adopt(root, record.mount_uid)
+
+        self.assertEqual(
+            third.sidecars_created,
+            0,
+            "the third run wrote again; convergence is not idempotent",
+        )
+        self.assertEqual(
+            {path.name for path in self.sidecars_in(cloud)},
+            survived,
+            "the no-op run changed the mounted folder",
+        )
+
+    def test_adopt_refuses_an_unreadable_index_before_it_writes_anything(self):
+        """Item 2, and the ordering lesson 254a360b was actually about.
+
+        Metis's adopt wrote 114 sidecars into a live SharePoint folder and
+        only THEN reached an index that had been refusing every write for
+        hours. Both halves were defensible; the order is what turned a
+        refusal into files on a company drive somebody had to reason about.
+
+        The assertion that matters is not that it refused -- it is that the
+        folder is untouched when it does.
+        """
+        root, cloud, record = self.cloud_with(3)
+        (root / "vault" / "00-index.jsonl").write_text(
+            '{"uid": "aaaaaaaa"}\nthis line is not json\n', encoding="utf-8"
+        )
+
+        with self.assertRaises(folder.FolderMountError) as caught:
+            folder.adopt(root, record.mount_uid)
+
+        self.assertEqual(
+            self.sidecars_in(cloud),
+            [],
+            "the index refused adoption AFTER writing into the mounted "
+            "folder, which is the exact ordering the P0 was filed for",
+        )
+        self.assertEqual(
+            self.only_mount(root).state,
+            folder.STATE_ATTACHED,
+        )
+        self.assertIn("254a360b", str(caught.exception))
+
+    def test_adopt_converges_after_sigkill_from_on_disk_state_alone(self):
+        """Item 6 of the ruling, and the one that justifies the whole design.
+
+        A148: "no exception report is possible after SIGKILL; the substrate
+        itself is the journal." Every other recovery test here still gets a
+        Python-level unwind -- an exception is raised, a handler runs, a
+        report is built. This one gets none of that. The process is killed
+        outright while it is writing into the mounted folder, so whatever the
+        next run can recover from is what is physically on disk.
+
+        That is the honest test of an architecture whose answer to partial
+        writes is "re-run", because a rollback journal is exactly the thing a
+        SIGKILL would have left half-written too.
+        """
+        root, cloud, record = self.cloud_with(24)
+        source_before = self.source_digest(cloud)
+
+        script = (
+            "import importlib.util, sys\n"
+            f"spec = importlib.util.spec_from_file_location('f', {str(FOLDER_TOOL_PATH)!r})\n"
+            "m = importlib.util.module_from_spec(spec)\n"
+            "sys.modules['f'] = m\n"
+            "spec.loader.exec_module(m)\n"
+            f"m.adopt({str(root)!r}, {record.mount_uid!r})\n"
+        )
+        child = subprocess.Popen(
+            [sys.executable, "-c", script],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            deadline = time.time() + 30
+            while time.time() < deadline:
+                if 2 <= len(self.sidecars_in(cloud)) < 24:
+                    break
+                if child.poll() is not None:
+                    break
+                time.sleep(0.01)
+            child.kill()
+        finally:
+            child.wait(timeout=30)
+
+        partial = {path.name for path in self.sidecars_in(cloud)}
+        self.assertPlanted(
+            0 < len(partial) < 24,
+            f"the child was not killed mid-ingest ({len(partial)} of 24 "
+            f"sidecars), so there is no half-written state to recover from",
+        )
+        self.assertEqual(
+            self.only_mount(root).state,
+            folder.STATE_ATTACHED,
+            "the killed run had already marked the mount adopted, so a "
+            "half-ingested folder would look finished to the next run",
+        )
+
+        recovered = folder.adopt(root, record.mount_uid)
+
+        self.assertEqual(
+            self.source_digest(cloud),
+            source_before,
+            "the interrupted run or the recovery modified the source files",
+        )
+        survived = {path.name for path in self.sidecars_in(cloud)}
+        self.assertTrue(
+            partial <= survived,
+            f"recovery deleted sidecars the killed run had already written: "
+            f"{sorted(partial - survived)}",
+        )
+        self.assertEqual(len(survived), 24, "recovery did not converge")
+        self.assertEqual(
+            recovered.sidecars_existing,
+            len(partial),
+            "recovery did not recognise the sidecars already on disk, so it "
+            "rewrote work the killed process had completed",
+        )
+        self.assertEqual(
+            self.only_mount(root).state,
+            folder.STATE_ADOPTED,
+        )
+        self.assertEqual(
+            folder.adopt(root, record.mount_uid).sidecars_created,
+            0,
+            "the run after recovery still had work to do",
+        )
+
+    def test_mount_identity_survives_sigkill_and_retry_never_ingests_a_hole(self):
+        """7b1e0ae5 AC1 — identity-resolvable across mid-ingest kill + retry.
+
+        The general SIGKILL convergence case above already proves re-run
+        finishes from on-disk state. This case adds the Mount Identity halves
+        of acceptance item 1: (i) after the kill, the mount identity still
+        resolves in the index (ingest never runs against a hole), and
+        (ii) the retry's ``_ingest`` observes a resolvable identity before it
+        writes anything else.
+        """
+        root = self.studio()
+        # Seed external-context so the identity has a live parent in the fixture.
+        (root / "vault" / "files" / f"{folder.EXTERNAL_CONTEXT_L0_UID}.md").write_text(
+            f"---\nuid: {folder.EXTERNAL_CONTEXT_L0_UID}\ntype: project\n"
+            f"status: evergreen\nstate: active\ntitle: external-context\n"
+            f"member_of: []\n---\n\n# external-context\n",
+            encoding="utf-8",
+        )
+        cloud = self.cloud_folder(files={
+            f"note-{index:02d}.md": f"# note {index}\n\nbody {index}\n"
+            for index in range(16)
+        })
+        record = folder.mount(root, cloud, name="Marketing")
+        self.assertPlanted(
+            folder._index_resolves_uid(root, record.mount_uid),
+            "mount must leave a resolvable identity before adopt",
+        )
+
+        script = (
+            "import importlib.util, sys\n"
+            f"spec = importlib.util.spec_from_file_location('f', {str(FOLDER_TOOL_PATH)!r})\n"
+            "m = importlib.util.module_from_spec(spec)\n"
+            "sys.modules['f'] = m\n"
+            "spec.loader.exec_module(m)\n"
+            f"m.adopt({str(root)!r}, {record.mount_uid!r})\n"
+        )
+        child = subprocess.Popen(
+            [sys.executable, "-c", script],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            deadline = time.time() + 30
+            while time.time() < deadline:
+                if 2 <= len(self.sidecars_in(cloud)) < 16:
+                    break
+                if child.poll() is not None:
+                    break
+                time.sleep(0.01)
+            child.kill()
+        finally:
+            child.wait(timeout=30)
+
+        partial = len(self.sidecars_in(cloud))
+        self.assertPlanted(
+            0 < partial < 16,
+            f"child was not killed mid-ingest ({partial} of 16 sidecars)",
+        )
+        self.assertEqual(self.only_mount(root).state, folder.STATE_ATTACHED)
+        # Half (i): identity still resolves after the kill — the allowed
+        # intermediate is anchor/sidecars without finish, never a missing identity.
+        self.assertTrue(
+            folder._index_resolves_uid(root, record.mount_uid),
+            msg="mount identity must remain resolvable after mid-ingest SIGKILL "
+                "(7b1e0ae5 AC1 — no hole for a retry to compound)",
+        )
+        identity = root / "vault" / "files" / f"{record.mount_uid}.md"
+        self.assertTrue(identity.is_file())
+
+        ingest_saw_resolvable: list[bool] = []
+        real_ingest = folder._ingest
+
+        def spy_ingest(*args, **kwargs):
+            ingest_saw_resolvable.append(
+                folder._index_resolves_uid(root, record.mount_uid)
+            )
+            return real_ingest(*args, **kwargs)
+
+        with mock.patch.object(folder, "_ingest", side_effect=spy_ingest):
+            recovered = folder.adopt(root, record.mount_uid)
+
+        self.assertEqual(ingest_saw_resolvable, [True])
+        self.assertEqual(len(self.sidecars_in(cloud)), 16)
+        self.assertEqual(self.only_mount(root).state, folder.STATE_ADOPTED)
+        self.assertEqual(recovered.sidecars_existing, partial)
+        self.assertEqual(
+            folder.adopt(root, record.mount_uid).sidecars_created,
+            0,
+            "post-recovery adopt must be a no-op",
+        )
+
+    def test_adopt_refuses_when_one_file_fails_inside_the_sweep(self):
+        """A148's P0 NO-GO, evt_a9360f18f56fe472_00000012.
+
+        `cmd_ingest` catches per-file exceptions on purpose so one unreadable
+        file cannot abort a folder, and returns them in `failed_files` instead
+        of raising. Adoption read that normal return, flipped the mount to
+        ADOPTED and reported success while a source file had no sidecar.
+
+        This is worse than the interruption case. Interruption at least left
+        the mount ATTACHED, so the next run finished the job. Here the
+        registry said the folder was fully tooled and nothing would ever come
+        back to it -- a false success that no later gesture would correct.
+
+        Every interruption plant I wrote before this raised OUTSIDE the
+        walker's per-file catch, so none of them ever reached the branch the
+        walker deliberately uses for one bad file. The most ordinary failure
+        of all was the one with no coverage.
+        """
+        root, cloud, record = self.cloud_with(3)
+        source_before = self.source_digest(cloud)
+        real_writer = folder.walker.cmd_create_sidecar
+
+        def one_bad_file(args, studio_root):
+            if Path(getattr(args, "source", "")).name == "note-01.md":
+                raise RuntimeError("injected per-file failure")
+            return real_writer(args, studio_root)
+
+        with mock.patch.object(
+            folder.walker, "cmd_create_sidecar", side_effect=one_bad_file
+        ):
+            with self.assertRaises(folder.AdoptInterrupted) as caught:
+                folder.adopt(root, record.mount_uid)
+
+        self.assertPlanted(
+            len(self.sidecars_in(cloud)) == 2,
+            f"the injection did not leave exactly one file unwritten "
+            f"({len(self.sidecars_in(cloud))} sidecars of 3)",
+        )
+        self.assertEqual(
+            self.only_mount(root).state,
+            folder.STATE_ATTACHED,
+            "adopt marked a mount ADOPTED while one source file had no "
+            "sidecar -- false success, and nothing would ever revisit it",
+        )
+        self.assertIn("note-01.md", str(caught.exception))
+        self.assertEqual(self.source_digest(cloud), source_before)
+
+        second = folder.adopt(root, record.mount_uid)
+
+        self.assertEqual(len(self.sidecars_in(cloud)), 3)
+        self.assertEqual(second.sidecars_existing, 2)
+        self.assertEqual(self.only_mount(root).state, folder.STATE_ADOPTED)
+        self.assertEqual(
+            folder.adopt(root, record.mount_uid).sidecars_created,
+            0,
+            "the run after convergence still had work to do",
+        )
+
+    def test_unreadable_plan_output_reports_unknown_not_empty(self):
+        """The same unknown-as-empty seam, in the branch I fixed beside it.
+
+        A148 caught this in the same review: the dry-run branch of `_ingest`
+        fabricated a zero summary when the walker's JSON was unreadable, and
+        `_ingest_progress` consumed it as a confident "nothing pending". So
+        the exact lie I had just removed from the non-dry-run branch was still
+        being told by its twin, written in the same edit.
+
+        That is the adjacent-duplicate class this Studio keeps getting caught
+        by: fixing one instance is what stops you looking for the other.
+        """
+        root, cloud, record = self.cloud_with(3)
+
+        def junk(args, studio_root):
+            print("this is not json")
+
+        with mock.patch.object(
+            folder.walker, "cmd_ingest", side_effect=junk
+        ):
+            landed, pending = folder._ingest_progress(
+                root, cloud, record.mount_uid, "test"
+            )
+
+        self.assertIsNone(
+            pending,
+            "an unreadable plan reported an empty remainder, which reads as "
+            "'nothing left to do' to whoever is deciding whether to re-run",
+        )
+        self.assertEqual(landed, [], "landed is a directory read and stands")
 
     def test_adopt_preserves_the_mount_uid(self) -> None:
         """The single most important line in the surface.
@@ -1251,7 +2000,10 @@ class MountedAvailabilityTests(FolderCase):
 
     def test_sidecar_uid_collision_refuses_without_changing_any_byte(self):
         root, _cloud, record = self.adopted()
-        projection = self.projections_in(root)[0]
+        # A projection OF a mounted file. Picking index [0] of every projection
+        # started sorting the governed mount project into first place for some
+        # UIDs once 7b1e0ae5 added it, making this case order-dependent.
+        projection = self.source_projections_in(root, record.mount_uid)[0]
         uid = projection.stem
         projection.write_text(
             "---\n"
@@ -1350,16 +2102,23 @@ class MountedAvailabilityTests(FolderCase):
             "unavailable",
         )
         rows = self.index_rows(root)
-        for projection in self.projections_in(root):
+        # Availability is a property of MOUNTED CONTENT. The governed mount
+        # project describes the mount itself and carries no availability field,
+        # so it is not part of this sweep (7b1e0ae5 §3.2).
+        for projection in self.source_projections_in(root, record.mount_uid):
             self.assertEqual(frontmatter(projection)["availability"], "unavailable")
             self.assertEqual(rows[projection.stem]["availability"], "unavailable")
+        mounted_content_uids = {
+            projection.stem
+            for projection in self.source_projections_in(root, record.mount_uid)
+        }
         with sqlite3.connect(root / "vault" / "00-index.sqlite") as conn:
             sqlite_rows = {
                 uid: json.loads(raw)["availability"]
                 for uid, raw in conn.execute(
                     "SELECT uid, fm_json FROM entries"
                 )
-                if uid in rows
+                if uid in mounted_content_uids
             }
         self.assertTrue(sqlite_rows)
         self.assertEqual(set(sqlite_rows.values()), {"unavailable"})
@@ -1428,7 +2187,11 @@ class MountedAvailabilityTests(FolderCase):
 
     def test_unmount_blocks_all_live_structured_relationship_aliases(self):
         root, _cloud, record = self.adopted()
-        target_uid = self.projections_in(root)[0].stem
+        # Must be a projection unmount actually removes. The governed mount
+        # project survives unmount (7b1e0ae5), so a dependent pointing at it
+        # would correctly block nothing — and index [0] began landing on it for
+        # some UIDs, which is how this case turned order-dependent.
+        target_uid = self.source_projections_in(root, record.mount_uid)[0].stem
         source_uid = "f0f0f0f0"
         source = root / "vault" / "files" / f"{source_uid}.md"
         source.write_text(
@@ -1556,6 +2319,63 @@ class MountedAvailabilityTests(FolderCase):
                 ).fetchone()[0],
                 0,
             )
+
+    def mount_inventory_refs(self, root: Path, mount_uid: str) -> set:
+        """Derivation inputs in the per-machine surfaces that name this mount."""
+        found: set = set()
+        for relative in (
+            rebuild_index.index_surfaces.INDEX_RATCHET_RELATIVE_PATH,
+            rebuild_index.index_surfaces.INDEX_SURFACE_META_RELATIVE_PATH,
+        ):
+            path = root / relative
+            if not path.is_file():
+                continue
+            blob = path.read_text(encoding="utf-8")
+            for pattern in (
+                rf"@mounted-source/{re.escape(mount_uid)}/[0-9a-zA-Z]+",
+                rf"@mounted-registry/{re.escape(mount_uid)}",
+            ):
+                found |= set(re.findall(pattern, blob))
+        return found
+
+    def test_unmount_strands_no_derivation_input_from_the_forgotten_mount(self):
+        """The one owned surface the sibling case above does not assert on.
+
+        `254a360b` froze every index write in argo-os. The ratchet's source
+        inventory kept `@mounted-source/<mount>/<uid>` rows for a mount that
+        was no longer in the registry, so afterwards each index write refused
+        on inputs that could never resolve -- and the refusal told you to run
+        the full rebuild, which was itself refusing for the same reason. The
+        circularity is what made it a freeze rather than an error.
+
+        Metis named unmount as the suspected leak and asked for it to be
+        tested before anything was fixed on the symptom, because if unmount
+        strands references for ADOPTED mounts then every future unmount arms
+        the same trap. The test above checks six surfaces and is named for
+        removing every owned one; the two per-machine surfaces where the
+        stranding actually happened are not among them.
+        """
+        root, _cloud, record = self.adopted()
+        self.seal_index(root)
+
+        planted = self.mount_inventory_refs(root, record.mount_uid)
+        self.assertPlanted(
+            planted,
+            "the fixture recorded no mounted-source derivation input for this "
+            "mount, so an unmount that removed nothing would still pass",
+        )
+
+        folder.unmount(root, record.mount_uid)
+
+        stranded = self.mount_inventory_refs(root, record.mount_uid)
+        self.assertEqual(
+            stranded,
+            set(),
+            f"unmount forgot {record.mount_uid} but left "
+            f"{len(stranded)} derivation input(s) naming it: "
+            f"{sorted(stranded)}. Those can never resolve again, and the "
+            f"index refuses every later write on unresolvable inputs (254a360b)",
+        )
 
     def test_live_schema1_migration_preserves_mount_and_file_identities(self):
         root, cloud, record = self.adopted()
@@ -1807,7 +2627,9 @@ class MountedAvailabilityTests(FolderCase):
 
     def test_refind_restores_available_on_the_same_mount_and_file_uids(self):
         root, cloud, record = self.adopted()
-        file_uids = sorted(p.stem for p in self.projections_in(root))
+        file_uids = sorted(
+            p.stem for p in self.source_projections_in(root, record.mount_uid)
+        )
         offline = self.take_offline(cloud)
         folder.reconcile(root, record.mount_uid)
 
@@ -1820,8 +2642,9 @@ class MountedAvailabilityTests(FolderCase):
         self.assertEqual(
             self.only_mount(root).availability, folder.AVAILABILITY_AVAILABLE
         )
-        self.assertEqual(sorted(p.stem for p in self.projections_in(root)), file_uids)
-        for projection in self.projections_in(root):
+        source_projections = self.source_projections_in(root, record.mount_uid)
+        self.assertEqual(sorted(p.stem for p in source_projections), file_uids)
+        for projection in source_projections:
             self.assertEqual(frontmatter(projection)["availability"], "available")
         self.assertTrue(
             all(row["availability"] == "available"
@@ -1900,12 +2723,29 @@ class MountedAvailabilityTests(FolderCase):
             p.relative_to(cloud).as_posix(): p.read_bytes()
             for p in self.sidecars_in(cloud)
         }
-        projections = self.projections_in(root)
+        # Derived projections only. The governed mount project is first-class
+        # authored substrate and SURVIVES unmount as the record of what was
+        # mounted (7b1e0ae5, ruled explicitly) — asserted below rather than
+        # excluded silently.
+        projections = self.source_projections_in(root, record.mount_uid)
+        identity = root / "vault" / "files" / f"{record.mount_uid}.md"
+        identity_bytes = identity.read_bytes()
 
         result = folder.unmount(root, record.mount_uid)
 
         self.assertEqual(folder.mounts(root), [])
         self.assertEqual(sorted(result["recycled"]), sorted(p.stem for p in projections))
+        self.assertTrue(
+            identity.is_file(),
+            "unmount recycled the governed mount project; 7b1e0ae5 rules it "
+            "authored substrate that survives as the record of what was mounted",
+        )
+        self.assertEqual(
+            identity.read_bytes(),
+            identity_bytes,
+            "unmount rewrote the surviving mount identity",
+        )
+        self.assertNotIn(record.mount_uid, result["recycled"])
         self.assertEqual(self.source_digest(cloud), source_before)
         self.assertEqual(
             {p.relative_to(cloud).as_posix(): p.read_bytes()
@@ -2305,8 +3145,11 @@ class MountedAvailabilityTests(FolderCase):
 
     def test_unmount_after_offline_removes_sealed_rows_and_failure_keeps_registry(self):
         root, cloud, record = self.adopted()
+        # Derived projections only: the governed mount project survives unmount
+        # by design (7b1e0ae5), so it is not part of the removed row set.
         owned_uids = {
-            projection.stem for projection in self.projections_in(root)
+            projection.stem
+            for projection in self.source_projections_in(root, record.mount_uid)
         }
         self.seal_index(root)
         self.take_offline(cloud)
@@ -2510,6 +3353,19 @@ class EgressTests(FolderCase):
         )
         return uid
 
+    def imported_projections_in(self, root: Path, mount_uid: str) -> list:
+        """Every entry adoption created that carries somebody else's words.
+
+        The governed mount project (7b1e0ae5 §3.2) is the one projection in this
+        set that is NOT an imported body: Tropo authors it about the mount, its
+        words are ours, and agents must be able to read it — reaching mounted
+        content through it is its whole purpose. Excluded by UID, never by
+        pattern, so an imported projection cannot hide behind the exclusion. Its
+        own origin is pinned separately by
+        ``test_the_mount_identity_is_agent_authored_not_an_imported_body``.
+        """
+        return self.source_projections_in(root, mount_uid)
+
     def test_an_adopted_projection_is_not_eligible_to_reach_a_model(self) -> None:
         """The headline: adoption imports somebody else's words into the vault.
 
@@ -2523,8 +3379,7 @@ class EgressTests(FolderCase):
         folder.adopt(root, record.mount_uid)
         classify = self.classifier_over(root)
 
-        projections = self.projections_in(root)
-        self.assertPlanted(projections, "adoption produced no governed entries to classify")
+        projections = self.imported_projections_in(root, record.mount_uid)
         for projection in projections:
             with self.subTest(projection=projection.name):
                 self.assertEqual(
@@ -2546,8 +3401,7 @@ class EgressTests(FolderCase):
         record = folder.mount(root, cloud, name="Marketing")
         folder.adopt(root, record.mount_uid)
 
-        projections = self.projections_in(root)
-        self.assertPlanted(projections, "adoption produced no governed entries")
+        projections = self.imported_projections_in(root, record.mount_uid)
         for projection in projections:
             with self.subTest(projection=projection.name):
                 block = frontmatter_block(projection)
@@ -2558,6 +3412,39 @@ class EgressTests(FolderCase):
                         "an outside origin, so nothing downstream can tell it "
                         f"apart from agent-authored work. frontmatter:\n{block}",
                 )
+
+    def test_the_mount_identity_is_agent_authored_not_an_imported_body(self) -> None:
+        """The other side of the exclusion above, stated as a contract.
+
+        The governed mount project is written BY Tropo ABOUT a folder. It must
+        NOT wear outside-origin marks: marking it imported would make the entry
+        agents are supposed to route through unreadable to them, and would file
+        Tropo's own words as somebody else's. If a future writer starts stamping
+        it, this goes red and the exclusion above stops being safe.
+        """
+        root = self.studio()
+        cloud = self.cloud_folder(files={"quarterly-plan.md": "# Q3\n"})
+        record = folder.mount(root, cloud, name="Marketing")
+        folder.adopt(root, record.mount_uid)
+
+        identity = root / "vault" / "files" / f"{record.mount_uid}.md"
+        block = frontmatter_block(identity)
+        hits = [m.pattern for m in orient._IMPORTED_MARKS if m.search(block)]
+        self.assertEqual(
+            hits,
+            [],
+            f"the mount identity is stamped as an imported body: {hits}",
+        )
+        self.assertIn("type: project", block)
+        self.assertIn(folder.EXTERNAL_CONTEXT_L0_UID, block)
+
+        classify = self.classifier_over(root)
+        self.assertNotEqual(
+            classify(record.mount_uid),
+            "private",
+            "the mount identity classified as an imported private body; agents "
+            "must be able to read the entry mounted content points at",
+        )
 
     def test_each_of_the_three_marks_alone_is_enough(self) -> None:
         """Any one is enough — because any one of them can be edited away.
@@ -2800,8 +3687,7 @@ class DriftTests(FolderCase):
         if it already resolved, the case proved nothing and says so.
         """
         root, before, moved = self.moved_fixture(adopt=True)
-        projections = self.projections_in(root)
-        self.assertPlanted(projections, "the adopted fixture has no governed entries")
+        projections = self.source_projections_in(root, self.only_mount(root).mount_uid)
 
         def handles(projection: Path):
             front = frontmatter(projection)
@@ -3123,6 +4009,294 @@ class ImportWalkerPriorArtTests(FolderCase):
             (outside / SIDECAR_DIR).exists(),
             msg="the refusal still wrote into the folder it refused",
         )
+
+
+class ReconcileNamesWhatItCouldNotSidecar(FolderCase):
+    """A148's final P0 tail (evt_a9360f18f56fe472_00000015).
+
+    Reconcile repaired what it could and returned a clean report over what it
+    could not. `cmd_ingest` reports per-file faults in its summary instead of
+    raising, and this command read only `created`; the metadata pass bound its
+    error to `_err` and dropped it. `ReconcileReport` had no field for either,
+    so the failures were unrepresentable rather than merely unprinted, and the
+    CLI exited 0 while a named file had no sidecar.
+
+    Lower severity than adopt's false ADOPTED -- reconcile never marks a mount
+    finished -- but it is the same helper contract on the same mount-health
+    command, which is why it was ruled into this P0 rather than spun out.
+    """
+
+    def adopted_with(self, files: dict):
+        root = self.studio()
+        cloud = self.cloud_folder(files=files)
+        record = folder.mount(root, cloud, name="Marketing")
+        folder.adopt(root, record.mount_uid)
+        return root, cloud, record
+
+    def test_a_file_that_could_not_be_sidecarred_is_named_and_exits_one(self):
+        """Create-side: the walker's per-file catch must not read as success."""
+        root, cloud, record = self.adopted_with({"first.md": "# first\n"})
+        (cloud / "second.md").write_text("# second\n", encoding="utf-8")
+        (cloud / "third.md").write_text("# third\n", encoding="utf-8")
+        real_writer = folder.walker.cmd_create_sidecar
+
+        def fail_second(args, studio_root):
+            if Path(getattr(args, "source", "")).name == "second.md":
+                raise RuntimeError("injected: cannot write this sidecar")
+            return real_writer(args, studio_root)
+
+        with mock.patch.object(
+            folder.walker, "cmd_create_sidecar", side_effect=fail_second
+        ):
+            report = folder.reconcile(root, record.mount_uid)
+
+        named = [bad["file"] for bad in report.sidecar_failures]
+        self.assertPlanted(
+            report.sidecars_created >= 1,
+            "no sidecar succeeded, so this proves nothing about a report that "
+            "is clean BESIDE successful work",
+        )
+        self.assertTrue(
+            any("second.md" in name for name in named),
+            f"the file that failed is not named in the report: {named}",
+        )
+        self.assertTrue(
+            all(bad["reason"] for bad in report.sidecar_failures),
+            "a failure was reported with no reason",
+        )
+
+        with mock.patch.object(
+            folder.walker, "cmd_create_sidecar", side_effect=fail_second
+        ):
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = folder.main(
+                    ["reconcile", record.mount_uid, "--root", str(root)]
+                )
+        self.assertEqual(
+            code, 1,
+            "reconcile exited 0 while a named file had no sidecar -- the exit "
+            "code is the half a script reads",
+        )
+        self.assertIn("second.md", output.getvalue())
+
+        recovered = folder.reconcile(root, record.mount_uid)
+
+        self.assertEqual(
+            recovered.sidecar_failures, [],
+            "the retry did not converge",
+        )
+        self.assertTrue(
+            any("second.md" in p.name for p in self.sidecars_in(cloud)),
+            "the previously failing file still has no sidecar",
+        )
+        third = folder.reconcile(root, record.mount_uid)
+        self.assertEqual(third.sidecar_failures, [])
+        self.assertEqual(third.sidecars_created, 0, "the third run rewrote")
+
+    def test_a_metadata_update_that_failed_is_named_and_exits_one(self):
+        """Update-side: the error bound to `_err` and thrown away."""
+        root, cloud, record = self.adopted_with({"drifting.md": "# before\n"})
+        (cloud / "drifting.md").write_text("# after, changed\n", encoding="utf-8")
+        calls = {"n": 0}
+        real_update = folder.walker._apply_update_sidecar_metadata
+
+        def refuse(root_arg, event):
+            calls["n"] += 1
+            return False, "injected: sidecar is read-only"
+
+        with mock.patch.object(
+            folder.walker, "_apply_update_sidecar_metadata", side_effect=refuse
+        ):
+            report = folder.reconcile(root, record.mount_uid)
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = folder.main(
+                    ["reconcile", record.mount_uid, "--root", str(root)]
+                )
+
+        self.assertPlanted(
+            calls["n"] > 0,
+            "the fixture never triggered a metadata update, so refusing one "
+            "proves nothing",
+        )
+        self.assertTrue(
+            report.sidecar_failures,
+            "a refused metadata update was reported as a clean reconcile",
+        )
+        failure = report.sidecar_failures[0]
+        self.assertEqual(failure["action"], "update_sidecar_metadata")
+        self.assertIn("read-only", failure["reason"])
+        self.assertEqual(code, 1)
+        self.assertIn("read-only", output.getvalue())
+
+        recovered = folder.reconcile(root, record.mount_uid)
+
+        self.assertEqual(
+            recovered.sidecar_failures, [],
+            "the retry did not converge once the writer worked again",
+        )
+        self.assertIs(
+            folder.walker._apply_update_sidecar_metadata, real_update,
+            "the patch leaked out of the with-block",
+        )
+
+
+class IngestFailuresAreNeverDiscarded(unittest.TestCase):
+    """A structural guard for the class that has now been missed four times.
+
+    `cmd_ingest` catches per-file exceptions on purpose and reports them in
+    its summary rather than raising. That is correct -- one unreadable file
+    must not abort a folder -- but it means EVERY caller inherits an
+    obligation: a summary that came back is not a sweep that succeeded, and a
+    caller that reads only `created` will report success over a file that has
+    no sidecar.
+
+    The count so far, all in this one tool: A148 found `adopt` marking a mount
+    ADOPTED with a failed file (P0 NO-GO, evt_a9360f18f56fe472_00000012) and
+    the dry-run branch fabricating a clean plan from unreadable output. I then
+    found two more in `_reconcile_sidecars`. The oldest instance predates all
+    of us -- the field above where reconcile's missing counter belongs is
+    documented as exactly this bug, caught once for projections and left
+    standing for sidecars beside it.
+
+    Four instances found by four separate readings is the argument for a test
+    instead of a fifth reading. This one fails when a NEW caller of the real
+    ingest ignores the failure fields, and it does not care how careful
+    anybody intends to be.
+    """
+
+    #: Callers that provably do not consult the failure fields yet, each with
+    #: the reason it is tolerated. A declaration is a debt with a name on it,
+    #: not an exemption: an entry here must cite where the decision lives.
+    #: Empty, and that is the point. `_reconcile_sidecars` was the one entry;
+    #: A148 ruled it into P0 254a360b as the final tail
+    #: (evt_a9360f18f56fe472_00000015) rather than let the P0 ship carrying a
+    #: live exemption for the adjacent false-clean it already knew about.
+    DECLARED: dict = {}
+
+    FAILURE_FIELDS = ("failed_files", "failed")
+
+    def _tool_ast(self):
+        return ast.parse(FOLDER_TOOL_PATH.read_text(encoding="utf-8"))
+
+    @staticmethod
+    def _is_dry_run(call: ast.Call) -> bool:
+        for keyword in call.keywords:
+            if keyword.arg == "dry_run":
+                return not (
+                    isinstance(keyword.value, ast.Constant)
+                    and keyword.value.value is False
+                )
+        return False
+
+    def _real_ingest_callers(self) -> dict:
+        """Enclosing function name -> its node, for every real ingest call."""
+        tree = self._tool_ast()
+        callers = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for inner in ast.walk(node):
+                if not isinstance(inner, ast.Call):
+                    continue
+                target = inner.func
+                if not (isinstance(target, ast.Name) and target.id == "_ingest"):
+                    continue
+                if self._is_dry_run(inner):
+                    continue
+                callers[node.name] = node
+        return callers
+
+    def _decides_on_failure(self, node) -> bool:
+        """Does this function BRANCH on the failure fields, or merely echo them?
+
+        Mentioning the field is not consulting it. The original defect passed
+        `failed_files` straight into the returned report and then marked the
+        mount adopted anyway -- so a guard that greps the function body for
+        the name would have gone green on the exact bug it exists to catch.
+        My first version did precisely that, and the mutation plant caught it.
+
+        The claim is therefore narrower and actually load-bearing: somewhere
+        in this function, a failure field decides control flow -- an `if`
+        test, or the expression of a `raise`.
+
+        KNOWN LIMIT, so nobody trusts this further than it earns. It reads
+        structure, not reachability: neutering a check to `if False:` while
+        leaving the raise in place still looks like a decision from here. It
+        catches the regression that actually happens -- the block being
+        deleted -- and it would not catch a deliberate disabling. Like the
+        caller guard, it closes one shape precisely and should be described
+        that way.
+        """
+        def mentions(sub) -> bool:
+            dumped = ast.dump(sub)
+            return any(field in dumped for field in self.FAILURE_FIELDS)
+
+        for inner in ast.walk(node):
+            if isinstance(inner, ast.If) and mentions(inner.test):
+                return True
+            if isinstance(inner, ast.Raise) and inner.exc and mentions(inner.exc):
+                return True
+            # Iterating the failures to record each one is consulting them,
+            # and is the better shape when the caller reports rather than
+            # refuses. Deliberately `ast.For` only, not comprehensions: a
+            # comprehension is how the ORIGINAL defect looked -- failed_files
+            # copied wholesale into a returned report while the caller went on
+            # to declare success -- so admitting them would reopen the hole
+            # this guard was built to close.
+            if isinstance(inner, ast.For) and mentions(inner.iter):
+                return True
+        return False
+
+    def test_every_real_ingest_caller_consults_the_failure_fields(self):
+        tree_names = self._real_ingest_callers()
+        self.assertTrue(
+            tree_names,
+            "no real (non-dry-run) _ingest caller was found at all, so this "
+            "guard is watching nothing -- the call was probably renamed",
+        )
+
+        unguarded = []
+        for name, node in sorted(tree_names.items()):
+            if self._decides_on_failure(node):
+                continue
+            if name in self.DECLARED:
+                continue
+            unguarded.append(name)
+
+        self.assertEqual(
+            unguarded,
+            [],
+            f"{unguarded} call the real ingest and never read `failed` or "
+            f"`failed_files`. cmd_ingest reports per-file faults in its "
+            f"summary instead of raising, so ignoring those fields reports "
+            f"success over a source file that has no sidecar. Either consult "
+            f"them, or add the caller to DECLARED with the ruling that "
+            f"permits it.",
+        )
+
+    def test_declared_exceptions_are_real_and_still_needed(self):
+        """A stale exemption is worse than none: it hides a fixed bug's twin."""
+        callers = self._real_ingest_callers()
+        for name, reason in sorted(self.DECLARED.items()):
+            self.assertIn(
+                name,
+                callers,
+                f"{name} is declared as an unguarded ingest caller but no "
+                f"longer calls the real ingest. Delete the declaration.",
+            )
+            self.assertTrue(
+                len(reason) > 40 and any(ch.isdigit() for ch in reason),
+                f"the declaration for {name} does not cite where the decision "
+                f"lives; a debt without a reference is an exemption",
+            )
+            if self._decides_on_failure(callers[name]):
+                self.fail(
+                    f"{name} now consults the failure fields, so its entry in "
+                    f"DECLARED is stale and is silently excusing a caller that "
+                    f"no longer needs excusing"
+                )
 
 
 if __name__ == "__main__":

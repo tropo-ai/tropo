@@ -133,6 +133,7 @@ import sys
 import tempfile
 import time
 import unicodedata
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
@@ -141,10 +142,43 @@ try:
 except ImportError:
     _yaml = None  # type: ignore
 
+#: Safe-load through libyaml's C scanner where the machine has it. PyYAML's
+#: pure-Python scanner was 88% of the sibling validator's runtime (measured
+#: 2026-08-09, talos-t40) and this module parses the same frontmatter. Resolved
+#: lazily and by hand rather than `from lib import`, because `_yaml` itself is
+#: optional here and this module must keep importing on a box with no PyYAML.
+_FAST_YAML = None
+if _yaml is not None:
+    try:
+        import importlib.util as _fy_util
+
+        _fy_spec = _fy_util.spec_from_file_location(
+            "tropo_fast_yaml_rebuild",
+            Path(__file__).resolve().parent / "lib" / "fast_yaml.py",
+        )
+        if _fy_spec is not None and _fy_spec.loader is not None:
+            _FAST_YAML = _fy_util.module_from_spec(_fy_spec)
+            _fy_spec.loader.exec_module(_FAST_YAML)
+    except Exception:
+        _FAST_YAML = None
+
+
+def _yaml_safe_load(text: str) -> Any:
+    """`yaml.safe_load` on the fastest available loader, with the old path intact.
+
+    Falls back to plain PyYAML if the helper could not be loaded, and callers
+    still guard on `_yaml is not None` for the no-PyYAML box, so this adds a
+    speedup without adding a way to fail.
+    """
+    if _FAST_YAML is not None:
+        return _FAST_YAML.safe_load(text)
+    return _yaml.safe_load(text)
+
 
 # v1.56 Lane S: script relocated to vault/tools/; siblings resolved by UID
 _TOOLS = Path(__file__).resolve().parent
 REHYDRATE = _TOOLS / "tropo-rehydrate.py"   # rehydrate — v1.30.0 Stream B auto-invoke
+MINT_REGISTRY_GENERATOR = _TOOLS / "tropo-generate-mint-registry.py"
 
 # v1.84 c6f6bea4 (ADR-051 Fork 4): shard-keyed incremental composed index.
 # lib/shard_index.py is the SHARED module also imported by tropo-validate.py's
@@ -1634,6 +1668,7 @@ def _incremental_manifest_blockers(
     owned_paths: set[str],
     *,
     allowed_virtual_paths: Optional[set[str]] = None,
+    allowed_virtual_prefixes: Optional[tuple[str, ...]] = None,
 ) -> list[str]:
     """Name semantic inputs changed since the trusted full/global snapshot."""
     prior_manifest = index_surfaces.load_trusted_derivation_manifest(
@@ -1655,11 +1690,21 @@ def _incremental_manifest_blockers(
     allowed_kinds = {'input', 'source', 'source-absence', 'symlink-target'}
     owned = {Path(path).as_posix() for path in owned_paths}
     allowed_virtual_paths = set(allowed_virtual_paths or ())
+    # Prefix authorization exists because a virtual entry can DISAPPEAR: an
+    # offline mount drops its sidecar observation entirely, so it is absent from
+    # the current manifest and cannot be named by enumerating it.
+    prefixes = tuple(allowed_virtual_prefixes or ())
+
+    def _virtual_allowed(path: str) -> bool:
+        return path in allowed_virtual_paths or (
+            bool(prefixes) and path.startswith(prefixes)
+        )
+
     return sorted({
         path
         for kind, path in changed_keys
         if path not in CLOCK_VIRTUAL_INPUTS
-        and not (kind == 'virtual' and path in allowed_virtual_paths)
+        and not (kind == 'virtual' and _virtual_allowed(path))
         and (kind not in allowed_kinds or path not in owned)
     })
 
@@ -1937,11 +1982,33 @@ def _decode_yaml_single_quoted_scalar(value: str) -> Optional[str]:
     return None
 
 
+@lru_cache(maxsize=8192)
+def _field_re(prefix: str, field: str, suffix: str) -> "re.Pattern[str]":
+    """Compile `prefix + escape(field) + suffix` ONCE per distinct field name.
+
+    MEASURED 2026-08-09 (talos-t40, velocity item 1). A dry-run full rebuild
+    called `re._compile` 877,263 times and actually compiled 160,296 patterns —
+    24.0s of a 69s profiled run, the single largest line item. The cause is that
+    the frontmatter readers built their pattern STRING on every call
+    (`rf'^{re.escape(field)}:...'`), five of them per `detect_field_type`, across
+    ~137k `get_scalar` and ~60k `detect_field_type` calls.
+
+    `re` does memoize by pattern string, but its cache holds 512 entries and is
+    CLEARED WHOLESALE on overflow. Enough distinct field names blow it on every
+    file, which is why even the constant patterns elsewhere in this module were
+    being recompiled: the thrash is global, so the cost lands on code that never
+    built a dynamic pattern at all.
+
+    Keyed on the three parts rather than the finished string so the escaping
+    stays here and no call site can drift from the pattern it means.
+    """
+    return re.compile(prefix + re.escape(field) + suffix, re.MULTILINE)
+
+
 def get_scalar(fm: str, field: str) -> Optional[str]:
     """Get a top-level scalar field. Strips quotes; handles multi-line block scalars."""
     # 1. Block scalar detection (| or >)
-    block_pattern = rf'^{re.escape(field)}:\s*([|>])\s*\n((?:\s+.*\n?)*)'
-    m_block = re.search(block_pattern, fm, re.MULTILINE)
+    m_block = _field_re('^', field, r':\s*([|>])\s*\n((?:\s+.*\n?)*)').search(fm)
     if m_block:
         content = m_block.group(2)
         if not content.strip(): return ""
@@ -1952,8 +2019,7 @@ def get_scalar(fm: str, field: str) -> Optional[str]:
         return "\n".join(line[indent:] for line in lines).strip()
 
     # 2. Quoted or simple scalar
-    pattern = rf'^{re.escape(field)}:\s*(.*)$'
-    m = re.search(pattern, fm, re.MULTILINE)
+    m = _field_re('^', field, r':\s*(.*)$').search(fm)
     if not m: return None
     value = m.group(1).rstrip()
     if value.startswith('"'):
@@ -1979,7 +2045,7 @@ def get_list(fm: str, field: str) -> list[str]:
         m = re.match(r'''^["']([^"']*)["']\s*(?:#.*)?$''', s)
         if m: return m.group(1).strip()
         return re.split(r'\s+#', s, 1)[0].strip().strip('"').strip("'")
-    inline = re.search(rf'^{re.escape(field)}:\s*\[([^\]]*)\]\s*(?:#.*)?$', fm, re.MULTILINE)
+    inline = _field_re('^', field, r':\s*\[([^\]]*)\]\s*(?:#.*)?$').search(fm)
     if inline:
         raw = inline.group(1)
         if not raw.strip(): return []
@@ -1992,8 +2058,7 @@ def get_list(fm: str, field: str) -> list[str]:
     #   sequences (`member_of:\n- uid`) -> collapsed member_of for ~1.8k files studio-wide.
     #   New capture accepts a column-0 `- item` line AND indented continuations (so the T20
     #   multi-line acceptance_criteria scan is preserved). Verified vs a full battery pre-apply.
-    block_pattern = rf'^{re.escape(field)}:\s*(?:[|>]-?)?\s*\n((?:[ \t]*-.*\n?|[ \t]+.*\n?)+)'
-    block = re.search(block_pattern, fm, re.MULTILINE)
+    block = _field_re('^', field, r':\s*(?:[|>]-?)?\s*\n((?:[ \t]*-.*\n?|[ \t]+.*\n?)+)').search(fm)
     if block:
         items: list[str] = []
         current = ""
@@ -2055,11 +2120,11 @@ def get_all_top_level_keys(fm: str) -> list[str]:
 
 def detect_field_type(fm: str, field: str) -> str:
     """Return 'list', 'scalar', 'mapping', or 'absent' based on declaration shape."""
-    if re.search(rf'^{re.escape(field)}:\s*\[', fm, re.MULTILINE): return 'list'
-    if re.search(rf'^{re.escape(field)}:\s*(?:[|>]-?)?\s*\n\s*-\s+', fm, re.MULTILINE): return 'list'
-    if re.search(rf'^{re.escape(field)}:\s*\n\s+[a-zA-Z_"]', fm, re.MULTILINE): return 'mapping'
-    if re.search(rf'^{re.escape(field)}:\s*([|>])', fm, re.MULTILINE): return 'scalar'
-    if re.search(rf'^{re.escape(field)}:\s*\S', fm, re.MULTILINE): return 'scalar'
+    if _field_re('^', field, r':\s*\[').search(fm): return 'list'
+    if _field_re('^', field, r':\s*(?:[|>]-?)?\s*\n\s*-\s+').search(fm): return 'list'
+    if _field_re('^', field, r':\s*\n\s+[a-zA-Z_"]').search(fm): return 'mapping'
+    if _field_re('^', field, r':\s*([|>])').search(fm): return 'scalar'
+    if _field_re('^', field, r':\s*\S').search(fm): return 'scalar'
     return 'absent'
 
 
@@ -2091,7 +2156,7 @@ def reflect_frontmatter(
             if pruning_eligible_markdown and _yaml is not None:
                 if not pruning_loaded:
                     try:
-                        parsed = _yaml.safe_load(fm)
+                        parsed = _yaml_safe_load(fm)
                         parsed_pruning = parsed.get('pruning') if isinstance(parsed, dict) else None
                     except Exception:
                         parsed_pruning = None
@@ -2267,7 +2332,7 @@ def process_file(filepath: Path, uid_override: Optional[str] = None) -> Optional
             record[key] = value
     if _yaml is not None:
         try:
-            structured_frontmatter = _yaml.safe_load(fm)
+            structured_frontmatter = _yaml_safe_load(fm)
         except Exception:
             structured_frontmatter = None
         if isinstance(structured_frontmatter, dict):
@@ -3955,7 +4020,7 @@ def load_meta_status_rollups(
         if _yaml is None:
             continue
         try:
-            parsed = _yaml.safe_load(fm_text)
+            parsed = _yaml_safe_load(fm_text)
         except Exception:
             continue
         if not isinstance(parsed, dict):
@@ -4014,7 +4079,7 @@ _FRONTMATTER_RE = re.compile(r'^---\s*\n(.*?)\n---\s*\n', re.DOTALL)
 
 def _raw_scalar(fm_text: str, field: str) -> Optional[str]:
     """Extract a raw scalar from YAML frontmatter text without laundering (store-raw)."""
-    m = re.search(rf'^{re.escape(field)}:\s*(.*)$', fm_text, re.MULTILINE)
+    m = _field_re('^', field, r':\s*(.*)$').search(fm_text)
     if not m:
         return None
     val = m.group(1).strip()
@@ -4566,6 +4631,14 @@ def _mounted_batch_dependency_uids(
     return tuple(sorted(expanded)), affected_mounts
 
 
+def _registry_bytes_on_disk(vault_root: Path) -> Optional[bytes]:
+    """The folder-mount registry as it currently is, or None when absent."""
+    try:
+        return (vault_root / _FOLDER_MOUNTS_REL).read_bytes()
+    except OSError:
+        return None
+
+
 def freshen_many(
     uids: Iterable[str],
     vault_root: Path,
@@ -4953,14 +5026,50 @@ def _freshen_many_locked(
         repo_clock=str(gardener_stats.get('repo_clock') or ''),
         wall_clock_date=str(gardener_stats.get('wall_clock_as_of') or ''),
     )
+    allowed_virtual_paths = catalog.virtual_paths_for_mounts(affected_mounts)
+    # A BATCH THAT DERIVES NOTHING FROM MOUNTED CONTENT IS NOT INVALIDATED BY
+    # MOUNTED CONTENT MOVING.
+    #
+    # `@mounted-source/...` and `@mounted-sidecar/...` are observations of
+    # folders on other volumes; on a laptop with iCloud and OneDrive mounts they
+    # change — and disappear, when a mount goes offline — constantly, for
+    # reasons no batch caused. When no record in this batch carries a
+    # `mount_uid`, none of its derived rows read those observations, so treating
+    # their movement as tampering refuses correct work: mounting a NEW folder
+    # died on an UNRELATED mount being offline (7b1e0ae5). Rows that do read
+    # them stay fully guarded, because any batch touching mounted content has a
+    # non-empty `affected_mounts` and takes the per-mount authorization above.
+    allowed_virtual_prefixes = (
+        ('@mounted-source/', '@mounted-sidecar/') if not affected_mounts else ()
+    )
+    if registry_raw is not None and registry_raw == _registry_bytes_on_disk(vault_root):
+        # A COMPANION THAT DECLARES CURRENT STATE IS NOT A CHANGE.
+        #
+        # `@mounted-registry/<uid>` entries are a pure function of the
+        # folder-mount registry bytes. A caller that passes the bytes ALREADY ON
+        # DISK is stating what it derived against, so those entries belong to
+        # this transaction; a caller passing DIFFERENT bytes is mutating the
+        # registry and must still be held to per-mount authorization, which is
+        # what stops a batch for one mount smuggling a rename of another.
+        #
+        # Without this, the SECOND `mount` in a studio refused (7b1e0ae5):
+        # `affected_mounts` is derived from records carrying `mount_uid`, and a
+        # governed mount PROJECT deliberately does not carry one — it is the
+        # thing mounted content points at, not mounted content. So mount 1's
+        # registry row, written after the transaction that created the index
+        # surfaces, read as an unrelated semantic input changing under the
+        # writer, and mount 2 died with "no index surface was reported current".
+        allowed_virtual_paths.update(
+            f'@mounted-registry/{mount_uid}'
+            for mount_uid in mounted_catalog_after.mounts
+        )
     try:
         blockers = _incremental_manifest_blockers(
             vault_root,
             current_manifest,
             owned_paths | input_paths,
-            allowed_virtual_paths=catalog.virtual_paths_for_mounts(
-                affected_mounts
-            ),
+            allowed_virtual_paths=allowed_virtual_paths,
+            allowed_virtual_prefixes=allowed_virtual_prefixes,
         )
     except index_surfaces.IndexSurfaceRefusal as exc:
         print(
@@ -7947,6 +8056,33 @@ def main() -> int:
                   file=sys.stderr)
             return 6
         print('  ✓ rehydrate.py succeeded')
+
+    if args.apply:
+        if not MINT_REGISTRY_GENERATOR.exists():
+            print(
+                f'  ✗ {MINT_REGISTRY_GENERATOR.name} not found; a rebuilt Studio '
+                'cannot mint governed files.',
+                file=sys.stderr,
+            )
+            return 8
+        mint_result = subprocess.run(
+            [
+                sys.executable,
+                str(MINT_REGISTRY_GENERATOR),
+                '--vault-path',
+                str(vault),
+            ],
+            cwd=str(vault),
+            timeout=120,
+        )
+        if mint_result.returncode != 0:
+            print(
+                f'  ✗ mint-registry generation FAILED (exit code '
+                f'{mint_result.returncode})',
+                file=sys.stderr,
+            )
+            return 8
+        print('  ✓ mint registry generated')
 
     return 0
 

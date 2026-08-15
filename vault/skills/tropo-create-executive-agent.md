@@ -119,9 +119,24 @@ Show the slate in user voice (no jargon per Rule 2):
 
 Wait for yes. If the founder wants to rename or adjust scope, re-show the slate before proceeding.
 
-### 3. Generate UID (Rule 4)
+### 3. Mint three distinct UIDs (Rule 4)
 
-Generate an 8-char hex UID. Bash: `openssl rand -hex 4`. Record it — used in all three files' frontmatter.
+Mint one UID **per governed file** — charter, briefing, and activation each carry their own:
+
+```bash
+python3 vault/tools/tropo-mint-id.py --count 3 --kind file --reason "new executive agent <name>"
+```
+
+Record which UID belongs to which file. They are three governed entries that point at each other,
+not one entry written three times.
+
+*Until 2026-08-13 this step told the author to generate ONE UID and put it in all three files, and
+step 7 restated that instruction in the activation file's frontmatter line. Following it
+literally made a newcomer's first `tropo-rebuild-index.py --apply` abort on a duplicate-UID
+collision — the index treats one UID in three files as exactly the corruption it is. The agent is
+one entity; its identity is carried by the charter's UID and the pointers between the files, not by
+reusing an address. The shipped example agent already used distinct UIDs, so the instruction was the
+stale side (v1.86 cold-walk finding 3, `ae5e743c`; fixed under locked dev-spec `e52826c5`).*
 
 ### 4. Create the agent folder and workspace (Rule 6)
 
@@ -131,7 +146,7 @@ Generate an 8-char hex UID. Bash: `openssl rand -hex 4`. Record it — used in a
 
 Path: `agents/<name>/<name>-charter.md`. Copy from `vault/templates/tropo-executive-charter.template.md`. Fill in:
 
-- Frontmatter: `uid:` (from step 3), `owner:` (founder's name), `agent_name:`, `role:`, `created:` (today), plus every other required field from `charter-schema.md`
+- Frontmatter: `uid:` (the charter's **own** UID from step 3), `owner:` (founder's name), `agent_name:`, `role:`, `created:` (today), plus every other required field from `charter-schema.md`
 - Body: identity, soul paragraph (use founder's words from `agent_values`), lineage (this is generation 1 — the founding row), captain context (who the founder is and how they work), crew relationships (empty for solo agent, populated for team agents), boot paths, retirement acts
 
 Populate EVERY placeholder. Zero `[FILL:...]` and zero `[agent-name]` survive to the written file.
@@ -140,6 +155,7 @@ Populate EVERY placeholder. Zero `[FILL:...]` and zero `[agent-name]` survive to
 
 Path: `agents/<name>/<name>-briefing.md`. Copy from `vault/templates/tropo-executive-briefing.template.md`. Fill in:
 
+- Frontmatter: `uid:` (the briefing's **own** UID from step 3 — distinct from charter and activation)
 - What the agent owns (scope, deliverables)
 - Tiered reading (what to read at boot vs on-demand)
 - Working protocol (how the agent approaches work)
@@ -152,7 +168,7 @@ Path: `agents/<name>/<name>-briefing.md`. Copy from `vault/templates/tropo-execu
 
 Path: `agents/<name>/<name>-activation.md`. Copy from `vault/templates/tropo-executive-activation.template.md`. Fill in:
 
-- Frontmatter: `uid:` (same UID as charter — the agent is one entity, not three), pointer to charter, pointer to boot playbook
+- Frontmatter: `uid:` (this file's **own** UID from step 3 — never the charter's; three governed files carry three distinct UIDs or the first index rebuild aborts on collision), pointer to charter, pointer to boot playbook
 - Body: §Who You Are + §How to Boot + **§Routing** (concierge-bounce rules — present in the template by default per [playbook.capsule v2.3 §Subtypes §Concierge-Paths (`e7b3c509`)](../capsules/playbook.capsule.md)). The §Routing section is verbatim from the template; replace `[Founder Name]` placeholders, do not edit the bounce rules themselves. The bounce rules are the structural enforcement of D4.9 — they keep system primitives (projects / agents / teams / updates) under canonical playbook governance instead of drifting into agent-inline handling.
 
 ### 8. Create memory.md (Rule 7)
@@ -175,20 +191,21 @@ Path: `agents/<name>/sessions.md`. Copy from `vault/templates/tropo-sessions.tem
 
 ### 11. Register in the vault registry (Rule 9)
 
-Add an entry under the `agents:` map in `.tropo-studio/registries/agent-registry.yaml`. The registry is a **map keyed by UID** (not a list) — the key is the agent's 8-hex UID, the value is an indented block:
+Add an entry under the `user_agents:` map in `.tropo-studio/registries/agent-registry.yaml`. The registry is a **map keyed by messaging UID** (use the charter UID from step 3; do not reuse it in another file) — the value is an indented block:
 ```yaml
-agents:
+user_agents:
   <uid-from-step-3>:
     class: personal            # end-user founder agent (crew/personal/worker/service)
     name: "<Agent Name>"
-    role: "<role (human-readable)>"
+    type: executive
+    purpose: "<role (human-readable)>"
     status: active
-    activation-file: agents/<name>/<name>-activation.md
+    path: agents/<name>/<name>-activation.md
     owner: <founder-name>
     commissioned: <today>
 ```
 
-One entry per agent (the agent is one entity across its three files — do not add separate rows for the briefing/activation). Check existing `agents:` entries for the exact field set your vault uses.
+One entry per agent (the agent is one entity across its three files — do not add separate rows for the briefing/activation). Check existing `user_agents:` entries for the exact field set your Studio uses.
 
 ### 12. Refresh the vault index (Rule 11)
 
@@ -216,7 +233,7 @@ After creating the agent, before reporting success, verify:
 1. `agents/<name>/` exists as a folder
 2. `agents/<name>/workspace/` exists as a folder
 3. `agents/<name>/<name>-charter.md`, `<name>-briefing.md`, `<name>-activation.md` all exist
-4. All three files contain the same `uid:` value (they are one entity)
+4. Charter, briefing, and activation carry three distinct `uid:` values, and their pointer fields resolve to one another
 5. Every file has `owner: <founder-name>` in frontmatter
 6. `agents/<name>/memory.md` exists with `owner:` populated
 7. `agents/<name>/sessions.md` exists with agent name

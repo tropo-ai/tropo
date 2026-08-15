@@ -70,6 +70,7 @@ subsystem_hub:
 - 76bab75f
 ---
 """
+from __future__ import annotations  # py3.9 floor: PEP-604 unions in annotations (metis-g107 2026-08-12, gate-1 walk on Mike's Mac)
 
 """import-walker.py — Deep recursive walker for the Tropo import primitive.
 
@@ -668,6 +669,35 @@ Vault projection at `vault/files/{uid}.md` (Tier 1).
 """
     sidecar_path.write_text(content)
     return uid
+
+
+def resolve_mirror_parent_member(
+    parent_folder: Path,
+    studio_root: Path,
+    mount_uid: str | None,
+) -> str:
+    """Hierarchy-preserving parent for a folder mirror (7b1e0ae5 §3.3).
+
+    A mirror parents to its parent folder's mirror when the parent's on-disk
+    ``.tropo-folder.md`` marker exists and carries a folder_uid; otherwise to
+    the mount (when mounted) or Tropo Work (in-tree). Top-level mirrors under
+    a mount therefore parent to the mount; nested mirrors chain. Bounded
+    lookup — one marker read, no new state.
+    """
+    studio_root = Path(studio_root).resolve()
+    parent_folder = Path(parent_folder).resolve()
+    if parent_folder == studio_root:
+        return TROPO_WORK_L0_UID
+    grandparent = parent_folder.parent
+    marker = grandparent / '.tropo-studio' / '.tropo-folder.md'
+    if marker.is_file():
+        fm = parse_frontmatter(marker)
+        uid = fm.get('uid')
+        if isinstance(uid, str) and re.fullmatch(r'[0-9a-f]{8}', uid):
+            return uid
+    if mount_uid:
+        return mount_uid
+    return TROPO_WORK_L0_UID
 
 
 def write_folder_marker(folder_path, uid, folder_name, original_path,
@@ -1705,6 +1735,9 @@ def cmd_create_sidecar(args, studio_root):
             # Fresh import: mint UID + author marker + mirror (ordered-write protocol)
             folder_uid = generate_uid()
             mirror_path = studio_root / 'vault' / 'files' / f'{folder_uid}.md'
+            parent_member = resolve_mirror_parent_member(
+                parent_folder, studio_root, mount_uid
+            )
             mirror_tmp = None
             try:
                 # Step 1: write mirror to .tmp (NOT visible to readers)
@@ -1714,11 +1747,15 @@ def cmd_create_sidecar(args, studio_root):
                     folder_name=parent_folder.name,
                     original_path=folder_origin_rel,
                     folder_marker_path_rel=marker_rel,
+                    parent_member=parent_member,
                     mount_uid=mount_uid,
                     mount_relpath=folder_mount_relpath,
                 )
                 # Step 2: write on-disk marker (atomic per single-write semantics)
-                write_folder_marker(parent_folder, folder_uid, parent_folder.name, folder_origin_rel)
+                write_folder_marker(
+                    parent_folder, folder_uid, parent_folder.name, folder_origin_rel,
+                    parent_member=parent_member,
+                )
                 # Step 3: atomic-rename .tmp → .md (POSIX/NTFS atomic)
                 os.replace(mirror_tmp, mirror_final)
                 # Step 4: inline index append per §3.10 check 4 v0.5 widening
@@ -1728,6 +1765,7 @@ def cmd_create_sidecar(args, studio_root):
                     folder_name=parent_folder.name,
                     original_path=folder_origin_rel,
                     folder_marker_path_rel=marker_rel,
+                    parent_member=parent_member,
                     mount_uid=mount_uid,
                     mount_relpath=folder_mount_relpath,
                 )
@@ -1756,6 +1794,9 @@ def cmd_create_sidecar(args, studio_root):
                 # Retro-fill: marker exists but no vault mirror (pre-v0.4 import OR
                 # mid-write process-death recovery). Per arch-spec §3.5.5 Amendment 1 v0.5
                 # retro-fill semantics: author mirror using existing UID.
+                parent_member = resolve_mirror_parent_member(
+                    parent_folder, studio_root, mount_uid
+                )
                 mirror_tmp = None
                 try:
                     mirror_tmp, mirror_final = write_folder_mirror(
@@ -1764,6 +1805,7 @@ def cmd_create_sidecar(args, studio_root):
                         folder_name=parent_folder.name,
                         original_path=folder_origin_rel,
                         folder_marker_path_rel=marker_rel,
+                        parent_member=parent_member,
                         mount_uid=mount_uid,
                         mount_relpath=folder_mount_relpath,
                     )
@@ -1774,6 +1816,7 @@ def cmd_create_sidecar(args, studio_root):
                         folder_name=parent_folder.name,
                         original_path=folder_origin_rel,
                         folder_marker_path_rel=marker_rel,
+                        parent_member=parent_member,
                         mount_uid=mount_uid,
                         mount_relpath=folder_mount_relpath,
                     )
@@ -2290,6 +2333,9 @@ def _apply_event(studio_root, event, run_uid, executive):
                     parent_folder, folder_uid, parent_folder.name,
                     anchor_source_path(studio_root, marker_path, mount_uid, mount_root)
                     if mount_uid else folder_rel,
+                    parent_member=resolve_mirror_parent_member(
+                        parent_folder, studio_root, mount_uid
+                    ),
                 )
             else:
                 fm = parse_frontmatter(marker_path)

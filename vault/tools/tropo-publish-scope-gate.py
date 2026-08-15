@@ -70,6 +70,7 @@ two-gate filter.
 """
 import argparse
 import fnmatch
+import importlib.util
 import re
 import subprocess
 import sys
@@ -78,6 +79,20 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
+
+
+def _load_tropo_roots():
+    """Load the production-owned roots module outside either ``lib`` package."""
+    roots_path = Path(__file__).resolve().with_name("lib") / "tropo_roots.py"
+    spec = importlib.util.spec_from_file_location("_tropo_tools_roots", roots_path)
+    if spec is None or spec.loader is None:
+        raise ImportError("tropo_roots helper could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+tropo_roots = _load_tropo_roots()
 
 # ---------------------------------------------------------------------------
 # The declaration lives here — ABOVE the shipped subtree, in the private
@@ -590,7 +605,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = parse_args(argv)
-    root = Path(args.root).resolve() if args.root else Path(__file__).resolve().parents[2]
+    root = Path(args.root).resolve() if args.root else tropo_roots.STUDIO_ROOT
 
     print(f"[scope-gate] grounding in declaration {MANIFEST_REL} ({MANIFEST_UID})…")
     result = run_gate(root, args.source_commit)

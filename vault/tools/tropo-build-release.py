@@ -120,16 +120,31 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from datetime import datetime
 from pathlib import Path
 
 import yaml  # vendor-ref manifest generation (S1, v1.80 re-build) — AST-walk frontmatter
 
+
+def _load_tropo_roots():
+    """Load the production-owned roots module outside either ``lib`` package."""
+    roots_path = Path(__file__).resolve().with_name("lib") / "tropo_roots.py"
+    spec = importlib.util.spec_from_file_location("_tropo_tools_roots", roots_path)
+    if spec is None or spec.loader is None:
+        raise ImportError("tropo_roots helper could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+tropo_roots = _load_tropo_roots()
+
 # ─── lib/ship_extract/ engine (v1.43.0 Stream C — substrate UID c47b9d82) ───
 # Adds the scripts directory to sys.path so `from lib.ship_extract import ...` resolves
 # regardless of how build-release.py is invoked (cwd-independent).
 # v1.56 Lane S: script relocated to vault/tools/; lib/ imports from .tropo/scripts/
-_SCRIPTS_DIR = str(Path(__file__).resolve().parents[2] / '.tropo' / 'scripts')
+_SCRIPTS_DIR = str(tropo_roots.STUDIO_ROOT / '.tropo' / 'scripts')
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 from lib.ship_extract import (
@@ -137,6 +152,8 @@ from lib.ship_extract import (
     load_manifest_entries as _engine_load_manifest_entries,
     resolve_source_path as _engine_resolve_source_path,
     should_exclude_kernel as _engine_should_exclude_kernel,
+    is_generated_bytecode,
+    prune_bytecode,
     validate_manifest_basic as _engine_validate_manifest_basic,
     sha256_file as _engine_sha256_file,
     copy_file as _engine_copy_file,
@@ -145,21 +162,61 @@ from lib.ship_extract import (
 # refuse without a runtime-minted, unforgeable fingerprint of a legitimate pipeline-run.
 from lib.release_authorization import require_release_authorization, ReleaseAuthorizationError, attested_build_authorization
 
+# Per-studio state exclusion (velocity item 8). Loaded by path from
+# vault/tools/lib/ rather than the .tropo/scripts/lib namespace imported above,
+# because those are two different `lib` packages and this rule belongs with the
+# vault tooling that also consumes it.
+import importlib.util as _psx_util
+_psx_spec = _psx_util.spec_from_file_location(
+    "tropo_package_state_exclusions",
+    Path(__file__).resolve().with_name("lib") / "package_state_exclusions.py",
+)
+if _psx_spec is None or _psx_spec.loader is None:
+    raise ImportError("package_state_exclusions helper could not be loaded")
+package_state_exclusions = _psx_util.module_from_spec(_psx_spec)
+_psx_spec.loader.exec_module(package_state_exclusions)
+
+
+def _load_vault_lib(module_name, file_name):
+    """Load a vault/tools/lib module by path.
+
+    Same reason package_state_exclusions is loaded this way: `lib` above is
+    `.tropo/scripts/lib`, a different package. Importing `lib.release_package`
+    would silently resolve to the wrong namespace or fail, depending on path
+    order, which is worse than being explicit.
+    """
+    spec = _psx_util.spec_from_file_location(
+        module_name, Path(__file__).resolve().with_name("lib") / file_name)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"{file_name} could not be loaded")
+    module = _psx_util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+# Stage-6 AC6-final: package-entry authority and the release-leg wait. Both are
+# consulted before the zip exists.
+#: This script's own registered identity. package_frozen is authored by the
+#: TOOL, not by whichever executive invoked it (A148 blocker 2).
+BUILD_TOOL_UID = "a1b8c2d4"
+BUILD_TOOL_SOURCE = "/tools/build-release"
+
+release_package = _load_vault_lib("tropo_release_package", "release_package.py")
+release_legs = _load_vault_lib("tropo_release_legs", "release_legs.py")
+
 # ─── Configuration ───────────────────────────────────────────────────────────
 
-VAULT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PLATFORM_ROOT = os.path.dirname(VAULT_ROOT)   # one level above the Studio
-INDEX_PATH = os.path.join(VAULT_ROOT, 'vault', '00-index.jsonl')
-VERSION_PATH = os.path.join(VAULT_ROOT, '.tropo', 'version.md')
+INDEX_PATH = os.path.join(tropo_roots.VAULT_DIR, '00-index.jsonl')
+VERSION_PATH = os.path.join(tropo_roots.STUDIO_ROOT, '.tropo', 'version.md')
 # RELEASES_DIR sits OUTSIDE the platform repo entirely — releases are product artifacts,
 # not source-repo content. Convention: sibling to the platform repo at <dev-root>/tropo-releases/.
 # Path migration history: argo-os/releases/ → tropo-ai/releases/ (2026-05-11 partial move) →
 # /tropo-releases/ (2026-05-18 outside-repo final per Mike-V47 directive — eliminates copy step
 # for release-cold-boot-walk + clean separation of source vs product artifact).
-RELEASES_DIR = os.path.join(os.path.dirname(PLATFORM_ROOT), 'tropo-releases')
 
 # Directories and files copied by convention (not through the Vault)
-KERNEL_DIR = os.path.join(VAULT_ROOT, '.tropo')
+KERNEL_DIR = os.path.join(tropo_roots.STUDIO_ROOT, '.tropo')
 
 # Manifest-driven build (v1.12.1 MVP Phase E) — replaces legacy parallel-mirror handling
 # (ROOT_FILES list + SKELETON_DIRS constant + load-vault-ship-files function +
@@ -172,7 +229,7 @@ KERNEL_DIR = os.path.join(VAULT_ROOT, '.tropo')
 # (Phase 2 orphan-zombie scanner, Phase 4 cleanup engine, Phase 5 link checker,
 # 23-check validator, deterministic zip mode, build lock) deferred to v1.12.2/v1.13.
 
-SHIP_ARTIFACT_CAPSULE_PATH = os.path.join(VAULT_ROOT, 'vault', 'capsules', 'tropo-ship-artifact.capsule.md')  # ADR-045: moved from .tropo/capsules/ (v1.21.0)
+SHIP_ARTIFACT_CAPSULE_PATH = os.path.join(tropo_roots.VAULT_DIR, 'capsules', 'tropo-ship-artifact.capsule.md')  # ADR-045: moved from .tropo/capsules/ (v1.21.0)
 
 # Files to EXCLUDE from the kernel copy (argo-private scripts, migration
 # playbooks specific to pre-v1.1 internal transitions, etc.)
@@ -246,7 +303,7 @@ def step_0_5_publish_state_preflight():
     never raises — either returns normally (proceed) or calls sys.exit itself.
     """
     print('Step 0.5 — Publish-state pre-flight:')
-    checker = os.path.join(VAULT_ROOT, 'vault', 'tools', 'tropo-check-publish-state.py')
+    checker = os.path.join(tropo_roots.VAULT_DIR, 'tools', 'tropo-check-publish-state.py')
     if not os.path.exists(checker):
         print(f'  ⚠ {checker} not found — pre-flight skipped (non-blocking; tool missing).')
         return {"publish_state": "UNKNOWN", "reason": "checker tool not found"}
@@ -495,9 +552,9 @@ def guard_overwrite(new_version, build_dir, testing_dir):
 def step_2_create_output(new_version):
     """Step 4b: Create the output directory."""
     product_name = f'tropo-os-v{new_version}'
-    build_dir = os.path.join(RELEASES_DIR, f'v{new_version}', 'builds', product_name)
-    testing_dir = os.path.join(RELEASES_DIR, f'v{new_version}', 'testing', product_name)
-    dist_dir = os.path.join(RELEASES_DIR, f'v{new_version}', 'dist')
+    build_dir = os.path.join(tropo_roots.RELEASES_DIR, f'v{new_version}', 'builds', product_name)
+    testing_dir = os.path.join(tropo_roots.RELEASES_DIR, f'v{new_version}', 'testing', product_name)
+    dist_dir = os.path.join(tropo_roots.RELEASES_DIR, f'v{new_version}', 'dist')
 
     if not DRY_RUN:
         # Pre-write guard — added 2026-05-01 (vela-v37, Stream 2 task 87e3b4d6).
@@ -537,8 +594,10 @@ read_manifest_root_uid = _engine_read_manifest_root_uid  # signature unchanged (
 
 
 def load_manifest_entries(index_path, manifest_root_uid):
-    """Backward-compat wrapper — calls engine with VAULT_ROOT + target='release'."""
-    return _engine_load_manifest_entries(index_path, VAULT_ROOT, manifest_root_uid, target='release')
+    """Backward-compat wrapper — calls engine with the Studio root + release target."""
+    return _engine_load_manifest_entries(
+        index_path, tropo_roots.STUDIO_ROOT, manifest_root_uid, target='release'
+    )
 
 
 def validate_manifest_basic(entries, vault_root):
@@ -593,6 +652,20 @@ def build_from_manifest(build_dir, entries):
     deferred to v1.12.2.
     """
     overrides = _build_override_index(entries)
+    # FOLDER-LEVEL SKIPS. `_build_override_index` only indexes `kind: file`, so a
+    # `kind: folder` + `source_mode: skip` entry declared real intent that the
+    # walker silently ignored. Fresh-Box needs it: the template corpus ships
+    # recursively, but root-docs and the two skeletons inside it RELOCATE
+    # elsewhere (recipient root, agents/, .tropo-studio/), so without this a box
+    # carries two copies of those bytes at different paths — and a recipient
+    # edits the copy nobody reads (e52826c5 AC1).
+    skip_dirs = tuple(
+        os.path.join(_resolve_argo_path(e.get('canonical_source', '')), '')
+        for e in entries
+        if e.get('kind') == 'folder'
+        and e.get('source_mode') == 'skip'
+        and e.get('canonical_source')
+    )
     counts = {
         'recursive-ship-all': 0,
         'recursive-ship-tagged': 0,
@@ -626,7 +699,7 @@ def build_from_manifest(build_dir, entries):
             op = _resolve_argo_path(cs)
         op = op.rstrip('/')
 
-        src_abs = os.path.join(VAULT_ROOT, _resolve_argo_path(cs)) if cs else None
+        src_abs = os.path.join(tropo_roots.STUDIO_ROOT, _resolve_argo_path(cs)) if cs else None
         dst_abs = os.path.join(build_dir, op) if op else None
 
         counts[mode] = counts.get(mode, 0) + 1
@@ -644,11 +717,17 @@ def build_from_manifest(build_dir, entries):
                 if not DRY_RUN and dst_abs:
                     os.makedirs(dst_abs, exist_ok=True)
                 for root, dirs, files in os.walk(src_abs):
+                    prune_bytecode(dirs, files)
                     rel = os.path.relpath(root, src_abs)
                     rel = '' if rel == '.' else rel
+                    if skip_dirs and os.path.join(
+                        os.path.relpath(root, tropo_roots.STUDIO_ROOT), ''
+                    ).startswith(skip_dirs):
+                        dirs[:] = []
+                        continue
                     for fname in files:
                         src_file = os.path.join(root, fname)
-                        src_file_rel = os.path.relpath(src_file, VAULT_ROOT)
+                        src_file_rel = os.path.relpath(src_file, tropo_roots.STUDIO_ROOT)
                         # Honor per-file override (skip or direct-copy under recursive parent)
                         if src_file_rel in overrides:
                             files_skipped_by_override += 1
@@ -691,6 +770,158 @@ PER_STUDIO_BOOT_DERIVATION_UIDS = frozenset({
     '266b0b56',
     'a993f079',
 })
+
+
+#: Where the box tells itself which manifest to ask for updates.
+UPDATE_SOURCE_REL = os.path.join('.tropo', 'update-source.json')
+
+
+def step_3g_write_update_source(build_dir):
+    """Give the box a concrete update address, or refuse to build it.
+
+    ae5e743c finding 4, found live on the FIRST customer discovery (2026-08-09):
+    the box shipped no update-source address at all. The concierge's
+    remote-discovery step names "the stable manifest URL" and no such URL existed
+    anywhere in the shipped tree, so the check was never testable — and because
+    the surrounding contract is "offline = skip, no error state", an address that
+    was MISSING looked exactly like a network that was down. That swallowed the
+    gap forever.
+
+    THE FIX IS A REFUSAL, NOT A WARNING, and the placement is the point. A box
+    with no update address is a box that can never learn about its own updates,
+    and the only people who can supply the address are us, at build time. Making
+    the customer surface a configuration gap they cannot fix would move the
+    report away from the person who can act. So the build stops.
+
+    The URL is DERIVED, never typed: the same public Supabase releases path the
+    manifest generator publishes to, so the address the box asks for and the
+    address we upload to cannot drift. The previous default,
+    `https://api.tropo-ai.com/updates`, was fictional infrastructure whose host
+    never resolved — discovered on a real customer's first apply. Nothing here
+    invents a host.
+    """
+    manifest_url = _resolve_update_manifest_url()
+    if not manifest_url:
+        raise SystemExit(
+            'REFUSED: cannot resolve the update manifest URL, so this box would '
+            'ship with no update address — the exact defect found on the first '
+            'customer discovery (ae5e743c finding 4).\n'
+            '  Cure: set NEXT_PUBLIC_SUPABASE_URL, or provide tropo-app/.env.local, '
+            'so the address is DERIVED from where releases actually publish.\n'
+            '  Do not hand-write a URL here: the previous hand-written default '
+            'pointed at a host that never existed.'
+        )
+
+    payload = {
+        'schema_id': 'tropo.update-source/v1',
+        'manifest_url': manifest_url,
+        'note': (
+            'Where this studio asks about updates. Absence of this file is a '
+            'CONFIGURATION GAP, not an offline condition: report it, do not '
+            'silently skip. Generated at build from the publish target so the '
+            'address asked for and the address published to cannot drift.'
+        ),
+    }
+    dst = os.path.join(build_dir, UPDATE_SOURCE_REL)
+    if not DRY_RUN:
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst, 'w', encoding='utf-8') as handle:
+            json.dump(payload, handle, indent=2)
+            handle.write('\n')
+    print(f'  Update source: {manifest_url}')
+    return manifest_url
+
+
+UPDATE_PUBLIC_SHAPE = '/storage/v1/object/public/releases/updates'
+TRACKED_UPDATES_MANIFEST_REL = os.path.join('vault', 'updates', 'updates-manifest.json')
+
+
+def _resolve_update_base_from_tracked_manifest():
+    """Derive the public base from PUBLICATION EVIDENCE already in the repo.
+
+    `vault/updates/updates-manifest.json` records the real URLs previous
+    releases were published to. That is evidence, not a guess: if a package was
+    fetched from an address, that address exists. Deriving from it means a
+    machine with no publish credentials can still build a walkable candidate,
+    which is what blocked the AC8 walk (verdict 62a22664).
+
+    Nothing here invents a host — the previous hand-written default
+    (`api.tropo-ai.com`) pointed at infrastructure that never existed and broke
+    a real customer's first update. A URL that does not carry the expected
+    public shape is rejected rather than patched into shape.
+    """
+    manifest_path = os.path.join(tropo_roots.STUDIO_ROOT, TRACKED_UPDATES_MANIFEST_REL)
+    try:
+        with open(manifest_path, encoding='utf-8') as handle:
+            payload = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    for url in sorted(set(re.findall(r'https://[^"\'\s]+', json.dumps(payload)))):
+        marker = UPDATE_PUBLIC_SHAPE + '/'
+        if url.startswith('https://') and marker in url:
+            return url.split(marker)[0] + UPDATE_PUBLIC_SHAPE
+    return None
+
+
+def _reconcile_update_origins(env_base, tracked_base):
+    """Two sources of the same address must agree, or the build refuses.
+
+    Silently preferring one would publish a box pointed at a bucket nobody
+    uploads to — the same class of failure as the fictional host, arrived at by
+    a different route.
+    """
+    if env_base and tracked_base and env_base.rstrip('/') != tracked_base.rstrip('/'):
+        raise SystemExit(
+            'REFUSED: update-source drift — the publish environment resolves '
+            f'{env_base!r} but tracked publication evidence in '
+            f'{TRACKED_UPDATES_MANIFEST_REL} resolves {tracked_base!r}. '
+            'One of them is wrong, and shipping either would point the box at a '
+            'bucket that may receive nothing. Reconcile them, then rebuild.'
+        )
+    return (env_base or tracked_base or '').rstrip('/') or None
+
+
+def _resolve_update_manifest_url():
+    """The published manifest address: publish environment, then evidence.
+
+    Order: the real publish env (NEXT_PUBLIC_SUPABASE_URL / tropo-app/.env.local)
+    first, because that is the live target; then the stable public base derived
+    from tracked publication evidence. When both resolve they must agree —
+    `_reconcile_update_origins` refuses drift rather than choosing.
+
+    Reads the generator's own resolver rather than restating its path, so there
+    is one definition of where the manifest lives (velocity item 4's rule
+    applied across tools rather than across a tool and its test).
+    """
+    # The publish environment is consulted through the generator's own resolver,
+    # but a failure to LOAD it must not skip the evidence path — that early
+    # return is why a machine without publish credentials produced an
+    # unwalkable candidate (AC8 verdict 62a22664).
+    env_base = None
+    spec = importlib.util.spec_from_file_location(
+        'tropo_generate_update_manifest_for_source',
+        os.path.join(tropo_roots.VAULT_DIR, 'tools', 'tropo-generate-update-manifest.py'),
+    )
+    if spec is not None and spec.loader is not None:
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except SystemExit:
+            pass
+        except Exception:
+            module = None
+        if module is not None:
+            try:
+                env_base = getattr(module, '_resolve_package_url_base', lambda: None)()
+            except Exception:
+                env_base = None
+    if env_base:
+        env_base = env_base.rstrip('/')
+    tracked_base = _resolve_update_base_from_tracked_manifest()
+    base = _reconcile_update_origins(env_base, tracked_base)
+    if not base:
+        return None
+    return f"{base.rsplit('/', 1)[0]}/updates-manifest.json"
 
 
 def step_3f_remove_per_studio_boot_derivations(build_dir):
@@ -792,6 +1023,7 @@ def step_3_copy_kernel(build_dir):
     # build, 2026-04-22.)
     concierge_dir = os.path.join(src_kernel, 'concierge')
     for root, dirs, files in os.walk(src_kernel):
+        prune_bytecode(dirs, files)
         # Skip concierge subtree — copied separately below with its own governance
         if root == concierge_dir or root.startswith(concierge_dir + os.sep):
             continue
@@ -803,6 +1035,18 @@ def step_3_copy_kernel(build_dir):
                 continue
 
             rel = os.path.relpath(src, src_kernel)
+
+            # Per-studio STATE, excluded by PATH — the basename list above cannot
+            # express "everything under .tropo/flags/". v1.86.0 shipped 24 of our
+            # flags into every customer box, including the attendant-mode offer
+            # gate whose documented meaning is "the offer was made, do not repeat
+            # it", so a brand-new studio was told its owner had already been
+            # through onboarding (talos-t40, velocity item 8, 2026-08-09).
+            if package_state_exclusions.is_studio_state(
+                (Path('.tropo') / rel).as_posix()
+            ):
+                skipped += 1
+                continue
             dst = os.path.join(dst_kernel, rel)
             copy_file(src, dst, DRY_RUN)
             copied += 1
@@ -811,6 +1055,7 @@ def step_3_copy_kernel(build_dir):
     concierge_src = os.path.join(src_kernel, 'concierge')
     if os.path.exists(concierge_src):
         for root, dirs, files in os.walk(concierge_src):
+            prune_bytecode(dirs, files)
             for fname in files:
                 src = os.path.join(root, fname)
                 rel = os.path.relpath(src, src_kernel)
@@ -839,7 +1084,7 @@ def step_4_copy_ship_entries(build_dir, entries):
         if entry.get('type') == 'kernel':
             continue
 
-        src = resolve_source_path(entry, VAULT_ROOT)
+        src = resolve_source_path(entry, tropo_roots.STUDIO_ROOT)
         if not os.path.exists(src):
             print(f'    MISSING: {entry["uid"]} — {src}')
             missing += 1
@@ -957,7 +1202,7 @@ def step_3a_regenerate_catalogs():
 
     Must run BEFORE step_3_copy_kernel (which copies .tropo/ into the build).
     """
-    catalog_gen = os.path.join(VAULT_ROOT, 'vault', 'tools', 'tropo-generate-capability-catalogs.py')
+    catalog_gen = os.path.join(tropo_roots.VAULT_DIR, 'tools', 'tropo-generate-capability-catalogs.py')
     if not os.path.exists(catalog_gen):
         print(f'  ⚠ catalog generator not found at vault/tools/tropo-generate-capability-catalogs.py — catalogs NOT regenerated')
         return
@@ -967,7 +1212,7 @@ def step_3a_regenerate_catalogs():
     import subprocess as _sp
     result = _sp.run(
         [sys.executable, catalog_gen, '--apply'],
-        capture_output=True, text=True, cwd=str(VAULT_ROOT),
+        capture_output=True, text=True, cwd=str(tropo_roots.STUDIO_ROOT),
         stdin=_sp.DEVNULL, timeout=60,
     )
     if result.returncode != 0:
@@ -1008,7 +1253,7 @@ def step_3b_copy_vault_tools(build_dir):
     Added: v1.63 P0 fix (Talos T12) per ruling fdef56ea + directive 03b17aaa.
     Fixed to recurse: v1.78 (Talos T23) per Argus A123 finding G1.
     """
-    src_tools = os.path.join(VAULT_ROOT, 'vault', 'tools')
+    src_tools = os.path.join(tropo_roots.VAULT_DIR, 'tools')
     dst_tools = os.path.join(build_dir, 'vault', 'tools')
 
     if not os.path.isdir(src_tools):
@@ -1021,6 +1266,7 @@ def step_3b_copy_vault_tools(build_dir):
 
     copied = 0
     for root, dirs, files in os.walk(src_tools):
+        prune_bytecode(dirs, files)
         dirs[:] = sorted(d for d in dirs if d not in VAULT_TOOLS_EXCLUDE_DIRS)
         for fname in sorted(files):
             src_file = os.path.join(root, fname)
@@ -1044,7 +1290,7 @@ def step_3d_copy_vault_playbooks(build_dir):
 
     Added: v1.70 fix (Talos T18) per Orpheus finding b1f9c3d2.
     """
-    src_playbooks = os.path.join(VAULT_ROOT, 'vault', 'playbooks')
+    src_playbooks = os.path.join(tropo_roots.VAULT_DIR, 'playbooks')
     dst_playbooks = os.path.join(build_dir, 'vault', 'playbooks')
 
     if not os.path.isdir(src_playbooks):
@@ -1088,7 +1334,7 @@ def step_3e_copy_vault_updates(build_dir):
 
     Added: v1.78 (Talos T23) per Argus A123 finding G2.
     """
-    src_updates = os.path.join(VAULT_ROOT, 'vault', 'updates')
+    src_updates = os.path.join(tropo_roots.VAULT_DIR, 'updates')
     dst_updates = os.path.join(build_dir, 'vault', 'updates')
 
     if not os.path.isdir(src_updates):
@@ -1101,6 +1347,7 @@ def step_3e_copy_vault_updates(build_dir):
 
     copied = 0
     for root, dirs, files in os.walk(src_updates):
+        prune_bytecode(dirs, files)
         dirs[:] = sorted(dirs)
         for fname in sorted(files):
             src_file = os.path.join(root, fname)
@@ -1134,8 +1381,8 @@ def step_3c_assert_forward_targets(build_dir):
 
     if DRY_RUN:
         # In dry-run, scan the source dirs (build dirs don't exist yet).
-        scripts_dir = os.path.join(VAULT_ROOT, '.tropo', 'scripts')
-        tools_dir = os.path.join(VAULT_ROOT, 'vault', 'tools')
+        scripts_dir = os.path.join(tropo_roots.STUDIO_ROOT, '.tropo', 'scripts')
+        tools_dir = os.path.join(tropo_roots.VAULT_DIR, 'tools')
         print(f'  [DRY-RUN] Forward-target guard: scanning source dirs')
 
     if not os.path.isdir(scripts_dir):
@@ -1185,7 +1432,7 @@ def step_7_create_vault_skeleton(build_dir):
     Fail-loud on template missing, per ADR-032 Tier Reachability amendment:
     declared-present-but-unreachable halts the build instead of silent-skip.
     """
-    skeleton_src = os.path.join(VAULT_ROOT, 'vault', 'templates', '.tropo-studio-skeleton')  # ADR-045: moved from .tropo/templates/ (v1.21.0)
+    skeleton_src = os.path.join(tropo_roots.VAULT_DIR, 'templates', '.tropo-studio-skeleton')  # ADR-045: moved from .tropo/templates/ (v1.21.0)
     vault_dst = os.path.join(build_dir, '.tropo-studio')
 
     if not os.path.exists(skeleton_src):
@@ -1201,7 +1448,8 @@ def step_7_create_vault_skeleton(build_dir):
         # Remove any pre-existing destination to ensure clean copy
         if os.path.exists(vault_dst):
             shutil.rmtree(vault_dst)
-        shutil.copytree(skeleton_src, vault_dst)
+        shutil.copytree(skeleton_src, vault_dst,
+                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '*.pyo'))
 
     # Count what got copied for the log line
     file_count = 0
@@ -1306,6 +1554,24 @@ def step_9b_regenerate_tropo_nav(build_dir):
         return
 
     import subprocess
+
+    # Step 4 writes a provisional current index for the manifest walker. It is
+    # not a complete index generation: no archive/SQLite/meta companions exist,
+    # so the transactional index writer correctly refuses to adopt it. The
+    # build directory is scratch output, not user state; clear that provisional
+    # generation before asking the shipped rebuilder to derive the authoritative
+    # current+archive pair and navigation from shipped source files.
+    for rel in (
+        'vault/00-index.jsonl',
+        'vault/00-archive-index.jsonl',
+        'vault/00-index.sqlite',
+        'vault/00-project-tree.jsonl',
+        '.tropo-studio/locks/index-surfaces.meta.json',
+        '.tropo-studio/locks/index-surfaces.ratchet.json',
+    ):
+        candidate = os.path.join(build_dir, rel)
+        if os.path.isfile(candidate):
+            os.unlink(candidate)
 
     # 9b.1: rebuild-vault.py against build dir (writes 00-index.jsonl + 00-project-tree.jsonl
     # from the shipped vault files only — eats our own dogfood for v1.5 S5 ports)
@@ -1500,7 +1766,7 @@ def step_9c_generate_vendor_ref_manifest(build_dir, new_version):
         return 0
 
     shipped_uids = _vendor_manifest_collect_all_uids(build_dir)
-    source_uids = _vendor_manifest_collect_all_uids(VAULT_ROOT)
+    source_uids = _vendor_manifest_collect_all_uids(tropo_roots.STUDIO_ROOT)
     referenced_uids = _vendor_manifest_collect_referenced_uids(build_dir)
 
     outward_refs = referenced_uids - shipped_uids
@@ -1786,6 +2052,77 @@ def step_9_generate_manifest(build_dir, new_version):
     return len(entries)
 
 
+
+#: THE INDEX GENERATION LEAVES THE PACKAGE AS ONE SET (Argus, evt 114).
+#:
+#: A package cannot carry PART of an index generation. Shipping the pair with a
+#: seal but no database gave the recipient two of the three evidence copies the
+#: writer requires, and its first rebuild refused as incomplete evidence;
+#: shipping the database made the package machine-dependent, because SQLite
+#: bytes vary by library version. Both failures are the same mistake in
+#: different clothes — a partial generation is evidence that contradicts itself.
+#:
+#: So the box carries none of it, and the recipient's first documented rebuild
+#: bootstraps the whole generation locally: current, archive, project tree,
+#: metadata, ratchet and its own database. That is the only shape the writer
+#: both accepts and can recover from without machine-bound bytes.
+PORTABLE_PURGE_NAMES = ('index-write.lock',)
+PORTABLE_PURGE_SUFFIXES = ('.pyc', '.pyo', '-shm', '-wal', '.tmp-shm', '.tmp-wal')
+PORTABLE_PURGE_EXACT_RELATIVE = (
+    'vault/00-index.jsonl',
+    'vault/00-archive-index.jsonl',
+    'vault/00-project-tree.jsonl',
+    'vault/00-index.sqlite',
+    '.tropo-studio/locks/index-surfaces.meta.json',
+    '.tropo-studio/locks/index-surfaces.ratchet.json',
+)
+
+
+def step_10_2_purge_run_local_artifacts(build_dir):
+    """Remove what BUILDING the box created inside it, before the digest.
+
+    Excluding bytecode during the copy traversals is necessary but not
+    sufficient: later steps EXECUTE code inside the build directory — sealing
+    the index pair imports the box's own `lib` — and the interpreter writes
+    fresh `__pycache__` there afterwards, along with a machine-local index write
+    lock. Two builds of one commit then differ in files that no source produced,
+    which is the defect from evt 102 arriving by a second route.
+
+    Purging after the last step that can create them is the only placement that
+    holds regardless of which future step runs code in the box.
+    """
+    removed = 0
+    for root, dirs, files in os.walk(build_dir, topdown=False):
+        for name in list(dirs):
+            if name in ('__pycache__',):
+                shutil.rmtree(os.path.join(root, name), ignore_errors=True)
+                removed += 1
+                dirs.remove(name)
+        for name in files:
+            # `-shm`/`-wal` (and their `.tmp-` variants) are SQLite's journal
+            # files. They are an artifact of the process that just wrote the
+            # database, not content: Metis's Mac left `.tmp-shm`/`.tmp-wal`
+            # where this machine leaves `-shm`/`-wal`, so the file COUNT itself
+            # varied by platform before either byte was compared.
+            rel = os.path.relpath(os.path.join(root, name), build_dir).replace(os.sep, '/')
+            claims_absent_generation = (
+                rel.startswith('vault/00-index') or rel.startswith('vault/00-archive-index')
+                or rel.startswith('.tropo-studio/locks/index-'))
+            if (name.endswith(PORTABLE_PURGE_SUFFIXES)
+                    or name in PORTABLE_PURGE_NAMES
+                    or rel in PORTABLE_PURGE_EXACT_RELATIVE
+                    or claims_absent_generation):
+                try:
+                    os.remove(os.path.join(root, name))
+                    removed += 1
+                except OSError:
+                    pass
+    if removed:
+        print(f'Step 10.2 — Purged {removed} non-portable artifact(s) '
+              f'(bytecode, write locks, SQLite + its journals)')
+    return removed
+
+
 def step_10_sanitize_argo_identity(build_dir):
     print('Step 10 — Sanitize the Studio Identity')
     # v1.71 (argus-a114, Mike-authorized 2026-06-16): GENERICIZE the public artifact instead of
@@ -1800,6 +2137,14 @@ def step_10_sanitize_argo_identity(build_dir):
         (re.compile(r'development dogfood', re.I), 'development dogfood'),
         (re.compile(r'the Studio', re.I), 'the Studio'),
         (re.compile(r'the Studio', re.I), 'the Studio'),
+        # Metis's cold walk (verdict 62a22664): a recipient has no `argo-os/`
+        # directory, so prose naming it as THIS FOLDER points a newcomer at a
+        # path that does not exist in the artifact they are holding. Scoped to
+        # that reader-addressing phrase deliberately — `argo-os/vault/...` in a
+        # capsule's canonical_source examples describes a SOURCE address the
+        # manifest really uses, and rewriting it would corrupt documentation to
+        # fix a greeting.
+        (re.compile(r'\(this folder, `argo-os/`\)', re.I), '(this folder)'),
     ]
     sanitized = 0
     for root, _, files in os.walk(build_dir):
@@ -1818,7 +2163,34 @@ def step_10_sanitize_argo_identity(build_dir):
                 Path(path).write_text(new, encoding='utf-8')
                 sanitized += 1
 
-    argo_isms = ['the Studio', 'the development dogfood']
+    stripped_scope = 0
+    for root, _, files in os.walk(build_dir):
+        for f in files:
+            if not f.endswith('.md'):
+                continue
+            path = Path(root) / f
+            try:
+                content = path.read_text(encoding='utf-8')
+            except Exception:
+                continue
+            if not content.startswith('---\n'):
+                continue
+            end = content.find('\n---', 4)
+            if end == -1:
+                continue
+            head, rest = content[:end], content[end:]
+            # The trailing newline is optional: the LAST frontmatter line ends
+            # at the fence, not at a newline, and requiring one silently missed
+            # every single-field frontmatter (START-TROPO.md, GEMINI.md).
+            cleaned = re.sub(r'^extraction_scope:[ \t]*argo-reference[ \t]*(?:\n|$)', '',
+                             head, flags=re.M)
+            if cleaned != head:
+                path.write_text(cleaned + rest, encoding='utf-8')
+                stripped_scope += 1
+    if stripped_scope:
+        print(f'  Build-metadata frontmatter stripped from {stripped_scope} file(s)')
+
+    argo_isms = ['the Studio', 'the development dogfood', 'this folder, `argo-os/`']
     findings = []
     for root, _, files in os.walk(build_dir):
         for f in files:
@@ -1826,6 +2198,10 @@ def step_10_sanitize_argo_identity(build_dir):
                 continue
             path = os.path.join(root, f)
             rel_path = os.path.relpath(path, build_dir)
+            # The sanitizer's own rule table necessarily spells the strings it
+            # removes, so scanning it finds the definition rather than a leak.
+            if f == os.path.basename(__file__):
+                continue
             try:
                 content = Path(path).read_text(encoding='utf-8').lower()
             except Exception:
@@ -1842,7 +2218,43 @@ def step_10_sanitize_argo_identity(build_dir):
     print(f'  ✓ Build sanitized — genericized {sanitized} artifact file(s); no Argo-isms remain.')
 
 
-def step_10_6_cold_walk_gate(new_version, dist_dir, verdict_path, last_cw_path):
+WALK_ANSWER_ENV = 'TROPO_WALK_ANSWER'
+
+
+def _normalize_walk_answer(raw):
+    value = str(raw or '').strip().lower()
+    if value in ('', 'y', 'yes'):
+        return '', 'yes'
+    if value in ('n', 'no'):
+        return 'n', 'no'
+    raise ValueError(
+        f"invalid cold-walk answer {raw!r}; expected y/yes/n/no"
+    )
+
+
+def _resolve_walk_answer(explicit_answer=None, stdin=None):
+    """Resolve flag → env → immediate non-TTY default → interactive TTY."""
+    stdin = stdin or sys.stdin
+    interactive = False
+    if explicit_answer is not None:
+        raw, source = explicit_answer, '--walk-answer'
+    elif WALK_ANSWER_ENV in os.environ:
+        raw, source = os.environ[WALK_ANSWER_ENV], WALK_ANSWER_ENV
+    elif not stdin.isatty():
+        raw, source = '', 'immediate non-TTY default (stdin not read)'
+    else:
+        raw = input(
+            '  Run the cold-boot stranger walk? [Y/n, default Y]: '
+        )
+        source = 'interactive TTY'
+        interactive = True
+    normalized, label = _normalize_walk_answer(raw)
+    print(f'  Cold-walk prompt answer: {label} (source: {source})')
+    return normalized, interactive
+
+
+def step_10_6_cold_walk_gate(new_version, dist_dir, verdict_path, last_cw_path,
+                             walk_answer=None, stdin=None):
     """Step 10.6 — Stranger-walk gate (dev-spec 554624e5; v1.74).
 
     Always-ask: 'Run the cold-boot stranger walk?' Default YES. Override-to-skip recorded.
@@ -1860,10 +2272,24 @@ def step_10_6_cold_walk_gate(new_version, dist_dir, verdict_path, last_cw_path):
 
     # Always-ask (D3: always-ask, default YES — dev-spec 554624e5)
     try:
-        answer = input('  Run the cold-boot stranger walk? [Y/n, default Y]: ').strip().lower()
+        answer, interactive_answer = _resolve_walk_answer(
+            walk_answer, stdin
+        )
     except (EOFError, KeyboardInterrupt):
-        answer = ''
+        answer, interactive_answer = '', True
+        print('  Cold-walk prompt answer: yes (source: EOF/interrupt default)')
+    except ValueError as exc:
+        print(f'  ✗ Build REFUSED — {exc}', file=sys.stderr)
+        raise SystemExit(2) from None
     elected = (answer in ('', 'y', 'yes'))
+
+    if not elected and not interactive_answer:
+        print(
+            '  ✗ Build REFUSED — a non-interactive `no` cannot create '
+            '`skipped-by-mike`; answer yes/default headlessly or use a real TTY.',
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
 
     now = _dt.now().strftime('%Y-%m-%dT%H:%M:%S')
     os.makedirs(os.path.dirname(verdict_path), exist_ok=True)
@@ -2076,6 +2502,160 @@ def assert_mission_brief_slot(build_dir):
           '<FILL: …> template (no Argo-internal content).')
 
 
+def stage6_package_authority(activation_uid):
+    """Resolve who authorised this package and refuse unless the legs settled.
+
+    THE AC6-FINAL WELD (0a0a6777; A148 evt_a9360f18f56fe472_00000010 and
+    _00000020). AC6 claims the package freeze refuses until every release leg
+    is terminal or independently attested. Until now that claim was true of a
+    run walking the release graph and false of anyone invoking this script,
+    which is the only way a package is actually produced. The gate lived in a
+    library that only its own tests called.
+
+    Everything here happens BEFORE a single zip byte exists, because a refusal
+    after the artefact is a refusal that already cost something.
+
+    Deliberately no fallback. There is no "if we cannot resolve a run, carry
+    on" branch and no caller boolean that turns this off: an omission-based
+    bypass would make the gate advisory, and a gate a caller can decline is
+    not a gate. That is A148's Q2 answer and it is stricter than what I
+    proposed.
+    """
+    runtime = _load_pipeline_runtime()
+    identity = release_package.resolve_release_run(
+        activation_uid,
+        Path(tropo_roots.VAULT_DIR) / "files",
+        Path(tropo_roots.VAULT_DIR) / "pipeline-runs",
+    )
+
+    # A148 Q5: recompute the fan-in digest canonically from the lock's
+    # IMMUTABLE manifest and compare. One source plus an integrity check, not
+    # two sources — the rows are never read from live dev-specs, so a spec
+    # edited since the lock cannot change what this package claims to contain.
+    _verify_fan_in_against_manifest(identity, runtime)
+
+    run_entry = runtime.read_vault_entry(identity.run_uid) or {}
+    run_folder = str((run_entry.get("frontmatter") or {}).get("run_folder") or "")
+    if not run_folder:
+        raise release_package.PackageRefusal(
+            f"release run {identity.run_uid} declares no run_folder, so its "
+            f"leg events cannot be read and the wait cannot be evaluated"
+        )
+    events = runtime.read_events(Path(tropo_roots.STUDIO_ROOT) / run_folder)
+
+    # One definition, two readers: the same derivation the engine uses at the
+    # wait step. A package must not be able to disagree with the engine about
+    # whether the legs settled.
+    leg_records = release_legs.leg_records_from_events(events)
+    states = release_legs.assert_ready_to_freeze(
+        identity.run_uid, leg_records, runtime.read_vault_entry
+    )
+    return identity, states
+
+
+def _verify_fan_in_against_manifest(identity, runtime):
+    """Prove the membership recorded at lock time has not moved since.
+
+    The manifest is the lock's own immutable artefact. Reading the rows from
+    there and recomputing gives one source and a proof of integrity; reading
+    them from the current dev-specs would give two sources, and the newer one
+    would silently win.
+    """
+    plan = runtime.read_vault_entry(identity.plan_uid) or {}
+    ref = str((plan.get("frontmatter") or {}).get("fan_in_manifest_ref") or "")
+    if not ref:
+        raise release_package.PackageRefusal(
+            f"release-plan {identity.plan_uid} names no fan_in_manifest_ref, "
+            f"so the digest it recorded cannot be checked against anything"
+        )
+    path = Path(tropo_roots.STUDIO_ROOT) / ref
+    if not path.is_file():
+        raise release_package.PackageRefusal(
+            f"fan-in manifest for {identity.plan_uid} does not resolve at "
+            f"{path}; refusing rather than trusting a digest with no manifest"
+        )
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise release_package.PackageRefusal(
+            f"fan-in manifest at {path} does not parse: {exc}"
+        ) from exc
+    release_package.verify_fan_in_digest(identity, manifest.get("rows") or [])
+
+
+def _load_pipeline_runtime():
+    """The engine, imported by path. Its event reader is the one we reuse."""
+    path = os.path.join(tropo_roots.VAULT_DIR, 'tools', '9e7003b1.py')
+    spec = importlib.util.spec_from_file_location('_pipeline_runtime', path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules['_pipeline_runtime'] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def stage6_freeze_package(identity, zip_file, new_version, actor='tropo-build-release.py'):
+    """Hash the shipped bytes once and record the one package identity.
+
+    The digest is taken from the final zip on disk — not the build directory,
+    not a value a caller supplies. Every AC7 instrument afterwards names its
+    subject by this number, so a digest sourced from anything else makes all
+    four of them describe an artefact that never shipped.
+    """
+    package_sha256 = release_package.hash_final_zip(Path(zip_file))
+    runtime = _load_pipeline_runtime()
+    run_entry = runtime.read_vault_entry(identity.run_uid) or {}
+    run_folder = str((run_entry.get("frontmatter") or {}).get("run_folder") or "")
+    events = runtime.read_events(Path(tropo_roots.STUDIO_ROOT) / run_folder)
+
+    existing = release_package.active_frozen_payload(events, identity.run_uid)
+    if not release_package.reconcile_existing_freeze(
+        existing, package_sha256, identity.run_uid
+    ):
+        print(f'  ✓ package already frozen at {package_sha256[:12]}… (idempotent retry)')
+        return package_sha256
+
+    payload = release_package.package_frozen_payload(
+        identity, Path(zip_file), package_sha256, version=new_version
+    )
+    # A148 addendum item 1: package_frozen is a RUN-LOCAL event and belongs on
+    # the runtime's own writer, not a subprocess to tropo-emit-event.py. The
+    # subprocess call was wrong three ways at once — it passed --run-folder,
+    # which is not a flag that exists; it omitted --lifecycle, which is
+    # required; and it hardcoded --as talos, so identical bytes would carry
+    # different provenance depending on who ran the build.
+    #
+    # It would have failed on every real invocation. It never did here because
+    # nothing had yet driven this path end to end, which is precisely the
+    # helper-green gap this whole NO-GO is about.
+    #
+    # The tool is the author: a1b8c2d4 is this script's registered uid, and it
+    # is the same whoever is at the keyboard.
+    try:
+        event = runtime.make_event(
+            release_package.PACKAGE_FROZEN_EVENT,
+            BUILD_TOOL_UID,
+            actor_label=BUILD_TOOL_SOURCE,
+            data=payload,
+            trace_id=identity.run_uid,
+        )
+        runtime.append_event(Path(tropo_roots.STUDIO_ROOT) / run_folder, event)
+    except Exception as exc:  # noqa: BLE001 -- a package with no identity cannot ship
+        raise release_package.PackageRefusal(
+            f"package_frozen could not be recorded for run {identity.run_uid}: "
+            f"{exc}. A package whose identity was never recorded cannot be "
+            f"verified or published, so this refuses rather than leaving a zip "
+            f"nobody can bind a receipt to."
+        ) from exc
+    print(f'  ✓ package_frozen recorded: {package_sha256[:12]}… '
+          f'(run {identity.run_uid}, {len(states_summary(payload))} bindings)')
+    return package_sha256
+
+
+def states_summary(payload):
+    """The identity fields carried on the freeze, for the operator line."""
+    return [key for key in payload if key.endswith('_uid') or key == 'fan_in_digest']
+
+
 def step_11_zip_and_upload(build_dir, new_version, dist_dir, dry_run=False):
     """Step 11 — Zip ONLY (Release Coupling, fbe50871). The upload (Supabase zip +
     update-manifest) that used to live here moved to tropo-publish-release.py --fire —
@@ -2101,42 +2681,139 @@ def step_11_zip_and_upload(build_dir, new_version, dist_dir, dry_run=False):
 #: red on the release path it was bumped for. One definition, two readers.
 STUDIO_DEBT_RATCHET_TIMEOUT_S = 1080
 
+#: Wall-clock ceiling for the Step 0 full vault rebuild. The retrospective named
+#: this one as "300s vs 25min" — a limit set when the rebuild was fast, left
+#: alone while the vault grew, and finally discovered by a build that could never
+#: pass its own first step. Bumped 300 -> 2400 by metis-g105 on the strength of a
+#: 24m22s measurement.
+#:
+#: RE-MEASURED 2026-08-09 (talos-t40): 278.3s on this machine before velocity
+#: item 1, and 204.4s after. That is 7x below the measurement this ceiling was
+#: sized against, on the same command and the same vault, which is a machine
+#: difference nobody has reconciled yet — see the open question with Metis.
+#: The ceiling stays at 2400 deliberately: it costs nothing when the rebuild is
+#: healthy, and the failure it guards against is a build hanging unattended.
+#: Do not lower it on the strength of the faster machine alone.
+STEP0_VAULT_REBUILD_TIMEOUT_S = 2400
 
-def _studio_validator_debt_ratchet_clear():
-    """Accept known studio-root validator debt only when its recorded ratchet passes."""
+
+_VALIDATOR_SNAPSHOT_EXCLUDES = frozenset({
+    '.git', '__pycache__', '.pytest_cache', 'node_modules',
+    'archive', 'recycle', 'tropo-releases',
+})
+
+
+def _validator_tree_snapshot(root):
+    digest = hashlib.sha256()
+    count = 0
+    root_path = Path(root).resolve()
+    for path in sorted(root_path.rglob('*'), key=lambda item: item.as_posix()):
+        relative = path.relative_to(root_path)
+        if any(part in _VALIDATOR_SNAPSHOT_EXCLUDES for part in relative.parts):
+            continue
+        if path.is_symlink():
+            raw = os.readlink(path).encode('utf-8')
+            kind = b'L'
+        elif path.is_file():
+            try:
+                raw = path.read_bytes()
+            except OSError:
+                continue
+            kind = b'F'
+        else:
+            continue
+        digest.update(kind)
+        digest.update(relative.as_posix().encode('utf-8'))
+        digest.update(b'\0')
+        digest.update(hashlib.sha256(raw).digest())
+        count += 1
+    return digest.hexdigest(), count
+
+
+def _write_validation_receipt(receipt):
+    path = (
+        tropo_roots.STUDIO_ROOT
+        / '.tropo-studio'
+        / 'locks'
+        / 'build-validation-receipt.json'
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    staged = path.with_name(f'.{path.name}.tmp')
+    staged.write_text(
+        json.dumps(receipt, indent=2, sort_keys=True) + '\n',
+        encoding='utf-8',
+    )
+    os.replace(staged, path)
+    return path
+
+
+def _run_post_rebuild_validation(attempt_id):
+    """Run the one authoritative validator after rebuild and seal its receipt."""
     ratchet = os.path.join(
-        VAULT_ROOT, 'vault', 'tools', 'tests', 'test_post_migration_release_clean.py')
-    if not os.path.isfile(ratchet):
-        print(f'  ✗ Studio validator-debt ratchet not found at {ratchet}.')
-        return False
-    print('Step 0a — Studio validator-debt ratchet (root debt may fall, never grow):')
+        tropo_roots.VAULT_DIR,
+        'tools',
+        'tests',
+        'test_post_migration_release_clean.py',
+    )
+    print(
+        'Step 0a — Authoritative post-rebuild validation '
+        f'(attempt={attempt_id}):'
+    )
+    started = datetime.now().astimezone().isoformat()
     try:
         result = subprocess.run(
-            ['python3', ratchet],
-            capture_output=True, text=True, cwd=VAULT_ROOT,
+            [sys.executable, ratchet],
+            capture_output=True,
+            text=True,
+            cwd=tropo_roots.STUDIO_ROOT,
             timeout=STUDIO_DEBT_RATCHET_TIMEOUT_S,
         )
+        output = (result.stdout or '') + (result.stderr or '')
+        returncode = result.returncode
     except (OSError, subprocess.SubprocessError) as exc:
-        print(f'  ✗ Studio validator-debt ratchet could not run: {exc}')
-        return False
-    if result.stdout:
-        print('  ' + result.stdout.strip().replace('\n', '\n  '))
-    if result.returncode != 0:
-        if result.stderr:
-            print('  ' + result.stderr.strip().replace('\n', '\n  '))
-        print(f'  ✗ Studio validator-debt ratchet failed (exit {result.returncode}).')
-        return False
-    print('  ✓ Known studio-root validator debt did not grow; release-surface gates remain ahead.\n')
-    return True
-
-
-def _rebuild_result_clears_release_gate(returncode):
-    """Only success or validator-debt exit 8 with a green ratchet may proceed."""
-    if returncode == 0:
-        return True
-    if returncode == 8:
-        return _studio_validator_debt_ratchet_clear()
-    return False
+        output = f'validator ratchet could not run: {exc}'
+        returncode = 2
+    if output:
+        print('  ' + output.strip().replace('\n', '\n  '))
+    match = re.search(
+        r'Result:\s*(\d+) passed,\s*(\d+) failed',
+        output,
+    )
+    tree_sha256, tree_file_count = _validator_tree_snapshot(
+        tropo_roots.STUDIO_ROOT
+    )
+    receipt = {
+        'schema_version': 1,
+        'attempt_id': attempt_id,
+        'phase': 'post-rebuild',
+        'started_at': started,
+        'finished_at': datetime.now().astimezone().isoformat(),
+        'validator_returncode': returncode,
+        'summary': (
+            {
+                'passed': int(match.group(1)),
+                'failed': int(match.group(2)),
+            }
+            if match else None
+        ),
+        'tree_sha256': tree_sha256,
+        'tree_file_count': tree_file_count,
+        'output_sha256': hashlib.sha256(output.encode('utf-8')).hexdigest(),
+        'output_tail': '\n'.join(output.splitlines()[-40:]),
+        'clear': returncode == 0 and match is not None,
+    }
+    receipt_path = _write_validation_receipt(receipt)
+    print(
+        f'  Validation receipt: {receipt_path} '
+        f'(tree={tree_sha256[:12]}…, files={tree_file_count}, '
+        f'clear={receipt["clear"]})'
+    )
+    if not receipt['clear']:
+        print(
+            '  ✗ Build REFUSED — post-rebuild validator/ratchet did not '
+            'produce a clear, parseable receipt.'
+        )
+    return receipt
 
 
 # ─── Main ────────────────────────────────────────────────────────────────────
@@ -2146,6 +2823,7 @@ def main():
     bump_type = None
     target_version = None
     activation_uid = None
+    walk_answer = None
     for i, arg in enumerate(sys.argv):
         if arg == '--bump' and i + 1 < len(sys.argv):
             bump_type = sys.argv[i + 1]
@@ -2153,6 +2831,8 @@ def main():
             target_version = sys.argv[i + 1]
         elif arg == '--activation-uid' and i + 1 < len(sys.argv):
             activation_uid = sys.argv[i + 1]
+        elif arg == '--walk-answer' and i + 1 < len(sys.argv):
+            walk_answer = sys.argv[i + 1]
 
     if not bump_type and not target_version:
         print('Usage: python3 build-release.py (--bump <patch|feature|release> | --target <X.Y.Z>) '
@@ -2169,6 +2849,8 @@ def main():
         print('                     publish_state recorded UNKNOWN in build provenance, never silently')
         print('                     assumed in-sync. Build ends fully private regardless; publish via')
         print('                     tropo-publish-release.py when ready to go live.')
+        print('  --walk-answer y|n  Explicit cold-walk answer for headless builds; '
+              f'env fallback: {WALK_ANSWER_ENV}. Non-interactive `no` refuses.')
         sys.exit(1)
 
     if bump_type and bump_type not in ('patch', 'feature', 'release'):
@@ -2190,6 +2872,31 @@ def main():
     # through the pipeline (activation + doc/test cascade + gates). Fail-closed.
     # No break-glass: --force does NOT bypass this (it only overwrites a stale dir).
     # --dry-run is exempt (it produces no artifact).
+    # ── AC6-final: package-entry authority + the release-leg wait ────────────
+    # Before anything is built, not after. A refusal here costs nothing; the
+    # same refusal after the zip is a refusal that already produced an
+    # artefact somebody has to reason about (254a360b).
+    _stage6_identity = None
+    if not DRY_RUN:
+        try:
+            _stage6_identity, _stage6_states = stage6_package_authority(activation_uid)
+            print(f'  ✓ release run {_stage6_identity.run_uid} resolved; legs settled '
+                  f'({", ".join(s.leg + ":" + s.basis for s in _stage6_states)})\n')
+        except release_package.PackageRefusal as exc:
+            print(f'REFUSED: {exc}')
+            print(f'  No package was produced. Re-run after correcting: '
+                  f'python3 vault/tools/tropo-build-release.py '
+                  f'--activation-uid {activation_uid or "<uid>"} '
+                  f'{"--bump " + bump_type if bump_type else "--target " + str(target_version)}')
+            sys.exit(1)
+        except Exception as exc:  # noqa: BLE001 -- the wait refuses loudly, never warns
+            print(f'REFUSED: release legs are not settled for this package: {exc}')
+            print(f'  No package was produced. Settle or attest the open leg, '
+                  f'then re-run: python3 vault/tools/tropo-build-release.py '
+                  f'--activation-uid {activation_uid or "<uid>"} '
+                  f'{"--bump " + bump_type if bump_type else "--target " + str(target_version)}')
+            sys.exit(1)
+
     if not DRY_RUN:
         try:
             _key = require_release_authorization(activation_uid, 'produce-release-folder')
@@ -2240,45 +2947,51 @@ def main():
     # the silent-stale-index defect. Halt-mode failure locked per Mike-A71
     # 2026-05-18 R1 Locked Decision LD-3 (brief 800c3352).
     print('Step 0 — Vault rebuild (always-run; substrate currency pre-flight):')
-    rebuild_path = os.path.join(VAULT_ROOT, 'vault', 'tools', 'tropo-rebuild-vault.py')  # rebuild-vault (v1.56 migrated)
+    rebuild_path = os.path.join(tropo_roots.VAULT_DIR, 'tools', 'tropo-rebuild-vault.py')  # rebuild-vault (v1.56 migrated)
+    validation_attempt_id = uuid.uuid4().hex
     try:
         rebuild_result = subprocess.run(
-            ['python3', rebuild_path, '--vault-path', VAULT_ROOT, '--apply'],
-            capture_output=True, text=True, cwd=VAULT_ROOT, timeout=2400
+            [
+                sys.executable,
+                rebuild_path,
+                '--vault-path',
+                tropo_roots.STUDIO_ROOT,
+                '--apply',
+                '--skip-validator',
+                '--validator-run-id',
+                validation_attempt_id,
+            ],
+            capture_output=True, text=True, cwd=tropo_roots.STUDIO_ROOT,
+            timeout=STEP0_VAULT_REBUILD_TIMEOUT_S
         )
     except subprocess.TimeoutExpired:
         # 300s was set when the vault was a fraction of its current size; the full rebuild
         # MEASURED 24m22s on 2026-08-08 (4,900+ files, belt + three catalogs). 2400s gives
         # headroom without letting a genuine hang run unbounded. (metis-g105, v1.86 stage)
-        print('  ✗ Substrate rebuild timed out after 2400s. Investigate vault size or rebuild regression.')
+        print(f'  ✗ Substrate rebuild timed out after {STEP0_VAULT_REBUILD_TIMEOUT_S}s. Investigate vault size or rebuild regression.')
         sys.exit(2)
     except FileNotFoundError:
         print(f'  ✗ rebuild-vault.py not found at {rebuild_path}. v1.30.0 substrate missing.')
         sys.exit(2)
 
-    rebuild_gate_clear = _rebuild_result_clears_release_gate(rebuild_result.returncode)
-    debt_ratchet_clear = rebuild_result.returncode == 8 and rebuild_gate_clear
-    if not rebuild_gate_clear:
+    if rebuild_result.returncode != 0:
         tail = '\n'.join(rebuild_result.stdout.splitlines()[-30:])
         print(tail)
-        print('\n  ✗ Build REFUSED — rebuild-vault.py returned non-zero (validator FAIL or rebuild FAIL).')
+        print('\n  ✗ Build REFUSED — rebuild-vault.py returned non-zero.')
         print('    Vault rebuild is always-run; this failure is NOT bypassable via')
         print('    TROPO_SKIP_ENFORCEMENT_GATE=1 (substrate quality is separate from')
         print('    capability-membership enforcement).')
-        print('    Recovery paths depend on the failure class:')
-        print('      - Validator FAIL on duplicate top-level YAML keys → run:')
-        print('          python3 vault/tools/34fb726c.py --dry-run')
-        print('          python3 vault/tools/34fb726c.py --apply [--allow-dirty]')
-        print('      - Validator FAIL on other check classes → fix the violations surfaced above.')
-        print('      - Rebuild FAIL → investigate substrate state; fix the rebuild-blocking defect.')
+        print('    The authoritative validator runs only after rebuild succeeds.')
         sys.exit(1)
-    if debt_ratchet_clear:
-        print('  ⚠ rebuild-vault reported known validator debt (exit 8); '
-              'the accepted non-growth ratchet passed.')
 
     summary = '\n'.join(rebuild_result.stdout.splitlines()[-10:])
     print('  ' + summary.replace('\n', '\n  '))
     print('  ✓ Vault rebuild PASS\n')
+    validation_receipt = _run_post_rebuild_validation(
+        validation_attempt_id
+    )
+    if not validation_receipt['clear']:
+        sys.exit(1)
 
     # Step 1 (was Step 0 pre-v1.41.0 Stream C — v1.10 Pure Enforcement gate — Argus A50 + Mike pair-design 2026-05-07):
     # Run validate-capability-membership.py in STRICT mode before building.
@@ -2306,12 +3019,12 @@ def main():
         # v1.56 Lane S captain-mode fix-on-see (Vela V54 2026-05-27):
         # validate-capability-membership.py migrated to vault/tools/tropo-validate-capability-membership.py;
         # legacy .tropo/scripts/ path no longer exists. Use canonical vault/tools/ path.
-        validator_path = os.path.join(VAULT_ROOT, 'vault', 'tools',
+        validator_path = os.path.join(tropo_roots.VAULT_DIR, 'tools',
                                       'tropo-validate-capability-membership.py')
         try:
             result = subprocess.run(
                 ['python3', validator_path],
-                capture_output=True, text=True, cwd=VAULT_ROOT, timeout=600
+                capture_output=True, text=True, cwd=tropo_roots.STUDIO_ROOT, timeout=600
             )
         except subprocess.TimeoutExpired:
             print('  ✗ Validator timed out after 600s. Investigate vault size or validator regression.')
@@ -2360,13 +3073,13 @@ def main():
     print('Step 1b — v1.13.5 Canonical L0 verification (validate-canonical-l0.py; always-run since v1.46.0.1):')
     # v1.56 Lane S captain-mode fix-on-see (Vela V54 2026-05-27):
     # validate-canonical-l0.py migrated to vault/tools/tropo-validate-canonical-l0.py.
-    l0_validator_path = os.path.join(VAULT_ROOT, 'vault', 'tools',
+    l0_validator_path = os.path.join(tropo_roots.VAULT_DIR, 'tools',
                                      'tropo-validate-canonical-l0.py')
     try:
         l0_result = subprocess.run(
             ['python3', l0_validator_path, '--state', 'active',
              '--extraction-scope', 'ship'],
-            capture_output=True, text=True, cwd=VAULT_ROOT, timeout=30
+            capture_output=True, text=True, cwd=tropo_roots.STUDIO_ROOT, timeout=30
         )
     except subprocess.TimeoutExpired:
         print('  ⚠ L0 validator timed out after 30s. Continuing build (non-blocking warning).')
@@ -2400,7 +3113,7 @@ def main():
     # Composes with v1.51 three-pipeline coupling enforcement; structural fix for
     # 3-cycle-recurring R11+R12 substrate-population-residue defect class.
     try:
-        _scripts_lib = Path(VAULT_ROOT) / '.tropo' / 'scripts'
+        _scripts_lib = tropo_roots.STUDIO_ROOT / '.tropo' / 'scripts'
         import sys as _sys
         if str(_scripts_lib) not in _sys.path:
             _sys.path.insert(0, str(_scripts_lib))
@@ -2410,7 +3123,7 @@ def main():
         if _dev_spec_uid and re.match(r'^[0-9a-f]{8}$', _dev_spec_uid):
             print('Step 1c — v1.59 Lane B: cascade-pipelines-retired gate:')
             _casc_findings, _all_retired = check_cascade_pipelines_retired(
-                Path(VAULT_ROOT), _dev_spec_uid
+                tropo_roots.STUDIO_ROOT, _dev_spec_uid
             )
             if _casc_findings:
                 for _f in _casc_findings:
@@ -2438,6 +3151,16 @@ def main():
         print(f'  Version: {current} → {new_version} (--target override; bump skipped)')
     else:
         current, new_version = step_1_compute_version(bump_type)
+
+    if not DRY_RUN:
+        receipt_dir = tropo_roots.RELEASES_DIR / f'v{new_version}'
+        receipt_dir.mkdir(parents=True, exist_ok=True)
+        receipt_path = receipt_dir / 'build-validation-receipt.json'
+        receipt_path.write_text(
+            json.dumps(validation_receipt, indent=2, sort_keys=True) + '\n',
+            encoding='utf-8',
+        )
+        print(f'  Post-rebuild validation receipt copied to {receipt_path}')
 
     _pre_target_publish_state = _publish_state_provenance.get("publish_state")
     _publish_state_provenance = target_publish_state_provenance(
@@ -2489,12 +3212,13 @@ def main():
 
     print()
     print('Phase 1 (basic) — Validate Manifest:')
-    validate_manifest_basic(manifest_entries, VAULT_ROOT)
+    validate_manifest_basic(manifest_entries, tropo_roots.STUDIO_ROOT)
 
     print()
     print('Phase 3 — Build Output (manifest-driven):')
     build_from_manifest(build_dir, manifest_entries)
     step_3f_remove_per_studio_boot_derivations(build_dir)
+    step_3g_write_update_source(build_dir)
 
     # v1.12.1 transitional: RELEASE-NOTES.md is a generated artifact, not a
     # ship-artifact (per arch-spec 747c33c9 §1 Thesis "RELEASE-NOTES is generated
@@ -2502,7 +3226,7 @@ def main():
     # argo-os/starter/RELEASE-NOTES.md at v1.12.1 ship). Copy to build root.
     # v1.12.2 implements proper RELEASE-NOTES.md generation step OR authors a
     # ship-artifact entry with explicit generated-artifact handling.
-    rn_src = os.path.join(VAULT_ROOT, 'RELEASE-NOTES.md')
+    rn_src = os.path.join(tropo_roots.STUDIO_ROOT, 'RELEASE-NOTES.md')
     if os.path.exists(rn_src):
         rn_dst = os.path.join(build_dir, 'RELEASE-NOTES.md')
         copy_file(rn_src, rn_dst, DRY_RUN)
@@ -2512,7 +3236,7 @@ def main():
     # CHANGELOG.md (public user-facing changelog, Keep a Changelog format). Studio source-of-truth.
     # The ship gate (require_release_authorization with version) enforces this file is current
     # before upload is authorized (Metis G83 anti-drift gate, v1.74).
-    cl_src = os.path.join(VAULT_ROOT, 'CHANGELOG.md')
+    cl_src = os.path.join(tropo_roots.STUDIO_ROOT, 'CHANGELOG.md')
     if os.path.exists(cl_src):
         cl_dst = os.path.join(build_dir, 'CHANGELOG.md')
         copy_file(cl_src, cl_dst, DRY_RUN)
@@ -2529,6 +3253,8 @@ def main():
     # from the source filename (source ≠ dest).
     _d2_files = [
         ('package.json', ''),                                    # root → root
+        (os.path.join('vault', 'templates', 'agents-skeleton', 'AGENTS.md'),
+         'agents'),
         (os.path.join('channels', 'AGENTS.md'), 'channels'),
         (os.path.join('context', 'AGENTS.md'), 'context'),
         (os.path.join('operating-agreement', 'AGENTS.md'), 'operating-agreement'),
@@ -2540,7 +3266,7 @@ def main():
     for _entry in _d2_files:
         rel_path, dest_dir = _entry[0], _entry[1]
         dest_name = _entry[2] if len(_entry) > 2 else os.path.basename(rel_path)
-        src = os.path.join(VAULT_ROOT, rel_path)
+        src = os.path.join(tropo_roots.STUDIO_ROOT, rel_path)
         if os.path.exists(src):
             dst_folder = os.path.join(build_dir, dest_dir) if dest_dir else build_dir
             if not DRY_RUN:
@@ -2565,7 +3291,7 @@ def main():
     # brief (.tropo-studio/mission-brief.md, extraction_scope: argo-reference) never ships;
     # it ships separately as the labeled example (vault/templates/examples/mission-brief.example.md)
     # — do not touch that.
-    _mb_src = os.path.join(VAULT_ROOT, 'vault', 'templates', 'root-docs', 'mission-brief.template.md')
+    _mb_src = os.path.join(tropo_roots.VAULT_DIR, 'templates', 'root-docs', 'mission-brief.template.md')
     _mb_dst = os.path.join(build_dir, '.tropo-studio', 'mission-brief.md')
     if not os.path.exists(_mb_src):
         raise SystemExit(
@@ -2586,7 +3312,7 @@ def main():
     # (Release Coupling, fbe50871: "unreachable... recorded in build provenance as
     # publish_state UNKNOWN"). tropo-publish-release.py's STAGE step reads this.
     if not DRY_RUN:
-        _prov_dir = os.path.join(RELEASES_DIR, f'v{new_version}')
+        _prov_dir = os.path.join(tropo_roots.RELEASES_DIR, f'v{new_version}')
         os.makedirs(_prov_dir, exist_ok=True)
         _prov_path = os.path.join(_prov_dir, 'build-provenance.json')
         with open(_prov_path, 'w') as f:
@@ -2614,7 +3340,10 @@ def main():
 
     # Step 10: Sanitize the Studio identity
     step_10_sanitize_argo_identity(build_dir)
-    step_10_1_seal_release_index_pair(build_dir, activation_uid)
+    # The in-box gates below still need a working index, so the generation
+    # survives until the final freeze before the zip. It is NOT sealed: a seal
+    # is evidence about surfaces this package does not ship (evt 114), and the
+    # recipient seals the generation its own first rebuild creates.
 
     # Step 10.5: Release Test-Harness — mechanical regression GATE (new layer; brief f13cc214,
     # Mike-A115 2026-06-17). A release that fails its own regression does NOT ship. Runs the
@@ -2624,13 +3353,13 @@ def main():
     # by the reasoning layer / run by a human; this is the deterministic gate.)
     if not DRY_RUN:
         print('Step 10.5 — Release Test-Harness (mechanical regression gate):')
-        _harness = os.path.join(VAULT_ROOT, '.tropo', 'scripts', 'test-harness-check.py')
+        _harness = os.path.join(tropo_roots.STUDIO_ROOT, '.tropo', 'scripts', 'test-harness-check.py')
         if not os.path.exists(_harness):
             print(f'  ⚠ Test-harness not found at {_harness} — gate SKIPPED (surface this; do not treat as pass).')
         else:
             try:
                 _hr = subprocess.run(['python3', _harness, '--release-dir', build_dir],
-                                     capture_output=True, text=True, cwd=VAULT_ROOT, timeout=120)
+                                     capture_output=True, text=True, cwd=tropo_roots.STUDIO_ROOT, timeout=120)
                 print('  ' + (_hr.stdout or '').strip().replace('\n', '\n  '))
                 if _hr.returncode != 0:
                     print('\n  ✗ Build REFUSED — release failed its own test-harness regression.', file=sys.stderr)
@@ -2701,7 +3430,7 @@ def main():
     # downstream publish action. Governance wrapper: vault/playbooks/d2efcac9.md.
     if not DRY_RUN:
         print('Step 10.7 — Covenant Gate (THE FLOOR TEST, ADR-049 layer 2):')
-        _floor_test = os.path.join(VAULT_ROOT, 'vault', 'tools', 'tests', 'test_clean_update_floor.py')
+        _floor_test = os.path.join(tropo_roots.VAULT_DIR, 'tools', 'tests', 'test_clean_update_floor.py')
         if not os.path.exists(_floor_test):
             print(f'  ✗ Build REFUSED — floor test not found at {_floor_test}. '
                   f'The covenant gate cannot be skipped by absence.', file=sys.stderr)
@@ -2711,7 +3440,7 @@ def main():
         # If the gate can't catch a planted violation, it's not a real gate; refuse to
         # trust its PASS on the real run below.
         _gr = subprocess.run(['python3', _floor_test, '--gauntlet'],
-                              capture_output=True, text=True, cwd=VAULT_ROOT, timeout=60)
+                              capture_output=True, text=True, cwd=tropo_roots.STUDIO_ROOT, timeout=60)
         print('  ' + (_gr.stdout or '').strip().replace('\n', '\n  '))
         if _gr.returncode != 0:
             print('\n  ✗ Build REFUSED — the covenant gate failed its own gauntlet '
@@ -2723,7 +3452,7 @@ def main():
         # Sub-step 2: the real run — must show zero user-file churn against the current
         # update path (namespace predicate + apply-update playbook Rules).
         _fr = subprocess.run(['python3', _floor_test],
-                              capture_output=True, text=True, cwd=VAULT_ROOT, timeout=60)
+                              capture_output=True, text=True, cwd=tropo_roots.STUDIO_ROOT, timeout=60)
         print('  ' + (_fr.stdout or '').strip().replace('\n', '\n  '))
         if _fr.returncode != 0:
             print('\n  ✗ Build REFUSED — THE FLOOR TEST failed: the update path would '
@@ -2740,10 +3469,10 @@ def main():
     # so the manifest is always current-as-of-build for local inspection.
     if not DRY_RUN:
         print('Step 10.8 — Update API manifest (generate-only; upload moved to --fire):')
-        _manifest_gen = os.path.join(VAULT_ROOT, 'vault', 'tools', 'tropo-generate-update-manifest.py')
+        _manifest_gen = os.path.join(tropo_roots.VAULT_DIR, 'tools', 'tropo-generate-update-manifest.py')
         if os.path.exists(_manifest_gen):
             _mr = subprocess.run(['python3', _manifest_gen],
-                                  capture_output=True, text=True, cwd=VAULT_ROOT, timeout=30)
+                                  capture_output=True, text=True, cwd=tropo_roots.STUDIO_ROOT, timeout=30)
             print('  ' + (_mr.stdout or '').strip().replace('\n', '\n  '))
             if _mr.returncode != 0:
                 print(f'  ⚠ Manifest generation failed (exit {_mr.returncode}) — non-blocking; '
@@ -2761,7 +3490,7 @@ def main():
     # "the studio's own news tells the truth too" (S10, dev-spec be1979b6 §S10).
     if not DRY_RUN:
         import re as _re
-        _rn_path = os.path.join(VAULT_ROOT, 'agents', 'tropo', 'briefing-package', 'current-release-notes.md')
+        _rn_path = os.path.join(tropo_roots.STUDIO_ROOT, 'agents', 'tropo', 'briefing-package', 'current-release-notes.md')
         if os.path.exists(_rn_path):
             try:
                 _rn_text = open(_rn_path).read()
@@ -2795,9 +3524,26 @@ def main():
         # touch, named and inherited, not re-litigated"). Always-ask; default YES;
         # override-to-skip recorded as honest provenance. No longer gates any upload here
         # (nothing uploads from build) — it gates whether THIS build is clean enough to stage.
-        _cw_verdict_path = os.path.join(RELEASES_DIR, f'v{new_version}', 'cold-walk-verdict.json')
-        _last_cw_path = os.path.join(RELEASES_DIR, 'last-cold-walk-release.json')
-        _build_clean = step_10_6_cold_walk_gate(new_version, dist_dir, _cw_verdict_path, _last_cw_path)
+        # Step 10.6 is a v1 artefact on the v2 release path. AC7 moves the
+        # stranger walk into Verify as one of four instruments bound to the
+        # frozen digest; running it here too would create a second definition
+        # of "walk passed", and the older one would be the one that ran
+        # against bytes that did not exist yet.
+        if _stage6_identity is None:
+            _cw_verdict_path = os.path.join(tropo_roots.RELEASES_DIR, f'v{new_version}', 'cold-walk-verdict.json')
+            _last_cw_path = os.path.join(tropo_roots.RELEASES_DIR, 'last-cold-walk-release.json')
+            _build_clean = step_10_6_cold_walk_gate(
+                new_version,
+                dist_dir,
+                _cw_verdict_path,
+                _last_cw_path,
+                walk_answer=walk_answer,
+            )
+        else:
+            _build_clean = True
+            print('Step 10.6 — skipped on the v2 release path: the stranger walk '
+                  'is an AC7 Verify instrument bound to the frozen package digest '
+                  '(0a0a6777).')
 
         # RT1/RT2 ship-surface guard (argus-a118, v1.74): FAIL before the zip if the
         # release is missing its declared nav + workspace surfaces (finding 1ee11d09).
@@ -2811,7 +3557,22 @@ def main():
         # the slot is missing or carries anything other than the generic <FILL: …> template.
         assert_mission_brief_slot(build_dir)
 
+    # FINAL PORTABLE FREEZE (Argus, evt 112/113). The in-box mechanical gates
+    # above RUN the box — they import its tools and may compose its index — so
+    # they put bytecode, journals and a machine-local SQLite back after the
+    # earlier purge. Purging once more immediately before the zip is what makes
+    # the shipped bytes portable, and the manifest is regenerated afterwards so
+    # it cannot list files the freeze removed.
+    if not DRY_RUN:
+        if step_10_2_purge_run_local_artifacts(build_dir):
+            step_9_generate_manifest(build_dir, new_version)
+
     step_11_zip_and_upload(build_dir, new_version, dist_dir, DRY_RUN)
+
+    # The one immutable package identity, taken from the bytes that shipped.
+    if _stage6_identity is not None and not DRY_RUN:
+        _zip_file = os.path.join(dist_dir, f'tropo-os-v{new_version}.zip')
+        stage6_freeze_package(_stage6_identity, _zip_file, new_version)
 
     # Copy build to testing directory
     if not DRY_RUN:
@@ -2837,22 +3598,30 @@ def main():
     #     validator check catch any root left state:active.
     #   - Skipped on --dry-run (no artifact) and when no --activation-uid was supplied
     #     (e.g. attested builds with no pipeline-run — the sweep backstop covers those).
-    if not DRY_RUN and activation_uid:
+    # P10 / A148 blocker 1: NOT on the v2 release path. Legacy close-out here
+    # fires immediately after packaging — before Verify, before Publish, before
+    # any receipt exists — so a v2 release would close its own substrate while
+    # the artefact it just built is still unverified and unpublished. The
+    # release closes from its public receipt or it does not close.
+    #
+    # Guarded by the same `_stage6_identity` predicate as step 10.6, so the two
+    # cannot disagree about which path this build is on.
+    if not DRY_RUN and activation_uid and _stage6_identity is None:
         print('Step 12 — Durable pipeline closure (weld close-to-ship; dev-spec c392d833):')
         try:
             _ship_sha = subprocess.run(['git', 'rev-parse', 'HEAD'],
                                        capture_output=True, text=True,
-                                       cwd=VAULT_ROOT, timeout=15).stdout.strip()
+                                       cwd=tropo_roots.STUDIO_ROOT, timeout=15).stdout.strip()
         except Exception:
             _ship_sha = ''
-        _runtime = os.path.join(VAULT_ROOT, 'vault', 'tools', '9e7003b1.py')  # pipeline-runtime.py
+        _runtime = os.path.join(tropo_roots.VAULT_DIR, 'tools', '9e7003b1.py')  # pipeline-runtime.py
         _co_cmd = ['python3', _runtime, '--activation-uid', activation_uid,
                    '--actor', 'tropo-build-release.py', 'close-out']
         if _ship_sha:
             _co_cmd += ['--final-commit', _ship_sha]
         try:
             _co = subprocess.run(_co_cmd, capture_output=True, text=True,
-                                 cwd=VAULT_ROOT, timeout=60)
+                                 cwd=tropo_roots.STUDIO_ROOT, timeout=60)
             _co_out = (_co.stdout or '').strip()
             if _co_out:
                 print('  ' + _co_out.replace('\n', '\n  '))
@@ -2883,8 +3652,8 @@ def main():
     print(f'  Testing: {testing_dir}')
     if missing > 0:
         print(f'  ⚠ {missing} entries referenced in index but file not found')
-    _cw_verdict_path_display = os.path.join(RELEASES_DIR, f'v{new_version}', 'cold-walk-verdict.json')
-    _expected_zip_display = os.path.join(RELEASES_DIR, f'v{new_version}', 'dist', f'tropo-os-v{new_version}.zip')
+    _cw_verdict_path_display = os.path.join(tropo_roots.RELEASES_DIR, f'v{new_version}', 'cold-walk-verdict.json')
+    _expected_zip_display = os.path.join(tropo_roots.RELEASES_DIR, f'v{new_version}', 'dist', f'tropo-os-v{new_version}.zip')
     print(f'\nNext steps (reasoning layer — agent executes):')
     print(f'  1. Run cold-boot-test.playbook.md against {testing_dir}')
     print(f'     (artifact self-sufficiency testing — Argus-lane R1 verification primitive)')

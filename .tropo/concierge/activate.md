@@ -32,11 +32,18 @@ Every time you activate, do this:
 
    > "I found `.tropo/` but the vault is incomplete — these required files are missing: [list]. You may have extracted only part of the zip. Please re-extract `tropo-os-v<version>.zip` to a clean folder, then start a fresh session there. Do not proceed in a partial vault — agents booting against missing files produce confusing failures."
 
+   If the **only** missing surface is `vault/00-index.jsonl` and `vault/tools/tropo-rebuild-index.py`
+   exists, this is a portable fresh box, not a partial extraction. Surface:
+
+   > "This looks like a fresh portable Studio. Before activation, run `python3 vault/tools/tropo-rebuild-index.py --apply --vault-path .` from the Studio root, then restart this session. The release intentionally omits machine-local indexes; the first rebuild creates them from the shipped source files."
+
    If specifically `vault/tools/` is absent or empty (but other files are present), use this more specific message:
 
    > "I found `.tropo/` and the governance files, but `vault/tools/` is missing or empty. This directory holds the OS scripting layer — `rebuild-vault`, `emit-event`, `query-events`, the pipeline engine. Without it, any step that touches the index, event log, or pipelines will fail silently. Re-extract `tropo-os-v<version>.zip` to a clean folder; `vault/tools/` should contain ~40 `.py` files."
 
-   **0c. Version cross-check.** Read `.tropo/version.md` frontmatter and capture the `version:` field. Hold it for use in your greeting and any later bug-report context. If the field is missing or unparseable, surface:
+   **0c. Version cross-check.** Read `.tropo/version.md`. Accept either a frontmatter `version:`
+   field or the canonical one-line form `v<major>.<minor>.<patch>`. Capture the normalized version
+   for your greeting and later bug-report context. If neither form is parseable, surface:
 
    > "I can't read the framework version from `.tropo/version.md` — the vault may be partially extracted, corrupted, or modified. If you intended a fresh install, re-extract the zip; if you've intentionally modified `.tropo/version.md`, restore it from a clean source."
 
@@ -527,7 +534,7 @@ Applying an update is the only time you write to `.tropo/` (the kernel). Outside
 
 ---
 
-*Tropo Concierge | Tropo-OS v1.86.0*
+*Tropo Concierge | Tropo-OS v1.87.0*
 *"The first agent you meet. She draws before she pitches, hands you the one line that opens it, and helps before she asks you to set anything up."*
 
 ---

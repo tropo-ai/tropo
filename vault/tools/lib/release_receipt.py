@@ -49,6 +49,33 @@ RECEIPT_FIELDS = frozenset(
     }
 )
 
+#: What a v2 receipt binds on top of v1 (Stage-6 preflight §5).
+#:
+#: A v1 receipt proves a release happened and says where. It cannot say WHICH
+#: artefact, which release run authorised it, or which membership it shipped —
+#: so it cannot be checked against anything after the fact. These fields make
+#: the receipt self-verifying: the bytes are named by digest, the identity
+#: chain is named by uid, and the public asset observations record what was
+#: actually downloaded and hashed rather than what was uploaded.
+V2_ADDED_FIELDS = frozenset(
+    {
+        "release_plan_uid",
+        "release_entry_uid",
+        "release_activation_uid",
+        "release_pipeline_run_uid",
+        "activation_root_uid",
+        "fan_in_digest",
+        "package_sha256",
+        "public_asset_observations",
+        "transaction_id",
+    }
+)
+V2_RECEIPT_FIELDS = RECEIPT_FIELDS | V2_ADDED_FIELDS
+
+#: v1 receipts stay readable forever; nothing new is written at v1.
+SCHEMA_VERSION_V1 = "1.0.0"
+SCHEMA_VERSION_V2 = "2.0.0"
+
 _SEMVER_CORE = r"(?:0|[1-9][0-9]*)"
 _SEMVER_IDENTIFIER = r"(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
 SEMVER_RE = re.compile(
@@ -424,7 +451,7 @@ def load_release_receipts(vault_root: Path) -> dict[str, dict[str, Any]]:
                 f"receipt filename hash does not match exact bytes: {path.name}"
             )
         value = _strict_json_loads(payload, name=path.name)
-        receipt = validate_release_receipt(value)
+        receipt = validate_any_release_receipt(value)
         prior_sha = by_version.get(receipt["version"])
         if prior_sha is not None and prior_sha != expected_sha:
             raise ReleaseReceiptError(
@@ -530,7 +557,7 @@ def write_release_receipt(
     Identical bytes are a harmless no-op.  Existing invalid receipts or a
     different receipt for the same release version refuse without replacement.
     """
-    validated = validate_release_receipt(dict(receipt))
+    validated = validate_any_release_receipt(dict(receipt))
     payload = canonical_json_bytes(validated)
     digest = sha256_bytes(payload)
     directory = _receipt_directory(Path(vault_root), create=True)
@@ -595,6 +622,156 @@ def write_release_receipt(
             fcntl.flock(directory_fd, fcntl.LOCK_UN)
         finally:
             os.close(directory_fd)
+
+
+def _validate_asset_url(value: Any) -> str:
+    """A downloadable asset location: HTTPS, clean, no embedded credentials.
+
+    Deliberately looser than `_validate_public_url` about WHERE, because the
+    canonical GitHub asset and the Supabase mirror live on different hosts,
+    and deliberately just as strict about SHAPE, because a URL carrying
+    credentials or whitespace in a governed receipt is a different problem
+    than a wrong host.
+    """
+    if not isinstance(value, str) or not value:
+        raise ReleaseReceiptError("asset url must be a non-empty HTTPS URL")
+    if (
+        value != value.strip()
+        or any(ord(c) < 0x20 or ord(c) == 0x7F for c in value)
+        or any(c.isspace() for c in value)
+    ):
+        raise ReleaseReceiptError("asset url contains whitespace or control characters")
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError as exc:
+        raise ReleaseReceiptError("asset url is malformed") from exc
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.fragment
+    ):
+        raise ReleaseReceiptError(f"asset url {value!r} is not a clean HTTPS location")
+    return value
+
+
+def validate_release_receipt_v2(value: Any) -> dict[str, Any]:
+    """Validate a v2 receipt: the v1 contract plus the identity chain.
+
+    The v1 shape is reused wholesale rather than restated, so the two cannot
+    drift on the fields they share. What v2 adds is the ability to check a
+    receipt against the world afterwards: a digest for the bytes, uids for the
+    chain that authorised them, and observations of what was actually
+    downloaded from each public location.
+    """
+    if not isinstance(value, dict):
+        raise ReleaseReceiptError("release receipt must be a JSON object")
+    actual = set(value)
+    if actual != V2_RECEIPT_FIELDS:
+        raise ReleaseReceiptError(
+            "v2 release receipt fields differ from contract "
+            f"(missing={sorted(V2_RECEIPT_FIELDS - actual)}, "
+            f"unknown={sorted(actual - V2_RECEIPT_FIELDS)})"
+        )
+    if value.get("schema_version") != SCHEMA_VERSION_V2:
+        raise ReleaseReceiptError(
+            f"schema_version must equal {SCHEMA_VERSION_V2!r} for a v2 receipt"
+        )
+
+    core = {k: v for k, v in value.items() if k in RECEIPT_FIELDS}
+    core["schema_version"] = SCHEMA_VERSION
+    validate_release_receipt(core)
+
+    for field in ("release_plan_uid", "release_entry_uid",
+                  "release_activation_uid", "release_pipeline_run_uid",
+                  "activation_root_uid"):
+        uid = value[field]
+        if not isinstance(uid, str) or not re.fullmatch(r"[0-9a-f]{8}", uid):
+            raise ReleaseReceiptError(f"{field} must be a governed uid")
+
+    for field in ("package_sha256", "fan_in_digest"):
+        digest = value[field]
+        if not isinstance(digest, str) or not SHA256_RE.fullmatch(digest):
+            raise ReleaseReceiptError(f"{field} must be a sha-256 hex digest")
+
+    if not isinstance(value["transaction_id"], str) or not value["transaction_id"]:
+        raise ReleaseReceiptError("transaction_id must be a non-empty string")
+
+    observations = value["public_asset_observations"]
+    if not isinstance(observations, list) or not observations:
+        raise ReleaseReceiptError(
+            "public_asset_observations must list at least one downloaded "
+            "asset; a receipt that records no observation is recording an "
+            "upload, not a verification"
+        )
+    for entry in observations:
+        if not isinstance(entry, dict) or set(entry) != {"url", "observed_sha256"}:
+            raise ReleaseReceiptError(
+                "each public asset observation must be {url, observed_sha256}"
+            )
+        # NOT _validate_public_url: that one requires the GitHub tag PAGE for
+        # this exact tag. An asset observation is a download URL, and the
+        # Supabase mirror is not on github.com at all, so reusing it here
+        # would refuse every valid mirror observation.
+        _validate_asset_url(entry["url"])
+        if not SHA256_RE.fullmatch(str(entry["observed_sha256"])):
+            raise ReleaseReceiptError("observed_sha256 must be a sha-256 hex digest")
+        if entry["observed_sha256"] != value["package_sha256"]:
+            raise ReleaseReceiptError(
+                f"public asset at {entry['url']} hashed to "
+                f"{str(entry['observed_sha256'])[:12]} but the package is "
+                f"{value['package_sha256'][:12]}. Silent divergence between "
+                f"what shipped and what is downloadable is not allowed: the "
+                f"canonical asset and every mirror must be the same bytes."
+            )
+    return dict(value)
+
+
+def validate_any_release_receipt(value: Any) -> dict[str, Any]:
+    """Validate a receipt at whichever schema it declares.
+
+    The store validated v1 only, so a v2 receipt could be BUILT by the
+    publisher and then neither written nor read back — the writer refused it
+    and the loader refused it, and closure would never find the receipt it was
+    closing against. Surfaced by driving the real happy path, which is the
+    thing that catches an integration seam nobody wired.
+
+    Dispatches rather than loosening: each schema is still validated in full.
+    """
+    if isinstance(value, dict) and value.get("schema_version") == SCHEMA_VERSION_V2:
+        return validate_release_receipt_v2(value)
+    return validate_release_receipt(value)
+
+
+def assert_v2_authority(receipt: Any, *, purpose: str) -> dict[str, Any]:
+    """A v1 receipt is history, never authority for a v2 release.
+
+    A148's Q4 answer, implemented as the distinction it draws. Historical v1
+    receipts remain readable and remain valid evidence that a v1 publication
+    happened. They are never acceptable authority for a v2 release run, a
+    package gate, or closure — and the refusal names the missing digest rather
+    than treating its absence as satisfaction. This is read compatibility, not
+    an operational fallback, so no new v1 publication is licensed by it.
+    """
+    if not isinstance(receipt, dict):
+        raise ReleaseReceiptError("release receipt must be a JSON object")
+    schema = receipt.get("schema_version")
+    if schema == SCHEMA_VERSION_V2:
+        return validate_release_receipt_v2(receipt)
+    if schema == SCHEMA_VERSION_V1:
+        raise ReleaseReceiptError(
+            f"this is a v1 receipt and cannot authorise {purpose}: it carries "
+            f"no package_sha256, so nothing binds it to the artefact that "
+            f"shipped. It remains valid evidence of the v1 publication it "
+            f"records."
+        )
+    raise ReleaseReceiptError(
+        f"unrecognised receipt schema_version {schema!r}; refusing to treat an "
+        f"unknown shape as authority for {purpose}"
+    )
 
 
 # Short aliases keep call sites readable without weakening the explicit API.

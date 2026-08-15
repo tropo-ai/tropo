@@ -34,6 +34,23 @@ from pathlib import Path
 
 import yaml
 
+# Shared, memoized YAML parse (talos-t40 2026-08-09). One `tropo-validate` run
+# parsed 108,000+ documents of which ~91% were byte-identical repeats, because
+# each validator module carried its own private frontmatter parser. Routing them
+# through one helper gets libyaml's C scanner AND one shared memo; a miss here
+# would put this module back on the pure-Python path with a private cache.
+try:
+    from . import fast_yaml as _fast_yaml
+except Exception:  # pragma: no cover - exercised by test_fast_yaml_shared_memo
+    _fast_yaml = None
+
+
+def _yaml_safe_load(_text):
+    if _fast_yaml is not None:
+        return _fast_yaml.safe_load(_text)
+    return yaml.safe_load(_text)
+
+
 # v1.51 perf fix (Argus A80 2026-05-23): @lru_cache on loader functions.
 # _iter_entries is especially expensive (scans ALL vault files); cache critical.
 
@@ -60,7 +77,7 @@ def _parse_frontmatter(text: str) -> dict | None:
     if raw is None:
         return None
     try:
-        parsed = yaml.safe_load(raw)
+        parsed = _yaml_safe_load(raw)
         return parsed if isinstance(parsed, dict) else None
     except yaml.YAMLError:
         return None

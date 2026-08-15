@@ -4708,12 +4708,20 @@ class BindingGuardCoverageTests(BootOrientCase):
 class OrientBootRegressionFloor(unittest.TestCase):
     PRE_CYCLE_COMMIT = "f82adb0227f2209d1d475e932cc6389daf5238e8"
     PRE_CYCLE_BLOB = "8ab0af3f1a30c347915237547a20540c352dd847"
-    IMPORTED_FIXTURE_BLOB = "3d6d5023a84b488e27be4ac17f68d17f7bfb9b5e"
+    # test_distiller.py legitimately changed after this file's pre-cycle floor:
+    # 993820cb (Mike-approved relation-specificity ranker cycle, 2026-08-03)
+    # recomputed the fifth feature's frozen canonical and added bounded-boost
+    # tests. Keep THIS file pinned to PRE_CYCLE_COMMIT while pinning that imported
+    # dependency to the reviewed commit that now owns its bytes.
+    IMPORTED_FIXTURE_COMMIT = "993820cb420ddbe9bcfc1f90217c773de557b414"
+    IMPORTED_FIXTURE_BLOB = "b2a4239975203a400c55654debbf3b3f8bc4c8d2"
 
-    def _pinned_blob(self, relative: str, expected_blob: str) -> bytes:
+    def _pinned_blob(
+        self, relative: str, expected_blob: str, *, commit: str | None = None
+    ) -> bytes:
         root = Path(__file__).resolve().parents[3]
         resolved_blob = subprocess.run(
-            ["git", "rev-parse", f"{self.PRE_CYCLE_COMMIT}:{relative}"],
+            ["git", "rev-parse", f"{commit or self.PRE_CYCLE_COMMIT}:{relative}"],
             cwd=root,
             capture_output=True,
             text=True,
@@ -4731,7 +4739,9 @@ class OrientBootRegressionFloor(unittest.TestCase):
 
     def _assert_imported_fixture_bytes(self, current: bytes) -> None:
         baseline = self._pinned_blob(
-            "vault/tools/tests/test_distiller.py", self.IMPORTED_FIXTURE_BLOB
+            "vault/tools/tests/test_distiller.py",
+            self.IMPORTED_FIXTURE_BLOB,
+            commit=self.IMPORTED_FIXTURE_COMMIT,
         )
         self.assertEqual(
             hashlib.sha256(current).digest(), hashlib.sha256(baseline).digest()

@@ -61,15 +61,28 @@ subsystem_hub:
 ---
 """
 
+import importlib.util
 import json
 import os
 import re
 import sys
 from pathlib import Path
 
-VAULT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-INDEX_PATH = os.path.join(VAULT_ROOT, 'vault', '00-index.jsonl')
-DEFAULT_OUT = os.path.join(VAULT_ROOT, 'vault', 'updates', 'updates-manifest.json')
+
+def _load_tropo_roots():
+    """Load the production-owned roots module outside either ``lib`` package."""
+    roots_path = Path(__file__).resolve().with_name("lib") / "tropo_roots.py"
+    spec = importlib.util.spec_from_file_location("_tropo_tools_roots", roots_path)
+    if spec is None or spec.loader is None:
+        raise ImportError("tropo_roots helper could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+tropo_roots = _load_tropo_roots()
+INDEX_PATH = str(tropo_roots.VAULT_DIR / '00-index.jsonl')
+DEFAULT_OUT = str(tropo_roots.VAULT_DIR / 'updates' / 'updates-manifest.json')
 
 # Stable (non-expiring) path in the Supabase releases bucket — NOT version-namespaced,
 # so the client always fetches the same URL and always gets the latest catalog.
@@ -127,7 +140,26 @@ def load_release_catalog(index_path):
     return releases
 
 
-def build_manifest(releases, package_url_base='https://api.tropo-ai.com/updates'):
+def _resolve_package_url_base():
+    """Package URLs must point where packages actually live: the same Supabase
+    releases bucket that serves this manifest (public path, no auth). The prior
+    default 'https://api.tropo-ai.com/updates' was fictional infrastructure —
+    the host never resolved, discovered live on the FIRST customer apply attempt
+    (2026-08-09). Only the public project URL is needed (no secret)."""
+    supabase_url = os.environ.get('NEXT_PUBLIC_SUPABASE_URL')
+    if not supabase_url:
+        env_file = tropo_roots.STUDIO_ROOT / 'tropo-app' / '.env.local'
+        if os.path.exists(env_file):
+            with open(env_file, 'r') as f:
+                for line in f:
+                    if line.startswith('NEXT_PUBLIC_SUPABASE_URL='):
+                        supabase_url = line.strip().split('=', 1)[1]
+    if not supabase_url:
+        return None
+    return f"{supabase_url.rstrip('/')}/storage/v1/object/public/releases/updates"
+
+
+def build_manifest(releases, package_url_base=None):
     """Build the Update API manifest per the three response shapes in task f1d4b9e6.
 
     The manifest itself carries the FULL catalog (static-transport lean); the client
@@ -156,7 +188,7 @@ def build_manifest(releases, package_url_base='https://api.tropo-ai.com/updates'
             'version': version,
             'type': update_type,
             'description': (r.get('description') or r.get('title') or '')[:200],
-            'url': f'{package_url_base}/tropo-update-v{version}.zip',
+            'url': f'{package_url_base}/tropo-update-v{version}.zip',  # base resolved, never fictional
             'min_compatible': min_compatible,
         })
         prior_version = version
@@ -237,8 +269,10 @@ def upload_to_supabase(manifest_json):
     supabase_key = os.environ.get('SUPABASE_SECRET_KEY')
 
     if not supabase_url or not supabase_key:
-        platform_root = os.path.dirname(VAULT_ROOT)
-        env_file = os.path.join(os.path.dirname(platform_root), 'tropo-app', '.env.local')
+        # tropo-app lives INSIDE the studio (third instance of the one-level-off
+        # class caught at the v1.86.0 fire, 2026-08-09; siblings fixed the same night
+        # in tropo-publish-release.py).
+        env_file = tropo_roots.STUDIO_ROOT / 'tropo-app' / '.env.local'
         if os.path.exists(env_file):
             with open(env_file, 'r') as f:
                 for line in f:
@@ -277,7 +311,13 @@ def main():
         out_path = sys.argv[sys.argv.index('--out') + 1]
 
     releases = load_release_catalog(INDEX_PATH)
-    manifest = build_manifest(releases)
+    package_url_base = _resolve_package_url_base()
+    if not package_url_base:
+        print('  ⚠ NEXT_PUBLIC_SUPABASE_URL unresolvable — package URLs cannot be emitted '
+              'truthfully; refusing to generate a manifest with fictional hosts.',
+              file=sys.stderr)
+        sys.exit(2)
+    manifest = build_manifest(releases, package_url_base=package_url_base)
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     manifest_json = json.dumps(manifest, indent=2, ensure_ascii=False)

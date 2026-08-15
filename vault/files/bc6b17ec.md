@@ -1,15 +1,15 @@
 ---
 uid: bc6b17ec
-title: external-test — dev-pipeline step 6
+title: external-test — release-pipeline step
 type: pipeline
 subtype: workflow-node
 name: external-test
 version: 1.0.0
 author: argus-a42
 owner: argus
-modified: 2026-05-31
-modified_by: vela-v56
-status: draft
+modified: 2026-08-13
+modified_by: argus-a148
+status: active
 state: active
 role: step
 children: []
@@ -17,7 +17,7 @@ step_owner_role: vela
 step_verifier_role: same-as-executor
 verification_class: false
 depends_on_steps:
-  - 8654900a
+  - a0f2bea8
 exit_criteria:
   - 'file:<run_folder>/external-test-result.md exists AND carries frontmatter: (a) outcome: in {PASS | signed-off-on-known-failure | FAIL | skipped}; (b) tested_artifact: non-empty — the step-5 (8654900a) .zip artifact path or release version this result pertains to, binding the result to THIS build (not a stale prior-cycle file left in the folder); (c) when outcome in {signed-off-on-known-failure | FAIL}: signed_off_by: non-empty (owner sign-off per trust_level:approval-required); (d) when outcome: skipped: skip_rationale: non-empty (external-test''s OWN inline skip path — Mike-directed skip recorded here; distinct from the cold-boot-walk step-7.5 c6b61fb9 SKIP.md, a different step). The frontmatter SHAPE + presence is the machine-checkable gate (verification_class:false — engine checks shape, principal judges content); this closes the trivial-stub hole (a one-word PASS authored without a run no longer passes). A FAIL without signed_off_by FAILS the gate (blocks git-commit step 7) at shape
     level. [Advisory: full conditional FAIL-routing enforcement awaits pipeline.capsule v2.1 branching per this step''s Known Enforcement Gap; the frontmatter-shape check is the v2.0-expressible strengthening, per sa.criteria-reviewer 5c1aef02 weak-flagged review 2026-05-31.]'
@@ -32,10 +32,14 @@ next_steps:
   - c6b61fb9
 relationships:
   - rel: member_of
-    uid: 3a7dbdda
+    uid: 8a4f802b
+stage6_ac7_rehome_note: 'Talos T40 2026-08-11 (Stage-6 GO, A148 evt_a9360f18f56fe472_00000018; preflight §3). Relocated from the old Deploy stage 3a7dbdda into release Verify 8a4f802b as the third of AC7''s four declared instruments. Amended in place, never deleted and recreated: the uid is referenced by completed runs and reissuing it would orphan every record that points here.'
 schema_version: 2
 extraction_scope: ship
 member_of: []
+activated_under: '0a0a6777'
+activated_by: mike
+activated_at: '2026-08-13'
 subsystem_hub:
   - 76bab75f
 capsule_version: '2.5'
@@ -44,7 +48,7 @@ capsule_version: '2.5'
 # external-test — dev-pipeline step 6
 
 <!-- nav-block:start -->
-**📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Playbooks](76bab75f.md) → **external-test — dev-pipeline step 6**
+**📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Playbooks](76bab75f.md) → **external-test — release-pipeline step**
 <!-- nav-block:end -->
 
 ## Purpose

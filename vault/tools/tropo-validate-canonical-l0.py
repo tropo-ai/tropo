@@ -212,6 +212,83 @@ def _uid_in_extraction_scope(uid: str, scopes: dict[str, str],
     return scopes.get(uid) in (None, scope_filter)
 
 
+# The only cure that makes THIS validator pass. `--only <uid>` freshens the
+# index row and never writes 00-project-tree.jsonl, so it moves an entry from
+# unindexed to indexed-but-untreed and leaves the gate red — verified on a stale
+# clone by argus-a148, 2026-08-12.
+STALE_SURFACE_CURE = (
+    'python3 vault/tools/tropo-rebuild-index.py --apply --skip-rehydrate'
+)
+
+
+def load_indexed_uids(vault_root: Path) -> set:
+    """UIDs carried by the composed current index."""
+    index_path = vault_root / 'vault' / '00-index.jsonl'
+    uids: set = set()
+    if not index_path.is_file():
+        return uids
+    with index_path.open(encoding='utf-8') as handle:
+        for line in handle:
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            uid = row.get('uid')
+            if uid:
+                uids.add(str(uid))
+    return uids
+
+
+def load_treed_uids(vault_root: Path) -> set:
+    """UIDs carried by the rendered project tree, at any depth."""
+    tree_path = vault_root / 'vault' / '00-project-tree.jsonl'
+    uids: set = set()
+    if not tree_path.is_file():
+        return uids
+    with tree_path.open(encoding='utf-8') as handle:
+        for line in handle:
+            try:
+                node = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            uid = node.get('uid')
+            if uid:
+                uids.add(str(uid))
+    return uids
+
+
+def classify_missing(vault_root: Path, missing: list[dict[str, Any]]) -> dict[str, list]:
+    """Split MISSING canonical L0s by whether the governed source file exists.
+
+    A canonical L0 whose ``vault/files/<uid>.md`` is present but which carries no
+    index row is a STALE DERIVED SURFACE, not lost L0 status: the index and
+    project-tree are gitignored, so a machine that pulled a new canonical L0
+    without rebuilding reports it MISSING with no hint of the cure. That is
+    exactly how 48f8c52c (external-context) read red on a reviewer's clone while
+    the source file and registry row were both correct (7b1e0ae5 §3.1).
+
+    Each stale entry records whether it reaches the index and the project tree,
+    because those two surfaces are cured by different commands and only one of
+    them makes this validator pass.
+    """
+    stale: list[dict[str, Any]] = []
+    absent: list[dict[str, Any]] = []
+    indexed = load_indexed_uids(vault_root)
+    treed = load_treed_uids(vault_root)
+    for entry in missing:
+        uid = str(entry.get('uid', ''))
+        source = vault_root / 'vault' / 'files' / f'{uid}.md'
+        record = dict(entry)
+        if source.is_file():
+            record['source_path'] = str(source.relative_to(vault_root))
+            record['indexed'] = uid in indexed
+            record['in_project_tree'] = uid in treed
+            stale.append(record)
+        else:
+            absent.append(record)
+    return {'stale_derived_surface': stale, 'source_absent': absent}
+
+
 def load_rendered_l0_set(vault_root: Path, state_filter: Optional[str] = 'active',
                          extraction_scope_filter: Optional[str] = None
                          ) -> Optional[list[dict[str, Any]]]:
@@ -317,12 +394,35 @@ def report_human(findings: dict[str, Any]) -> None:
     print()
 
     if findings['missing_from_rendered']:
-        print(f"❌ MISSING from rendered tree ({len(findings['missing_from_rendered'])}):")
-        for p in findings['missing_from_rendered']:
-            print(f"   {p['uid']}  {p.get('title', '')}")
-        print("   → A canonical L0 is not rendering as L0. Check member_of: edges; project may have")
-        print("     been speculatively reparented or its L0 status corrupted by a backfill script.")
-        print()
+        stale = findings.get('stale_derived_surface') or []
+        absent = findings.get('source_absent') or []
+        if stale:
+            print(f"❌ MISSING from rendered tree — STALE DERIVED SURFACE ({len(stale)}):")
+            for p in stale:
+                surfaces = (
+                    f"{'in' if p.get('indexed') else 'NOT in'} 00-index.jsonl; "
+                    f"{'in' if p.get('in_project_tree') else 'NOT in'} "
+                    f"00-project-tree.jsonl"
+                )
+                print(f"   {p['uid']}  {p.get('title', '')}  [{p.get('source_path')} exists; {surfaces}]")
+            print("   → The governed source file is present, so L0 status is not lost: the index and")
+            print("     project-tree are derived, gitignored surfaces and this clone has not rebuilt")
+            print("     them since the entry arrived. Cure:")
+            print(f"       {STALE_SURFACE_CURE}")
+            print("     Then re-run this validator. The gate still FAILS until the surfaces carry")
+            print("     the entry.")
+            print("     NOT `--only <uid>`: that freshens the index row and never writes")
+            print("     00-project-tree.jsonl, which is the surface THIS validator reads — it")
+            print("     leaves the gate red and the entry indexed-but-untreed.")
+            print()
+        if absent:
+            print(f"❌ MISSING from rendered tree ({len(absent)}):")
+            for p in absent:
+                print(f"   {p['uid']}  {p.get('title', '')}")
+            print("   → A canonical L0 is not rendering as L0 and has no governed source file. Check")
+            print("     member_of: edges; project may have been speculatively reparented or its L0")
+            print("     status corrupted by a backfill script.")
+            print()
 
     if findings.get('non_l0_risk_at_l0'):
         print(f"❌ DECLARED-NON-L0 BUBBLED TO L0 ({len(findings['non_l0_risk_at_l0'])}):")
@@ -411,6 +511,7 @@ def main() -> int:
         return 2
 
     findings = compare(canonical, rendered, non_l0_risk)
+    findings.update(classify_missing(vault_root, findings['missing_from_rendered']))
 
     if args.json:
         print(json.dumps(findings, indent=2))

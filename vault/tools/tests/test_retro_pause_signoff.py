@@ -89,7 +89,17 @@ def _copy_vault_files(tmp: Path) -> None:
     src_files = _REAL_VAULT_ROOT / "vault" / "files"
     dest_files = tmp / "vault" / "files"
     dest_files.mkdir(parents=True, exist_ok=True)
-    for uid in (_PR_UID, _ACTIVATION_UID, "7b921d17", "cdf9b3ad", "cd1fcd25"):
+    # 882887c7 is the two-pipeline migration manifest. `load_run` consults it on
+    # every dev-pipeline action now, and an UNREADABLE manifest fails closed for
+    # v1 dev runs (0a0a6777; argus-a147 boundary-2). This fixture's run is
+    # pipeline_version 1.2.0, so omitting the manifest made a deliberately narrow
+    # allowlist look like a studio whose governance file had gone missing, and
+    # the freeze correctly refused. Copying it is the honest fix: the fixture is
+    # a studio where the manifest is READABLE and simply does not name this run.
+    # Adding an exemption to the freeze instead would have widened a safety rule
+    # to accommodate a test.
+    for uid in (_PR_UID, _ACTIVATION_UID, "7b921d17", "cdf9b3ad", "cd1fcd25",
+                "882887c7"):
         src = src_files / f"{uid}.md"
         if src.exists():
             shutil.copy2(src, dest_files / src.name)

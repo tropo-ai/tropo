@@ -22,6 +22,23 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
+# Shared, memoized YAML parse (talos-t40 2026-08-09). One `tropo-validate` run
+# parsed 108,000+ documents of which ~91% were byte-identical repeats, because
+# each validator module carried its own private frontmatter parser. Routing them
+# through one helper gets libyaml's C scanner AND one shared memo; a miss here
+# would put this module back on the pure-Python path with a private cache.
+try:
+    from . import fast_yaml as _fast_yaml
+except Exception:  # pragma: no cover - exercised by test_fast_yaml_shared_memo
+    _fast_yaml = None
+
+
+def _yaml_safe_load(_text):
+    if _fast_yaml is not None:
+        return _fast_yaml.safe_load(_text)
+    return yaml.safe_load(_text)
+
+
 try:
     from . import dev_spec_validators, spec_substrate_refs
 except ImportError:  # check-one imports validator modules directly from this directory
@@ -36,6 +53,11 @@ VALID_VERIFICATION_METHODS = frozenset({
     'machine_executable_script', 'deterministic_assertion', 'structural_check',
     'agentic_review', 'manual_walk'
 })
+RELEASE_PROVENANCE_FIELDS = (
+    'triggered_by_release_pipeline',
+    'release_plan_uid',
+    'release_pipeline_run_uid',
+)
 
 # Machine-side methods (counted against ceiling math complement)
 MACHINE_SIDE_METHODS = frozenset({
@@ -174,7 +196,7 @@ def _parse_frontmatter(text: str) -> dict | None:
     if raw is None:
         return None
     try:
-        parsed = yaml.safe_load(raw)
+        parsed = _yaml_safe_load(raw)
         return parsed if isinstance(parsed, dict) else None
     except yaml.YAMLError:
         return None
@@ -397,6 +419,25 @@ def _resolve_triggering_dev_spec(
 
     mode = _contract_mode(frontmatter, vault)
     declared = frontmatter.get('triggered_by_dev_cycle')
+    release_values = {
+        field: frontmatter.get(field) for field in RELEASE_PROVENANCE_FIELDS
+    }
+    if any(release_values.values()):
+        if declared:
+            return None, None, (
+                'test-spec declares both dev-cycle and release trigger provenance'
+            )
+        missing = [
+            field for field, value in release_values.items()
+            if not isinstance(value, str)
+            or not spec_substrate_refs.UID_RE.fullmatch(value)
+        ]
+        if missing:
+            return None, None, (
+                'release-triggered test-spec missing valid provenance fields: '
+                + ', '.join(missing)
+            )
+        return None, None, None
     if not isinstance(declared, str) or not spec_substrate_refs.UID_RE.fullmatch(declared):
         return None, None, (
             f"triggered_by_dev_cycle must be an 8-hex UID, got {declared!r}"
@@ -517,7 +558,7 @@ def _load_sa_class_registry(vault: Path) -> frozenset:
 # =============================================================================
 
 def check_test_spec_required_fields(vault: Path) -> tuple[list[str], int, int]:
-    required = ('type', 'target_substrate', 'target_subsystem', 'triggered_by_dev_cycle',
+    required = ('type', 'target_substrate', 'target_subsystem',
                 'behaviors_covered', 'coverage_class', 'acceptance_criteria')
     findings: list[str] = []
     total = 0
@@ -528,6 +569,29 @@ def check_test_spec_required_fields(vault: Path) -> tuple[list[str], int, int]:
         missing = [k for k in required if k not in fm]
         if missing:
             findings.append(f'[WARN] {rel} — test-spec missing required fields: {", ".join(missing)}')
+        has_dev = bool(fm.get('triggered_by_dev_cycle'))
+        release_values = [fm.get(field) for field in RELEASE_PROVENANCE_FIELDS]
+        has_release = all(release_values)
+        if has_dev and has_release:
+            findings.append(_finding(
+                mode, rel,
+                'test-spec declares both dev-cycle and release trigger provenance',
+            ))
+        elif not has_dev and any(release_values) and not has_release:
+            missing_release = [
+                field for field in RELEASE_PROVENANCE_FIELDS if not fm.get(field)
+            ]
+            findings.append(_finding(
+                mode, rel,
+                'release-triggered test-spec missing provenance fields: '
+                + ', '.join(missing_release),
+            ))
+        elif not has_dev and not has_release:
+            findings.append(_finding(
+                mode, rel,
+                'test-spec requires triggered_by_dev_cycle or the complete '
+                'release activation/plan/run triplet',
+            ))
         if mode.version_error:
             findings.append(f'[ERROR] {rel} — {mode.version_error}')
         # cycle_class was WARN-if-absent at v1.0 and is strict for v1.2+.

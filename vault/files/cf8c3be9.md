@@ -7,11 +7,11 @@ description: 'Canonical Tier 2 (Studio) boot extension substrate. Migrated from 
 layer: vault
 status: published
 state: active
-version: '2.5'
+version: '2.6'
 history_companion: 83590936
-modified: 2026-06-10
-modified_by: argus-a106
-supersedes_version: '2.0'
+modified: 2026-08-09
+modified_by: argus-a147
+supersedes_version: '2.5'
 owner: vela
 schema_version: 2
 extraction_scope: ship
@@ -44,9 +44,9 @@ capsule_version: '2.5'
 
 ---
 
-## Group 1 — No Vault-Level Additions
+## Group 1 — No Studio-Level Additions
 
-Identity verification (hard gates ADR-016 / ADR-028) is entirely OS-defined. This vault adds no additional identity requirements.
+Lineage birth and any identity findings are OS-defined. This Studio adds no identity requirement and cannot refuse existence.
 
 ---
 
@@ -69,12 +69,10 @@ Vault root resolved in Group 0 Step 0.0 (activation playbook). All paths in this
 **Vault-level memory — required read:**
 - [.tropo-studio/memory/memory-current.md](memory/memory-current.md) — vault-level cross-crew memories (v3-shape since 2026-05-12; the legacy `MEMORY.md` path this line pointed at was DEAD for 8+ generations — see Path 2 finding + v2.5 note). Read the index. Read pinned (🔴) and CRITICAL entries in full.
 
-**Capability catalogs — required reads (v1.15 Stream F):**
-- [.tropo/tool-catalog.md](../.tropo/tool-catalog.md) — Tropo Tool Catalog. Every kernel script + action surface registered as a `type: tool` vault entry with `extraction_scope: ship`. Scan to know what tools exist before invoking; dive into specific entries via UID when invoking.
-- [.tropo/skill-catalog.md](../.tropo/skill-catalog.md) — Tropo Skill Catalog. Every kernel skill (`type: how-to` per canonical schema; user-facing surface is "skill" per Mike-A52 mirror-Claude-Code lock). Scan at boot during Group 3 to know what skills are available; dive into specific skills when invoking.
-- [.tropo/sa-agent-catalog.md](../.tropo/sa-agent-catalog.md) — Tropo sa.\* Agent Catalog. Every shipped session agent (`type: session-agent`). Scan before commissioning sa.\* dispatches; dive into specific activation files when commissioning per `vault/files/e863a1e0.md` 6-step protocol.
+**Capability discovery — one required read:**
+- [.tropo/toolbelt.md](../.tropo/toolbelt.md) — compact boot-known capability map. Read once at boot; use the current index or the full tool / skill / sa.\* catalogs on demand when the task requires depth.
 
-Catalogs are agent-canonical scannable surfaces (mirror Claude Code's tool-catalog + skill-catalog design pattern). Each entry's `trigger_description:` is the hand-curated "when to reach for it" prose. Session-specific agents that already have target capabilities loaded may skip; executive agents commission with awareness of what's available.
+The generated [.tropo/tool-catalog.md](../.tropo/tool-catalog.md), [.tropo/skill-catalog.md](../.tropo/skill-catalog.md), and [.tropo/sa-agent-catalog.md](../.tropo/sa-agent-catalog.md) remain complete reference surfaces. They are not mandatory boot scans.
 
 **Harness orientation — pointer (post-v1.15 Stream G rescope):**
 - [.tropo/orientation.md](../.tropo/orientation.md) — "Find Things" lookup table + pointer to the three catalogs. Pre-v1.15 narrative inventory of actions/skills/playbooks/sa.\* moved to the catalogs; orientation.md now scoped to harness-map navigation only. Executive agents should read; session-specific agents may skip.

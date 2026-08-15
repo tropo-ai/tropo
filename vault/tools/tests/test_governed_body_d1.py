@@ -142,23 +142,102 @@ class CovenantHashIsBlindToRendererOwnedSpans(unittest.TestCase):
             "violation — this test has stopped discriminating the fix")
 
 
+class WildcardMintFormIsVocabularyNotDefect(unittest.TestCase):
+    """`<<MINT:*>>` is documentation convention and can never be a real token.
+
+    Ruled by metis-g105 2026-08-08 after the in-box binary gate left the two
+    wildcard mentions (38c63381, de5181b0) as the sole remaining reds; the
+    grammar proof is talos-t40's (evt 9552) — `MINT_TOKEN_RE` admits only
+    `[a-z_]+`, so a star can never name a substitution the minter would fill.
+
+    REWRITTEN AS A REAL TEST BY talos-t40, 2026-08-09. These four assertions
+    shipped as a module-level `check_wildcard_...()` function that nothing ever
+    called, guarded by
+    `if __name__ == "__main__" and "check_wildcard" in str(...) is False:` whose
+    body was `pass`. Three independent reasons it could not fire: Python chains
+    that comparison into `(x in s) and (s is False)`, and a str is never False,
+    so the condition is a constant False; the body called nothing even if it
+    ran; and `unittest.main()` sits above it and exits the process, so the
+    function was never even defined during a script run.
+
+    The suppression itself was correct — all four claims verified by hand before
+    this rewrite, so nothing shipped broken. What was missing is the only thing
+    that keeps it correct tomorrow. Guards that cannot fire are the shape this
+    file already exists to fight: its own
+    `test_mutation_sentinel_only_canonicalization_reproduces_the_defect` is
+    there because a green test that never reaches its branch measures nothing.
+    """
+
+    def setUp(self) -> None:
+        from lib.template_leg import find_stray_mint_tokens
+
+        self.scan = find_stray_mint_tokens
+
+    def test_the_wildcard_form_is_not_reported(self) -> None:
+        self.assertEqual(
+            self.scan("prose about <<MINT:*>> tokens", "capsule-definition"), []
+        )
+
+    def test_a_real_token_still_reports(self) -> None:
+        self.assertEqual(self.scan("real <<MINT:uid>> left", "note"), ["<<MINT:uid>>"])
+
+    def test_a_typo_form_still_reports(self) -> None:
+        """Uppercase is outside the grammar, so it is a malformed token, not vocabulary."""
+        self.assertTrue(self.scan("typo <<MINT:Uid>> here", "note"))
+
+    def test_a_double_star_still_reports(self) -> None:
+        """The suppression is the exact form and nothing adjacent to it."""
+        self.assertTrue(self.scan("weird <<MINT:**>> here", "note"))
+
+    def test_the_suppression_is_type_independent_and_that_is_deliberate(self) -> None:
+        """Not scoped to capsule-definition, unlike the template-leg exclusion.
+
+        Recorded because the two behaviours sit in the same function and the
+        difference is easy to read as an oversight. It is not: the template-leg
+        exclusion suppresses tokens that ARE well-formed, so it must be scoped
+        to the type entitled to carry them. A star is unrepresentable in the
+        grammar for every type, so no scope buys anything.
+        """
+        for entry_type in ("note", "task", "capsule-definition", None):
+            with self.subTest(entry_type=entry_type):
+                self.assertEqual(self.scan("about <<MINT:*>> tokens", entry_type), [])
+
+    def test_mutation_removing_the_suppression_reddens_the_first_test(self) -> None:
+        """Teeth, run rather than asserted.
+
+        Re-implements the scan with the one `if form != "<<MINT:*>>"` guard
+        removed and asserts the wildcard comes back. If this ever passes, the
+        suppression is no longer what makes the first test green.
+        """
+        from lib import template_leg as tl
+
+        text = "prose about <<MINT:*>> tokens"
+        scannable = tl.scannable_instance_text(text, "capsule-definition")
+        unsuppressed: list[str] = []
+        cursor = 0
+        while True:
+            start = scannable.find(tl.MINT_TOKEN_OPEN, cursor)
+            if start == -1:
+                break
+            match = tl.MINT_TOKEN_RE.match(scannable, start)
+            if match is not None:
+                unsuppressed.append(match.group(0))
+                cursor = match.end()
+                continue
+            end = scannable.find(">>", start)
+            end = end + 2 if end != -1 else len(scannable)
+            unsuppressed.append(scannable[start:end])
+            cursor = max(end, start + len(tl.MINT_TOKEN_OPEN))
+        self.assertEqual(unsuppressed, ["<<MINT:*>>"])
+        self.assertEqual(self.scan(text, "capsule-definition"), [])
+
+    def test_the_grammar_claim_the_suppression_rests_on(self) -> None:
+        """The whole argument is that a star cannot name a substitution."""
+        from lib import template_leg as tl
+
+        self.assertIsNone(tl.MINT_TOKEN_RE.fullmatch("<<MINT:*>>"))
+        self.assertIsNotNone(tl.MINT_TOKEN_RE.fullmatch("<<MINT:uid>>"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
-
-
-def check_wildcard_mint_form_is_vocabulary_not_defect():
-    """<<MINT:*>> is doc vocabulary (star is unrepresentable in the token grammar).
-
-    Ruled by metis-g105 2026-08-08 after the in-box binary gate; soundness proven by
-    talos-t40 (evt 9552). Mutation guard: real tokens and every other malformed
-    form must still report."""
-    import sys, os
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-    from lib.template_leg import find_stray_mint_tokens
-    assert find_stray_mint_tokens("prose about <<MINT:*>> tokens", "capsule-definition") == []
-    assert find_stray_mint_tokens("real <<MINT:uid>> left", "note") == ["<<MINT:uid>>"]
-    assert find_stray_mint_tokens("typo <<MINT:Uid>> here", "note")
-    assert find_stray_mint_tokens("weird <<MINT:**>> here", "note")
-
-if __name__ == "__main__" and "check_wildcard" in str(globals().get("__doc__","")) is False:
-    pass

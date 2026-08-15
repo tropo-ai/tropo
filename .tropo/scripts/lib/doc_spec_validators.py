@@ -26,10 +26,32 @@ TARGETS_CAPSULE = "doc-spec"  # Lane V Layer 3 M.1 targeting (8e2f1a47)
 
 # V-ratchet v1.60: VALID_* constants for Layer 3 enum-drift detection
 VALID_ORPHEUS_DISPOSITION_SIGNOFF = {"PASS", "PASS-with-findings", "FAIL-incomplete"}
+RELEASE_PROVENANCE_FIELDS = (
+    'triggered_by_release_pipeline',
+    'release_plan_uid',
+    'release_pipeline_run_uid',
+)
 from functools import lru_cache
 from pathlib import Path
 
 import yaml
+
+# Shared, memoized YAML parse (talos-t40 2026-08-09). One `tropo-validate` run
+# parsed 108,000+ documents of which ~91% were byte-identical repeats, because
+# each validator module carried its own private frontmatter parser. Routing them
+# through one helper gets libyaml's C scanner AND one shared memo; a miss here
+# would put this module back on the pure-Python path with a private cache.
+try:
+    from . import fast_yaml as _fast_yaml
+except Exception:  # pragma: no cover - exercised by test_fast_yaml_shared_memo
+    _fast_yaml = None
+
+
+def _yaml_safe_load(_text):
+    if _fast_yaml is not None:
+        return _fast_yaml.safe_load(_text)
+    return yaml.safe_load(_text)
+
 
 # v1.51 perf fix (Argus A80 2026-05-23): @lru_cache on loader functions brings
 # per-check cost from O(checks × files × parse) to O(files × parse) once per
@@ -57,7 +79,7 @@ def _parse_frontmatter(text: str) -> dict | None:
     if raw is None:
         return None
     try:
-        parsed = yaml.safe_load(raw)
+        parsed = _yaml_safe_load(raw)
         return parsed if isinstance(parsed, dict) else None
     except yaml.YAMLError:
         return None
@@ -199,7 +221,7 @@ def _resolve_subsystem_hub_uids(vault: Path) -> frozenset:
 # =============================================================================
 
 def check_doc_spec_required_fields(vault: Path) -> tuple[list[str], int, int]:
-    required = ('type', 'target_subsystem', 'target_tier', 'triggered_by_dev_cycle',
+    required = ('type', 'target_subsystem', 'target_tier',
                 'doc_changes_required', 'acceptance_criteria')
     findings: list[str] = []
     total = 0
@@ -210,6 +232,27 @@ def check_doc_spec_required_fields(vault: Path) -> tuple[list[str], int, int]:
         if missing:
             findings.append(
                 f'[WARN] {rel} — doc-spec missing required fields: {", ".join(missing)}'
+            )
+        has_dev = bool(fm.get('triggered_by_dev_cycle'))
+        release_values = [fm.get(field) for field in RELEASE_PROVENANCE_FIELDS]
+        has_release = all(release_values)
+        if has_dev and has_release:
+            findings.append(
+                f'[WARN] {rel} — doc-spec requires exactly one trigger provenance: '
+                'triggered_by_dev_cycle OR the complete release activation/plan/run triplet'
+            )
+        elif not has_dev and any(release_values) and not has_release:
+            missing_release = [
+                field for field in RELEASE_PROVENANCE_FIELDS if not fm.get(field)
+            ]
+            findings.append(
+                f'[WARN] {rel} — release-triggered doc-spec missing provenance fields: '
+                f'{", ".join(missing_release)}'
+            )
+        elif not has_dev and not has_release:
+            findings.append(
+                f'[WARN] {rel} — doc-spec requires trigger provenance: '
+                'triggered_by_dev_cycle OR the complete release activation/plan/run triplet'
             )
     return findings, total, len(findings)
 
@@ -324,6 +367,29 @@ def check_doc_spec_triggered_by_dev_cycle_resolvable(vault: Path) -> tuple[list[
         total += 1
         rel = path.relative_to(vault)
         tdc = fm.get('triggered_by_dev_cycle')
+        release_values = {field: fm.get(field) for field in RELEASE_PROVENANCE_FIELDS}
+        if any(release_values.values()):
+            if tdc:
+                findings.append(
+                    f'[WARN] {rel} — doc-spec declares both dev-cycle and release trigger provenance'
+                )
+                continue
+            for field, value in release_values.items():
+                if not isinstance(value, str):
+                    findings.append(f'[WARN] {rel} — {field} must be a UID string')
+                    continue
+                expected_type = {
+                    'triggered_by_release_pipeline': 'activation',
+                    'release_plan_uid': 'release-plan',
+                    'release_pipeline_run_uid': 'pipeline-run',
+                }[field]
+                actual_type = type_map.get(value)
+                if actual_type != expected_type:
+                    findings.append(
+                        f'[WARN] {rel} — {field} {value} resolves to '
+                        f'type={actual_type!r}, expected {expected_type}'
+                    )
+            continue
         if not tdc:
             continue  # required-field check 1 catches absence
         if not isinstance(tdc, str):
@@ -678,7 +744,7 @@ def check_doc_spec_orpheus_disposition_signoff(vault: Path) -> tuple[list[str], 
         try:
             import yaml as _yaml
             end = text.find('\n---\n', 4)
-            fm = _yaml.safe_load(text[4:end]) if end > 0 and text.startswith('---\n') else {}
+            fm = __yaml_safe_load(text[4:end]) if end > 0 and text.startswith('---\n') else {}
         except Exception:
             continue
         if not isinstance(fm, dict):

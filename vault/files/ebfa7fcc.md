@@ -41,7 +41,7 @@ tags:
 # Ship (web): How to Build with Tropo Vault — Explainer Page
 
 <!-- nav-block:start -->
-**📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Governance](8dd772a0.md) → [Tropo Website Content Structure](4a99638d.md) → **Ship (web): How to Build with Tropo Vault — Explainer Page**
+**📍 Vault Path:** [4a99638d](4a99638d.md) → **Ship (web): How to Build with Tropo Vault — Explainer Page**
 <!-- nav-block:end -->
 
 *Web-target ship-artifact entry per [Tropo Website Content Structure (4a99638d)](4a99638d.md). Renders at tropo-ai.com/build-with-tropo/vault.*

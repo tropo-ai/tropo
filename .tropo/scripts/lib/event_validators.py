@@ -121,13 +121,10 @@ def _info(check_id: str, subject: str, message: str) -> Finding:
     return Finding(Severity.INFO, check_id, subject, message)
 
 def _registered_party_uids(vault: Path) -> set[str]:
-    """Party UIDs (messaging axis) from the unified agent entries at vault/agents/.
-    Stdlib regex parse; empty set if the directory is unreadable."""
+    """Party UIDs from crew identities plus portable user-agent registry rows."""
     agents_dir = vault / "vault" / "agents"
-    if not agents_dir.is_dir():
-        return set()
     uids = set()
-    for p in agents_dir.glob("*.md"):
+    for p in agents_dir.glob("*.md") if agents_dir.is_dir() else []:
         try:
             txt = p.read_text(encoding="utf-8")
             m = re.search(r"^party_uid:\s*([0-9a-f]{8})", txt, re.MULTILINE)
@@ -135,6 +132,16 @@ def _registered_party_uids(vault: Path) -> set[str]:
                 uids.add(m.group(1))
         except OSError:
             continue
+    registry = (
+        vault / ".tropo-studio" / "registries" / "agent-registry.yaml"
+    )
+    try:
+        text = registry.read_text(encoding="utf-8")
+        uids.update(
+            re.findall(r"^\s{2}([0-9a-f]{8}):\s*$", text, re.MULTILINE)
+        )
+    except OSError:
+        pass
     return uids
 
 

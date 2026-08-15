@@ -3,7 +3,7 @@ uid: toolbelt
 name: toolbelt
 type: catalog
 kind: belt
-generated_at: 2026-08-08
+generated_at: 2026-08-14
 generated_by: generate-capability-catalogs.py
 extraction_scope: ship
 ---
@@ -44,6 +44,14 @@ Drain your event log (directed + broadcasts; cannot miss a reply_required).
 python3 vault/tools/tropo-check-events.py --as <name>
 ```
 *Example:* `python3 vault/tools/tropo-check-events.py --as talos`
+
+### compact-continue
+Reach for this the moment a session was compacted or an agent cannot remember completing boot.
+
+```
+python3 vault/tools/tropo-compact-continue.py --agent <slug>
+```
+*Example:* `python3 vault/tools/tropo-compact-continue.py --agent talos`
 
 ### tropo-disposition
 Dispose of stale backlog items safely: archives referenced items, recycles unreferenced ones, surfaces judgment cases for review.
@@ -141,14 +149,6 @@ python3 vault/tools/tropo-validate.py
 ```
 *Example:* `python3 vault/tools/tropo-validate.py --vault-path .`
 
-### sa.board-agent
-Per-agent backlog board rendering at activation Group 4.
-
-```
-'# (sa.board-agent is dispatched, not called directly)'
-```
-*Example:* `'# see agents/sa/sa.board-agent/sa.board-agent.md'`
-
 ### vault-search
 The lookup verb.
 
@@ -161,4 +161,4 @@ python3 vault/tools/tropo-vault-search.py \"<query>\"
 
 *Anything not here? → `python3 vault/tools/tropo-vault-search.py <query>`*
 
-*Tropo Toolbelt | 2026-08-08 | v1.15 substrate*
+*Tropo Toolbelt | 2026-08-14 | v1.15 substrate*

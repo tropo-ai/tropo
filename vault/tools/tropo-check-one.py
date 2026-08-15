@@ -57,6 +57,11 @@ DISPATCHER: dict[str, tuple[str, str]] = {
     "action":      ("action_validators",             "run_all_action_checks"),
     "tool":        ("tool_validators",               "run_all_tool_checks"),
     "loop":        ("loop_validators",               "run_all_loop_checks"),
+    # v1.87 fan-in correction (a54b9889 C1/C2). Registered here because a
+    # predicate only its own tests call cannot refuse anything: before this,
+    # `check-one c447eb6a` printed "no check-family registered — SKIP".
+    "release-plan": ("lib.release_capsule_contract", "run_all_release_plan_checks"),
+    "build":        ("lib.release_capsule_contract", "run_all_build_checks"),
 }
 
 

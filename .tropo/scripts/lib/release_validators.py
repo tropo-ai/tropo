@@ -137,7 +137,7 @@ def check_release_required_fields(vault: Path) -> tuple[list[str], int, int]:
 
         # required_at_activation checks (all non-archived release entries)
         if status not in ("archived", "superseded"):
-            for field in REQUIRED_AT_ACTIVATION:
+            for field in sorted(REQUIRED_AT_ACTIVATION):
                 val = _get_scalar(fm, field)
                 if not val or val.upper() in ("TBD", "PENDING", ""):
                     findings.append(
@@ -147,7 +147,7 @@ def check_release_required_fields(vault: Path) -> tuple[list[str], int, int]:
 
         # required_at_ship checks (only status:shipped entries)
         if status == "shipped":
-            for field in REQUIRED_AT_SHIP:
+            for field in sorted(REQUIRED_AT_SHIP):
                 val = _get_scalar(fm, field)
                 if not val or val.upper() in ("TBD", "PENDING", ""):
                     findings.append(

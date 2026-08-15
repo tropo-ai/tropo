@@ -40,6 +40,8 @@ import re
 import shutil
 import stat
 import subprocess
+import json
+import os
 import sys
 import tempfile
 import unittest
@@ -60,6 +62,9 @@ _spec.loader.exec_module(tropo_validate)
 _lock_spec = importlib.util.spec_from_file_location("tropo_lock_dev_spec_under_test", str(LOCK_TOOL_PATH))
 lock_dev_spec_mod = importlib.util.module_from_spec(_lock_spec)
 _lock_spec.loader.exec_module(lock_dev_spec_mod)
+
+sys.path.insert(0, str(LOCK_TOOL_PATH.parent))
+from lib import lock_transaction as LOCK_TXN  # noqa: E402
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n(.*)$", re.DOTALL)
 
@@ -322,8 +327,58 @@ class TestItem2LockGestureIsolatedFixture(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="lock_dev_spec_fixture_"))
         self.files_dir = self.tmp / "vault" / "files"
         self.files_dir.mkdir(parents=True)
+        self._write_pipeline_root()
+        self._redirect_transaction_state()
+
+    #: Entries the fixture itself authors as scaffolding. The probes below ask
+    #: "did the gesture create anything", so the pipeline definition the lock
+    #: needs to snapshot must not read as something the lock created.
+    SCAFFOLD_UIDS = frozenset({"cd1fcd25", "0c6518ef", "fa3a49c8"})
+
+    def _authored_entries(self, *expected_stems: str) -> list:
+        """Files present beyond the fixture scaffolding and the named subjects."""
+        return sorted(
+            f.stem for f in self.files_dir.glob("*.md")
+            if f.stem not in self.SCAFFOLD_UIDS and f.stem not in expected_stems
+        )
+
+    def _write_pipeline_root(self) -> None:
+        """The dev-pipeline root and two steps.
+
+        Added 2026-08-10 with AC2. The lock now writes the run's immutable
+        declaration snapshot, so it needs a real root to snapshot; this fixture
+        never had one because the old lock only flipped a status field. The
+        refusal it hit ("pipeline root cd1fcd25 does not resolve") is the new
+        contract working — a lock that cannot record the contract it is starting
+        must not start it.
+        """
+        root = self.files_dir / f"{lock_dev_spec_mod.DEFAULT_PIPELINE_UID}.md"
+        root.write_text(
+            "---\n"
+            f"uid: {lock_dev_spec_mod.DEFAULT_PIPELINE_UID}\n"
+            "type: pipeline\ntitle: dev-pipeline\nstatus: active\nversion: 2.0.0\n"
+            "children:\n  - 0c6518ef\n  - fa3a49c8\n---\n\n# dev-pipeline\n",
+            encoding="utf-8")
+        for uid, title in (("0c6518ef", "specify"), ("fa3a49c8", "build")):
+            (self.files_dir / f"{uid}.md").write_text(
+                f"---\nuid: {uid}\ntype: pipeline\nsubtype: workflow-node\n"
+                f"title: {title}\nstatus: active\n---\n\n# {title}\n",
+                encoding="utf-8")
+
+    def _redirect_transaction_state(self) -> None:
+        """Keep journals, the workspace lock and containment inside the fixture."""
+        sys.path.insert(0, str(Path(lock_dev_spec_mod.__file__).resolve().parent))
+        from lib import lock_transaction as lt
+
+        self._lt = lt
+        self._lt_orig = (lt.LOCK_JOURNAL_DIR, lt.WORKSPACE_LOCK_PATH, lt.VAULT_ROOT)
+        lt.LOCK_JOURNAL_DIR = self.tmp / "journal"
+        lt.WORKSPACE_LOCK_PATH = self.tmp / "journal" / "ignition.lock"
+        lt.VAULT_ROOT = self.tmp
 
     def tearDown(self) -> None:
+        (self._lt.LOCK_JOURNAL_DIR, self._lt.WORKSPACE_LOCK_PATH,
+         self._lt.VAULT_ROOT) = self._lt_orig
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _write_dev_spec(self, uid: str, status: str = "draft") -> Path:
@@ -380,38 +435,60 @@ class TestItem2LockGestureIsolatedFixture(unittest.TestCase):
         return script
 
     def test_success_path_opens_activation_then_locks_atomically(self) -> None:
+        """The claim is unchanged; the mechanism moved (argus-a147 blocker 1).
+
+        This used to pin the stub activate script's UID, because the lock shelled
+        out to pipeline-activate.py before taking the lock. That subprocess could
+        not join the transaction, so it is gone: the activation is now minted and
+        authored inside the plan. The assertions therefore stop naming a UID the
+        fixture chose and check the thing that actually matters — an activation
+        exists on disk, correlated both ways, and the spec points at it.
+        """
         self._write_dev_spec("bbbb2222", status="draft")
-        stub = self._write_stub_activate_script(succeed=True, activation_uid="cccc3333")
 
         code, msg = lock_dev_spec_mod.lock_dev_spec(
             "bbbb2222", "talos-test", pipeline_uid="cd1fcd25", cycle_context="fixture test",
-            files_dir=self.files_dir, vault_root=self.tmp, activate_script=stub,
+            files_dir=self.files_dir, vault_root=self.tmp,
         )
         self.assertEqual(code, 0, msg)
         self.assertIn("LOCKED", msg)
-        self.assertIn("cccc3333", msg)
 
         # Prove it by re-reading the fixture file, not by asserting in-memory state.
         new_fm = lock_dev_spec_mod.parse_frontmatter((self.files_dir / "bbbb2222.md").read_text())
         self.assertEqual(new_fm.get("status"), "locked")
         self.assertEqual(new_fm.get("locked_by"), "talos-test")
         self.assertTrue(new_fm.get("locked_at"))
-        self.assertEqual(new_fm.get("dev_spec_activation_uid"), "cccc3333")
-        # The activation really exists on disk, correlated.
-        act_fm = lock_dev_spec_mod.parse_frontmatter((self.files_dir / "cccc3333.md").read_text())
+
+        activation_uid = new_fm.get("dev_spec_activation_uid")
+        self.assertTrue(activation_uid, "the spec records no activation")
+
+        act_fm = lock_dev_spec_mod.parse_frontmatter(
+            (self.files_dir / f"{activation_uid}.md").read_text())
         self.assertEqual(act_fm.get("dev_spec_uid"), "bbbb2222")
+        self.assertTrue(act_fm.get("activation_root_project"),
+                        "the activation names no root")
+
+        # Exactly ONE root, which is the defect this refactor removed.
+        roots = [f.stem for f in self.files_dir.glob("*.md")
+                 if "type: project" in f.read_text(encoding="utf-8")]
+        self.assertEqual(len(roots), 1, f"expected one activation root, got {roots}")
 
     def test_failure_path_leaves_dev_spec_byte_for_byte_unchanged(self) -> None:
-        """The atomicity guarantee: if the activation cannot be opened, the
-        dev-spec is refused — NOT partially updated. Proven by comparing raw
-        bytes before and after the failed attempt."""
+        """The atomicity guarantee, retriggered through a failure that still exists.
+
+        The old trigger was a failing pipeline-activate.py stub. There is no
+        such subprocess any more, so the modern equivalent is a plan-phase
+        refusal: a draft pipeline root cannot be ignited. The CLAIM is unchanged
+        and is now stronger, because the refusal covers every write rather than
+        just the activation — proven by comparing raw bytes.
+        """
         path = self._write_dev_spec("dddd4444", status="draft")
         before = path.read_bytes()
-        stub = self._write_stub_activate_script(succeed=False)
+        root = self.files_dir / f"{lock_dev_spec_mod.DEFAULT_PIPELINE_UID}.md"
+        root.write_text(root.read_text().replace("status: active", "status: draft"))
 
         code, msg = lock_dev_spec_mod.lock_dev_spec(
             "dddd4444", "talos-test", files_dir=self.files_dir, vault_root=self.tmp,
-            activate_script=stub,
         )
         self.assertEqual(code, 1, msg)
         self.assertIn("ABORTING THE LOCK", msg)
@@ -419,15 +496,26 @@ class TestItem2LockGestureIsolatedFixture(unittest.TestCase):
         after = path.read_bytes()
         self.assertEqual(before, after, "dev-spec file must be byte-for-byte unchanged on a refused lock")
         # And no activation file leaked onto disk either.
-        self.assertEqual(list(self.files_dir.glob("*.md")), [path])
+        self.assertEqual(self._authored_entries(path.stem), [],
+                         "the refusal authored substrate")
 
     def test_idempotent_reuse_when_already_correlated_no_duplicate_activation(self) -> None:
         """If a correlated activation ALREADY exists (e.g. a prior retroactive
         feed-the-pipeline cure), the tool must REUSE it, not open a duplicate."""
         self._write_dev_spec("eeee5555", status="draft")
+        # A pre-existing activation carries its OWN root, and the lock must
+        # reuse that root rather than mint a second one (argus-a147 residual 1).
+        # This fixture had no root until 2026-08-10, which is why the reuse path
+        # could mint one unnoticed.
         (self.files_dir / "ffff6666.md").write_text(
             "---\nuid: ffff6666\ntype: activation\nstatus: retired\n"
-            "dev_spec_uid: eeee5555\n---\n\npre-existing activation\n",
+            "dev_spec_uid: eeee5555\n"
+            "activation_root_project: 'aaaa6666'\n---\n\npre-existing activation\n",
+            encoding="utf-8",
+        )
+        (self.files_dir / "aaaa6666.md").write_text(
+            "---\nuid: aaaa6666\ntype: project\nstatus: active\n"
+            "activation_uid: 'ffff6666'\n---\n\npre-existing activation root\n",
             encoding="utf-8",
         )
         # A stub that would FAIL if actually invoked — proves it was never called.
@@ -440,9 +528,28 @@ class TestItem2LockGestureIsolatedFixture(unittest.TestCase):
         self.assertEqual(code, 0, msg)
         self.assertIn("ffff6666", msg)
         self.assertIn("reused", msg)
-        # No second activation was minted.
-        activations = [f for f in self.files_dir.glob("*.md") if f.stem != "eeee5555"]
-        self.assertEqual([f.stem for f in activations], ["ffff6666"])
+        # No second ACTIVATION was minted. The probe now reads types rather than
+        # counting files: since AC2 the lock legitimately authors an activation
+        # ROOT and a pipeline-RUN in the same act, so a file count would fail for
+        # a reason that has nothing to do with this test's claim.
+        activations = sorted(
+            f.stem for f in self.files_dir.glob("*.md")
+            if "type: activation" in f.read_text(encoding="utf-8")
+        )
+        self.assertEqual(activations, ["ffff6666"])
+
+        # And the snapshot transaction did land, so this is idempotent reuse of
+        # the activation rather than the lock quietly doing nothing.
+        runs = [f.stem for f in self.files_dir.glob("*.md")
+                if "type: pipeline-run" in f.read_text(encoding="utf-8")]
+        self.assertEqual(len(runs), 1, "expected exactly one run from the lock")
+
+        # And exactly ONE root: the pre-existing one, reused rather than joined
+        # by a freshly minted sibling.
+        roots = sorted(f.stem for f in self.files_dir.glob("*.md")
+                       if "type: project" in f.read_text(encoding="utf-8"))
+        self.assertEqual(roots, ["aaaa6666"],
+                         f"the reuse path minted a second root: {roots}")
 
     def test_refuses_to_relock_already_locked_dev_spec(self) -> None:
         path = self._write_dev_spec("11119999", status="locked")
@@ -469,7 +576,8 @@ class TestItem2LockGestureIsolatedFixture(unittest.TestCase):
         self.assertEqual(code, 1, msg)
         self.assertIn("not in a lockable state", msg)
         self.assertEqual(path.read_bytes(), before)
-        self.assertEqual(list(self.files_dir.glob("*.md")), [path])
+        self.assertEqual(self._authored_entries(path.stem), [],
+                         "the refusal authored substrate")
 
     def test_refuses_non_dev_spec_type(self) -> None:
         path = self.files_dir / "22228888.md"
@@ -483,88 +591,97 @@ class TestItem2LockGestureIsolatedFixture(unittest.TestCase):
         self.assertIn("not type:dev-spec", msg)
 
 
+class TestRealVaultIsLeftExactlyAsFound(unittest.TestCase):
+    """The guard the pollution incident earned (talos-t40, 2026-08-10).
+
+    The real-vault integration test below locks against the PRODUCTION Studio on
+    purpose. That was survivable while the lock only flipped a status field and
+    minted one activation. AC2 made the same gesture write an activation root, a
+    pipeline-run and a run folder, the hand-maintained teardown fell behind
+    without a word, and seven suite runs left fourteen governed entries and
+    seven run folders in the live vault before argus-a147 found them.
+
+    Enumerating cleanup by hand is what failed, so the fix is not a longer list.
+    This asserts the invariant directly — after the real-vault class runs, the
+    vault holds exactly what it held before — so any future write the cleanup
+    does not know about is caught by the suite instead of by a reviewer.
+
+    Fail-closed, harm named (deb77758): fixture substrate in the production
+    vault is indistinguishable from real work to every later reader, and the
+    index, the event ledger and any release that fans it in all inherit it.
+    """
+
+    #: Every surface the real-vault gesture can write to. Enumerating SURFACES
+    #: is safe in a way that enumerating artifacts was not: a new artifact lands
+    #: in one of these and is caught, whereas a new artifact simply never
+    #: appeared in a hand-kept cleanup list.
+    SURFACES = (
+        ("governed entries", lambda: ROOT / "vault" / "files", "*.md"),
+        ("run folders", lambda: ROOT / "vault" / "pipeline-runs", "*"),
+        ("event streams", lambda: ROOT / "vault" / "events" / "streams", "*.jsonl"),
+        ("activate manifests", lambda: ROOT / "playbook-runs", "*"),
+    )
+
+    def _survey(self) -> dict:
+        found = {}
+        for label, directory, pattern in self.SURFACES:
+            path = directory()
+            found[label] = {p.name for p in path.glob(pattern)} if path.is_dir() else set()
+        return found
+
+    def test_the_real_vault_class_leaves_no_residue(self) -> None:
+        before = self._survey()
+
+        suite = unittest.TestLoader().loadTestsFromTestCase(
+            TestItem2LockGestureRealVaultIntegration)
+        with open(os.devnull, "w") as sink:
+            unittest.TextTestRunner(stream=sink, verbosity=0).run(suite)
+
+        after = self._survey()
+        leaks = {label: sorted(after[label] - before[label])
+                 for label, _, _ in self.SURFACES
+                 if after[label] - before[label]}
+
+        self.assertEqual(
+            leaks, {},
+            "the real-vault test left residue in the production Studio: "
+            + "; ".join(f"{label}: {names}" for label, names in leaks.items())
+            + ". Fixture substrate is indistinguishable from real work to every "
+              "later reader, and the index, the event ledger and any release that "
+              "fans it in all inherit it.")
+
+
 class TestItem2LockGestureRealVaultIntegration(unittest.TestCase):
-    """ONE end-to-end integration proof against the REAL pipeline-activate.py +
-    the REAL vault, using the plant-and-cleanup adversarial-gauntlet pattern
-    test_capability_chain_smoke.py already established for exactly this class
-    of component (wired to the real vault path by construction). Plants a
-    throwaway TEST FIXTURE dev-spec, locks it through the real tool end-to-end,
-    asserts the coupling gate does NOT flag it, then removes every artifact."""
+    """RETIRED 2026-08-10 (talos-t40) — it wrote to the production Studio.
 
-    PLANT_UID = "10c40001"
+    This class planted a dev-spec in the LIVE vault, locked it through the real
+    tool, and cleaned up afterwards. That was survivable while the lock only
+    flipped a status field; AC2 made the same gesture write an activation root,
+    a pipeline-run, a run folder and event streams, the hand-maintained cleanup
+    fell behind without a word, and seven suite runs left fourteen governed
+    entries in the live Studio (quarantined by argus-a147, commit 0f8af6e2).
 
-    def setUp(self) -> None:
-        self.plant_path = FILES_DIR / f"{self.PLANT_UID}.md"
-        if self.plant_path.exists():
-            self.fail(f"plant path {self.plant_path} already exists — refusing to overwrite")
-        self.plant_path.write_text(
-            "---\n"
-            f"uid: {self.PLANT_UID}\n"
-            "type: dev-spec\n"
-            "status: draft\n"
-            "state: active\n"
-            "title: \"TEST FIXTURE — lock-dev-spec real-vault integration plant (deleted immediately)\"\n"
-            "target_release: \"0.0.0-test\"\n"
-            "target_stream: null\n"
-            "committed_substrate:\n"
-            "  - target: \"vault/tools/tests/test_systemic_feed_pipeline_v184.py\"\n"
-            "    change_class: \"AMENDED\"\n"
-            "    description: \"test fixture plant\"\n"
-            "acceptance_criteria:\n"
-            "  - \"test fixture only\"\n"
-            "owner: talos\n"
-            "author: talos\n"
-            "created: '2026-07-07'\n"
-            "created_by: talos-t25\n"
-            "modified: '2026-07-07'\n"
-            "modified_by: talos-t25\n"
-            "schema_version: 2\n"
-            "tags: [test-fixture]\n"
-            "---\n\n# TEST FIXTURE\n\nDeleted immediately after this gauntlet runs.\n",
-            encoding="utf-8",
-        )
-        self._minted_activation_uid = None
-        self._minted_root_uid = None
+    I first fixed it by making cleanup journal-driven and exhaustive. That was a
+    real improvement and still the weaker guarantee — it depends on cleanup being
+    correct forever, where isolation depends on the tools being unable to reach
+    production at all. Argus asked for the stronger one and he was right.
 
-    def tearDown(self) -> None:
-        if self.plant_path.exists():
-            self.plant_path.unlink()
-        if self._minted_activation_uid:
-            act_path = FILES_DIR / f"{self._minted_activation_uid}.md"
-            if act_path.exists():
-                # Read the root project uid before deleting, if not already known.
-                fm = lock_dev_spec_mod.parse_frontmatter(act_path.read_text())
-                root_uid = fm.get("activation_root_project")
-                act_path.unlink()
-                if root_uid:
-                    root_path = FILES_DIR / f"{root_uid}.md"
-                    if root_path.exists():
-                        root_path.unlink()
-                    manifest_dir = ROOT / "playbook-runs" / f"pipeline-activate-{self._minted_activation_uid}"
-                    if manifest_dir.exists():
-                        shutil.rmtree(manifest_dir, ignore_errors=True)
+    Its coverage is not lost. `test_ac2_isolation_and_production_identity.py`
+    runs the SAME real tools end to end, in a temp Studio built by
+    `temp_studio.py`, in a fresh interpreter so even the tools' own
+    `Path(__file__).parents[2]` roots and their `lib` imports resolve inside the
+    fixture — plus the injected mid-transaction failure control this class never
+    had, and a production byte-identity assertion after every test.
+    """
 
-    def test_real_lock_gesture_opens_real_activation_and_coupling_gate_stays_clean(self) -> None:
-        code, msg = lock_dev_spec_mod.lock_dev_spec(
-            self.PLANT_UID, "talos-t25-test",
-            pipeline_uid="cd1fcd25",
-            cycle_context="test_systemic_feed_pipeline_v184.py real-vault integration plant (deleted immediately)",
-        )
-        self.assertEqual(code, 0, msg)
-        m = re.search(r"activation=([0-9a-f]{8})", msg)
-        self.assertIsNotNone(m, msg)
-        self._minted_activation_uid = m.group(1)
-
-        # Re-read the plant from disk — proves the write really landed.
-        fm = lock_dev_spec_mod.parse_frontmatter(self.plant_path.read_text())
-        self.assertEqual(fm.get("status"), "locked")
-        self.assertEqual(fm.get("dev_spec_activation_uid"), self._minted_activation_uid)
-
-        # The coupling gate (8f15f08d, UNMODIFIED by this build) must NOT flag
-        # the freshly-locked plant — the happy path is clean.
-        findings, _checked, _violations = tropo_validate.check_dev_spec_activation_coupling(ROOT)
-        flagged = [f for f in findings if self.PLANT_UID in f]
-        self.assertEqual(flagged, [], f"coupling gate incorrectly flagged the atomically-locked plant: {flagged}")
+    def test_retired_in_favour_of_the_isolated_suite(self) -> None:
+        successor = Path(__file__).with_name(
+            "test_ac2_isolation_and_production_identity.py")
+        self.assertTrue(successor.is_file(),
+                        "the isolated successor suite is missing; coverage WOULD be lost")
+        body = successor.read_text(encoding="utf-8")
+        self.assertIn("test_a_failure_mid_transaction_leaves_no_production_artifact_or_event", body)
+        self.assertIn("production_fingerprint", body)
 
 
 class TestCouplingGateBackstopNotRegressed(unittest.TestCase):
@@ -574,8 +691,15 @@ class TestCouplingGateBackstopNotRegressed(unittest.TestCase):
     def test_coupling_gate_still_flags_a_genuinely_off_pipeline_plant(self) -> None:
         """Same shape as test_capability_chain_smoke.py's own adversarial plant,
         run directly here for a fast, local non-regression signal."""
+        # Planted in a temp Studio, not the live one. This wrote to FILES_DIR
+        # until 2026-08-10 — the same production-write habit that produced the
+        # AC2 pollution, in a test whose only need is a root argument.
+        self._temp_root = Path(tempfile.mkdtemp(prefix="coupling_gate_"))
+        self.addCleanup(shutil.rmtree, self._temp_root, True)
+        temp_files = self._temp_root / "vault" / "files"
+        temp_files.mkdir(parents=True)
         plant_uid = "1ockfeed"
-        plant_path = FILES_DIR / f"{plant_uid}.md"
+        plant_path = temp_files / f"{plant_uid}.md"
         if plant_path.exists():
             self.fail(f"plant path {plant_path} already exists — refusing to overwrite")
         plant_path.write_text(
@@ -588,7 +712,7 @@ class TestCouplingGateBackstopNotRegressed(unittest.TestCase):
             encoding="utf-8",
         )
         try:
-            findings, _checked, violations = tropo_validate.check_dev_spec_activation_coupling(ROOT)
+            findings, _checked, violations = tropo_validate.check_dev_spec_activation_coupling(self._temp_root)
             self.assertGreaterEqual(violations, 1)
             self.assertTrue(any(plant_uid in f for f in findings), findings)
         finally:

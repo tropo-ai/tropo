@@ -71,7 +71,7 @@ from __future__ import annotations
 import argparse, json, re, sqlite3, sys, time
 from pathlib import Path
 
-from lib import event_identity
+from lib import event_identity, fast_yaml
 
 VAULT_ROOT = Path(__file__).resolve().parents[2]
 JSONL_PATH = VAULT_ROOT / "vault" / "events" / "00-events.jsonl"
@@ -79,6 +79,7 @@ SQLITE_PATH = VAULT_ROOT / "vault" / "events" / "00-events-index.sqlite"
 CURSOR_DIR = VAULT_ROOT / "vault" / "events"
 RECEIPTS_DIR = VAULT_ROOT / "vault" / "events" / "receipts"
 AGENTS_DIR = VAULT_ROOT / "vault" / "agents"
+AGENT_REGISTRY = VAULT_ROOT / ".tropo-studio" / "registries" / "agent-registry.yaml"
 
 MESSAGING_TYPES = frozenset([
     "tropo.message.sent",
@@ -187,12 +188,8 @@ def resolve_identity(agent_name: str) -> tuple[str, str | None]:
     match on 'agent:' slug. Same contract as emit (81e52840) so
     read and send cannot diverge on caller identity.
     """
-    if not AGENTS_DIR.is_dir():
-        print(f"ERROR: unified agents directory not found at {AGENTS_DIR}", file=sys.stderr)
-        sys.exit(1)
-
     name_lower = agent_name.strip().lower()
-    for p in AGENTS_DIR.glob("*.md"):
+    for p in AGENTS_DIR.glob("*.md") if AGENTS_DIR.is_dir() else []:
         try:
             txt = p.read_text(encoding="utf-8")
             # Find the agent slug
@@ -213,8 +210,30 @@ def resolve_identity(agent_name: str) -> tuple[str, str | None]:
         except OSError:
             continue
 
+    try:
+        registry = fast_yaml.safe_load(AGENT_REGISTRY.read_text()) or {}
+        for section in ("user_agents", "agents"):
+            rows = registry.get(section) or {}
+            if not isinstance(rows, dict):
+                continue
+            for uid, row in rows.items():
+                if not isinstance(row, dict):
+                    continue
+                name = str(row.get("name") or "").strip().lower()
+                path = str(
+                    row.get("path")
+                    or row.get("activation-file")
+                    or row.get("activation_file")
+                    or ""
+                ).lower()
+                if name == name_lower or f"/{name_lower}/" in path:
+                    if re.fullmatch(r"[0-9a-f]{8}", str(uid)):
+                        return str(uid), None
+    except (OSError, ValueError, TypeError):
+        pass
+
     print(f"ERROR: --as '{agent_name}' resolves to no unified entry in vault/agents/ "
-          f"(check spelling; known agents: use --as argus, --as vela, etc.)",
+          f"or user agent in agent-registry.yaml (check spelling)",
           file=sys.stderr)
     sys.exit(1)
 
@@ -446,6 +465,33 @@ def scan_unanswered_rr(
 # Output formatting
 # ---------------------------------------------------------------------------
 
+#: Every field a message has ever carried its content in. MEASURED across the
+#: live log 2026-08-09 (talos-t40): 394 messages use `body`, 132 `body`+`headline`,
+#: 33 `summary` ONLY, 20 `text` ONLY. The renderer read headline/subject_text/body
+#: and nothing else, so 53 messages carrying real content displayed as a blank
+#: line in the drain — 12 of them addressed to talos, including four rulings from
+#: metis-g106 that I read as empty and had to open the raw stream to recover.
+#:
+#: This is very likely the cause of the "empty bodies" recorded in Talos lineage
+#: at T38: two of T37's dangling threads were closed as having shipped with no
+#: substance to answer. They may simply have been carrying it in a field the
+#: drain could not see.
+#:
+#: A fallback rather than a schema fix on purpose: the emitters are several tools
+#: and several agents, and a reader that only understands one shape turns a
+#: writer's harmless choice into a lost message. Normalising the writers is worth
+#: doing; it is not worth losing mail until it happens.
+_BODY_FIELDS = ("headline", "subject_text", "body", "text", "summary")
+
+
+def _renderable_body(data: dict) -> str:
+    for field in _BODY_FIELDS:
+        value = data.get(field)
+        if value:
+            return str(value)
+    return ""
+
+
 def _fmt(ev: dict, prefix: str = "") -> str:
     eid = ev.get("event_uid") or ev.get("id", "?")
     display = _display_seq(ev)
@@ -456,7 +502,7 @@ def _fmt(ev: dict, prefix: str = "") -> str:
     from_f = data.get("from") or ev.get("source_uid", "?")
     subj = ev.get("subject", "")
     rr = " [reply_required]" if data.get("reply_required") else ""
-    content = data.get("headline") or data.get("subject_text") or str(data.get("body", ""))[:120]
+    content = _renderable_body(data)[:120]
     return (f"{prefix}{display_label}[{eid}] {ts} {etype} from={from_f} subj={subj}{rr}\n"
             f"{prefix}  {content[:120]}")
 
@@ -476,10 +522,7 @@ def _triage_unanswered(unanswered: list[dict], agent_name: str, model: str | Non
     lines = []
     for ev in unanswered:
         data = ev.get("data", {})
-        headline = (
-            data.get("headline") or data.get("subject_text") or
-            str(data.get("body", ""))[:100]
-        )
+        headline = _renderable_body(data)[:100]
         lines.append(
             f"[{ev.get('id','?')}] {ev.get('time','')[:10]} "
             f"from={data.get('from', ev.get('source_uid','?'))} "
@@ -554,6 +597,28 @@ def _print_result(agent_name: str, party_uid: str, agent_root_uid: str | None,
             print()
 
 
+def _preflight_event_rendering(events: list[dict]) -> None:
+    """Refuse durable acknowledgement unless every event can render."""
+    for event in events:
+        rendered = _fmt(event)
+        if not isinstance(rendered, str):
+            event_id = event.get("event_uid") or event.get("id", "?")
+            raise RuntimeError(
+                f"event renderer returned {type(rendered).__name__} for {event_id}"
+            )
+
+
+def _persist_delivery(party_uid: str, candidate_events: list[dict],
+                      delivered_events: list[dict], receipt_set: set[str]) -> None:
+    """Advance hints/receipts only after successful output."""
+    if candidate_events:
+        save_cursor(
+            party_uid,
+            str(max(_display_seq(event) for event in candidate_events)),
+        )
+    append_receipts(party_uid, delivered_events, receipt_set)
+
+
 # ---------------------------------------------------------------------------
 # Run modes
 # ---------------------------------------------------------------------------
@@ -578,9 +643,6 @@ def run_once(agent_name: str, party_uid: str, agent_root_uid: str | None,
     )
     new_events = [ev for ev in candidate_events if _event_key(ev) not in receipt_set]
 
-    if candidate_events:
-        save_cursor(party_uid, str(max(_display_seq(ev) for ev in candidate_events)))
-
     if filter_type:
         new_events = [ev for ev in new_events if ev.get("type") == filter_type]
     if filter_id:
@@ -588,11 +650,6 @@ def run_once(agent_name: str, party_uid: str, agent_root_uid: str | None,
             ev for ev in new_events
             if ev.get("id") == filter_id or _event_key(ev) == filter_id
         ]
-    # Targeted drains must not acknowledge unrelated unseen messages. Filters
-    # narrow both output and durable receipt writes; the cursor is only a hint,
-    # so unreceipted messages remain discoverable on the next full scan.
-    append_receipts(party_uid, new_events, receipt_set)
-
     unanswered = scan_unanswered_rr(
         party_uid,
         agent_root_uid,
@@ -600,17 +657,26 @@ def run_once(agent_name: str, party_uid: str, agent_root_uid: str | None,
     )
 
     if json_output:
-        print(json.dumps({
+        rendered = json.dumps({
             "agent": agent_name,
             "party_uid": party_uid,
             "agent_root_uid": agent_root_uid,
             "new_events": new_events,
             "unanswered_reply_required": unanswered,
-        }, indent=2, ensure_ascii=False))
+        }, indent=2, ensure_ascii=False)
+        print(rendered)
+        _persist_delivery(
+            party_uid, candidate_events, new_events, receipt_set
+        )
         return 0
 
+    _preflight_event_rendering(new_events + unanswered)
     _print_result(agent_name, party_uid, agent_root_uid, new_events, unanswered,
                   triage=triage, triage_model=triage_model)
+    # Targeted drains must not acknowledge unrelated unseen messages. Filters
+    # narrow both output and durable receipt writes; the cursor is only a hint,
+    # so unreceipted messages remain discoverable on the next full scan.
+    _persist_delivery(party_uid, candidate_events, new_events, receipt_set)
     return 0
 
 
@@ -629,10 +695,6 @@ def run_until_answered(agent_name: str, party_uid: str, agent_root_uid: str | No
             event_union=event_union,
         )
         new_events = [ev for ev in candidate_events if _event_key(ev) not in receipt_set]
-        append_receipts(party_uid, new_events, receipt_set)
-        if candidate_events:
-            save_cursor(party_uid, str(max(_display_seq(ev) for ev in candidate_events)))
-
         unanswered = scan_unanswered_rr(
             party_uid,
             agent_root_uid,
@@ -643,13 +705,27 @@ def run_until_answered(agent_name: str, party_uid: str, agent_root_uid: str | No
             if json_output:
                 print(json.dumps({"status": "answered", "new_events": new_events}))
             else:
+                _preflight_event_rendering(new_events)
                 print("✓ All reply_required answered.")
+            _persist_delivery(
+                party_uid, candidate_events, new_events, receipt_set
+            )
             return 0
 
         if not json_output:
+            _preflight_event_rendering(new_events + unanswered)
             print(f"[poll {attempt + 1}] {len(unanswered)} unanswered — "
                   f"{new_events and len(new_events) or 0} new events:")
             _print_result(agent_name, party_uid, agent_root_uid, new_events, unanswered)
+        else:
+            print(json.dumps({
+                "status": "waiting",
+                "new_events": new_events,
+                "unanswered_reply_required": unanswered,
+            }))
+        _persist_delivery(
+            party_uid, candidate_events, new_events, receipt_set
+        )
 
         delay = cadence[min(attempt, len(cadence) - 1)]
         time.sleep(delay)

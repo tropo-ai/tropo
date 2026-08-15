@@ -3,8 +3,9 @@ uid: a3f1e7b2
 name: release-plan
 type: capsule-definition
 extends: core
-version: '1.5'
-supersedes_version: '1.4'
+version: '1.6'
+supersedes_version: '1.5'
+v1_6_amendment_note: 'v1.5 -> v1.6 amendment 2026-08-10 by talos-t40 (lifecycle reconciliation added same day per argus-a147 stage-4 review: the enum lives on status: while the lifecycle table and transitions said stage:, and adding `locked` to one and not the other left them disagreeing about which states exist; status: is now declared canonical with stage: read as the legacy synonym, the table and transitions carry `locked`, and there is deliberately no transition out of it) under Mike-locked dev-spec 0a0a6777 (two-pipeline split), whose committed_substrate names this file with change_class: AMENDED and the scope "Add locked lifecycle, immutable dev-spec fan-in, manifest/digest, and release activation/run links." That is the lock-break authorization; status stays locked and this is an amend-in-place, following the v1.5 (Mike-A100) and v1.3/v1.4 (Mike-A98/A99-signed) precedent where the approved spec carried the authority. Implements contract §3: adds the `locked` status enum value — the release ignition, symmetric with the dev-spec lock — plus five fields (`dev_spec_uids`, `fan_in_manifest_ref`, `fan_in_digest`, `release_activation_uid`, `release_pipeline_run_uid`) and Checks 24-27. ADDITIVE: every field is optional below `status: locked`, no existing field/rule/check changes, and no existing instance is modified — the 30 pre-v1.6 release-plans stay valid because the new requirements fire only at a status none of them holds.'
 v1_5_amendment_note: 'v1.4 -> v1.5 amendment 2026-06-06 by Vela V59 per the member_of DISAMBIGUATE build (spec 6f5bb2cb v0.4; Mike-A100 approved 9 lock-breaks; core.capsule v1.5 Rule 9: member_of=parent, subsystem_hub=subsystem). Check 20 + the capabilities_touched field desc + the Composes-With derivation note retargeted from member_of: to subsystem_hub: for capabilities_touched -> hub resolution; the hardcoded 7-hub set softened to the dynamic hub set (from subsystem_name:; 11 at present). Status stays locked (amend-in-place per the approved lock-break). Exact edits drafted by Argus A101 (event 2013); landed by Vela V59 (release lane) as the independent member_of edit (Argus verified zero capability/release-plan stragglers; validator 55/0 before+after). Sibling release.capsule Rule 12 lands atomically with Talos f5e2d1c7.py; status-enum done->shipped split to a focused follow-up (e68503aa, Mike Call-1).'
 tier: os
 author: d.pm
@@ -22,6 +23,7 @@ enforced_enums:
     canonical:
       - design
       - specify
+      - locked
       - active
       - build
       - done
@@ -85,26 +87,36 @@ Failure mode prevented: releases shipping without scoped streams, undeclared blo
 | `state` | enum | `active` / `archived` |
 | `release_version` | string | Semver `^\d+\.\d+\.\d+$`; must match the corresponding release entry when one exists |
 | `member_of` | UID array | Projects this plan belongs to (typically the release coordination project + pipeline stage folder) |
-| `basis_spec` | UID | Primary locked architectural spec this plan implements. Must resolve to a `design-spec` at `status: locked` (multi-spec cases use the `foundation:` array). |
 | `streams` | UID array | Ordered list of stream projects. Each must resolve to a `project` entry with `tags: [stream]` |
 
 ### Optional Frontmatter
 
 | Field | Type | Purpose |
 |-------|------|---------|
+| `basis_spec` | UID | **Optional legacy (v1.87+).** The singular locked architectural spec a pre-v1.87 plan implements; must resolve to a `design-spec` at `status: locked`. A multi-stream release has no single architectural document to name, so from v1.87 the authority is the locked ordered fan-in below. Plans that carry it keep the old check. |
+| `dev_spec_uids` | UID array | **Required for locked v1.87+ plans.** The ordered dev-specs this release fans in. Order reaches the digest. |
+| `fan_in_manifest_ref` | path | **Required for locked v1.87+ plans.** The manifest the release lock wrote. |
+| `fan_in_digest` | sha256 | **Required for locked v1.87+ plans.** Digest over the ordered fan-in rows. |
+| `release_activation_uid` | UID | **Required for locked v1.87+ plans.** The release activation the lock opened. |
+| `release_pipeline_run_uid` | UID | **Required for locked v1.87+ plans.** The release run the lock created. |
 | `gates` | UID array | Blocking decisions — `task` entries with `tags: [decision]` that gate the release |
 | `foundation` | UID array | Locked `design-spec` entries this release references (context, not scope) |
 | `ship_criteria` | UID array | Tasks whose `stage: done` collectively signal "ready to ship" |
 | `supersedes` / `superseded_by` | UID | Bidirectional pair for major re-planning |
 | `shipped_release` | UID | The corresponding `release` entry. Required when `stage: done` |
 | `target_date` | ISO date | Planned release date (best-effort, not enforced) |
-| `locked_by` / `locked_at` | string / ISO datetime | Required when `stage: locked` or `stage: build` onward |
+| `locked_by` / `locked_at` | string / ISO datetime | Required at `status: locked` and every status after it. **v1.6:** written by `tropo-lock-release-plan.py` as part of the lock transaction, so the provenance of the ignition is recorded by the gesture rather than by hand. |
 | `sub_systems` | string array | **v1.1 addition; SOFT-DEPRECATED at v1.2.** Informal subsystem names. v1.2+ release-plans use `capabilities_touched:` instead; `subsystems_touched:` is derived. v1.1 instances still REQUIRE this at `stage: specify`. |
 | `arch_specs` | UID array | **v1.1 addition.** Tracking pointer for arch-spec entries authored under this release-plan. No 1:1 validation against `sub_systems:` (deferred). |
 | `capabilities_touched` | UID array | **v1.2+; required under v1.2 opt-in.** TYPED list of governed primitives this release touches. Each UID must resolve to an entry whose `subsystem_hub:` includes at least one subsystem hub UID (v1.5 member_of DISAMBIGUATE — was `member_of:`). Empty `[]` legal at `stage: design`; non-empty at `stage: specify` onward. Mirrored to release.capsule at ship; derived `subsystems_touched:` computed via 1-hop graph traversal. *(v1.3 soft principle: list only substantively-amended capabilities; lifecycle marker change OR non-trivial body content change; metadata-only edits not listed.)* |
 | `hub_summaries` | `{hub_uid: text}` map | **v1.3+; required under v1.3 opt-in.** Per-touched-subsystem-hub 3-5 sentence summary describing what the cycle does to that subsystem. Empty `{}` legal at `stage: design`; populated for every derived hub at `stage: locked` for cycles touching ≥ 1 subsystem (ZERO-touch may keep `{}`). Consumed by dev-pipeline step `update-subsystem-canonical-docs` at ship to write hub `release_history:` rows. Length: 50-1500 chars per entry. |
 | `capsule_version` | string | **v1.1+ opt-in marker.** Values: `"1.1"` / `"1.2"` / `"1.3"`. Gates which validation checks fire. When absent, instance treated as MIGRATION-PENDING v1.0 (only Checks 1-12 fire). v1.4.4-v1.7 on v1.1; v1.8/v1.9.0/v1.9.1 on v1.2; v1.9.2+ on v1.3. |
 | `relationships` | typed-edge array | Schema-v2 unified relationships for cross-cutting references |
+| `dev_spec_uids` | UID array, **ordered** | **v1.6+ (0a0a6777 §3).** The dev-specs this release fans in, in plan order. Order is part of the plan's identity and feeds `fan_in_digest`, so the same members in a different order are a different plan. Required non-empty at `status: locked`. Each member must be a `done` dev-spec unreserved by another release-plan that still holds reservations (Check 26). |
+| `fan_in_manifest_ref` | repo-relative path | **v1.6+ (0a0a6777 §3).** The fan-in manifest written by the lock, one row per member, each binding the seven AC5 values. Lives inside the release run folder rather than as a separate governed entry: it is evidence produced BY this run and its immutability comes from `fan_in_digest`, not from a lifecycle of its own. Required at `status: locked`. |
+| `fan_in_digest` | 64-hex SHA-256 | **v1.6+ (0a0a6777 §3).** SHA-256 over the ordered manifest rows. The plan's binding claim about exactly which work, in exactly which verified state, is being released. Required at `status: locked`; a mismatch against the manifest on disk is Check 25. |
+| `release_activation_uid` | UID | **v1.6+ (0a0a6777 §3).** The release-pipeline activation this lock opened. Symmetric with `dev_spec_activation_uid` on the dev side. Required at `status: locked`. |
+| `release_pipeline_run_uid` | UID | **v1.6+ (0a0a6777 §3).** The single immutable release run this lock opened. Exactly one per locked plan — a second run would mean two contracts for one release. Required at `status: locked`. |
 
 ### Body shape — 7 required sections + 2 optional, in order
 
@@ -130,21 +142,41 @@ design → specify → build → done → archived
         cancelled (any stage)
 ```
 
-| Stage | Meaning |
-|-------|---------|
+**Vocabulary note (v1.6).** This section said `stage:` throughout while the
+enforced enum has always been on `status:`. They were the same lifecycle spoken
+two ways, which is survivable until a new value is added to one and not the
+other — as v1.6 did with `locked`, leaving the enum and the table disagreeing
+about what states exist. The canonical field is **`status:`**; `stage:` is the
+legacy spelling and is read as a synonym wherever it survives in prose or in
+pre-v1.6 instances. Nothing is renamed in existing files.
+
+| `status:` | Meaning |
+|-----------|---------|
 | `design` | Plan being drafted; streams being identified; not yet committed |
-| `specify` | Plan committed; streams acknowledged; gates declared; work may begin |
+| `specify` | Plan committed; streams acknowledged; gates declared |
+| `locked` | **v1.6 (0a0a6777 §3).** The release IGNITION has fired. Members are fanned in and reserved, the fan-in manifest and its digest are written, and exactly one release activation and run are open. Symmetric with the dev-spec lock. The plan's membership is frozen here: it is what the digest attests to. |
+| `active` | Release cycle underway against the locked membership |
 | `build` | Release in flight; streams executing; plan is live reference |
-| `done` | Release shipped; corresponding release entry exists at `stage: done` |
-| `cancelled` | Release abandoned before shipping (any-stage terminal) |
+| `done` | Release shipped; corresponding release entry exists at `status: done` |
+| `cancelled` | Release abandoned before shipping (any-status terminal) |
 
 **Valid transitions:**
 
 - `design → specify` — Founder approves; streams committed
 - `specify → design` — Revision needed (gate rejected, stream reshaped)
-- `specify → build` — First stream enters active work
-- `build → done` — Corresponding release entry reaches `stage: done`
+- `specify → locked` — **v1.6.** The release-plan lock fires. The ONLY entry into
+  `locked`, and it is a transaction: reservations, manifest, digest, activation
+  and run all land together or none of them do.
+- `locked → active` / `locked → build` — Work begins against the frozen membership
+- `active → build` — Streams enter execution
+- `build → done` — Corresponding release entry reaches `status: done`
 - `any → cancelled` — Release abandoned (Founder approval required)
+
+**There is no transition OUT of `locked` back to `specify`.** Unlocking would
+release reservations that other plans may already have been refused on, and
+would orphan an activation and run that exist. Cancel and supersede instead —
+which is the same shape the dev-spec lock has, and the reason the release lock
+refuses to re-lock an already-locked plan.
 
 ---
 
@@ -153,8 +185,8 @@ design → specify → build → done → archived
 ### Governance Rules (9)
 
 1. **Distinct from `release`.** A release-plan plans; a release records. They are 1:1 and linked via `shipped_release:` on the plan.
-2. **Founder-gated transitions.** `design → specify` requires Founder approval. `specify → build` may be self-triggering (first work item starts). `build → done` requires the corresponding release entry at `stage: done`.
-3. **Gates must be resolved before lock.** No `stage: done` until every `gates` decision-task has `stage: done` (or has been explicitly removed from the list with rationale in body).
+2. **Founder-gated transitions.** `design → specify` requires Founder approval. `specify → locked` is the lock gesture (see Check 24) and records `locked_by:`/`locked_at:` as its provenance. `locked → active`/`build` may be self-triggering (first work item starts). `build → done` requires the corresponding release entry at `status: done`.
+3. **Gates must be resolved before lock.** No `status: done` until every `gates` decision-task has `status: done` (or has been explicitly removed from the list with rationale in body).
 4. **Streams must be projects.** Every UID in `streams:` resolves to a `project` entry. Tasks and specs cannot be streams.
 5. **Version is immutable.** Once `release_version:` is set, it cannot change. If the target version changes, cancel the plan and create a new one.
 6. **One active plan per version.** Two release-plan entries with the same `release_version:` in `state: active` is a governance violation.
@@ -167,10 +199,10 @@ design → specify → build → done → archived
 Core checks (1-12; fire on all instances):
 
 1. `release_version:` matches semver `^\d+\.\d+\.\d+$`
-2. `status:` ∈ {design, specify, active, build, done, cancelled}
+2. `status:` ∈ {design, specify, locked, active, build, done, cancelled} *(v1.6 adds `locked` — the release ignition, per 0a0a6777 §3)*
 3. `state:` is one of `active` / `archived`
 4. `member_of:` non-empty array of valid UIDs
-5. `basis_spec:` resolves to a `design-spec` at `status: locked`
+5. **Authority (v1.87+ amendment; enforced by `lib/release_capsule_contract.check_release_plan`).** For a LOCKED plan whose `release_version:` is ≥ 1.87.0, every fan-in field is present and non-empty: `dev_spec_uids`, `fan_in_manifest_ref`, `fan_in_digest`, `release_activation_uid`, `release_pipeline_run_uid`. These are the fields the release lock itself authors, so requiring them requires that the lock actually ran. For a plan below 1.87.0, or any plan carrying `basis_spec:`, the legacy check stands: `basis_spec:` resolves to a `design-spec` that is locked. A locked v1.87+ plan may NOT satisfy this check through `basis_spec:` — compatibility is a branch for old plans, not a fallback for new ones.
 6. `streams:` non-empty; every UID resolves to a `project` with `tags: [stream]`
 7. `gates:` (if present) — every UID resolves to a `task` with `tags: [decision]`
 8. `foundation:` (if present) — every UID resolves to a `design-spec`
@@ -198,6 +230,11 @@ v1.3 checks (gated on `capsule_version: "1.3"`):
 21. *(honor-system at v1.9.2-v1.9.x; ERROR at v1.10)* `hub_summaries:` populated for every subsystem hub UID present in the derived `subsystems_touched:` set (ZERO-touch cycles may keep `{}`)
 22. Each `hub_summaries[hub_uid]` text VALUE is 50-1500 chars
 23. *(honor-system)* `capabilities_touched:` follows the soft principle (lists only substantively-amended capabilities; lifecycle marker change OR non-trivial body content change; metadata-only edits not listed)
+
+24. **(NEW v1.6 / 0a0a6777 AC4)** At `status: locked`, all five ignition fields are present: `dev_spec_uids:` (non-empty, ordered), `fan_in_manifest_ref:`, `fan_in_digest:` (64-hex), `release_activation_uid:`, `release_pipeline_run_uid:`. Below `locked` they are OPTIONAL, which is why this amendment cannot invalidate an existing instance — the requirement fires only at a status no pre-v1.6 plan holds.
+25. **(NEW v1.6 / 0a0a6777 AC4)** `fan_in_digest:` equals the SHA-256 of the ordered rows in the manifest at `fan_in_manifest_ref:`. A plan whose digest and manifest disagree is asserting two different release contents; neither can be trusted over the other, so the mismatch is the finding rather than a preference for either.
+26. **(NEW v1.6 / 0a0a6777 AC5)** Every UID in `dev_spec_uids:` resolves to a `dev-spec` at `status: done` that no OTHER release-plan holding reservations lists. A plan releases its reservations at `design`, `specify`, `done`, and `cancelled`; any other status still holds them, so an unrecognized value fails CLOSED and keeps the claim.
+27. **(NEW v1.6 / 0a0a6777 AC4)** Exactly one `release_pipeline_run_uid:` per locked plan, and it resolves to a `pipeline-run` whose `pipeline:` is the release-pipeline root. Two runs for one plan would be two contracts for one release.
 
 Core checks inherited: UID uniqueness, UID immutability, type immutability, owner/created/modified invariants.
 

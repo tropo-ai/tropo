@@ -7,8 +7,8 @@ version: 1.0
 tier: os
 author: argus
 created: 2026-04-21
-modified: '2026-07-25'
-modified_by: "vela-v69"
+modified: '2026-08-12'
+modified_by: "metis-g107"
 created_by: argus-a30
 status: retired
 locked_by: argus-a30
@@ -31,10 +31,10 @@ pruning:
     start_byte: 1
     end_byte: 136
   judge_policy_uid: 341823aa
-  judge_version: 2.0.0
+  judge_version: 2.1.0
   judge_prompt_sha256: 855e18bd29d09ed8ecff16c006a3b0f18c39aa913207619978dda02fdc54f6db
   origin_studio: f1a7b3c2
-  judged_at: '2026-07-25T22:18:27Z'
+  judged_at: '2026-08-12T01:04:24Z'
   confidence: 0.95
   normalized_body_hash_judged: db7441af701d71e6ab3da7d94a08b69e74954ffffab7254479be1ec81fb8dc05
 ---

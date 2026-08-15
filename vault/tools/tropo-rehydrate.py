@@ -7,7 +7,7 @@ name: rehydrate
 type: tool
 status: active
 owner: argus
-domain: Rehydrate vault into navigable folder trees — symlinks under 00-tropo-nav/ for active/archived/all views.
+domain: Rehydrate vault into navigable folder trees — hardlinks for governed entries under 00-tropo-nav/; source-file symlinks for available folder mounts (7b1e0ae5).
 spawnable_by:
 - all-executives
 transport: cli
@@ -27,15 +27,17 @@ audit_required: false
 writes_scope:
 - 00-tropo-nav/**
 governance_category: lifecycle
-description: 'Reads the flat vault (vault/files/<uid>.md) and project tree, generates human-navigable folder hierarchy under <output-dir-name>/ using symlinks. Three companion trees: 00-tropo-all/ (active + archived), 00-tropo-active/ (state: active only), 00-tropo-archived/ (state: archived only). Single root entry in sidebar; click to choose view. Project anchors live INSIDE their own folder (parent shows child folders cleanly; project''s own folder shows anchor at top alongside children).'
+description: 'Reads the flat vault (vault/files/<uid>.md) and project tree, generates human-navigable folder hierarchy under <output-dir-name>/. Governed entries use hardlinks (v1.51). Available folder-mount leaves use symlinks to the real source file (7b1e0ae5 — cross-filesystem; opening reaches the native app). Three companion trees: 00-tropo-all/, 00-tropo-active/, 00-tropo-archived/. Project anchors live INSIDE their own folder.'
 domain_tags:
 - rehydrate
 - navigation
-- symlinks
+- hardlinks
+- source-symlinks
 - project-tree
 - three-views
 - rendering
-trigger_description: Reach for this when the navigable folder tree at 00-tropo-nav/ is stale or missing — typically after running rebuild-vault.py to update the index + project-tree. The symlink hierarchy is the human-navigable surface; rebuild-vault.py rebuilds the data; rehydrate.py rebuilds the navigation. Run rehydrate.py whenever you want the project hierarchy in your editor's file tree to reflect current vault state. The active/archived/all views let you collapse archived noise without losing it.
+- mount-identity
+trigger_description: Reach for this when the navigable folder tree at 00-tropo-nav/ is stale or missing — typically after running rebuild-vault.py to update the index + project-tree. The nav hierarchy is the human-navigable surface; rebuild-vault.py rebuilds the data; rehydrate.py rebuilds the navigation. Run rehydrate.py whenever you want the project hierarchy in your editor's file tree to reflect current vault state. The active/archived/all views let you collapse archived noise without losing it.
 created: 2026-05-09
 created_by: argus-a53
 modified: 2026-05-09
@@ -51,25 +53,35 @@ tags:
 - cli
 - rehydrate
 - navigation
-- symlinks
+- hardlinks
+- source-symlinks
 - v1.15-stream-b
+- mount-identity
 subsystem_hub:
 - dbc1cbbf
 ---
 """
 
-"""Rehydrate ledger into navigable folder trees with hardlinks.
+"""Rehydrate vault into navigable folder trees.
 
-Reads the flat ledger (`vault/files/<uid>.md`) and the project tree index,
-and generates a human-navigable folder hierarchy under <output-dir-name>/
+Reads the flat vault (`vault/files/<uid>.md`) and the project tree index,
+and generates a human-navigable folder hierarchy under <output-dir-name>/.
 
-v1.51.0 amendment (vela-v51 2026-05-23): swapped symlinks → hardlinks per Mike-V51
-UX report — VS Code resolved symlinks to canonical target, landing the user in
-vault/files/<uid>.md instead of the nav-tree path they clicked. Hardlinks preserve
-the path-the-user-opened-with in VS Code while keeping content canonical (same inode).
-Variable name `symlinks_created` retained for diff minimality.
-using symlinks. Every governed artifact appears under every project it is
-`member_of`.
+Linking policy (codified by 7b1e0ae5; both halves in writing):
+
+- **Governed entries → hardlinks** (v1.51.0, vela-v51 2026-05-23 / Mike-V51):
+  VS Code resolved symlinks to the canonical target, collapsing nav walkability
+  onto ``vault/files/<uid>.md``. Hardlinks keep the path-the-user-opened-with.
+- **Mounted source files → symlinks** (7b1e0ae5 / Mike 2026-08-11): hardlinks
+  cannot cross filesystems and live mounts sit on other volumes. For a mounted
+  source, resolving to the real file *is* the point (Finder/editor opens the
+  native app). Only mounts whose registry ``availability`` is ``available``
+  render source leaves; unavailable mounts keep record hardlinks only.
+  The governed ``.md`` record does not render a duplicate leaf beside the source.
+
+Variable name ``symlinks_created`` counts both hardlinks and source symlinks
+(historical; retained for diff minimality). Every governed artifact appears
+under every project it is ``member_of``.
 
 Three companion trees are generated under a single navigation root:
 
@@ -78,32 +90,11 @@ Three companion trees are generated under a single navigation root:
     ├── 00-tropo-active/      state: active only
     └── 00-tropo-archived/    state: archived only
 
-Single root entry in the sidebar; click to choose the view. Default output
-directory name: `00-tropo-nav`.
-
-Project-anchor placement (2026-04-25 amendment):
-    Project anchors live INSIDE their own folder, not in their parent's
-    folder. This keeps the parent showing child folders cleanly, and the
-    project's own folder shows the anchor at the top alongside its
-    children. Single navigation primitive.
-
 Usage:
-    python3 rehydrate.py <output-dir-name> [--vault-path <path>]
-
-Vault root resolution (2026-05-03 amendment, Metis G50 — align with Tier 1 v1.1 / ADR-032):
-    Anchors checked in order: `.tropo/boot-config.md` (current Tier 1 v1.1 standard),
-    then `settings/env.md` (legacy, retained for older vaults).
-
-    1. Explicit `--vault-path <path>` argument wins (must contain at least one anchor).
-    2. Otherwise: walk up from this script's location for either anchor.
-    3. Fallback: cwd contains either anchor, use that.
-    4. Otherwise: raise with a clear error naming both anchors.
+    python3 tropo-rehydrate.py <output-dir-name> [--vault-path <path>]
 
 This script is part of the Tropo-OS kernel and ships with every release via
-`build-release.py`. It is called by `vault/tools/tropo-rebuild-vault.py` (engineering
-repo) — see that file's `rehydrateScript` invocation.
-
-Governed by: `.tropo/scripts/CAPSULE.md` (kernel-tier scripts).
+`build-release.py`. It is called by `vault/tools/tropo-rebuild-vault.py`.
 """
 
 import argparse
@@ -115,6 +106,9 @@ import shutil
 from pathlib import Path
 
 from lib import index_surfaces
+
+FOLDER_MOUNTS_REL = Path(".tropo-studio") / "folder-mounts.json"
+AVAILABILITY_AVAILABLE = "available"
 
 
 VAULT_ANCHORS = (
@@ -322,18 +316,43 @@ def build_project_paths(project_tree_path, index, project_states, state_filter):
     return paths
 
 
+def load_mount_availability(vault_root):
+    """Return ``(availability_by_uid, root_path_by_uid)`` from folder-mounts.json.
+
+    7b1e0ae5 §3.5 reads registry availability only — never invents it.
+    """
+    path = Path(vault_root) / FOLDER_MOUNTS_REL
+    if not path.is_file():
+        return {}, {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {}, {}
+    mounts = data.get("mounts") if isinstance(data, dict) else {}
+    if not isinstance(mounts, dict):
+        return {}, {}
+    out = {}
+    roots = {}
+    for uid, raw in mounts.items():
+        if not isinstance(raw, dict):
+            continue
+        out[str(uid)] = raw.get("availability")
+        roots[str(uid)] = raw.get("path")
+    return out, roots
+
+
 def load_index(index_path, archive_index_path=None):
-    """Load uid -> {title, state, type, member_of, subsystem_hub, subsystem_name} from
-    the pre-built current + archive index union.
+    """Load uid -> entry fields from the current + archive index union.
+
+    Carries ``mount_uid`` / ``source_path`` / ``mount_relpath`` / ``availability``
+    / ``source_filename`` for external-artifact rows (7b1e0ae5 §3.5).
 
     v1.14 schema split (Argus A80 2026-05-23): subsystem_hub: is the canonical home for
     subsystem hub catalog membership; member_of: holds true parent project UIDs only.
     Tree-building in build_project_paths reads BOTH fields as parent-edge sources.
-    subsystem_name retained for hub-identification (informational use).
 
     ADR-047 Layer 1: rehydrate is intentionally an archive-aware consumer
     because it renders BOTH ``00-tropo-active`` and ``00-tropo-archived``.
-    Default retrieval remains current-only; this renderer explicitly opts in.
     """
     entries = {}
     paths = [Path(index_path)]
@@ -350,26 +369,89 @@ def load_index(index_path, archive_index_path=None):
                 "member_of": e.get("member_of", []),
                 "subsystem_hub": e.get("subsystem_hub", []),
                 "subsystem_name": e.get("subsystem_name", ""),
+                "mount_uid": e.get("mount_uid"),
+                "source_path": e.get("source_path") or e.get("original_path") or "",
+                "mount_relpath": e.get("mount_relpath") or "",
+                "availability": e.get("availability"),
+                "source_filename": e.get("source_filename") or "",
             }
     return entries
 
 
+def _safe_link(kind, target, link_path, *, skipped, leaf_name):
+    """Create one hardlink or symlink; never abort the tree on a single failure.
+
+    7b1e0ae5 §3.5 per-leaf guard: EXDEV / missing target / permission skips the
+    leaf and reports it by name; the build continues.
+    """
+    try:
+        if kind == "hardlink":
+            os.link(target, link_path)
+        elif kind == "symlink":
+            os.symlink(target, link_path)
+        else:
+            raise ValueError(f"unknown link kind {kind!r}")
+        return True
+    except OSError as exc:
+        skipped.append(f"{leaf_name} ({exc.strerror or exc.__class__.__name__})")
+        return False
+
+
+def _source_leaf_target(entry, mount_roots):
+    """Resolve the real source path for a mounted leaf, or None.
+
+    Authoritative: registry mount root + ``mount_relpath``. Never stats-deep
+    (76126a26 §5b B1); placeholders get the symlink like any other file.
+    """
+    mount_uid = entry.get("mount_uid")
+    if not mount_uid:
+        return None
+    root = mount_roots.get(mount_uid)
+    if not root:
+        return None
+    rel = entry.get("mount_relpath") or ""
+    if not rel:
+        # Fall back to basename of advisory source_path only when relpath absent.
+        source_path = entry.get("source_path") or ""
+        if source_path:
+            return Path(source_path)
+        return None
+    return Path(root) / rel
+
+
+def _source_leaf_name(entry, uid):
+    """Real filename for the source leaf (not the governed uid — title.md)."""
+    name = entry.get("source_filename") or ""
+    if not name:
+        rel = entry.get("mount_relpath") or ""
+        name = Path(rel).name if rel else ""
+    if not name:
+        source_path = entry.get("source_path") or ""
+        name = Path(source_path).name if source_path else ""
+    if not name:
+        name = f"{uid}.bin"
+    return navigation_component(sanitize(name), identity=uid, suffix="")
+
+
 def build_one_tree(vault_root, output_dir, ledger_files, project_tree_path,
-                   index, project_states, state_filter, label):
-    """Build one filtered tree of project folders + symlinks.
+                   index, project_states, state_filter, label,
+                   mount_availability=None, mount_roots=None):
+    """Build one filtered tree of project folders + leaves.
 
     Multi-parent rendering (v1.9.x): project_paths is now {uid: [Path, ...]} —
     each project may render under multiple parent paths (composable graph).
-    Files (non-project entries) symlink under EVERY path of EVERY navigable
-    member_of parent, so entries appear at every applicable location in the tree.
-    Symlink creation is idempotent (skip if link already exists at that path)."""
+    Files (non-project entries) link under EVERY path of EVERY navigable
+    member_of parent. Link creation is per-leaf guarded (7b1e0ae5).
+    """
     if output_dir.exists():
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True)
 
+    mount_availability = mount_availability or {}
+    mount_roots = mount_roots or {}
+
     project_paths = build_project_paths(project_tree_path, index, project_states, state_filter)
 
-    # Create directories for every path each project should appear at
     folder_count = 0
     for paths_list in project_paths.values():
         for rel_path in paths_list:
@@ -377,8 +459,10 @@ def build_one_tree(vault_root, output_dir, ledger_files, project_tree_path,
             folder_count += 1
 
     symlinks_created = 0
+    source_leaves = 0
     skipped_orphans = 0
     skipped_filter = 0
+    skipped_leaves = []
 
     for ledger_file in sorted(ledger_files.glob("*.md")):
         uid = ledger_file.stem
@@ -386,67 +470,110 @@ def build_one_tree(vault_root, output_dir, ledger_files, project_tree_path,
         if not entry or not entry["title"]:
             continue
 
-        # Filter by entry state.
         if state_filter is not None and entry["state"] != state_filter:
             skipped_filter += 1
             continue
 
-        link_name = navigation_component(
+        record_link_name = navigation_component(
             f"{uid} — {sanitize(entry['title'])}",
             identity=uid,
             suffix=".md",
         )
 
-        # Project anchors live inside their own folder(s) — one anchor per rendered path.
+        # Project anchors: always the governed record (hardlink).
         if uid in project_paths:
             for project_path in project_paths[uid]:
                 project_folder = output_dir / project_path
-                link_path = project_folder / link_name
+                link_path = project_folder / record_link_name
                 if link_path.exists() or link_path.is_symlink():
-                    continue  # idempotent (handles legacy symlinks during transition)
-                # Hardlinks (v1.51.0 fix-on-see by vela-v51 2026-05-23 per Mike-V51 UX report):
-                # symlinks resolved to canonical target in VS Code, collapsing nav-tree
-                # walkability — opening a 00-tropo-nav link landed Mike in vault/files/<uid>.md
-                # via symlink-follow, defeating OP-12 Tropo-Nav Path intent. Hardlinks point at
-                # same inode but VS Code shows the path used to open. Same-filesystem requirement
-                # holds (argo-os/ is one disk); editing one updates both (canonical content
-                # preserved); rm one doesn't delete the other (idempotent rebuild safe).
-                os.link(ledger_file, link_path)
-                symlinks_created += 1
+                    continue
+                if _safe_link(
+                    "hardlink",
+                    ledger_file,
+                    link_path,
+                    skipped=skipped_leaves,
+                    leaf_name=record_link_name,
+                ):
+                    symlinks_created += 1
             continue
 
-        # Non-project entries live in each parent project's folder
-        # (only those parents whose state matches the filter).
-        # Multi-parent: walk every path of every navigable parent.
         member_of = entry["member_of"]
         if not member_of:
             skipped_orphans += 1
             continue
 
+        mount_uid = entry.get("mount_uid")
+        use_source_leaf = (
+            bool(mount_uid)
+            and mount_availability.get(mount_uid) == AVAILABILITY_AVAILABLE
+        )
+        source_target = _source_leaf_target(entry, mount_roots) if use_source_leaf else None
+        if use_source_leaf and source_target is not None:
+            leaf_name = _source_leaf_name(entry, uid)
+            placed = False
+            for project_uid in member_of:
+                if project_uid not in project_paths:
+                    continue
+                for project_path in project_paths[project_uid]:
+                    project_folder = output_dir / project_path
+                    link_path = project_folder / leaf_name
+                    if link_path.exists() or link_path.is_symlink():
+                        placed = True
+                        continue
+                    if _safe_link(
+                        "symlink",
+                        source_target,
+                        link_path,
+                        skipped=skipped_leaves,
+                        leaf_name=leaf_name,
+                    ):
+                        symlinks_created += 1
+                        source_leaves += 1
+                        placed = True
+            if not placed:
+                skipped_orphans += 1
+            continue
+
+        # Governed record hardlink (including mounted rows on unavailable mounts).
         placed = False
         for project_uid in member_of:
             if project_uid not in project_paths:
                 continue
             for project_path in project_paths[project_uid]:
                 project_folder = output_dir / project_path
-                link_path = project_folder / link_name
+                link_path = project_folder / record_link_name
                 if link_path.exists() or link_path.is_symlink():
-                    continue  # idempotent — a file member_of two projects with overlapping paths (handles legacy symlinks during transition)
-                # Hardlinks per v1.51.0 fix-on-see — see comment at first os.link() site above
-                os.link(ledger_file, link_path)
-                symlinks_created += 1
-                placed = True
+                    placed = True
+                    continue
+                if _safe_link(
+                    "hardlink",
+                    ledger_file,
+                    link_path,
+                    skipped=skipped_leaves,
+                    leaf_name=record_link_name,
+                ):
+                    symlinks_created += 1
+                    placed = True
 
         if not placed:
             skipped_orphans += 1
 
-    print(f"  {label}: {len(project_paths)} unique projects ({folder_count} rendered folder paths), "
-          f"{symlinks_created} symlinks ({skipped_orphans} orphans, {skipped_filter} state-filtered)")
+    print(
+        f"  {label}: {len(project_paths)} unique projects "
+        f"({folder_count} rendered folder paths), "
+        f"{symlinks_created} links ({source_leaves} source leaves, "
+        f"{skipped_orphans} orphans, {skipped_filter} state-filtered, "
+        f"{len(skipped_leaves)} leaf-skips)"
+    )
+    return skipped_leaves
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Rehydrate ledger into navigable folder trees with symlinks."
+        description=(
+            "Rehydrate vault into navigable folder trees "
+            "(hardlinks for governed entries; source symlinks for available mounts)."
+        )
     )
     parser.add_argument(
         "output_dir_name",
@@ -460,7 +587,7 @@ def main():
     args = parser.parse_args()
 
     vault_root = resolve_vault_root(args.vault_path)
-    ledger_files = vault_root / "vault" / "files"   # path renamed ledger/ → vault/ in v1.9.0; variable name retained for diff minimality (v1.10+ rename candidate)
+    ledger_files = vault_root / "vault" / "files"
     project_tree_path = vault_root / "vault" / "00-project-tree.jsonl"
     index_path = vault_root / "vault" / "00-index.jsonl"
     archive_index_path = vault_root / "vault" / "00-archive-index.jsonl"
@@ -470,7 +597,12 @@ def main():
     print(f"Loading index union from {index_path.name} + {archive_index_path.name}...")
     index = load_index(index_path, archive_index_path)
     project_states = {uid: entry["state"] for uid, entry in index.items()}
+    mount_availability, mount_roots = load_mount_availability(vault_root)
     print(f"  {len(index)} entries indexed")
+    available_mounts = sum(
+        1 for v in mount_availability.values() if v == AVAILABILITY_AVAILABLE
+    )
+    print(f"  {available_mounts} available folder mount(s) for source leaves")
 
     print(f"Generating navigation trees under {nav_root}/...")
 
@@ -478,22 +610,43 @@ def main():
         shutil.rmtree(nav_root)
     nav_root.mkdir(parents=True)
 
-    # Three trees side-by-side. Single sidebar root.
-    build_one_tree(vault_root, nav_root / "00-tropo-all",
-                   ledger_files, project_tree_path, index,
-                   project_states, None, "all")
-    build_one_tree(vault_root, nav_root / "00-tropo-active",
-                   ledger_files, project_tree_path, index,
-                   project_states, "active", "active")
-    build_one_tree(vault_root, nav_root / "00-tropo-archived",
-                   ledger_files, project_tree_path, index,
-                   project_states, "archived", "archived")
+    all_skipped = []
+    for tree_name, state_filter, label in (
+        ("00-tropo-all", None, "all"),
+        ("00-tropo-active", "active", "active"),
+        ("00-tropo-archived", "archived", "archived"),
+    ):
+        skipped = build_one_tree(
+            vault_root,
+            nav_root / tree_name,
+            ledger_files,
+            project_tree_path,
+            index,
+            project_states,
+            state_filter,
+            label,
+            mount_availability=mount_availability,
+            mount_roots=mount_roots,
+        )
+        all_skipped.extend(skipped or [])
 
-    # Best-effort cleanup of the legacy single-tree directory if it still exists.
     legacy = vault_root / "00-tropo-all-folders"
     if legacy.exists() and legacy.is_dir():
         shutil.rmtree(legacy)
         print(f"Removed legacy directory: {legacy.name}/")
+
+    if all_skipped:
+        # Dedup while preserving order for the end-of-build report.
+        seen = set()
+        unique = []
+        for name in all_skipped:
+            if name in seen:
+                continue
+            seen.add(name)
+            unique.append(name)
+        print(f"Skipped {len(unique)} leaf link(s) by name:")
+        for name in unique:
+            print(f"  - {name}")
 
     print(f"Done. Output: {nav_root}")
 

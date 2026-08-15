@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.87.0] - 2026-08-14
+### Added
+- **Mounted work in navigation:** external folders and documents receive governed mount identity and appear in the Studio tree without copying or taking ownership of source files.
+- **Compact-Continue:** compacted sessions re-anchor the same agent generation, Git state, event debt, and recent work instead of birthing phantom successors.
+- **Portable first setup:** one documented command derives local indexes, navigation, and the mint registry from a fresh cross-platform zip.
+- **Two-pipeline operation:** dev work ends after specify/build/test; release work fans in completed evidence, opens documentation and verification legs, freezes one package identity, and requires explicit publication approval.
+### Changed
+- Release verification uses package-bound harness, external-test, and cold-walk evidence while keeping source-Studio debt visible as a separate diagnostic.
+- First user agents use distinct governed-file UIDs and resolve event identity through the portable `user_agents` registry.
+### Fixed
+- Release activations now use the canonical activation renderer, preserve lock provenance through bootstrap, and enforce Assemble → Verify → Publish ordering.
+- Cancelled runs refuse mutation; healthy retired runs retain idempotent retry behavior.
+- Fresh packages no longer require machine-specific index bytes, leak Argo identity, omit templates, or dead-end before minting.
+
 ## [1.86.0] - 2026-08-08
 ### Added
 - **Working with real files:** point your studio at a folder of real work — SharePoint, OneDrive, iCloud — and it mounts in place: attach, adopt, and reconcile without copying. Word, PowerPoint, and PDF content becomes searchable (`tropo-extract-text`, cached on content identity), and mounted-binary text lands in the full-text index.

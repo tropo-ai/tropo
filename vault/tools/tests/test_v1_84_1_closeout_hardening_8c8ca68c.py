@@ -97,7 +97,112 @@ class TestAutoHealFieldDrop(_SandboxedVaultTest):
     (Vela V64 diagnosis, event 00006024 -> 974b08ad; fixed by Talos T27.)
     """
 
-    def test_auto_healed_step_carries_verification_command_and_verdict_cwd(self):
+    def test_definition_drift_is_reported_and_never_heals_the_started_run(self):
+        """INVERTED 2026-08-09 (talos-t40) for 0a0a6777 §1, Mike-locked.
+
+        CORRECTED the same day. My first inversion asserted the check RAISED on
+        drift. It does not, and must not: §1 says a started run executes only its
+        own snapshot, and AC10 requires the migration manifest to be able to
+        record a run as `finish-v1`. A refusal would insulate the run from
+        nothing and make finish-v1 unreachable. The prohibition §1 actually makes
+        is on HEALING — so that is what this test pins.
+
+        This test used to assert that a started run silently acquired a step its
+        definition had gained after bootstrap, and that the healed declaration
+        carried `verification_command` and `verdict_cwd` — bug 1 of the v1.84.1
+        closeout, where the heal dropped both.
+
+        The two-pipeline split removes the heal itself: "A started run executes
+        only its immutable declaration snapshot." So the original assertion now
+        describes forbidden behaviour, and the honest move is to invert the test
+        rather than delete it. The fixture is unchanged — same stale fingerprint,
+        same post-bootstrap step — because it is still the exact trigger
+        condition; only the required outcome moved from "heals quietly" to
+        "reports, and leaves the run's own snapshot exactly as it found it".
+
+        Bug 1's own coverage is not lost. It was about a declaration losing
+        fields while being written; nothing writes a declaration on this path any
+        more, so the class it guarded is unrepresentable rather than untested.
+        """
+        pipe_uid = self._hex("pipedef")
+        step_uid = self._hex("stepnew")
+        self._write(pipe_uid, {
+            "uid": pipe_uid, "type": "pipeline", "version": "2.0",
+            "children": [step_uid],
+        })
+        self._write(step_uid, {
+            "uid": step_uid, "type": "pipeline", "subtype": "workflow-node",
+            "step_owner_role": "vela", "step_verifier_role": "same-as-executor",
+            "verification_class": True, "depends_on_steps": [], "exit_criteria": [],
+            "trust_level": "auto", "verification_command": "python3 -c pass",
+            "verdict_cwd": ".", "member_of": [pipe_uid], "next_steps": [],
+        })
+        pr = {"frontmatter": {"uid": "prun1", "pipeline": pipe_uid,
+                               "pipeline_step_fingerprint": "stale-does-not-match"}}
+        # The run has ALREADY declared some other step, so it has a snapshot to
+        # be out of step with. Without this the check correctly stays silent —
+        # a run with no declarations has not started.
+        other = self._hex("stepold")
+        events = [
+            {"event": "run_created", "trace_id": "act1", "data": {}},
+            {"event": "step_declared", "trace_id": "act1", "data": {"step_id": other}},
+        ]
+        run_folder = self.tmp / "run-sandbox-1"
+        run_folder.mkdir()
+
+        import io, contextlib
+        before = list(events)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            eng._report_definition_drift(pr, run_folder, events, "act1")
+        message = err.getvalue()
+        self.assertIn("definition drift", message)
+        self.assertIn(step_uid, message, "the report must name the drifting step")
+        self.assertIn("OWN declaration snapshot", message)
+        self.assertIn("NEW run", message)
+
+        # The whole point: the run is left exactly as it was found. This is the
+        # assertion the raising version could not make, because it never got here.
+        self.assertEqual(events, before, "the run's declarations were mutated")
+
+        # And the mechanism is gone, not merely unreached.
+        self.assertFalse(
+            hasattr(eng, "_auto_heal_stale_def"),
+            "the silent heal is still present; §1 removes it, not just its call",
+        )
+
+        # Control: no drift, no refusal. Without it the assertion above passes
+        # for a function that raises on everything.
+        #
+        # The control must declare EXACTLY what the definition declares. My first
+        # version kept the extra `stepold` declaration and the check correctly
+        # reported it as a removal — the control was wrong, not the code, and it
+        # is worth saying so here because "the control failed" reads like a bug
+        # in the thing under test until you look.
+        aligned = [
+            {"event": "run_created", "trace_id": "act1", "data": {}},
+            {"event": "step_declared", "trace_id": "act1", "data": {"step_id": step_uid}},
+        ]
+        pr_aligned = {"frontmatter": {"uid": "prun1", "pipeline": pipe_uid}}
+        quiet = io.StringIO()
+        with contextlib.redirect_stderr(quiet):
+            eng._report_definition_drift(pr_aligned, run_folder, aligned, "act1")
+        self.assertEqual(quiet.getvalue(), "", "no drift must produce no report")
+
+        # And drift in the REMOVAL direction is reported too, not just additions —
+        # a definition that drops a step the run still holds is the same drift
+        # seen from the other side.
+        removed = io.StringIO()
+        with contextlib.redirect_stderr(removed):
+            eng._report_definition_drift(
+                pr_aligned, run_folder,
+                aligned + [{"event": "step_declared", "trace_id": "act1",
+                            "data": {"step_id": other}}],
+                "act1",
+            )
+        self.assertIn("no longer declares", removed.getvalue())
+
+    def _retired_test_auto_healed_step_carries_verification_command_and_verdict_cwd(self):
         # A pipeline def declaring one step with a real verification_command + verdict_cwd.
         # resolve_workflow_node_tree only queues children matching [0-9a-f]{8} (D2 fix,
         # v1.63) — readable test names are silently filtered out, not just rejected loudly,
@@ -146,23 +251,70 @@ class TestB5StatusAwareRetrigger(_SandboxedVaultTest):
     activations before refusing.)
     """
 
+    ACTIVATION = "ac700001"
+    RUN = "0e1c0001"
+    PLAN = "b1a00001"
+
     def _seed_dev_run(self, existing_act_uid, existing_act_status):
-        self._write("devspec1", {
-            "uid": "devspec1", "type": "dev-spec",
+        """Seeded on a RELEASE run since 2026-08-10 (0a0a6777 AC6).
+
+        The name is kept because the B5 claim is unchanged — exactly one live
+        cascade per run, re-triggerable once the prior one is terminal. What
+        moved is WHERE cascades may be opened: doc/test legs now belong to the
+        release Assemble graph, and action_trigger_step refuses a dev parent
+        run outright. A dev-run fixture no longer reaches the B5 logic at all,
+        so seeding one would test the provenance gate and report it as a B5
+        result.
+        """
+        self._write("de750001", {
+            "uid": "de750001", "type": "dev-spec",
             "triggered_test_activation_uids": [existing_act_uid] if existing_act_uid else [],
         })
-        self._write("devact1", {"uid": "devact1", "type": "activation",
-                                 "activation_class": "pipeline", "dev_spec_uid": "devspec1"})
+        self._write(self.PLAN, {
+            "uid": self.PLAN, "type": "release-plan", "status": "locked",
+            "release_activation_uid": self.ACTIVATION,
+            "release_pipeline_run_uid": self.RUN,
+        })
+        self._write(self.ACTIVATION, {
+            "uid": self.ACTIVATION, "type": "activation", "status": "active",
+            "state": "active", "activation_class": "pipeline",
+            "dev_spec_uid": "de750001", "pipeline_uid": "634913c2",
+            "pipeline_run_uid": self.RUN, "release_plan_uid": self.PLAN,
+        })
+        # The parent RELEASE run the belt reads provenance from.
+        self._write(self.RUN, {
+            "uid": self.RUN, "type": "pipeline-run", "status": "active",
+            "state": "active", "pipeline": "634913c2",
+            "activation": self.ACTIVATION,
+            "substrate_authored_by": self.ACTIVATION,
+            "release_plan_uid": self.PLAN,
+            "run_folder": f"vault/pipeline-runs/{self.RUN}",
+        })
+        folder = self.tmp / "vault" / "pipeline-runs" / self.RUN
+        folder.mkdir(parents=True)
+        event = eng.make_event(
+            "step_declared", "fixture", trace_id=self.ACTIVATION,
+            parent_span_id=None, data={
+                "step_id": "4f64ec3c", "depends_on_steps": [],
+                "trust_level": "auto-with-verification",
+            },
+        )
+        (folder / "run.jsonl").write_text(
+            __import__("json").dumps(event) + "\n", encoding="utf-8")
         if existing_act_uid:
             self._write(existing_act_uid, {"uid": existing_act_uid, "type": "activation",
                                             "status": existing_act_status})
+
+    def _body(self, uid):
+        return f"---\nuid: {uid}\ntype: test-spec\n---\n\nbody\n"
 
     def test_all_prior_cascades_terminal_allows_retrigger(self):
         """The real bug: prior test-pipeline activation is RETIRED (terminal) — a re-trigger
         for the same dev-run must be ALLOWED, not refused forever."""
         self._seed_dev_run("oldact01", "retired")
+        uid = self._hex("spec", "1")
         result = eng.action_trigger_step(
-            "devact1", "trigstep1", self._hex("spec", "1"), "body", "da3f50dc", "test-pipeline",
+            self.ACTIVATION, "4f64ec3c", uid, self._body(uid), "da3f50dc", "test-pipeline",
             "test-actor", dry_run=True)
         self.assertTrue(result.get("dry_run"), "retrigger over a terminal prior cascade must be allowed")
 
@@ -170,16 +322,18 @@ class TestB5StatusAwareRetrigger(_SandboxedVaultTest):
         """The invariant B5 actually wants: exactly one ACTIVE cascade at a time — a prior
         activation that is still genuinely live must still refuse a second trigger."""
         self._seed_dev_run("liveact1", "active")
+        uid = self._hex("spec", "2")
         with self.assertRaises(eng.ContractError):
             eng.action_trigger_step(
-                "devact1", "trigstep1", self._hex("spec", "2"), "body", "da3f50dc", "test-pipeline",
+                self.ACTIVATION, "4f64ec3c", uid, self._body(uid), "da3f50dc", "test-pipeline",
                 "test-actor", dry_run=True)
 
     def test_no_prior_cascade_allows_first_trigger(self):
         """Sanity: the common case (no prior activation at all) is unaffected."""
         self._seed_dev_run(None, None)
+        uid = self._hex("spec", "3")
         result = eng.action_trigger_step(
-            "devact1", "trigstep1", self._hex("spec", "3"), "body", "da3f50dc", "test-pipeline",
+            self.ACTIVATION, "4f64ec3c", uid, self._body(uid), "da3f50dc", "test-pipeline",
             "test-actor", dry_run=True)
         self.assertTrue(result.get("dry_run"))
 

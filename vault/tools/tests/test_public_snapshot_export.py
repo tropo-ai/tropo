@@ -262,10 +262,16 @@ def _copy_cli_fixture(
     tools = root / "vault" / "tools"
     lib = tools / "lib"
     lib.mkdir(parents=True)
+    (root / ".tropo").mkdir()
     shutil.copy2(CLI_SOURCE, tools / CLI_SOURCE.name)
     for name in ("tropo-publish-release.py", "tropo-check-publish-state.py"):
         shutil.copy2(TOOLS / name, tools / name)
-    for name in ("public_snapshot.py", "event_identity.py", "release_receipt.py"):
+    for name in (
+        "public_snapshot.py",
+        "event_identity.py",
+        "release_receipt.py",
+        "tropo_roots.py",
+    ):
         shutil.copy2(TOOLS / "lib" / name, lib / name)
     _write_agent(root)
     _write_event_union(
@@ -1490,7 +1496,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
             self.assertFalse(output.exists())
 
     def test_normal_cli_binds_authority_code_and_receipt_bytes(self) -> None:
-        plants = ("authority-code", "receipt")
+        plants = ("authority-code", "root-authority-code", "receipt")
         for plant in plants:
             with self.subTest(plant=plant), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -1506,6 +1512,8 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
                 self._init_git(root)
                 if plant == "authority-code":
                     target = root / "vault" / "tools" / "lib" / "release_receipt.py"
+                elif plant == "root-authority-code":
+                    target = root / "vault" / "tools" / "lib" / "tropo_roots.py"
                 else:
                     target = next(
                         (

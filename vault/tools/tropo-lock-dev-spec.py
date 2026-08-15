@@ -226,6 +226,238 @@ def open_activation(pipeline_uid: str, locked_by: str, cycle_context: str,
     return result.returncode, result.stdout, result.stderr
 
 
+def plan_dev_snapshot_transaction(
+    dev_spec_uid: str, locked_by: str, activation_uid: Optional[str] = None,
+    files_dir: Path = VAULT_FILES, runs_dir: Optional[Path] = None,
+    mint: Optional[object] = None, cycle_context: str = "",
+):
+    """AC2's snapshot transaction, on the shared mechanism (0a0a6777 §2).
+
+    Contract §2 calls the two locks a symmetric pair. Until now only the release
+    side had the transaction, so "symmetric" was an aspiration; this instantiates
+    the SAME primitive for dev, which is what makes it real rather than a phrase
+    in a spec.
+
+    What AC2 asks for, in one indivisible act: one activation root, one
+    pipeline-run and run folder, and immutable hashes of the spec, its ACs, and
+    its committed substrate. Specify only confirms this snapshot afterwards; it
+    does not author or repin it.
+    """
+    import json as _json
+    import sys as _sys
+
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from lib import ignition as _ig, lock_transaction as _lt
+
+    runs = runs_dir or (files_dir.parent / "pipeline-runs")
+    spec_path = files_dir / f"{dev_spec_uid}.md"
+
+    def _read(uid):
+        path = files_dir / f"{uid}.md"
+        if not path.is_file():
+            return None
+        return {"frontmatter": parse_frontmatter(path.read_text(encoding="utf-8"))}
+
+    def _entry_bytes(uid):
+        path = files_dir / f"{uid}.md"
+        return path.read_bytes() if path.is_file() else None
+
+    snapshot = _ig.snapshot_declarations(
+        DEFAULT_PIPELINE_UID, _read,
+        lambda uid: _resolve_step_uids(uid, files_dir),
+        read_bytes=_entry_bytes)
+
+    # Hashed from the file, not from a parse: a projection moves when the parser
+    # changes, and then an "immutable" hash moves without the input moving.
+    inputs = _ig.input_snapshot([("dev_spec", spec_path)])
+    # AC2 names spec, ACs and committed substrate as three inputs. A whole-file
+    # hash proves the spec moved and cannot say whether it was a typo or the
+    # acceptance criteria being rewritten under the run.
+    inputs.update(_ig.spec_component_digests(spec_path.read_text(encoding="utf-8")))
+
+    minter = mint or (lambda exclude=frozenset(): _mint_uid(files_dir, exclude))
+
+    # A pre-existing correlated activation is REUSED, never duplicated (ADR-052
+    # "existence is the gate") — AND SO IS ITS ROOT.
+    #
+    # argus-a147 residual 1: the first version reused the activation and then
+    # minted a fresh root anyway, so the reuse path produced a second root just
+    # as the subprocess path had. Reusing half an identity is not reuse; it
+    # leaves two roots claiming one cycle, and Rule 12 has two things to archive
+    # where there should be one.
+    reused_activation = activation_uid is not None
+    existing = None
+    if not reused_activation:
+        existing = find_correlated_activation(dev_spec_uid, files_dir=files_dir)
+        if existing is not None:
+            activation_uid = existing.get("uid")
+            reused_activation = True
+
+    root_uid = None
+    if reused_activation:
+        if existing is None:
+            existing = _read_entry_frontmatter(activation_uid, files_dir)
+        root_uid = _resolve_existing_root(activation_uid, existing, files_dir)
+
+    if root_uid is None:
+        root_uid = minter()
+    run_uid = minter({root_uid})
+    if not reused_activation:
+        activation_uid = minter({root_uid, run_uid})
+    run_name = f"dev-pipeline-{run_uid}-{time.strftime('%Y-%m-%d')}"
+    today = time.strftime("%Y-%m-%d")
+
+    plan = _lt.LockPlan(kind="dev-spec-lock", subject_uid=dev_spec_uid, actor=locked_by)
+    plan.notes = {
+        "activation_uid": activation_uid,
+        "activation_reused": reused_activation,
+        "activation_root_uid": root_uid,
+        "run_uid": run_uid,
+        "declaration_digest": snapshot.digest,
+        "pipeline_version": snapshot.pipeline_version,
+        **inputs,
+    }
+
+    if not reused_activation:
+        # The root is authored only alongside a NEW activation. A reused
+        # activation already has one, resolved above.
+        plan.create(files_dir / f"{root_uid}.md",
+                    _ig.render_activation_root(root_uid, activation_uid, dev_spec_uid,
+                                               "dev-spec", locked_by, today,
+                                               DEFAULT_PIPELINE_UID),
+                    governed=True)
+        plan.create(files_dir / f"{activation_uid}.md",
+                    _ig.render_activation(
+                        activation_uid, root_uid, run_uid, DEFAULT_PIPELINE_UID,
+                        dev_spec_uid, "dev-spec", locked_by, today, cycle_context),
+                    governed=True)
+
+    plan.create(runs / run_name / "declaration-snapshot.json",
+                _json.dumps(dict(snapshot.as_dict(), **inputs),
+                            indent=2, sort_keys=True) + "\n")
+    plan.create(files_dir / f"{run_uid}.md", "---\n" + "\n".join([
+        f"uid: {run_uid}", "type: pipeline-run",
+        f'title: "Dev run {run_name}"',
+        f'description: "Immutable dev run opened by the lock of dev-spec {dev_spec_uid}."',
+        "status: active", "state: active", f"owner: {locked_by}",
+        f"pipeline: {DEFAULT_PIPELINE_UID}",
+        f"pipeline_version: '{snapshot.pipeline_version}'",
+        f"activation: '{activation_uid}'",
+        # The engine correlates runs to activations through THIS field
+        # (find_pipeline_run_for). Without it the run the lock creates is
+        # invisible to the runtime, which then behaves as though no run exists.
+        f"substrate_authored_by: '{activation_uid}'",
+        f"activation_root_uid: '{root_uid}'",
+        f"dev_spec_uid: '{dev_spec_uid}'",
+        f"declaration_digest: '{snapshot.digest}'",
+        f"dev_spec_sha256: '{inputs['dev_spec_sha256']}'",
+        f"run_folder: 'vault/pipeline-runs/{run_name}'",
+        f"created: '{today}'", f"modified: '{today}'", f"created_by: {locked_by}",
+        "schema_version: 2", "governed_by: 8dd772a0",
+    ]) + "\n---\n\n# " + run_name + "\n", governed=True)
+
+    return plan
+
+
+def _read_entry_frontmatter(uid: str, files_dir: Path) -> Optional[dict]:
+    path = files_dir / f"{uid}.md"
+    if not path.is_file():
+        return None
+    return parse_frontmatter(path.read_text(encoding="utf-8"))
+
+
+def _resolve_existing_root(activation_uid: str, activation_fm: Optional[dict],
+                           files_dir: Path) -> str:
+    """The root a reused activation ALREADY has, or a refusal naming why not.
+
+    Three ways this can fail, and they are different problems (argus-a147
+    residual 1):
+
+      missing    the activation names no root, or names one that does not
+                 resolve — its identity is incomplete and minting a fresh root
+                 would paper over that rather than fix it
+      ambiguous  the activation names one root while another project claims the
+                 same activation; two records disagree about one identity
+      multiple   several projects claim this activation
+
+    Fail-closed, harm named (deb77758): a cycle with two roots has two things to
+    archive at close and two places to stamp final_commit, so its completion
+    record is unreconstructable afterwards — the identity class deb77758 lists.
+    """
+    from lib import ignition as _ig
+
+    named = (activation_fm or {}).get("activation_root_project")
+    claimants = []
+    for path in sorted(files_dir.glob("*.md")):
+        fm = parse_frontmatter(path.read_text(encoding="utf-8", errors="replace"))
+        if fm.get("type") == "project" and fm.get("activation_uid") == activation_uid:
+            claimants.append(path.stem)
+
+    if named and not (files_dir / f"{named}.md").is_file():
+        raise _ig.IgnitionRefusal(
+            f"activation {activation_uid} names root {named}, which does not "
+            "resolve. Minting a replacement would leave the activation pointing "
+            "at nothing while a new root claimed the cycle."
+        )
+    if len(claimants) > 1:
+        raise _ig.IgnitionRefusal(
+            f"activation {activation_uid} is claimed by {len(claimants)} roots "
+            f"({', '.join(claimants)}). One cycle cannot have two roots to "
+            "archive at close."
+        )
+    if named and claimants and named not in claimants:
+        raise _ig.IgnitionRefusal(
+            f"activation {activation_uid} names root {named} but root "
+            f"{claimants[0]} claims the activation. Two records disagree about "
+            "one identity; resolve it before locking."
+        )
+    resolved = named or (claimants[0] if claimants else None)
+    if not resolved:
+        raise _ig.IgnitionRefusal(
+            f"activation {activation_uid} exists but names no activation root. "
+            "Its identity is incomplete, and minting a fresh root here would "
+            "hide that rather than repair it."
+        )
+    return str(resolved)
+
+
+def _resolve_step_uids(root_uid: str, files_dir: Path) -> list:
+    """Leaf step UIDs under a pipeline root, read from disk.
+
+    From disk rather than the index: the run's snapshot must describe the
+    definition as it stands at ignition, and the index is per-machine derived
+    state that may not have been rebuilt.
+    """
+    seen: list = []
+    stack = [root_uid]
+    visited = set()
+    while stack:
+        uid = stack.pop(0)
+        if uid in visited:
+            continue
+        visited.add(uid)
+        path = files_dir / f"{uid}.md"
+        if not path.is_file():
+            continue
+        fm = parse_frontmatter(path.read_text(encoding="utf-8"))
+        children = [str(c) for c in (fm.get("children") or [])
+                    if re.fullmatch(r"[0-9a-f]{8}", str(c))]
+        if uid != root_uid and not children:
+            seen.append(uid)
+        stack.extend(children)
+    return seen
+
+
+def _mint_uid(files_dir: Path, exclude=frozenset()) -> str:
+    import uuid
+
+    taken = {p.stem for p in files_dir.glob("*.md")} | set(exclude)
+    while True:
+        candidate = uuid.uuid4().hex[:8]
+        if candidate not in taken:
+            return candidate
+
+
 def lock_dev_spec(dev_spec_uid: str, locked_by: str, pipeline_uid: str = DEFAULT_PIPELINE_UID,
                    cycle_context: str = "", files_dir: Path = VAULT_FILES,
                    vault_root: Path = VAULT_ROOT,
@@ -254,38 +486,80 @@ def lock_dev_spec(dev_spec_uid: str, locked_by: str, pipeline_uid: str = DEFAULT
                     f"lockable state ({sorted(LOCKABLE_STATUSES)}) — refusing to lock")
 
     # --- The atomic gesture (ADR-052: "as one indivisible act") ---
-    existing = find_correlated_activation(dev_spec_uid, files_dir=files_dir)
-    opened_new = False
-    if existing is not None:
-        activation_uid = existing.get("uid")
-    else:
-        ctx = cycle_context or f"lock-dev-spec.py atomic lock-time activation for {dev_spec_uid}"
-        returncode, stdout, stderr = open_activation(
-            pipeline_uid, locked_by, ctx, dev_spec_uid,
-            vault_root=vault_root, activate_script=activate_script,
-        )
-        if returncode != 0:
-            return 1, (f"ERROR: pipeline-activate.py refused to open an activation for dev-spec "
-                        f"{dev_spec_uid!r} (exit={returncode}). ABORTING THE LOCK — the dev-spec's "
-                        f"status is UNCHANGED (atomic: no activation means no lock).\n"
-                        f"--- pipeline-activate.py stderr ---\n{stderr}")
-        opened_new = True
-        # Re-scan is authoritative: confirms the activation is really on disk
-        # and correlated, rather than trusting stdout parsing alone.
-        fresh = find_correlated_activation(dev_spec_uid, files_dir=files_dir)
-        if fresh is None:
-            return 2, (f"FATAL: pipeline-activate.py exited 0 but no correlated activation is "
-                        f"found on disk for {dev_spec_uid!r} — ABORTING THE LOCK (atomicity guard "
-                        f"tripped; investigate e337f1dd.py before retrying). stdout was: {stdout!r}")
-        activation_uid = fresh.get("uid")
+    #
+    # REFACTORED 2026-08-10 for argus-a147 stage-4 blocker 1. This used to shell
+    # out to pipeline-activate.py BEFORE taking the lock, then build a snapshot
+    # transaction afterwards. Two defects fell out of that split, and both are
+    # the kind that only appear on the paths nobody tests:
+    #
+    #   the subprocess wrote immediately and outside the journal, so a refusal
+    #   after it succeeded left an activation and a root on disk with nothing
+    #   describing them
+    #
+    #   pipeline-activate authors its own `activation_root_project` and the
+    #   ignition authored another, so a SUCCESSFUL lock produced one activation
+    #   and TWO roots
+    #
+    # A subprocess cannot join a transaction. Everything the gesture writes —
+    # activation, root, run, run folder, and the spec flip — is now one plan,
+    # built and applied inside one lock span.
+    import sys as _sys
 
-    # Only reached with a real, on-disk, correlated activation in hand.
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from lib import ignition as _ig, lock_transaction as _lt
+
     today = time.strftime("%Y-%m-%d")
-    new_text = flip_dev_spec_to_locked(raw, locked_by, today, activation_uid)
-    dev_spec_path.write_text(new_text, encoding="utf-8")
 
-    tag = "new" if opened_new else "pre-existing, reused"
-    return 0, f"{dev_spec_uid} LOCKED activation={activation_uid} ({tag})"
+    # The plan is built INSIDE the span, not before it. It was outside until the
+    # lock token was added, and the token caught it immediately: a plan carries
+    # the acquisition its reads were taken under, and one built beforehand
+    # carries none. That is not a technicality — the plan reads the pipeline
+    # definition and the dev-spec, and doing so outside the lock means planning
+    # against a world another ignition can still be changing.
+    try:
+        with _lt.exclusive_workspace_lock():
+            # Recovery inside the span and before anything else, symmetric with
+            # the release ignition: a crashed prior attempt must be resolved
+            # before this one plans against what it left behind.
+            for report in _lt.recover_incomplete():
+                print(f"[RECOVERY] {report['journal']}: {report['outcome']}",
+                      file=sys.stderr)
+                if report["outcome"] == "needs-operator":
+                    return 2, (
+                        f"REFUSED: an earlier transaction at {report['journal']} "
+                        "cannot be recovered automatically. Resolve it before "
+                        "locking.")
+
+            plan = plan_dev_snapshot_transaction(
+                dev_spec_uid, locked_by, files_dir=files_dir,
+                cycle_context=cycle_context)
+            # The spec flip is the LAST operation in the plan and part of it, so
+            # a failure anywhere leaves the spec exactly as found.
+            plan.patch(
+                dev_spec_path, raw,
+                flip_dev_spec_to_locked(raw, locked_by, today,
+                                        plan.notes["activation_uid"]))
+
+            if _lt.already_applied("dev-spec-lock", dev_spec_uid, plan):
+                return 0, f"{dev_spec_uid} already locked by this exact plan (idempotent retry)"
+            _lt.apply_plan(plan)
+    except _ig.IgnitionRefusal as exc:
+        return 1, (f"ERROR: cannot open the dev snapshot transaction for "
+                   f"{dev_spec_uid!r}: {exc}. ABORTING THE LOCK — the dev-spec is "
+                   "UNCHANGED. A lock that flips status without writing the run's "
+                   "immutable snapshot leaves a cycle executing a contract it never "
+                   "recorded.")
+    except _lt.LockRefusal as exc:
+        return 1, f"REFUSED: {exc}"
+    except _lt.LockApplyFailure as exc:
+        return 2, f"PARTIAL: {exc}"
+
+    tag = "pre-existing, reused" if plan.notes["activation_reused"] else "new"
+    return 0, (f"{dev_spec_uid} LOCKED activation={plan.notes['activation_uid']} "
+               f"({tag}) root={plan.notes['activation_root_uid']} "
+               f"run={plan.notes['run_uid']} "
+               f"declarations={plan.notes['declaration_digest'][:12]} "
+               f"version={plan.notes['pipeline_version']}")
 
 
 def main() -> int:

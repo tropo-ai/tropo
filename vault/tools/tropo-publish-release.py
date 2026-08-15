@@ -91,11 +91,19 @@ from pathlib import Path
 
 import yaml
 
-VAULT_ROOT = Path(__file__).resolve().parents[2]
-VAULT_FILES = VAULT_ROOT / "vault" / "files"
-PLATFORM_ROOT = VAULT_ROOT.parent
-RELEASES_DIR = PLATFORM_ROOT.parent / "tropo-releases"
-STAGED_CLONE_DIR = PLATFORM_ROOT.parent / "tropo-staged-clone"
+
+def _load_tropo_roots():
+    """Load the production-owned roots module outside either ``lib`` package."""
+    roots_path = Path(__file__).resolve().with_name("lib") / "tropo_roots.py"
+    spec = importlib.util.spec_from_file_location("_tropo_tools_roots", roots_path)
+    if spec is None or spec.loader is None:
+        raise ImportError("tropo_roots helper could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+tropo_roots = _load_tropo_roots()
 CANONICAL_REPOSITORY = "tropo-ai/tropo"
 CANONICAL_GH_REPOSITORY = "github.com/tropo-ai/tropo"
 DEFAULT_REMOTE = "https://github.com/tropo-ai/tropo.git"
@@ -114,7 +122,7 @@ def _load_release_receipt():
         return existing
     spec = importlib.util.spec_from_file_location(
         module_name,
-        Path(__file__).resolve().parent / "lib" / "release_receipt.py",
+        Path(__file__).resolve().with_name("lib") / "release_receipt.py",
     )
     if spec is None or spec.loader is None:
         raise ImportError("release receipt helper could not be loaded")
@@ -126,7 +134,32 @@ def _load_release_receipt():
 
 release_receipt = _load_release_receipt()
 
-_TROPO_SCRIPTS = VAULT_ROOT / ".tropo" / "scripts"
+
+def _load_vault_lib(module_name, file_name):
+    """Load a co-located vault/tools/lib module without `lib` path ambiguity.
+
+    Same reason _load_release_receipt exists: `lib` below is
+    `.tropo/scripts/lib`, a different package, and an ambiguous import here
+    would resolve differently depending on path order.
+    """
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
+    spec = importlib.util.spec_from_file_location(
+        module_name, Path(__file__).resolve().with_name("lib") / file_name)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"{file_name} could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+# Stage-6 AC7: the four-instrument receipt set is the sole Verify authority.
+release_verify = _load_vault_lib("tropo_publish_release_verify", "release_verify.py")
+release_package = _load_vault_lib("tropo_publish_release_package", "release_package.py")
+
+_TROPO_SCRIPTS = tropo_roots.STUDIO_ROOT / ".tropo" / "scripts"
 if str(_TROPO_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_TROPO_SCRIPTS))
 from lib.release_authorization import require_release_authorization, ReleaseAuthorizationError  # noqa: E402
@@ -167,7 +200,7 @@ def _git(args, cwd, check=True, timeout=120):
 
 
 def _state_path(version: str) -> Path:
-    return RELEASES_DIR / f"v{version}" / STATE_FILE_NAME
+    return tropo_roots.RELEASES_DIR / f"v{version}" / STATE_FILE_NAME
 
 
 def _read_state(version: str) -> dict | None:
@@ -251,7 +284,7 @@ def _finalization_lock(version: str):
 
 def _find_release_entry(version: str) -> tuple[Path, dict] | tuple[None, None]:
     target_norm = str(version).lstrip("vV")
-    for f in VAULT_FILES.glob("*.md"):
+    for f in (tropo_roots.VAULT_DIR / "files").glob("*.md"):
         fm = _load_fm(f)
         if fm and fm.get("type") == "release" and str(fm.get("release_version") or "").lstrip("vV") == target_norm:
             return f, fm
@@ -301,7 +334,7 @@ def _confirm_tty(prompt: str) -> bool:
 
 
 def _run_publish_state(*extra_args, remote=None) -> dict:
-    checker = VAULT_ROOT / "vault" / "tools" / "tropo-check-publish-state.py"
+    checker = tropo_roots.VAULT_DIR / "tools" / "tropo-check-publish-state.py"
     cmd = ["python3", str(checker), "--json"]
     if remote:
         cmd += ["--remote", remote]
@@ -327,7 +360,7 @@ def _require_pinned_remote(remote: str) -> str:
 
 def _require_clone_origin(clone_dir: Path, remote: str) -> None:
     result = _git(
-        ["remote", "get-url", "origin"],
+        ["config", "--get", "remote.origin.url"],
         cwd=str(clone_dir),
         check=False,
     )
@@ -459,7 +492,7 @@ def _published_event_data(receipt_sha256: str, receipt: dict) -> dict:
 
 def _scan_published_events(receipt_sha256: str, expected_data: dict) -> int:
     """Return the exact event count or refuse any split-brain pointer."""
-    events_dir = VAULT_ROOT / "vault" / "events"
+    events_dir = tropo_roots.VAULT_DIR / "events"
     paths = [events_dir / "00-events.jsonl"]
     streams_dir = events_dir / "streams"
     if streams_dir.is_symlink():
@@ -529,7 +562,7 @@ def _scan_published_events(receipt_sha256: str, expected_data: dict) -> int:
 
 
 def _emit_published_event(data: dict) -> None:
-    emitter_path = VAULT_ROOT / "vault" / "tools" / "tropo-emit-event.py"
+    emitter_path = tropo_roots.VAULT_DIR / "tools" / "tropo-emit-event.py"
     spec = importlib.util.spec_from_file_location(
         "tropo_publish_release_event_emitter", str(emitter_path)
     )
@@ -547,12 +580,114 @@ def _emit_published_event(data: dict) -> None:
     )
 
 
+def _release_entry_uid_for(identity) -> str:
+    """The release entry this run publishes, read from its activation."""
+    runtime = _load_pipeline_runtime()
+    activation = runtime.read_vault_entry(identity.activation_uid) or {}
+    uid = str((activation.get("frontmatter") or {}).get("release_entry_uid") or "")
+    if not uid:
+        raise PublishError(
+            f"activation {identity.activation_uid} names no release_entry_uid, "
+            f"so the receipt cannot bind the entry this release publishes"
+        )
+    return uid
+
+
+def _initiate_release_closure(ac7_context: dict, receipt_sha256: str) -> dict:
+    """Invoke the real closure saga. Never raise past the public act.
+
+    Everything before this point could refuse and leave the world unchanged.
+    Nothing after it can: the release is public. So a closure failure is
+    reported as PUBLIC AND OPEN with the exact retry, rather than raised —
+    an exception here would read as "the release failed" when the release
+    succeeded and only the bookkeeping is behind.
+    """
+    identity = ac7_context["identity"]
+    runtime = _load_pipeline_runtime()
+    try:
+        result = runtime.action_close_release(
+            identity.activation_uid, "tropo-publish-release.py",
+            receipt_sha256=receipt_sha256,
+            transaction_id=ac7_context["transaction_id"],
+        )
+        return {"ok": True, "closed": result.get("closed"),
+                "recovered": result.get("recovered")}
+    except Exception as exc:  # noqa: BLE001 -- publication already happened
+        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+
+
+def _github_asset_url(version: str) -> str:
+    return (f"https://github.com/{release_receipt.REPOSITORY}/releases/download/"
+            f"v{version}/tropo-os-v{version}.zip")
+
+
+def _supabase_asset_url(version: str) -> str:
+    base, _key = _load_supabase_credentials()
+    return (f"{base}/storage/v1/object/public/releases/v{version}/"
+            f"tropo-os-v{version}.zip")
+
+
+def _observe_public_asset(url: str) -> str:
+    """Download the asset and hash the bytes that came back.
+
+    Not the bytes we uploaded — the bytes a stranger would get. Those are
+    different questions, and only the second one is what "published" means.
+    An upload that reported 200 and stored something else, a CDN serving a
+    stale object, a mirror that silently lagged: none of those are visible
+    from the sending side, and all of them ship.
+    """
+    import hashlib as _hashlib
+
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:
+            if getattr(response, "status", 200) != 200:
+                raise PublishError(
+                    f"public asset at {url} returned status {response.status}")
+            digest = _hashlib.sha256()
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+            return digest.hexdigest()
+    except PublishError:
+        raise
+    except Exception as exc:  # noqa: BLE001 -- any failure to observe is a refusal
+        raise PublishError(
+            f"could not download and hash the public asset at {url}: {exc}. "
+            f"A release is not verified by having uploaded something; it is "
+            f"verified by reading back what is now downloadable."
+        ) from exc
+
+
+def observe_published_assets(version: str, package_sha256: str) -> list:
+    """Hash the canonical GitHub asset and the Supabase mirror. Both must match.
+
+    P3/P16. The GitHub release zip is canonical and the Supabase copy is a
+    verified mirror; silent divergence between them is not allowed, because a
+    consumer taking the mirror would receive bytes nobody verified.
+    """
+    observations = []
+    for url in (_github_asset_url(version), _supabase_asset_url(version)):
+        observed = _observe_public_asset(url)
+        if observed != package_sha256:
+            raise PublishError(
+                f"public asset at {url} hashes to {observed[:12]} but the "
+                f"frozen package is {package_sha256[:12]}. What is "
+                f"downloadable is not what was verified; refusing to stamp "
+                f"LIVE or close over it."
+            )
+        observations.append({"url": url, "observed_sha256": observed})
+    return observations
+
+
 def _validated_receipt_observation(
     version: str,
     state: dict,
     verify_state: dict,
     *,
     release_observation: dict,
+    ac7_context: dict | None = None,
 ) -> dict:
     """Cross-check raw remote observations and build one candidate receipt."""
     tag = state.get("tag")
@@ -582,6 +717,45 @@ def _validated_receipt_observation(
         release_observation
     ) != expected_release_fields:
         raise PublishError("release object observation fields differ from contract")
+    if ac7_context is not None:
+        # BLOCKER 3: a v2 receipt binds the bytes and the identity chain.
+        # cmd_fire already resolved both to pass the AC7 gate and then threw
+        # them away, so the receipt it wrote could not be checked against
+        # anything afterwards.
+        identity = ac7_context["identity"]
+        package_sha256 = ac7_context["package_sha256"]
+        observations = observe_published_assets(version, package_sha256)
+        core = release_receipt.make_release_receipt(
+            version=version,
+            tag=tag,
+            public_url=public_url,
+            published_at=release_observation["release_object_published_at"],
+            remote_main_sha=verify_state["remote_main_sha"],
+            remote_tag_sha=verify_state["remote_tag_sha"],
+            release_object_tag=release_observation["release_object_tag"],
+            release_object_url=release_observation["release_object_url"],
+            release_object_published_at=release_observation[
+                "release_object_published_at"],
+            release_object_is_draft=release_observation["release_object_is_draft"],
+            verify_live_at=_utc_timestamp(),
+        )
+        core.update({
+            "schema_version": release_receipt.SCHEMA_VERSION_V2,
+            "release_plan_uid": identity.plan_uid,
+            "release_entry_uid": ac7_context["release_entry_uid"],
+            "release_activation_uid": identity.activation_uid,
+            "release_pipeline_run_uid": identity.run_uid,
+            "activation_root_uid": identity.root_uid,
+            "fan_in_digest": identity.fan_in_digest,
+            "package_sha256": package_sha256,
+            "public_asset_observations": observations,
+            "transaction_id": ac7_context["transaction_id"],
+        })
+        try:
+            return release_receipt.validate_release_receipt_v2(core)
+        except release_receipt.ReleaseReceiptError as exc:
+            raise PublishError(f"v2 release receipt is invalid: {exc}") from exc
+
     try:
         return release_receipt.make_release_receipt(
             version=version,
@@ -609,7 +783,7 @@ def _finalize_verified_publication_locked(
     state: dict,
     candidate: dict,
 ) -> tuple[dict, str, str]:
-    receipts = release_receipt.load_release_receipts(VAULT_ROOT)
+    receipts = release_receipt.load_release_receipts(tropo_roots.STUDIO_ROOT)
     existing = [
         (digest, candidate)
         for digest, candidate in receipts.items()
@@ -624,7 +798,9 @@ def _finalize_verified_publication_locked(
             )
     else:
         receipt = candidate
-        receipt_sha256 = release_receipt.write_release_receipt(VAULT_ROOT, receipt)
+        receipt_sha256 = release_receipt.write_release_receipt(
+            tropo_roots.STUDIO_ROOT, receipt
+        )
 
     event_data = _published_event_data(receipt_sha256, receipt)
     fired_by = os.environ.get("USER", "mike-maziarz")
@@ -679,6 +855,7 @@ def _finalize_verified_publication(
     verify_state: dict,
     *,
     release_observation: dict,
+    ac7_context: dict | None = None,
 ) -> tuple[dict, str, str]:
     """Serialize receipt-first, exactly-once event, then private state."""
     candidate = _validated_receipt_observation(
@@ -686,6 +863,7 @@ def _finalize_verified_publication(
         state,
         verify_state,
         release_observation=release_observation,
+        ac7_context=ac7_context,
     )
     with _finalization_lock(version):
         return _finalize_verified_publication_locked(version, state, candidate)
@@ -697,6 +875,7 @@ def _complete_verified_publication(
     verify_state: dict,
     *,
     release_observation: dict,
+    ac7_context: dict | None = None,
 ) -> tuple[dict, str, str]:
     """Hold the version lock through private state and LIVE stamps."""
     candidate = _validated_receipt_observation(
@@ -704,12 +883,13 @@ def _complete_verified_publication(
         state,
         verify_state,
         release_observation=release_observation,
+        ac7_context=ac7_context,
     )
     with _finalization_lock(version):
         receipt, receipt_sha256, fired_by = (
             _finalize_verified_publication_locked(version, state, candidate)
         )
-        version_md = VAULT_ROOT / ".tropo" / "version.md"
+        version_md = tropo_roots.STUDIO_ROOT / ".tropo" / "version.md"
         try:
             version_md.write_text(f"v{version}\n", encoding="utf-8")
         except OSError as exc:
@@ -738,11 +918,11 @@ def _complete_verified_publication(
 
 def _ensure_staged_clone(remote: str, target: Path = None) -> Path:
     """Ensure a git clone of `remote` exists at `target` (default: the module-level
-    STAGED_CLONE_DIR), cloning fresh if it isn't already a git repo there. Used both
+    shared staged-clone directory), cloning fresh if it isn't already a git repo there. Used both
     for the real persistent staged clone AND for --clone-dir test seams — a caller
     supplying --clone-dir gets the SAME ensure-or-clone behavior, not a bypass of it
     (a test pointing at a not-yet-existing scratch dir must still get a real clone)."""
-    target = target or STAGED_CLONE_DIR
+    target = target or tropo_roots.STAGED_CLONE_DIR
     if (target / ".git").is_dir():
         _require_clone_origin(target, remote)
         return target
@@ -795,7 +975,7 @@ def _changelog_equality_assert(build_dir: Path, version: str):
     means one was edited without the other; rebuild is the cure, not a
     hand-merge here."""
     box_cl = build_dir / "CHANGELOG.md"
-    studio_cl = VAULT_ROOT / "CHANGELOG.md"
+    studio_cl = tropo_roots.STUDIO_ROOT / "CHANGELOG.md"
     if not box_cl.is_file() or not studio_cl.is_file():
         raise PublishError(f"CHANGELOG.md missing from box ({box_cl.is_file()}) or "
                             f"studio root ({studio_cl.is_file()}) — cannot assert equality.")
@@ -814,14 +994,104 @@ def _changelog_equality_assert(build_dir: Path, version: str):
                             f"CHANGELOG.md — rebuild is the cure, not a hand-merge here.")
 
 
-def _require_cold_walk_clearance(version: str) -> dict:
-    """Require the live Stranger-Walk Gate before stage or fire.
+def _load_pipeline_runtime():
+    """The engine, for its event reader. Not a second one."""
+    return _load_vault_lib_by_path(
+        "tropo_publish_pipeline_runtime",
+        Path(__file__).resolve().with_name("9e7003b1.py"))
 
-    The build deliberately creates a private zip before the walk so Po can test
-    the exact artifact. Publication is the hard boundary: neither staging nor
-    firing may proceed without PASS or Mike's explicit recorded skip.
+
+def _load_vault_lib_by_path(module_name, path):
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"{path} could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def require_ac7_receipt_set(state: dict, version: str) -> dict:
+    """The AC7 gate: four instruments passed against the bytes about to ship.
+
+    THIS REPLACES THE LEGACY COLD-WALK FILE (preflight §4, V10). The old gate
+    read `cold-walk-verdict.json`, written by build Step 10.6 before the zip
+    existed — so it attested to a walk over an artefact that had not been
+    produced yet, and it was one instrument standing in for four. Keeping both
+    would leave the Studio with two definitions of "walk passed", and the
+    weaker one would be the one that ran first.
+
+    Called before the push URL is restored and before any network write. A
+    refusal after the first outward byte is not a refusal.
     """
-    verdict_path = RELEASES_DIR / f"v{version}" / "cold-walk-verdict.json"
+    activation_uid = str(state.get("activation_uid") or "")
+    try:
+        identity = release_package.resolve_release_run(
+            activation_uid,
+            Path(tropo_roots.VAULT_DIR) / "files",
+            Path(tropo_roots.VAULT_DIR) / "pipeline-runs",
+        )
+    except release_package.PackageRefusal as exc:
+        # A refusal must arrive as a refusal. PackageRefusal is not a
+        # PublishError, so uncaught it escapes cmd_fire's handler as a
+        # traceback — which reads as a crash rather than a gate doing its job,
+        # and an operator who sees a stack trace reaches for --force.
+        raise PublishError(str(exc)) from exc
+
+    runtime = _load_pipeline_runtime()
+    run_entry = runtime.read_vault_entry(identity.run_uid) or {}
+    run_folder = str((run_entry.get("frontmatter") or {}).get("run_folder") or "")
+    if not run_folder:
+        raise PublishError(
+            f"release run {identity.run_uid} declares no run_folder, so its "
+            f"verification receipts cannot be read"
+        )
+    events = runtime.read_events(Path(tropo_roots.STUDIO_ROOT) / run_folder)
+
+    receipts = []
+    for event in events:
+        data = event.get("data") or {}
+        if str(data.get("receipt_kind") or "") == release_verify.RECEIPT_KIND:
+            receipts.append(data)
+    frozen = release_package.active_frozen_payload(events, identity.run_uid)
+
+    if not frozen or not str(frozen.get("package_sha256") or ""):
+        raise PublishError(
+            f"release run {identity.run_uid} has no package_frozen event, so "
+            f"there is no digest for the receipts to be bound to. The package "
+            f"was produced outside the Stage-6 path, or not at all."
+        )
+    package_sha256 = str(frozen["package_sha256"])
+    receipts = [
+        receipt for receipt in receipts
+        if str(receipt.get("package_sha256") or "") == package_sha256
+    ]
+
+    try:
+        resolved = release_verify.assert_ready_to_publish(
+            receipts, identity.run_uid, package_sha256)
+    except release_verify.VerifyRefusal as exc:
+        raise PublishError(str(exc)) from exc
+
+    print(f"  ✓ AC7: four instruments passed against package "
+          f"{package_sha256[:12]}… on run {identity.run_uid}")
+    return {"identity": identity, "package_sha256": package_sha256,
+            "receipts": resolved}
+
+
+def _require_cold_walk_clearance(version: str) -> dict:
+    """SUPERSEDED by require_ac7_receipt_set. Retained, uncalled, for v1 reading.
+
+    Kept so historical v1 releases remain interpretable — their verdict files
+    are still on disk and this is what wrote the rules for them. It is called
+    from nowhere: AC7's receipt set is the sole Verify authority on the v2
+    path, and having two callable definitions of "walk passed" is the failure
+    mode V10 names.
+    """
+    verdict_path = tropo_roots.RELEASES_DIR / f"v{version}" / "cold-walk-verdict.json"
     if not verdict_path.is_file():
         raise PublishError(
             f"cold-walk verdict missing at {verdict_path} — private build may exist, "
@@ -859,16 +1129,29 @@ def _require_cold_walk_clearance(version: str) -> dict:
 
 def cmd_stage(args) -> int:
     version = args.version
-    build_dir = RELEASES_DIR / f"v{version}"
+    # The BOX, not the release folder: rsync and the changelog assert both operate on
+    # what ships. Pointing this at the v<X> release folder synced builds/, dist/ and the walk
+    # reports into the public clone and deleted the real box files — caught on this
+    # code's first-ever live stage (v1.86.0, metis-g105 2026-08-08; clone healed via
+    # git before any commit; nothing was pushed).
+    build_dir = (
+        tropo_roots.RELEASES_DIR
+        / f"v{version}"
+        / "builds"
+        / f"tropo-os-v{version}"
+    )
     if not build_dir.is_dir():
-        print(f"✗ Build directory not found: {build_dir} — run tropo-build-release.py first.",
+        print(f"✗ Box directory not found: {build_dir} — run tropo-build-release.py first.",
               file=sys.stderr)
         return 3
 
     print(f"=== STAGE v{version} ===\n")
     print("Gate: live Stranger-Walk clearance —")
     try:
-        _require_cold_walk_clearance(version)
+        # Stage no longer consults the legacy cold-walk verdict (preflight
+        # §4). Staging prepares a private clone and writes nothing public,
+        # so the Verify question belongs at Fire, where it can be asked
+        # against a frozen digest that exists.
         print()
     except PublishError as e:
         print(f"  ✗ REFUSED: {e}", file=sys.stderr)
@@ -964,10 +1247,10 @@ def cmd_stage(args) -> int:
 def _latest_staged_version() -> str | None:
     """--fire with no --version: find the most recently staged version (the
     normal case — stage then immediately fire)."""
-    if not RELEASES_DIR.is_dir():
+    if not tropo_roots.RELEASES_DIR.is_dir():
         return None
     candidates = []
-    for d in RELEASES_DIR.iterdir():
+    for d in tropo_roots.RELEASES_DIR.iterdir():
         sp = d / STATE_FILE_NAME
         if sp.is_file():
             try:
@@ -985,7 +1268,10 @@ def _load_supabase_credentials() -> tuple[str, str]:
     supabase_url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_SECRET_KEY")
     if not supabase_url or not supabase_key:
-        env_file = PLATFORM_ROOT.parent / "tropo-app" / ".env.local"
+        # tropo-app lives inside the Studio at <studio>/tropo-app/. The shared
+        # taxonomy-true root removes the one-level-off ambiguity that caused two
+        # wrong fixes during the first live fire (v1.86.0, 2026-08-09).
+        env_file = tropo_roots.STUDIO_ROOT / "tropo-app" / ".env.local"
         if env_file.exists():
             for line in env_file.read_text().splitlines():
                 if line.startswith("NEXT_PUBLIC_SUPABASE_URL="):
@@ -1020,7 +1306,7 @@ def _upload_supabase_zip(build_dir: Path, version: str, dist_dir: Path):
 
 
 def _upload_update_manifest():
-    gen = VAULT_ROOT / "vault" / "tools" / "tropo-generate-update-manifest.py"
+    gen = tropo_roots.VAULT_DIR / "tools" / "tropo-generate-update-manifest.py"
     if not gen.is_file():
         raise PublishError(f"{gen} not found — update-manifest upload cannot run")
     supabase_url, supabase_key = _load_supabase_credentials()
@@ -1032,7 +1318,7 @@ def _upload_update_manifest():
             ["python3", str(gen), "--upload"],
             capture_output=True,
             text=True,
-            cwd=str(VAULT_ROOT),
+            cwd=str(tropo_roots.STUDIO_ROOT),
             timeout=30,
             env=child_env,
         )
@@ -1093,9 +1379,14 @@ def cmd_fire(args) -> int:
         print(f"✗ No publish-state for v{version} — not staged. Run stage first.", file=sys.stderr)
         return 3
     try:
-        _require_cold_walk_clearance(version)
+        _ac7 = require_ac7_receipt_set(state, version)
+        _ac7["transaction_id"] = f"fire-{version}-{_ac7['package_sha256'][:12]}"
+        _ac7["release_entry_uid"] = _release_entry_uid_for(_ac7["identity"])
     except PublishError as e:
         print(f"✗ REFUSED: {e}", file=sys.stderr)
+        print(f"    Nothing was published. Record the missing verification, "
+              f"then re-run: python3 vault/tools/tropo-publish-release.py "
+              f"--fire --version {version}", file=sys.stderr)
         return 6
     try:
         remote = _require_pinned_remote(state.get("remote"))
@@ -1146,7 +1437,7 @@ def cmd_fire(args) -> int:
         return 8
 
     print("\ngh release create —")
-    dist_dir = RELEASES_DIR / f"v{version}" / "dist"
+    dist_dir = tropo_roots.RELEASES_DIR / f"v{version}" / "dist"
     zip_file = dist_dir / f"tropo-os-v{version}.zip"
     try:
         release_observation = _view_release_object(
@@ -1182,7 +1473,9 @@ def cmd_fire(args) -> int:
 
     print("\nUploading Supabase zip + update manifest —")
     try:
-        _upload_supabase_zip(RELEASES_DIR / f"v{version}", version, dist_dir)
+        _upload_supabase_zip(
+            tropo_roots.RELEASES_DIR / f"v{version}", version, dist_dir
+        )
         print("  ✓ Supabase zip uploaded")
         _upload_update_manifest()
         _verify_published_update_manifest(version)
@@ -1232,6 +1525,7 @@ def cmd_fire(args) -> int:
             state,
             vstate,
             release_observation=release_observation,
+            ac7_context=_ac7,
         )
     except (PublishError, release_receipt.ReleaseReceiptError) as e:
         print(f"  ✗ PROVENANCE NOT RECORDED — {e}", file=sys.stderr)
@@ -1243,6 +1537,20 @@ def cmd_fire(args) -> int:
         return 14
     print(f"  ✓ verify-live receipt {receipt_sha256}")
     print(f"  ✓ .tropo/version.md stamped to v{version}")
+
+    # BLOCKER 4: closure is welded here, not left as an action someone might
+    # remember to run. The release is already public at this point, so a
+    # failure below leaves it PUBLIC AND OPEN — reported honestly and
+    # replayable with the same transaction id — never falsely closed.
+    closure = _initiate_release_closure(_ac7, receipt_sha256)
+    if closure.get("ok"):
+        print(f"  ✓ release closed — {len(closure.get('closed') or [])} record(s)")
+    else:
+        print(f"  ! PUBLIC AND OPEN — {closure.get('detail')}", file=sys.stderr)
+        print(f"    Re-run: python3 vault/tools/9e7003b1.py "
+              f"--activation-uid {_ac7['identity'].activation_uid} close-release "
+              f"--receipt-sha256 {receipt_sha256} "
+              f"--transaction-id {_ac7['transaction_id']}", file=sys.stderr)
 
     print(f"\n=== LIVE — v{version} published. ===")
     return 0
@@ -1298,7 +1606,7 @@ def cmd_verify_only(args) -> int:
     try:
         _view_release_object(
             f"v{version}",
-            VAULT_ROOT,
+            tropo_roots.STUDIO_ROOT,
             allow_missing=False,
         )
     except PublishError as e:

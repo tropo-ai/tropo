@@ -86,7 +86,7 @@ The doc-pipeline engine refuses to activate without a compliant doc-spec entry. 
 | `type` | string | Literal `doc-spec` |
 | `target_subsystem` | UID OR null | The subsystem being documented (subsystem hub UID), OR null for cross-subsystem changes. If null, doc-pipeline requires at least one entry in `doc_changes_required:` per tier. |
 | `target_tier` | enum | `summary` / `subsystem` / `spec` / `multi`. Anchored to Captain's Briefing v3.0 §Structural-Enforcement Requirement 1. |
-| `triggered_by_dev_cycle` | UID | UID of dev-pipeline activation that triggered this doc-spec (per dev-pipeline retrofit step 4.5 fire). Engine writes; honest cross-pipeline back-reference. Race-lock disambiguator per Engine Extension v0.1 §Race condition handling. |
+| trigger provenance | UID fields | Exactly one source: `triggered_by_dev_cycle` for a dev activation, OR the complete release triplet `triggered_by_release_pipeline` + `release_plan_uid` + `release_pipeline_run_uid`. The engine writes these; release-triggered specs never fabricate a dev cycle. |
 | `doc_changes_required` | list of objects | Each object has `tier` (one of: summary / subsystem / spec), `path` (string; vault-relative path to the doc file needing update OR explicit "new-file" marker), `change_summary` (≤200 chars). |
 | `acceptance_criteria` | string | Non-empty; Mike-walkable verification per Captain's Briefing v3.0 Requirement 1 framing; not box-checkable. |
 

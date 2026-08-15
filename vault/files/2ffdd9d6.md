@@ -71,7 +71,7 @@ acceptance_criteria:
 # Pipeline Activation Key — Dev-Spec v1.0
 
 <!-- nav-block:start -->
-**📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Agents](99ed55fd.md) → [Argus — Agent Root Project](6dff0111.md) → **Pipeline Activation Key — Dev-Spec (fingerprint-as-key re...**
+**📍 Vault Path:** [6dff0111](6dff0111.md) → **Pipeline Activation Key — Dev-Spec (fingerprint-as-key re...**
 <!-- nav-block:end -->
 
 *The HOW for brief [f8cda3dd](f8cda3dd.md). Lean by intent — the key is simple by design. Realizes the principle: build the plain fingerprint now; it grows into signed provenance later without redesign.*

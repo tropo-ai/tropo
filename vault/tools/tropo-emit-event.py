@@ -91,7 +91,7 @@ import argparse, fcntl, json, os, re, sqlite3, subprocess, sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lib import event_identity
+from lib import event_identity, fast_yaml
 from lib.capture_segment import verify_segment_attestation
 
 VAULT_ROOT = Path(__file__).resolve().parents[2]
@@ -99,6 +99,7 @@ EVENTS_DIR = VAULT_ROOT / "vault" / "events"
 JSONL_PATH = EVENTS_DIR / "00-events.jsonl"
 SQLITE_PATH = EVENTS_DIR / "00-events-index.sqlite"
 AGENTS_DIR = VAULT_ROOT / "vault" / "agents"
+AGENT_REGISTRY = VAULT_ROOT / ".tropo-studio" / "registries" / "agent-registry.yaml"
 # v1.10: derived from the shared lib rather than restated, so the emit path and
 # the read path can never drift onto different rebuild scripts or cooldowns.
 REBUILD_SCRIPT_PATH = VAULT_ROOT / event_identity.REBUILD_SCRIPT_REL
@@ -154,10 +155,8 @@ def _registered_party_uids() -> set[str] | None:
     """Party UIDs (messaging axis) from the unified agent entries at vault/agents/.
     Returns None if the directory is unreadable or empty — the guard then FAILS OPEN.
     Stdlib-only regex parse (no frontmatter/yaml dependency)."""
-    if not AGENTS_DIR.is_dir():
-        return None
     uids = set()
-    for p in AGENTS_DIR.glob("*.md"):
+    for p in AGENTS_DIR.glob("*.md") if AGENTS_DIR.is_dir() else []:
         try:
             txt = p.read_text(encoding="utf-8")
             # Unified entries carry party_uid: <8-hex>
@@ -166,6 +165,17 @@ def _registered_party_uids() -> set[str] | None:
                 uids.add(m.group(1))
         except OSError:
             continue
+    try:
+        registry = fast_yaml.safe_load(AGENT_REGISTRY.read_text()) or {}
+        for section in ("user_agents", "agents"):
+            rows = registry.get(section) or {}
+            if isinstance(rows, dict):
+                uids.update(
+                    str(uid) for uid in rows
+                    if re.fullmatch(r"[0-9a-f]{8}", str(uid))
+                )
+    except (OSError, ValueError, TypeError):
+        pass
     return uids if uids else None
 
 
@@ -176,12 +186,8 @@ def _resolve_identity_by_name(agent_name: str) -> str:
     match on 'agent:' slug. Same contract as check-events (2471edc0)
     resolver so read and send cannot diverge on caller identity.
     """
-    if not AGENTS_DIR.is_dir():
-        print(f"ERROR: unified agents directory not found at {AGENTS_DIR}", file=sys.stderr)
-        sys.exit(1)
-
     name_lower = agent_name.strip().lower()
-    for p in AGENTS_DIR.glob("*.md"):
+    for p in AGENTS_DIR.glob("*.md") if AGENTS_DIR.is_dir() else []:
         try:
             txt = p.read_text(encoding="utf-8")
             # Find the agent slug
@@ -199,8 +205,30 @@ def _resolve_identity_by_name(agent_name: str) -> str:
         except OSError:
             continue
 
+    try:
+        registry = fast_yaml.safe_load(AGENT_REGISTRY.read_text()) or {}
+        for section in ("user_agents", "agents"):
+            rows = registry.get(section) or {}
+            if not isinstance(rows, dict):
+                continue
+            for uid, row in rows.items():
+                if not isinstance(row, dict):
+                    continue
+                name = str(row.get("name") or "").strip().lower()
+                path = str(
+                    row.get("path")
+                    or row.get("activation-file")
+                    or row.get("activation_file")
+                    or ""
+                ).lower()
+                if name == name_lower or f"/{name_lower}/" in path:
+                    if re.fullmatch(r"[0-9a-f]{8}", str(uid)):
+                        return str(uid)
+    except (OSError, ValueError, TypeError):
+        pass
+
     print(f"ERROR: --as '{agent_name}' resolves to no unified entry in vault/agents/ "
-          f"(check spelling; e.g. --as argus, --as vela, --as talos)",
+          f"or user agent in agent-registry.yaml (check spelling)",
           file=sys.stderr)
     sys.exit(1)
 

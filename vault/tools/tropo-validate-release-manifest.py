@@ -116,8 +116,8 @@ Usage:
 
 
 import argparse
+import importlib.util
 import json
-import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -129,10 +129,21 @@ try:
 except ImportError:
     yaml = None  # type: ignore
 
-# ─── Configuration ───────────────────────────────────────────────────────────
 
-VAULT_ROOT = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-SHIP_ARTIFACT_CAPSULE_PATH = VAULT_ROOT / "vault" / "capsules" / "tropo-ship-artifact.capsule.md"  # ADR-045: moved from .tropo/capsules/ (v1.21.0)
+def _load_tropo_roots():
+    """Load the production-owned roots module outside either ``lib`` package."""
+    roots_path = Path(__file__).resolve().with_name("lib") / "tropo_roots.py"
+    spec = importlib.util.spec_from_file_location("_tropo_tools_roots", roots_path)
+    if spec is None or spec.loader is None:
+        raise ImportError("tropo_roots helper could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+tropo_roots = _load_tropo_roots()
+
+# ─── Configuration ───────────────────────────────────────────────────────────
 
 VALID_SOURCE_MODES = {
     "recursive-ship-all",
@@ -250,7 +261,9 @@ def parse_frontmatter_and_body(text: str) -> tuple[Optional[dict], str]:
     return None, body
 
 
-def read_manifest_root_uid(target: str = "release") -> str:
+def read_manifest_root_uid(
+    target: str = "release", studio_root: Path | None = None
+) -> str:
     """Read manifest_root_uid from ship-artifact.capsule frontmatter.
 
     Per arch-spec Required Behavior #3: NEVER hard-coded; resolved dynamically.
@@ -263,10 +276,16 @@ def read_manifest_root_uid(target: str = "release") -> str:
     v1.3+ map shape: `manifest_root_uid: {release: <uid>, web: <uid>}` → return value for `target` key
     v1.2 scalar fallback: `manifest_root_uid: <uid>` → return value for target='release'; ERROR otherwise
     """
-    if not SHIP_ARTIFACT_CAPSULE_PATH.exists():
-        print(f"BOOTSTRAP HALT: ship-artifact.capsule not found at {SHIP_ARTIFACT_CAPSULE_PATH}", file=sys.stderr)
+    vault_dir = (
+        tropo_roots.VAULT_DIR
+        if studio_root is None
+        else studio_root / "vault"
+    )
+    capsule_path = vault_dir / "capsules" / "tropo-ship-artifact.capsule.md"
+    if not capsule_path.exists():
+        print(f"BOOTSTRAP HALT: ship-artifact.capsule not found at {capsule_path}", file=sys.stderr)
         sys.exit(64)
-    text = SHIP_ARTIFACT_CAPSULE_PATH.read_text()
+    text = capsule_path.read_text()
     fm, _ = parse_frontmatter_and_body(text)
     if not fm or "manifest_root_uid" not in fm:
         print("BOOTSTRAP HALT: manifest_root_uid not declared in ship-artifact.capsule frontmatter", file=sys.stderr)
@@ -297,14 +316,20 @@ def read_manifest_root_uid(target: str = "release") -> str:
 
 # ─── Manifest loading ────────────────────────────────────────────────────────
 
-def load_ship_artifacts(manifest_root_uid: str) -> list[ManifestEntry]:
+def load_ship_artifacts(
+    manifest_root_uid: str, studio_root: Path | None = None
+) -> list[ManifestEntry]:
     """Walk vault/files/, return all ship-artifact entries belonging to the manifest graph.
 
     Filter: type:ship-artifact AND state:active AND member_of contains manifest_root_uid.
     Archived/superseded entries are graph-history, not build-targets.
     """
     entries: list[ManifestEntry] = []
-    vault_files = VAULT_ROOT / "vault" / "files"
+    vault_files = (
+        tropo_roots.VAULT_DIR
+        if studio_root is None
+        else studio_root / "vault"
+    ) / "files"
     if not vault_files.is_dir():
         return entries
     for path in sorted(vault_files.glob("*.md")):
@@ -333,7 +358,11 @@ def load_ship_artifacts(manifest_root_uid: str) -> list[ManifestEntry]:
 
 # ─── Per-entry checks ────────────────────────────────────────────────────────
 
-def check_entry(entry: ManifestEntry, by_uid: dict[str, ManifestEntry]) -> list[Finding]:
+def check_entry(
+    entry: ManifestEntry,
+    by_uid: dict[str, ManifestEntry],
+    studio_root: Path | None = None,
+) -> list[Finding]:
     """Apply Checks 1-13 + 17-20 + 21-23 to a single entry.
 
     (Checks 14-16 are graph-level; applied separately in check_graph.)
@@ -361,7 +390,7 @@ def check_entry(entry: ManifestEntry, by_uid: dict[str, ManifestEntry]) -> list[
     if cs and mode not in ("skip", "structure-only"):
         # Strip argo-os/ prefix
         rel = cs[len("argo-os/"):] if cs.startswith("argo-os/") else cs
-        abs_path = VAULT_ROOT / rel
+        abs_path = (studio_root or tropo_roots.STUDIO_ROOT) / rel
         if not abs_path.exists():
             findings.append(Finding("P0", "C4-canonical-source-not-found", uid, f"canonical_source path does not resolve: {cs}", "fix canonical_source path OR set source_mode: skip if intentional"))
         else:
@@ -391,7 +420,15 @@ def check_entry(entry: ManifestEntry, by_uid: dict[str, ManifestEntry]) -> list[
         # Check if parent is a known root-sentinel project (the manifest graph root project)
         # Note: parent: <root-sentinel-UID> is allowed for top-level entries; the root project itself is type:project, not ship-artifact
         # so by_uid won't include it. Allow parent UIDs that resolve to *any* file in vault/files/.
-        parent_path = VAULT_ROOT / "vault" / "files" / f"{parent}.md"
+        parent_path = (
+            (
+                tropo_roots.VAULT_DIR
+                if studio_root is None
+                else studio_root / "vault"
+            )
+            / "files"
+            / f"{parent}.md"
+        )
         if not parent_path.exists():
             findings.append(Finding("P0", "C7-parent-resolves", uid, f"parent UID '{parent}' does not resolve to any vault entry", "fix parent UID OR set parent: null for root entry"))
 
@@ -539,19 +576,21 @@ def check_graph(entries: list[ManifestEntry], by_uid: dict[str, ManifestEntry]) 
 
 # ─── Public API + main ──────────────────────────────────────────────────────
 
-def validate_manifest(strict: bool = True) -> list[Finding]:
+def validate_manifest(
+    strict: bool = True, studio_root: Path | None = None
+) -> list[Finding]:
     """Public API for build-release.py and other consumers.
 
     Returns list of Finding objects. Caller decides whether to halt.
     Convenience: caller may wrap in `if any(f.severity == 'P0' for f in findings): raise ManifestValidationError(findings)`.
     """
-    manifest_root_uid = read_manifest_root_uid()
-    entries = load_ship_artifacts(manifest_root_uid)
+    manifest_root_uid = read_manifest_root_uid(studio_root=studio_root)
+    entries = load_ship_artifacts(manifest_root_uid, studio_root=studio_root)
     by_uid = {e.uid: e for e in entries}
 
     all_findings: list[Finding] = []
     for entry in entries:
-        all_findings.extend(check_entry(entry, by_uid))
+        all_findings.extend(check_entry(entry, by_uid, studio_root=studio_root))
     all_findings.extend(check_graph(entries, by_uid))
 
     # --strict promotion: P1 → P0 (no P1s currently; reserved for forward-compat)
@@ -594,15 +633,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Validate ship-artifact manifest")
     parser.add_argument("--strict", action="store_true", help="Promote P1 honor-system findings to P0 (HALT)")
     parser.add_argument("--json", action="store_true", help="Emit findings as JSON instead of markdown")
-    parser.add_argument("--vault-root", type=str, help="Override VAULT_ROOT (default: derived from script path)")
+    parser.add_argument(
+        "--vault-root",
+        type=str,
+        help="Override the Studio root (legacy option name retained for compatibility)",
+    )
     args = parser.parse_args()
 
-    if args.vault_root:
-        global VAULT_ROOT, SHIP_ARTIFACT_CAPSULE_PATH
-        VAULT_ROOT = Path(args.vault_root).resolve()
-        SHIP_ARTIFACT_CAPSULE_PATH = VAULT_ROOT / "vault" / "capsules" / "tropo-ship-artifact.capsule.md"
-
-    findings = validate_manifest(strict=args.strict)
+    studio_root = Path(args.vault_root).resolve() if args.vault_root else None
+    findings = validate_manifest(strict=args.strict, studio_root=studio_root)
 
     if args.json:
         print(json.dumps([

@@ -70,6 +70,34 @@ def resolve_source_path(entry, vault_root):
     return canonical
 
 
+#: Interpreter-generated artifacts. These are outputs, not sources: their bytes
+#: carry the compiling interpreter's magic number and the source mtime, so two
+#: builds of the SAME commit produce different packages purely by having run
+#: Python at different moments. Found by Argus on Fresh-Box AC8 — two candidate
+#: builds of 67ac70a5 differed in exactly 13 `.pyc` files and nothing else.
+BYTECODE_DIR_NAMES = ('__pycache__',)
+BYTECODE_SUFFIXES = ('.pyc', '.pyo')
+
+
+def is_generated_bytecode(path):
+    """True for compiled-Python artifacts that must never reach a package."""
+    normalized = str(path).replace(os.sep, '/')
+    if any(f'/{name}/' in f'/{normalized}/' for name in BYTECODE_DIR_NAMES):
+        return True
+    return normalized.endswith(BYTECODE_SUFFIXES)
+
+
+def prune_bytecode(dirs, files):
+    """Drop bytecode from one `os.walk` frame, in place.
+
+    Pruning `dirs` in place is what stops the walk from descending, so this is
+    called for its effect rather than its return value.
+    """
+    dirs[:] = [d for d in dirs if d not in BYTECODE_DIR_NAMES]
+    files[:] = [f for f in files if not f.endswith(BYTECODE_SUFFIXES)]
+    return files
+
+
 def should_exclude_kernel(filepath, exclude_patterns):
     """Check if a kernel file should be excluded from the build.
 

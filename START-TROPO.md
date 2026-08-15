@@ -1,5 +1,5 @@
 ---
-extraction_scope: argo-reference
+
 ---
 
 # Welcome to Tropo
@@ -7,6 +7,26 @@ extraction_scope: argo-reference
 **You're looking at a Tropo Studio — a way to run real work with AI agents using nothing but markdown files in this folder.**
 
 To get started you need a folder-aware AI tool — one that can read and write files on your computer. The common ones: Claude Code, OpenAI Codex, Cursor, Windsurf. (Don't have one? Visit [tropo-ai.com](https://tropo-ai.com) for setup guidance.)
+
+## Compacted session? Continue — do not activate
+
+> If this agent session was compacted or you no longer remember completing boot, do not activate and never run `born`. Run `python3 vault/tools/tropo-compact-continue.py --agent <slug>` before any other work.
+
+Continue means this same agent session keeps going. Nothing is born, retired, or added to
+permanent lineage. Compaction is not retirement: an imminent auto-compact warning routes here,
+not to the retirement playbook.
+
+## First setup after unzip (run once)
+
+Before opening your AI tool, run this command from the extracted Studio root:
+
+```bash
+python3 vault/tools/tropo-rebuild-index.py --apply --vault-path .
+```
+
+Release packages omit machine-local derived indexes so the same zip is portable across macOS,
+Linux, and Windows. This command derives your local index and navigation from the shipped source
+files. It is normal first-time setup, not a repair.
 
 ## How to activate (under a minute)
 

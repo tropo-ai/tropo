@@ -331,6 +331,11 @@ def open_master_activation_entry(
     activation_root_uid: str, existing: set, manifest: list,
     activation_uid: str = None,
     dev_spec_uid: str = None,
+    triggered_by_activation: str = None,
+    triggered_spec_uid: str = None,
+    triggered_pipeline_class: str = None,
+    release_plan_uid: str = None,
+    release_pipeline_run_uid: str = None,
 ) -> str:
     """Author activation entry per activation.capsule v1.0.
 
@@ -343,6 +348,9 @@ def open_master_activation_entry(
     with author_activation_root_project (both files reference each other).
     dev_spec_uid: optional; written to frontmatter for three-pipeline coupling
     enforcement at close-time (v1.51 per engine-extension spec 51d171f3).
+    Trigger provenance fields are optional and supplied together by trigger-step.
+    Release-opened doc/test legs carry the existing release plan/run identity
+    chain; they never impersonate a dev-spec activation.
     """
     if activation_uid is None:
         activation_uid = mint_uid(existing)
@@ -353,6 +361,18 @@ def open_master_activation_entry(
     cycle_ref = f"cycle_context: {yaml_quote(cycle_context)}\n" if cycle_context else ""
     dev_spec_ref = (
         f"dev_spec_uid: {yaml_quote(dev_spec_uid)}\n" if dev_spec_uid else ""
+    )
+    trigger_refs = (
+        (f"triggered_by_activation: {yaml_quote(triggered_by_activation)}\n"
+         if triggered_by_activation else "")
+        + (f"triggered_spec_uid: {yaml_quote(triggered_spec_uid)}\n"
+           if triggered_spec_uid else "")
+        + (f"triggered_pipeline_class: {yaml_quote(triggered_pipeline_class)}\n"
+           if triggered_pipeline_class else "")
+        + (f"release_plan_uid: {yaml_quote(release_plan_uid)}\n"
+           if release_plan_uid else "")
+        + (f"release_pipeline_run_uid: {yaml_quote(release_pipeline_run_uid)}\n"
+           if release_pipeline_run_uid else "")
     )
     # v1.52 owner+assigned_to propagation (Mike-A82 board-surfacing amendment 2026-05-24):
     # Read pipeline def's owner: field; write owner + assigned_to on activation entry so
@@ -396,6 +416,7 @@ def open_master_activation_entry(
         f"schema_version: 2\n"
         f"{cycle_ref}"
         f"{dev_spec_ref}"
+        f"{trigger_refs}"
         f"tags: [activation, pipeline-class, v1-35-0]\n"
         f"file_ext: md\n"
         f"---\n\n"
@@ -408,6 +429,12 @@ def open_master_activation_entry(
         f"- **Date:** {TODAY}\n"
         + (f"- **Cycle context:** {cycle_context}\n" if cycle_context else "")
         + (f"- **Dev-spec:** [{dev_spec_uid}]({dev_spec_uid}.md)\n" if dev_spec_uid else "")
+        + (f"- **Triggered spec:** [{triggered_spec_uid}]({triggered_spec_uid}.md)\n"
+           if triggered_spec_uid else "")
+        + (f"- **Release plan:** [{release_plan_uid}]({release_plan_uid}.md)\n"
+           if release_plan_uid else "")
+        + (f"- **Release run:** [{release_pipeline_run_uid}]({release_pipeline_run_uid}.md)\n"
+           if release_pipeline_run_uid else "")
         + f"\n*Authored by pipeline-activate.py | Argus A67 | 2026-05-16*\n"
     )
     (VAULT_FILES / f"{activation_uid}.md").write_text(content)
@@ -655,6 +682,17 @@ def main():
     parser.add_argument("--depth", type=int, default=0, help="(internal) cascade depth counter")
     parser.add_argument("--dev-spec-uid", default=None,
                         help="8-hex UID of locked dev-spec for three-pipeline coupling (required for dev-pipeline activations at v1.52+; WARN at v1.51 grace period)")
+    parser.add_argument("--triggered-by-activation", default=None,
+                        help="internal: parent activation that fired trigger-step")
+    parser.add_argument("--triggered-spec-uid", default=None,
+                        help="internal: doc/test spec owned by this triggered activation")
+    parser.add_argument("--triggered-pipeline-class", default=None,
+                        choices=["doc-pipeline", "test-pipeline"],
+                        help="internal: class of the triggered doc/test pipeline")
+    parser.add_argument("--release-plan-uid", default=None,
+                        help="internal: parent release-plan for a release-opened leg")
+    parser.add_argument("--release-pipeline-run-uid", default=None,
+                        help="internal: parent release pipeline-run for a release-opened leg")
     args = parser.parse_args()
 
     pipeline_uid = args.pipeline_uid.strip()
@@ -709,6 +747,42 @@ def main():
                       "required at v1.52+ per dev-spec.capsule Rule 7 (grandfathered at v1.51)",
                       file=sys.stderr)
 
+    trigger_identity = {
+        "--triggered-by-activation": args.triggered_by_activation,
+        "--triggered-spec-uid": args.triggered_spec_uid,
+        "--triggered-pipeline-class": args.triggered_pipeline_class,
+    }
+    for label, value in trigger_identity.items():
+        if label != "--triggered-pipeline-class" and value and not re.fullmatch(r"[0-9a-f]{8}", value):
+            print(f"ERROR: {label} must be 8-hex; got: {value}", file=sys.stderr)
+            sys.exit(3)
+    if any(trigger_identity.values()) and not all(trigger_identity.values()):
+        print("ERROR: trigger provenance requires --triggered-by-activation, "
+              "--triggered-spec-uid, and --triggered-pipeline-class together",
+              file=sys.stderr)
+        sys.exit(3)
+
+    release_identity = {
+        "--release-plan-uid": args.release_plan_uid,
+        "--release-pipeline-run-uid": args.release_pipeline_run_uid,
+    }
+    if any(release_identity.values()) and not all(release_identity.values()):
+        print("ERROR: release trigger provenance requires both --release-plan-uid and "
+              "--release-pipeline-run-uid", file=sys.stderr)
+        sys.exit(3)
+    for label, value in release_identity.items():
+        if value and not re.fullmatch(r"[0-9a-f]{8}", value):
+            print(f"ERROR: {label} must be 8-hex; got: {value}", file=sys.stderr)
+            sys.exit(3)
+    if any(release_identity.values()) and not all(trigger_identity.values()):
+        print("ERROR: release trigger provenance requires the complete trigger identity",
+              file=sys.stderr)
+        sys.exit(3)
+    if any(release_identity.values()) and dev_spec_uid:
+        print("ERROR: release trigger provenance and --dev-spec-uid are mutually exclusive",
+              file=sys.stderr)
+        sys.exit(3)
+
     # Setup roll-back manifest
     is_root_invocation = args.rollback_manifest is None
     if is_root_invocation:
@@ -759,6 +833,11 @@ def main():
             pipeline_uid, args.activated_by, args.cycle_context, root_uid_actual,
             existing, manifest, activation_uid=act_uid_actual,
             dev_spec_uid=dev_spec_uid,
+            triggered_by_activation=args.triggered_by_activation,
+            triggered_spec_uid=args.triggered_spec_uid,
+            triggered_pipeline_class=args.triggered_pipeline_class,
+            release_plan_uid=args.release_plan_uid,
+            release_pipeline_run_uid=args.release_pipeline_run_uid,
         )
 
         # 4. Author activation-root-project (references act_uid_actual)

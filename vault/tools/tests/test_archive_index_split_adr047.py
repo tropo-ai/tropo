@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import importlib.util
 import sqlite3
@@ -63,7 +64,62 @@ def _write(path: Path, records: list[dict]) -> None:
     )
 
 
+#: Every index surface `tropo-orient` resolves over. Named in one place because
+#: `_records()` reads the UNION of current and archive (ADR-047), and a test that
+#: redirects only some of them silently measures the live vault through the rest.
+_ORIENT_SURFACES = ("INDEX_JSONL", "ARCHIVE_INDEX_JSONL", "INDEX_SQLITE")
+
+
+def _orient_isolated(root: Path):
+    """Point every orient surface inside `root`, so a fixture is the whole world.
+
+    This exists because of a real failure, not a hypothetical one. Both orient
+    tests below patched `INDEX_JSONL` and left `ARCHIVE_INDEX_JSONL` aimed at the
+    developer's own vault, so `_records()` returned the fixture UNION 1,805 live
+    archive rows.
+
+    What made it survive a full release is that the archive index is a DERIVED,
+    gitignored file: absent on a fresh clone, so the union was the fixture and
+    the suite was green; present the moment anyone runs a full rebuild, and red
+    from then on. A test whose correctness depends on a build artifact being
+    missing passes exactly where nobody is working.
+
+    Patching by name from one list means a fourth surface cannot be forgotten in
+    one test and remembered in the other.
+    """
+    patches = [
+        mock.patch.object(orient_module, "ROOT", root),
+    ]
+    for name in _ORIENT_SURFACES:
+        current = getattr(orient_module, name)
+        patches.append(
+            mock.patch.object(orient_module, name, root / "vault" / current.name)
+        )
+    return patches
+
+
 class ArchiveIndexSplitTests(unittest.TestCase):
+    def test_control_orient_isolation_actually_hides_the_live_vault(self) -> None:
+        """The control for `_orient_isolated`, and the regression pin.
+
+        Asserts the escape route is closed rather than trusting that it is: with
+        the helper active over an empty fixture, `_records()` must be EMPTY. If a
+        surface is ever added to orient and not to `_ORIENT_SURFACES`, this fails
+        here — next to the reason — instead of somewhere downstream as a puzzling
+        set mismatch.
+        """
+        self.assertTrue(
+            orient_module.ARCHIVE_INDEX_JSONL.name.endswith(".jsonl"),
+            "the archive surface must still be a real attribute to redirect",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "vault").mkdir(parents=True)
+            with contextlib.ExitStack() as stack:
+                for patch in _orient_isolated(root):
+                    stack.enter_context(patch)
+                self.assertEqual(orient_module._records(), {})
+
     def test_yaml_single_quoted_live_title_shapes_share_one_canonical_projection(
         self,
     ) -> None:
@@ -161,7 +217,9 @@ class ArchiveIndexSplitTests(unittest.TestCase):
                 for uid, title in expected_by_uid.items()
             ]
             _write(index_path, records)
-            with mock.patch.object(orient_module, "INDEX_JSONL", index_path):
+            with contextlib.ExitStack() as stack:
+                for patch in _orient_isolated(root):
+                    stack.enter_context(patch)
                 orient_records = orient_module._records()
             self.assertEqual(
                 {uid: record["title"] for uid, record in orient_records.items()},
@@ -231,17 +289,11 @@ class ArchiveIndexSplitTests(unittest.TestCase):
                 value=SimpleNamespace(items=(ranked_item,)),
             )
             with (
-                mock.patch.object(orient_module, "ROOT", root),
-                mock.patch.object(
-                    orient_module,
-                    "INDEX_JSONL",
-                    root / "vault" / "00-index.jsonl",
-                ),
-                mock.patch.object(
-                    orient_module,
-                    "INDEX_SQLITE",
-                    root / "vault" / "00-index.sqlite",
-                ),
+                # Same isolation as the test above, from the same list — this
+                # one patched two of the three surfaces and passed anyway,
+                # because it asserts one UID's title rather than the whole set.
+                # A latent hole in a green test is still a hole.
+                contextlib.ExitStack() as stack,
                 mock.patch.object(
                     orient_module.vp.ViewerProjection,
                     "from_repo_root",
@@ -263,6 +315,8 @@ class ArchiveIndexSplitTests(unittest.TestCase):
                     return_value=result,
                 ),
             ):
+                for patch in _orient_isolated(root):
+                    stack.enter_context(patch)
                 answer = orient_module.orient("00000001", 1, "00000009")
             self.assertEqual(answer["task_title"], long_title)
             self.assertEqual(answer["items"][0]["title"], long_title)

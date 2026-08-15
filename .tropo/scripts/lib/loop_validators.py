@@ -21,6 +21,23 @@ import re
 import yaml
 import json
 
+# Shared, memoized YAML parse (talos-t40 2026-08-09). One `tropo-validate` run
+# parsed 108,000+ documents of which ~91% were byte-identical repeats, because
+# each validator module carried its own private frontmatter parser. Routing them
+# through one helper gets libyaml's C scanner AND one shared memo; a miss here
+# would put this module back on the pure-Python path with a private cache.
+try:
+    from . import fast_yaml as _fast_yaml
+except Exception:  # pragma: no cover - exercised by test_fast_yaml_shared_memo
+    _fast_yaml = None
+
+
+def _yaml_safe_load(_text):
+    if _fast_yaml is not None:
+        return _fast_yaml.safe_load(_text)
+    return yaml.safe_load(_text)
+
+
 TARGETS_CAPSULE = "loop"
 UID_RE = re.compile(r"^[0-9a-f]{8}$")
 SA_RUNNER_RE = re.compile(r"^sa\.[a-z0-9][a-z0-9.-]*$")
@@ -63,7 +80,7 @@ def _parse_frontmatter(f: Path) -> dict | None:
             start = opening + len('\n---\n')
         end = text.find('\n---\n', start)
         if end == -1: return None
-        value = yaml.safe_load(text[start:end])
+        value = _yaml_safe_load(text[start:end])
         return value if isinstance(value, dict) else None
     except Exception:
         return None

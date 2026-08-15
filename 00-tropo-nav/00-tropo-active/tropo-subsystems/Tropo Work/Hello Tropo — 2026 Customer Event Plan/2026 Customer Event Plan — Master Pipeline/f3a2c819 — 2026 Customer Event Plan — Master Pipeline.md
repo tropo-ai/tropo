@@ -1,0 +1,143 @@
+---
+uid: f3a2c819
+type: pipeline
+subtype: workflow-node
+name: industry-conference-activation
+title: 2026 Customer Event Plan — Master Pipeline
+description: Master pipeline template for activating a marketing team around attending an industry conference. Five stages (Decide → Plan → Coordinate → Execute → Wrap-up). Cascade-spec spawns 6 workstreams + generates the project plan at activation. First canonical pipeline using pipeline.capsule v2.6 cascade_spec field.
+version: '1.0'
+status: active
+state: active
+domain: marketing-event-activation
+role: master-pipeline
+owner: marketing-coordinator-agent
+author: argus-a67
+created: 2026-05-16
+created_by: argus-a67
+modified: 2026-05-16
+modified_by: argus-a67
+schema_version: 2
+extraction_scope: ship
+governed_by: e4c8a6b2
+children: []
+next_steps: []
+cascade_spec:
+  generates_project_plan: true
+  spawns_workstreams:
+    - pipeline_uid: b4e9d572
+      name: Finance
+      owner_agent_class: finance-coordinator-agent
+      member_of_project_plan: true
+    - pipeline_uid: c6a1f483
+      name: Booth
+      owner_agent_class: booth-coordinator-agent
+      member_of_project_plan: true
+    - pipeline_uid: d28e95b1
+      name: Staffing
+      owner_agent_class: staffing-coordinator-agent
+      member_of_project_plan: true
+    - pipeline_uid: a7f4b2e3
+      name: Hospitality
+      owner_agent_class: hospitality-coordinator-agent
+      member_of_project_plan: true
+    - pipeline_uid: e1c8d3a5
+      name: Promotion
+      owner_agent_class: promotion-coordinator-agent
+      member_of_project_plan: true
+    - pipeline_uid: b5d4a1f8
+      name: Content
+      owner_agent_class: content-coordinator-agent
+      member_of_project_plan: true
+member_of:
+  - e8d1a4f6
+unit_of_work_purpose: Coordinate a marketing team's end-to-end activation around an industry conference — from the decision to attend through to post-event wrap-up — so each function's work is governed, each handoff is visible, and the activation completes as a single coherent unit.
+tags:
+  - pipeline
+  - master-pipeline
+  - industry-conference-activation
+  - cascade-spec
+  - hello-tropo
+  - v1-35-0
+file_ext: md
+subsystem_hub:
+  - 2d083137
+capsule_version: '2.5'
+---
+
+# 2026 Customer Event Plan — Master Pipeline
+
+<!-- nav-block:start -->
+**📍 Vault Path:** [tropo-subsystems](aae9a37b.md) → [Tropo Work](2d083137.md) → **2026 Customer Event Plan — Master Pipeline**
+<!-- nav-block:end -->
+
+*Five-stage master pipeline coordinating a marketing team's industry-conference activation. Cascade-spec spawns 6 workstreams + generates the project plan at activation. First canonical use of pipeline.capsule v2.6.*
+
+---
+
+## Purpose
+
+This pipeline governs the end-to-end activation a marketing team runs when attending an industry conference as a vendor — from the decision to attend through the post-event wrap-up. It coordinates six functional workstreams (Finance, Booth, Staffing, Hospitality, Promotion, Content) under a single project plan; each workstream-owning agent generates their own tasks against the plan and reports back through the project's status board.
+
+**What it does NOT govern:** ongoing demand-gen campaigns; product-launch sequences not tied to an event; one-off content production. Those are different pipeline templates.
+
+## Structure
+
+```
+industry-conference-activation (master pipeline)
+├── Stage 1 — Decide       (commit to the event; event date locked; budget proposed)
+├── Stage 2 — Plan         (project plan finalized; workstreams scoped)
+├── Stage 3 — Coordinate   (cascade fires here: workstreams activate; each agent generates tasks)
+├── Stage 4 — Execute      (workstreams run their work; cross-team coordination per project board)
+└── Stage 5 — Wrap-up      (post-event retro; outcomes captured; lessons folded forward)
+```
+
+At the Coordinate stage, the cascade_spec on this pipeline fires: project-plan generated; 6 workstream sub-pipelines activated; each workstream gets its own activation-root-project and starts its own work.
+
+## Nodes
+
+| Stage | Role | Children | Notes |
+|---|---|---|---|
+| Decide | gate-check | 0 | Human-gated: event chosen, date locked, budget approved |
+| Plan | stage | 0 | Project plan authored against this pipeline's cascade_spec |
+| Coordinate | stage | 0 | Cascade fires; workstreams spawn |
+| Execute | stage | 0 | Workstreams run in parallel; coordinated through project board |
+| Wrap-up | gate-check | 0 | Human-gated: retro signed; outcomes captured |
+
+*v1.35.0 minimal demonstration: stages stay leaf-level on the master pipeline; richer composition (per-stage WorkflowNodes) defers to v1.35.5+.*
+
+## Flow Rules
+
+- Linear (default): each stage flows to the next; `next_steps:` length 1 except at terminal Wrap-up.
+- Cascade-spec evaluated at activation-time (per pipeline.capsule v2.6); cascade-generated substrate spawns at Coordinate stage entry.
+- Each workstream sub-pipeline runs in parallel with siblings (no inter-workstream blocking dependencies at template level; cross-workstream coordination via project plan + project board).
+
+## Cold-Boot Walk-Through
+
+A marketing lead decides their team will attend Annual Industry Conference X. They activate this pipeline (via `pipeline-activate.py --pipeline-uid f3a2c819 --activated-by <their-uid> --cycle-context "ACX 2026"`).
+
+The cascade fires:
+1. Master activation-root-project authored.
+2. Master activation entry opened.
+3. Project plan generated — the coordinating substrate that names all six workstreams + their owner-classes + the acceptance criteria for each.
+4. Six workstream sub-activations spawned — each gets its own activation-root-project; Finance starts working contracts; Booth starts vendor outreach; etc.
+5. The Promotion workstream additionally cascades tasks (its cascade_spec carries spawns_tasks): pre-event tease at T-21 days; landing page launch at T-14 days; day-of teaser at T-1 hour; recap at T+3 days.
+
+Each workstream-owning agent picks up their work, generates tasks against the project plan, and reports state through the rendered project board.
+
+When the event runs and all workstreams reach wrap-up, the marketing lead closes the master activation with a wrap-up retro; lessons fold into future activations.
+
+## Known Enforcement Gaps
+
+| Gap | What closes it | Target release | Owner |
+|---|---|---|---|
+| Cascade-spec runtime mechanically enforced at honor-system warn at v1.35.0 | tropo-validate.py extension ratchets WARN→ERROR after migration of existing honor-system pipelines | v1.36.0+ | Argus |
+| Project board's per-workstream sub-boards not authored at v1.35.0 | v1.35.5 rich Hello Tropo enrichment | v1.35.5 | Argus |
+
+## Changelog
+
+- **v1.0** (2026-05-16, argus-a67) — Initial authoring per v1.35.0 ship; first canonical pipeline using pipeline.capsule v2.6 `cascade_spec:` field.
+
+---
+
+*Master pipeline | Hello Tropo | First canonical cascade_spec use | Argus A67 | 2026-05-16*
+*"Decide → Plan → Coordinate → Execute → Wrap-up. The shape transposes to any event-class activation."*

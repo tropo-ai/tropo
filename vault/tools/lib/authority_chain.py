@@ -38,6 +38,23 @@ import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+# Shared, memoized YAML parse (talos-t40 2026-08-09). One `tropo-validate` run
+# parsed 108,000+ documents of which ~91% were byte-identical repeats, because
+# each validator module carried its own private frontmatter parser. Routing them
+# through one helper gets libyaml's C scanner AND one shared memo; a miss here
+# would put this module back on the pure-Python path with a private cache.
+try:
+    from . import fast_yaml as _fast_yaml
+except Exception:  # pragma: no cover - exercised by test_fast_yaml_shared_memo
+    _fast_yaml = None
+
+
+def _yaml_safe_load(_text):
+    if _fast_yaml is not None:
+        return _fast_yaml.safe_load(_text)
+    return yaml.safe_load(_text)
+
+
 
 SESSION_KEY_ROOT_ENV = "TROPO_AGENT_KEY_ROOT"
 SESSION_KEY_DIRNAME = f"tropo-agent-key-sessions-{os.getuid()}"
@@ -1151,7 +1168,7 @@ def parse_frontmatter(path: Path) -> dict[str, Any] | None:
     if end == -1:
         return None
     try:
-        parsed = yaml.safe_load(text[4:end])
+        parsed = _yaml_safe_load(text[4:end])
     except yaml.YAMLError:
         return None
     return dict(parsed) if isinstance(parsed, Mapping) else None
@@ -1210,7 +1227,7 @@ def _raw_frontmatter_scalar(frontmatter: bytes, key: str) -> str:
         return ""
     if value_text[:1] in {'"', "'"}:
         try:
-            decoded = yaml.safe_load(value_text)
+            decoded = _yaml_safe_load(value_text)
         except yaml.YAMLError:
             return ""
         return str(decoded).strip() if isinstance(decoded, str) else ""
@@ -1229,7 +1246,7 @@ def _activation_record_from_bytes(
     fm: dict[str, Any] | None = None
     if frontmatter is not None:
         try:
-            parsed = yaml.safe_load(frontmatter.decode("utf-8"))
+            parsed = _yaml_safe_load(frontmatter.decode("utf-8"))
         except (UnicodeDecodeError, yaml.YAMLError):
             parsed = None
         if isinstance(parsed, Mapping):

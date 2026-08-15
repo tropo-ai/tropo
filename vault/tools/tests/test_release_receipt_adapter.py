@@ -577,8 +577,16 @@ class PublisherReceiptTests(unittest.TestCase):
 
     def _patches(self, root: Path):
         return (
-            patch.object(publisher, "VAULT_ROOT", root),
-            patch.object(publisher, "RELEASES_DIR", root / "private-releases"),
+            patch.multiple(
+                publisher.tropo_roots,
+                STUDIO_ROOT=root,
+                VAULT_DIR=root / "vault",
+            ),
+            patch.object(
+                publisher.tropo_roots,
+                "RELEASES_DIR",
+                root / "private-releases",
+            ),
             patch.object(
                 publisher,
                 "_find_release_entry",
@@ -1011,7 +1019,11 @@ class PublisherReceiptTests(unittest.TestCase):
             receipt = _receipt()
             digest = release_receipt.receipt_sha256(receipt)
             data = publisher._published_event_data(digest, receipt)
-            with patch.object(publisher, "VAULT_ROOT", root):
+            with patch.multiple(
+                publisher.tropo_roots,
+                STUDIO_ROOT=root,
+                VAULT_DIR=root / "vault",
+            ):
                 publisher._emit_published_event(data)
             lines = (
                 root / "vault" / "events" / "00-events.jsonl"
@@ -1045,8 +1057,16 @@ class PublisherReceiptTests(unittest.TestCase):
 
             completed = types.SimpleNamespace(returncode=0, stdout="", stderr="")
             with (
-                patch.object(publisher, "VAULT_ROOT", root),
-                patch.object(publisher, "RELEASES_DIR", root / "private-releases"),
+                patch.multiple(
+                    publisher.tropo_roots,
+                    STUDIO_ROOT=root,
+                    VAULT_DIR=root / "vault",
+                ),
+                patch.object(
+                    publisher.tropo_roots,
+                    "RELEASES_DIR",
+                    root / "private-releases",
+                ),
                 patch.object(publisher, "_read_state", return_value=state),
                 patch.object(publisher, "_confirm_tty", return_value=True),
                 patch.object(
@@ -1090,6 +1110,31 @@ class PublisherReceiptTests(unittest.TestCase):
                 ),
                 patch.object(publisher, "_emit_published_event") as emit,
                 patch.object(publisher, "_stamp_release_entry") as stamp,
+                # Stage 6 put the AC7 receipt-set gate ahead of everything in
+                # cmd_fire, so without this every fire test refuses at the gate
+                # and stops exercising its own subject. This case is about what
+                # happens when the RECEIPT WRITE fails much later; that the gate
+                # is wired at all is proved in test_ac07_publish_receipt_gate,
+                # and asserting it twice here would only mean this test fails
+                # for two unrelated reasons.
+                # Stage 6: cmd_fire now CONSUMES what this gate returns — the
+                # identity chain and frozen digest go into the v2 receipt — so
+                # patching it to a bare mock makes the fire fail early on the
+                # context rather than on this test's subject. Returns a usable
+                # context; that the gate is wired is proved in
+                # test_ac07_publish_receipt_gate.
+                patch.object(publisher, "require_ac7_receipt_set",
+                             return_value={
+                                 "identity": types.SimpleNamespace(
+                                     activation_uid="acc00001",
+                                     run_uid="b0000001",
+                                     plan_uid="c0000001",
+                                     root_uid="d0000001",
+                                     fan_in_digest="d" * 64),
+                                 "package_sha256": "c" * 64,
+                                 "receipts": {}}),
+                patch.object(publisher, "_release_entry_uid_for",
+                             return_value="e0000001"),
             ):
                 result = publisher.cmd_fire(types.SimpleNamespace(version=VERSION))
             self.assertEqual(result, 14)

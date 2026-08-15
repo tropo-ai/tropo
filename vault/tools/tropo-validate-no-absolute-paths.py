@@ -170,8 +170,10 @@ PER_LINE_EXEMPT_MARKER = 'portability:exempt'
 # File extensions to scan. Anything else is skipped.
 SCAN_EXTENSIONS = {'.md', '.jsonl', '.json', '.ts', '.tsx', '.js', '.py', '.yaml', '.yml'}
 
-# Skip these directories outright
-SKIP_DIRS = {'node_modules', '.git'}
+# Skip these directories outright.
+# 00-tropo-nav: rendered surface; with 7b1e0ae5 source-file symlinks it would
+# otherwise walk into the user's raw external mount tree.
+SKIP_DIRS = {'node_modules', '.git', '00-tropo-nav'}
 
 
 # ---------------------------------------------------------------------------
@@ -183,10 +185,13 @@ def resolve_vault_root(explicit) -> Path:
     if explicit:
         return Path(explicit).resolve()
 
-    # Walk up from script location
+    # Walk up from script location. Prefer the current vault/ + .tropo/ shape;
+    # retain pre-v1.8 `ledger/` as a legacy fallback only.
     script_path = Path(__file__).resolve()
     for candidate in [script_path.parent.parent.parent, *script_path.parents]:
-        if (candidate / 'ledger').is_dir() and (candidate / '.tropo').is_dir():
+        if (candidate / '.tropo').is_dir() and (
+            (candidate / 'vault').is_dir() or (candidate / 'ledger').is_dir()
+        ):
             return candidate
 
     return Path.cwd().resolve()
@@ -197,7 +202,11 @@ def resolve_vault_root(explicit) -> Path:
 # ---------------------------------------------------------------------------
 
 def walk_files(root: Path):
-    """Yield Path objects for every scannable file under root."""
+    """Yield Path objects for every scannable file under root.
+
+    Symlinks are skipped entirely (7b1e0ae5): nav source leaves point at
+    ungoverned external files that must not be scanned for absolute paths.
+    """
     stack = [root]
     while stack:
         d = stack.pop()
@@ -206,6 +215,8 @@ def walk_files(root: Path):
         except (PermissionError, FileNotFoundError):
             continue
         for entry in entries:
+            if entry.is_symlink():
+                continue
             if entry.is_dir():
                 if entry.name in SKIP_DIRS:
                     continue

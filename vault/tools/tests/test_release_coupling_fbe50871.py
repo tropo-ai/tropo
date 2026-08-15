@@ -67,7 +67,7 @@ class TestPrivateBuildRetryHonesty(unittest.TestCase):
             (dist_dir / f"{product}.zip").write_bytes(b"stale zip")
 
             with (
-                patch.object(build, "RELEASES_DIR", str(release_root)),
+                patch.object(build.tropo_roots, "RELEASES_DIR", release_root),
                 patch.object(build, "DRY_RUN", False),
                 patch.object(build, "guard_overwrite"),
             ):
@@ -251,7 +251,10 @@ class TestPublishReleaseStage(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="pub-fbe50871-")).resolve()
         self.bare = self.tmp / "bare.git"
-        self.build_dir = self.tmp / "releases" / "v9.9.9"
+        self.release_dir = self.tmp / "releases" / "v9.9.9"
+        self.build_dir = (
+            self.release_dir / "builds" / "tropo-os-v9.9.9"
+        )
         self.clone_dir = self.tmp / "staged-clone"
         self.studio_root = self.tmp / "fake-studio"
 
@@ -273,9 +276,9 @@ class TestPublishReleaseStage(unittest.TestCase):
         (self.build_dir / "CHANGELOG.md").write_text(
             "## [Unreleased]\n\n## [9.9.9]\n- new stuff\n\n## [9.9.8]\n- old\n")
         (self.build_dir / "README.md").write_text("# Tropo-OS v9.9.9\n")
-        (self.build_dir / "dist").mkdir()
-        (self.build_dir / "dist" / "tropo-os-v9.9.9.zip").write_bytes(b"PK\x03\x04fake")
-        (self.build_dir / "cold-walk-verdict.json").write_text(
+        (self.release_dir / "dist").mkdir()
+        (self.release_dir / "dist" / "tropo-os-v9.9.9.zip").write_bytes(b"PK\x03\x04fake")
+        (self.release_dir / "cold-walk-verdict.json").write_text(
             json.dumps({"release_version": "9.9.9", "overall": "PASS"})
         )
 
@@ -288,8 +291,8 @@ class TestPublishReleaseStage(unittest.TestCase):
 
     def _patches(self):
         return (
-            patch.object(pub, "VAULT_ROOT", self.studio_root),
-            patch.object(pub, "RELEASES_DIR", self.tmp / "releases"),
+            patch.object(pub.tropo_roots, "STUDIO_ROOT", self.studio_root),
+            patch.object(pub.tropo_roots, "RELEASES_DIR", self.tmp / "releases"),
             patch.object(pub, "require_release_authorization", lambda *a, **k: {"fingerprint": "fake"}),
             patch.object(pub, "DEFAULT_REMOTE", str(self.bare)),
         )
@@ -349,10 +352,11 @@ class TestPublishReleaseStage(unittest.TestCase):
         subprocess.run(["git", "-C", str(seed2), "remote", "add", "origin", str(bare2)], check=True)
         subprocess.run(["git", "-C", str(seed2), "push", "-q", "origin", "main"], check=True)
 
-        build2 = self.tmp / "releases" / "v9.9.10"
+        release2 = self.tmp / "releases" / "v9.9.10"
+        build2 = release2 / "builds" / "tropo-os-v9.9.10"
         build2.mkdir(parents=True)
         (build2 / "CHANGELOG.md").write_text("## [Unreleased]\n\n## [9.9.10]\n- x\n")
-        (build2 / "cold-walk-verdict.json").write_text(
+        (release2 / "cold-walk-verdict.json").write_text(
             json.dumps({"release_version": "9.9.10", "overall": "PASS"})
         )
         (self.studio_root / "CHANGELOG.md").write_text("## [Unreleased]\n\n## [9.9.10]\n- x\n")
@@ -379,7 +383,10 @@ class TestPublishReleaseFireAndDeferGates(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="pub-firegates-")).resolve()
         self.bare = self.tmp / "bare.git"
-        self.build_dir = self.tmp / "releases" / "v9.9.9"
+        self.release_dir = self.tmp / "releases" / "v9.9.9"
+        self.build_dir = (
+            self.release_dir / "builds" / "tropo-os-v9.9.9"
+        )
         self.clone_dir = self.tmp / "staged-clone"
         self.studio_root = self.tmp / "fake-studio"
 
@@ -400,15 +407,15 @@ class TestPublishReleaseFireAndDeferGates(unittest.TestCase):
         self.build_dir.mkdir(parents=True)
         (self.build_dir / "CHANGELOG.md").write_text(
             "## [Unreleased]\n\n## [9.9.9]\n- new stuff\n\n## [9.9.8]\n- old\n")
-        (self.build_dir / "cold-walk-verdict.json").write_text(
+        (self.release_dir / "cold-walk-verdict.json").write_text(
             json.dumps({"release_version": "9.9.9", "overall": "PASS"})
         )
         self.studio_root.mkdir(parents=True)
         (self.studio_root / "CHANGELOG.md").write_text(
             "## [Unreleased]\n\n## [9.9.9]\n- new stuff\n\n## [9.9.8]\n- old\n")
 
-        with patch.object(pub, "VAULT_ROOT", self.studio_root), \
-             patch.object(pub, "RELEASES_DIR", self.tmp / "releases"), \
+        with patch.object(pub.tropo_roots, "STUDIO_ROOT", self.studio_root), \
+             patch.object(pub.tropo_roots, "RELEASES_DIR", self.tmp / "releases"), \
              patch.object(pub, "DEFAULT_REMOTE", str(self.bare)), \
              patch.object(pub, "require_release_authorization", lambda *a, **k: {"fingerprint": "fake"}):
             pub.cmd_stage(types.SimpleNamespace(
@@ -419,8 +426,8 @@ class TestPublishReleaseFireAndDeferGates(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_fire_refuses_without_tty(self):
-        with patch.object(pub, "VAULT_ROOT", self.studio_root), \
-             patch.object(pub, "RELEASES_DIR", self.tmp / "releases"), \
+        with patch.object(pub.tropo_roots, "STUDIO_ROOT", self.studio_root), \
+             patch.object(pub.tropo_roots, "RELEASES_DIR", self.tmp / "releases"), \
              patch.object(pub, "DEFAULT_REMOTE", str(self.bare)), \
              patch.object(pub, "require_release_authorization", lambda *a, **k: {"fingerprint": "fake"}), \
              patch.object(sys.stdin, "isatty", lambda: False):
@@ -432,8 +439,8 @@ class TestPublishReleaseFireAndDeferGates(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.clone_dir), "add", "-A"], check=True)
         subprocess.run(["git", "-C", str(self.clone_dir), "-c", "user.email=t@t.com",
                          "-c", "user.name=T", "commit", "-q", "-m", "drift"], check=True)
-        with patch.object(pub, "VAULT_ROOT", self.studio_root), \
-             patch.object(pub, "RELEASES_DIR", self.tmp / "releases"), \
+        with patch.object(pub.tropo_roots, "STUDIO_ROOT", self.studio_root), \
+             patch.object(pub.tropo_roots, "RELEASES_DIR", self.tmp / "releases"), \
              patch.object(pub, "DEFAULT_REMOTE", str(self.bare)), \
              patch.object(pub, "require_release_authorization", lambda *a, **k: {"fingerprint": "fake"}), \
              patch.object(pub, "_confirm_tty", lambda prompt: True):
@@ -455,6 +462,9 @@ class TestColdWalkPublishGate(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="pub-cold-walk-")).resolve()
         self.release_dir = self.tmp / "releases" / "v9.9.9"
         self.release_dir.mkdir(parents=True)
+        (
+            self.release_dir / "builds" / "tropo-os-v9.9.9"
+        ).mkdir(parents=True)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -470,7 +480,9 @@ class TestColdWalkPublishGate(unittest.TestCase):
             {"release_version": "9.9.8", "overall": "PASS"},
         ]
         for payload in cases:
-            with self.subTest(payload=payload), patch.object(pub, "RELEASES_DIR", self.tmp / "releases"):
+            with self.subTest(payload=payload), patch.object(
+                pub.tropo_roots, "RELEASES_DIR", self.tmp / "releases"
+            ):
                 verdict_path = self.release_dir / "cold-walk-verdict.json"
                 if payload is None:
                     verdict_path.unlink(missing_ok=True)
@@ -485,11 +497,27 @@ class TestColdWalkPublishGate(unittest.TestCase):
             {"release_version": "9.9.9", "cold_walk": "skipped-by-mike"},
         ]
         for payload in cases:
-            with self.subTest(payload=payload), patch.object(pub, "RELEASES_DIR", self.tmp / "releases"):
+            with self.subTest(payload=payload), patch.object(
+                pub.tropo_roots, "RELEASES_DIR", self.tmp / "releases"
+            ):
                 self._write(payload)
                 self.assertEqual(pub._require_cold_walk_clearance("9.9.9"), payload)
 
-    def test_stage_refuses_before_authorization_when_walk_is_pending(self):
+    def test_stage_no_longer_gates_on_the_legacy_cold_walk_verdict(self):
+        """Superseded contract, rewritten rather than deleted (Stage-6 V10).
+
+        Until Stage 6 this asserted that Stage refuses while the cold walk is
+        pending. That gate read a verdict file written by build Step 10.6
+        BEFORE the zip existed, so it attested to a walk over an artefact that
+        had not been produced, and it stood in for what AC7 now requires from
+        four instruments against the frozen digest.
+
+        Stage writes nothing public — it prepares a private clone — so the
+        Verify question belongs at Fire, where it can be asked against a
+        digest that exists. What this now pins is the absence: a pending walk
+        no longer stops Stage, and the authorization call it used to short-
+        circuit is reached.
+        """
         self._write({"release_version": "9.9.9", "cold_walk": "elected-pending"})
         args = types.SimpleNamespace(
             activation_uid="deadbeef",
@@ -499,10 +527,10 @@ class TestColdWalkPublishGate(unittest.TestCase):
             clone_dir=None,
             allow_delete=False,
         )
-        with patch.object(pub, "RELEASES_DIR", self.tmp / "releases"), \
+        with patch.object(pub.tropo_roots, "RELEASES_DIR", self.tmp / "releases"), \
              patch.object(pub, "require_release_authorization") as authorize:
-            self.assertEqual(pub.cmd_stage(args), 6)
-        authorize.assert_not_called()
+            pub.cmd_stage(args)
+        authorize.assert_called()
 
 
 class TestManifestPublishWeld(unittest.TestCase):
@@ -527,7 +555,8 @@ class TestManifestPublishWeld(unittest.TestCase):
             generator = root / "vault" / "tools" / "tropo-generate-update-manifest.py"
             generator.parent.mkdir(parents=True)
             generator.write_text("# fixture\n")
-            with patch.object(pub, "VAULT_ROOT", root), \
+            with patch.object(pub.tropo_roots, "STUDIO_ROOT", root), \
+                 patch.object(pub.tropo_roots, "VAULT_DIR", root / "vault"), \
                  patch.object(
                      pub,
                      "_load_supabase_credentials",
@@ -545,7 +574,8 @@ class TestManifestPublishWeld(unittest.TestCase):
             generator.parent.mkdir(parents=True)
             generator.write_text("# fixture\n")
             completed = types.SimpleNamespace(returncode=0, stdout="uploaded\n", stderr="")
-            with patch.object(pub, "VAULT_ROOT", root), \
+            with patch.object(pub.tropo_roots, "STUDIO_ROOT", root), \
+                 patch.object(pub.tropo_roots, "VAULT_DIR", root / "vault"), \
                  patch.object(
                      pub,
                      "_load_supabase_credentials",
@@ -564,7 +594,8 @@ class TestManifestPublishWeld(unittest.TestCase):
             generator = root / "vault" / "tools" / "tropo-generate-update-manifest.py"
             generator.parent.mkdir(parents=True)
             generator.write_text("# fixture\n")
-            with patch.object(pub, "VAULT_ROOT", root), \
+            with patch.object(pub.tropo_roots, "STUDIO_ROOT", root), \
+                 patch.object(pub.tropo_roots, "VAULT_DIR", root / "vault"), \
                  patch.object(
                      pub,
                      "_load_supabase_credentials",

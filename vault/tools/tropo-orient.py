@@ -695,7 +695,7 @@ def read_block(task_uid: str, task_title: str, items: list,
         block["status"] = "refused"
         return block
 
-    run_uid = edge.run_uid or secrets.token_hex(4)
+    run_uid = edge.run_uid or os.environ.get("TROPO_RUN_UID") or secrets.token_hex(4)
     binding = metered_model.RunBinding(
         run_uid=run_uid,
         gateway_url=metered_model.GATEWAY_URL,
@@ -779,27 +779,233 @@ def read_block(task_uid: str, task_title: str, items: list,
     return block
 
 
+# --------------------------------------------------------------------------- #
+# Tier-0 deterministic recall (dev-spec 4883fa94 / cascade amendment cd946580). #
+# Enumerate exhaustively where it's cheap; select only where it's expensive.    #
+# Neither helper calls a model, reads a body, or consults a clock — both are    #
+# pure functions of the index rows, so AC6 determinism holds by construction.  #
+# --------------------------------------------------------------------------- #
+def _when(rec: dict) -> str:
+    """The record's modified (or created) date, normalised to YYYY-MM-DD."""
+
+    return str(rec.get("modified") or rec.get("created") or "")[:10]
+
+
+def _index_clock(records: Mapping) -> str:
+    """The newest modified date across the index — the deterministic clock.
+
+    Ages are measured against the substrate's own newest row, never against
+    wall-clock now(), so identical commands stay byte-identical (AC6) while a
+    stale rendered artifact still reads as exactly how far it lags the index.
+    """
+
+    newest = ""
+    for rec in records.values():
+        when = _when(rec)
+        # Only real dates advance the clock — template rows carry literal
+        # "[YYYY-MM-DD]" placeholders, and "[" out-sorts every digit.
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", when) and when > newest:
+            newest = when
+    return newest
+
+
+def _is_rendered_catalog(rec: dict) -> bool:
+    """A rendered-catalog record: derived prose that does not re-render itself
+    (the Writing Library TOC class — a73cef23 F6)."""
+
+    if str(rec.get("subtype") or "").strip().lower() == "catalog":
+        return True
+    tags = {str(t).strip().lower() for t in (rec.get("tags") or ())}
+    return bool(tags & {"catalog", "rendered", "front-desk"})
+
+
+def _catalog_age_days(rec: dict, clock: str) -> Optional[int]:
+    """Exact age of a rendered catalog vs the index clock, in days; None when
+    the record is not a rendered catalog or either date is unparseable."""
+
+    if not _is_rendered_catalog(rec):
+        return None
+    import datetime
+
+    try:
+        rendered = datetime.date.fromisoformat(_when(rec))
+        newest = datetime.date.fromisoformat(clock)
+    except ValueError:
+        return None
+    return (newest - rendered).days
+
+
+def _is_archived(uid: str, rec: dict, current: Mapping) -> bool:
+    """Archived by residence (archive index) OR by lifecycle (state field) —
+    a row can sit in the current index with ``state: archived`` (the shells
+    that outranked live series on 08-12 did exactly that)."""
+
+    return uid not in current or str(rec.get("state") or "").strip().lower() == "archived"
+
+
+def _one_hop_roster(task_uid: str, governed_ranks: Optional[Mapping] = None) -> dict:
+    """Every node one structural hop from the task — complete, never truncated.
+
+    The circle's membership budget cuts in (seed-distance, UID) order, so a
+    high-UID live sibling can lose its seat to a low-UID archived shell before
+    the ranker ever sees either (the 2026-08-12 miss, a73cef23 F1-corrected).
+    This roster is the floor under that cut: names are ~80 bytes each, so the
+    complete 1-hop truth is always affordable and always shown.
+    """
+
+    records = _all_records()
+    current = _records()
+    clock = _index_clock(records)
+    ranks = governed_ranks or {}
+    task = records.get(task_uid) or {}
+    parents = [str(u) for u in (task.get("member_of") or ())]
+    rows: dict = {}
+
+    def add(uid: str, relation: str) -> None:
+        rec = records.get(uid)
+        if rec is None or uid == task_uid or uid in rows:
+            return
+        rows[uid] = {
+            "uid": uid,
+            "relation": relation,
+            "type": rec.get("type") or "?",
+            "status": rec.get("status") or "",
+            "modified": _when(rec),
+            "title": rec.get("title") or "(untitled)",
+            "archived": _is_archived(uid, rec, current),
+            # AC7 (lock-break form): the governed rank is DISCLOSED wherever
+            # the complete evidence lists a node the ranked view may not show.
+            "governed_rank": ranks.get(uid),
+            "catalog_age_days": _catalog_age_days(rec, clock),
+        }
+
+    for parent in parents:
+        add(parent, "parent")
+    for uid, rec in records.items():
+        member_of = [str(u) for u in (rec.get("member_of") or ())]
+        if task_uid in member_of:
+            add(uid, "child")
+        elif parents and any(p in member_of for p in parents):
+            add(uid, "sibling")
+    ordered = sorted(
+        rows.values(), key=lambda r: (r["modified"], r["uid"]), reverse=True
+    )
+    return {"nodes": ordered, "total": len(ordered)}
+
+
+#: Tokens too generic to carry a keyword query on their own.
+_TERM_STOPWORDS = frozenset(
+    "the a an and or of for to in on with is are this that from into over".split()
+)
+
+#: Keyword hits carried in --json. The COUNT is always honest (``total``); the
+#: list is bounded so a generic term cannot balloon the answer. Loud, not silent.
+_KEYWORD_JSON_CAP = 200
+
+#: Keyword hits shown in the text rendering (AC3: capped at 40, loudly).
+_KEYWORD_TEXT_CAP = 40
+
+
+def _query_terms(task_rec: dict, extra: tuple) -> tuple:
+    """Deterministic term extraction: task title tokens + tags + caller terms."""
+
+    raw = []
+    for tok in re.split(r"[^0-9A-Za-z]+", str(task_rec.get("title") or "").lower()):
+        if len(tok) >= 4 and tok not in _TERM_STOPWORDS:
+            raw.append(tok)
+    for tag in (task_rec.get("tags") or ()):
+        tag_norm = str(tag).lower().strip()
+        if tag_norm:
+            raw.append(tag_norm)
+        for tok in re.split(r"[^0-9A-Za-z]+", tag_norm):
+            if len(tok) >= 4 and tok not in _TERM_STOPWORDS:
+                raw.append(tok)
+    for term in extra:
+        term_norm = str(term).lower().strip()
+        if term_norm:
+            raw.append(term_norm)
+    return tuple(sorted(set(raw)))
+
+
+def _keyword_hits(task_uid: str, extra_terms: tuple,
+                  governed_ranks: Optional[Mapping] = None) -> dict:
+    """Tier-0 keyword recall over the current + archive index rows.
+
+    The 2026-08-12 control (a73cef23 F2): a plain grep over the index found the
+    complete live series the circle missed, in sub-second time, for $0. This is
+    that grep made structural — always run, never model-dependent. Hits are
+    UNRANKED next to the circle: match provenance travels with each hit so the
+    reader (or a later Tier-1 triage) judges relevance from evidence.
+    """
+
+    records = _all_records()
+    current = _records()
+    ranks = governed_ranks or {}
+    terms = _query_terms(records.get(task_uid) or {}, extra_terms)
+    if not terms:
+        return {"terms": [], "hits": [], "total": 0}
+    hits = []
+    for uid, rec in records.items():
+        if uid == task_uid:
+            continue
+        haystacks = (
+            ("title", str(rec.get("title") or "").lower()),
+            ("description", str(rec.get("description") or "").lower()),
+            ("tags", " ".join(str(t).lower() for t in (rec.get("tags") or ()))),
+        )
+        matched = sorted(
+            term for term in terms if any(term in hay for _, hay in haystacks)
+        )
+        if not matched:
+            continue
+        hits.append({
+            "uid": uid,
+            "title": rec.get("title") or "(untitled)",
+            "type": rec.get("type") or "?",
+            "status": rec.get("status") or "",
+            "modified": _when(rec),
+            "archived": _is_archived(uid, rec, current),
+            "terms_matched": matched,
+            "governed_rank": ranks.get(uid),
+        })
+    hits.sort(key=lambda h: (h["modified"], h["uid"]), reverse=True)
+    hits.sort(key=lambda h: len(h["terms_matched"]), reverse=True)
+    return {"terms": list(terms), "hits": hits[:_KEYWORD_JSON_CAP],
+            "total": len(hits)}
+
+
 def orient(task_uid: str, k: int, principal: str,
-           edge: Optional[MeteredEdge] = None) -> dict:
+           edge: Optional[MeteredEdge] = None,
+           draw_budget: Optional[int] = None,
+           extra_terms: tuple = ()) -> dict:
     projection = vp.ViewerProjection.from_repo_root(ROOT)
     circle_index = SqliteStructuralIndex(INDEX_SQLITE, index_as_of=INDEX_AS_OF)
     rank_index = SqliteRankIndex(INDEX_SQLITE)
     viewer = vp.Viewer(principal_uid=principal)
 
+    # AC1 (4883fa94): the circle's membership budget is DECOUPLED from the
+    # display count. Display-k as the draw budget let (seed-distance, UID)
+    # membership order decide the contest before the ranker ran — "best first"
+    # was only true among the UID-lucky. Draw wide, rank everything, show k.
+    draw = max(int(draw_budget), k) if draw_budget else max(8 * k, 256)
+
     result = distiller.orient_deterministic(
-        task_uid, viewer, k,
+        task_uid, viewer, draw,
         projection=projection, circle_index=circle_index, rank_index=rank_index,
     )
     if not result.ok:
         return {"ok": False, "error": str(result.error)}
 
     records = _records()
-    items = []
+    clock = _index_clock(records)
+    ranked_items = []
     for item in getattr(result.value, "items", ()):
         uid = getattr(item, "uid", "?")
         rec = records.get(uid, {})
         ranked = getattr(item, "ranked_member", None)
-        items.append({
+        circle_member = getattr(item, "circle_member", None)
+        distance = getattr(circle_member, "distance", None)
+        ranked_items.append({
             "uid": uid,
             # Compatibility fallback for older deterministic producers. The
             # current circle admits entries-backed members only and reports
@@ -807,11 +1013,22 @@ def orient(task_uid: str, k: int, principal: str,
             "title": rec.get("title") or f"{uid} — not in the index",
             "type": rec.get("type") or "unindexed",
             "status": rec.get("status") or "",
-            "why": _describe(getattr(item, "circle_member", None)),
+            "modified": _when(rec),
+            "why": _describe(circle_member),
             "score": round(float(getattr(ranked, "score", 0) or 0), 3),
+            "distance": distance,
             "stale": bool((rec.get("decay") or {}).get("stale")),
+            "catalog_age_days": _catalog_age_days(rec, clock),
             "indexed": bool(rec),
         })
+    # Governed-ranker order, exactly (4883fa94 lock-break, AC1): orchestration
+    # must not become a second ranker, so there is NO post-sort here — not by
+    # distance, not by recency. What the ranker ordered is what displays; the
+    # roster and keyword sections below carry the complete evidence with each
+    # node's governed rank disclosed (AC7), which is where a far-ranked live
+    # node stays visible.
+    items = ranked_items[:k]
+    governed_ranks = {it["uid"]: n for n, it in enumerate(ranked_items, 1)}
     observations = [
         {
             "raw_target": getattr(observation, "raw_target", ""),
@@ -826,6 +1043,12 @@ def orient(task_uid: str, k: int, principal: str,
     answer = {"ok": True, "task": task_uid,
               "task_title": (records.get(task_uid) or {}).get("title") or "(unknown)",
               "items": items,
+              "ranked_total": len(ranked_items),
+              "k": k,
+              "draw_budget": draw,
+              "one_hop": _one_hop_roster(task_uid, governed_ranks),
+              "keyword_recall": _keyword_hits(task_uid, extra_terms,
+                                              governed_ranks),
               "reference_observations": observations}
     # The paid branch, and the only one. Without ``edge`` the answer above is
     # the same deterministic citation + observation answer and no metered edge
@@ -1052,6 +1275,26 @@ def render_text(answer: dict) -> str:
         f"  WHERE THIS STANDS — {answer['task_title']}",
         f"  {answer['task']}",
     ]
+    # AC1 + AC8 (4883fa94): both budgets and the tiers that ran, stated up top,
+    # and the claim's scope stated with them — this is orientation evidence,
+    # never an answer to the caller's substantive task.
+    tier = ("deterministic tiers + read tier below"
+            if "read" in answer else "deterministic tiers only — 0 model calls")
+    if answer.get("draw_budget"):
+        lines.append(
+            f"  drew up to {answer['draw_budget']} candidates, ranked "
+            f"{answer.get('ranked_total', len(answer['items']))}, showing top "
+            f"{len(answer['items'])} — {tier}"
+        )
+        lines.append(
+            "  orientation evidence only — selecting evidence does not answer"
+            " the caller's task"
+        )
+    if answer.get("read_preflight_refusal"):
+        lines.extend([
+            "",
+            "  THE READ DID NOT HAPPEN — " + answer["read_preflight_refusal"],
+        ])
     if "read" in answer:
         lines.extend(_read_lines(answer["read"]))
     lines.extend([
@@ -1061,9 +1304,60 @@ def render_text(answer: dict) -> str:
     ])
     for n, it in enumerate(answer["items"], 1):
         flag = "  ⚠ flagged stale" if it["stale"] else ""
+        when = f"  ·  {it['modified']}" if it.get("modified") else ""
         lines.append(f"  {n:2}. {it['title']}")
-        lines.append(f"      {it['type']}{'  ·  ' + it['status'] if it['status'] else ''}  ·  {it['why']}{flag}")
+        lines.append(f"      {it['type']}{'  ·  ' + it['status'] if it['status'] else ''}{when}  ·  {it['why']}{flag}")
         lines.append(f"      vault/files/{it['uid']}.md")
+        lines.append("")
+    one_hop = answer.get("one_hop") or {}
+    if one_hop.get("nodes"):
+        lines.append(
+            f"  ONE HOP FROM THIS — all {one_hop['total']} nodes, complete and"
+        )
+        lines.append("  newest first, with governed rank disclosed when drawn.")
+        lines.append("  The ranked picture above is a selection; this is the whole neighbourhood.")
+        lines.append("")
+        for row in one_hop["nodes"]:
+            arch = "  [archived]" if row["archived"] else ""
+            when = row["modified"] or "undated"
+            rank = row.get("governed_rank")
+            ranked = (f" · governed rank {rank}" if rank
+                      else " · unranked (outside the draw)")
+            age = row.get("catalog_age_days")
+            catalog = (f" · rendered catalog, {age} days behind the newest index row"
+                       if age is not None else "")
+            lines.append(
+                f"  - {row['uid']}  {row['relation']:7}  {row['type']}"
+                f" · {row['status'] or '?'} · {when}{ranked}{catalog}{arch}"
+            )
+            lines.append(f"      {row['title']}")
+        lines.append("")
+    recall = answer.get("keyword_recall") or {}
+    if recall.get("terms"):
+        shown = recall["hits"][:_KEYWORD_TEXT_CAP]
+        lines.append(
+            f"  KEYWORD HITS — deterministic, unranked. {recall['total']} rows"
+        )
+        lines.append(
+            f"  match the task's own words; showing {len(shown)}."
+        )
+        lines.append(f"  terms: {', '.join(recall['terms'])}")
+        lines.append("")
+        for hit in shown:
+            arch = "  [archived]" if hit["archived"] else ""
+            when = hit["modified"] or "undated"
+            rank = hit.get("governed_rank")
+            ranked = f" · governed rank {rank}" if rank else ""
+            lines.append(
+                f"  - {hit['uid']}  {hit['type']} · {hit['status'] or '?'}"
+                f" · {when}{ranked}{arch}  ({', '.join(hit['terms_matched'])})"
+            )
+            lines.append(f"      {hit['title']}")
+        if recall["total"] > len(shown):
+            lines.append(
+                f"  … and {recall['total'] - len(shown)} more not shown —"
+                " tighten with --terms."
+            )
         lines.append("")
     observations = answer.get("reference_observations", ())
     if observations:
@@ -1311,17 +1605,49 @@ def main() -> int:
         help="SPENDS MONEY — a few cents. Opens the documents with a model and "
              "puts what they say at the top. Off by default; there is no other "
              "way to turn it on.")
+    parser.add_argument(
+        "--draw-budget", type=int, default=None,
+        help="how many candidates the circle may admit before ranking "
+             "(default max(8*k, 256); clamped to at least k). The display "
+             "count stays --k; this widens the contest, not the answer.")
+    parser.add_argument(
+        "--terms", default="",
+        help="extra keyword-recall terms, comma-separated, alongside the "
+             "task's own title and tags.")
     args = parser.parse_args()
 
     people = _principals()
     people.setdefault("mike", "7b921d17")
     principal = people.get(args.as_agent, args.as_agent)
+    extra_terms = tuple(t for t in (s.strip() for s in args.terms.split(",")) if t)
+
+    # AC5 (4883fa94): the read tier is gateway-brokered. Preflight the local
+    # metering gateway BEFORE constructing the edge, so a missing gateway is
+    # named as itself — not surfaced later as PROVIDER_FAILED mid-run with a
+    # budget hold already taken.
+    read_preflight_refusal = None
+    if args.read:
+        import socket
+        try:
+            socket.create_connection(("127.0.0.1", 8080), timeout=1.0).close()
+        except OSError:
+            read_preflight_refusal = (
+                "the local metering gateway is not accepting on 127.0.0.1:8080."
+                " The read tier is gateway-brokered by design; start the"
+                " gateway and re-run --read. No model was called, nothing was"
+                " reserved, nothing was spent."
+            )
+            args.read = False
 
     # The whole spend gate, in one expression: no flag, no edge, no money. The
-    # deterministic answer below is reached identically either way.
+    # deterministic answer below is reached identically either way. (TROPO_RUN_UID
+    # attribution resolves where run_uid is consumed, so the gate stays bare.)
     answer = orient(args.task, args.k, principal,
-                    MeteredEdge(run_uid=os.environ.get("TROPO_RUN_UID") or None)
-                    if args.read else None)
+                    MeteredEdge() if args.read else None,
+                    draw_budget=args.draw_budget,
+                    extra_terms=extra_terms)
+    if read_preflight_refusal and answer.get("ok"):
+        answer["read_preflight_refusal"] = read_preflight_refusal
     if args.json:
         print(json.dumps(answer, indent=1))
         return 0 if answer["ok"] else 1

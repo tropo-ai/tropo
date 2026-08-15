@@ -33,11 +33,26 @@ version.md missing/unparseable) — fail-LOUD, never silently 'assume in sync'.
 """
 from __future__ import annotations  # PEP 604 `X | None` annotations on py3.9
 import argparse
+import importlib.util
 import json as _json
 import subprocess
 import sys
 import re
 from pathlib import Path
+
+
+def _load_tropo_roots():
+    """Load the production-owned roots module outside either ``lib`` package."""
+    roots_path = Path(__file__).resolve().with_name("lib") / "tropo_roots.py"
+    spec = importlib.util.spec_from_file_location("_tropo_tools_roots", roots_path)
+    if spec is None or spec.loader is None:
+        raise ImportError("tropo_roots helper could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+tropo_roots = _load_tropo_roots()
 
 REMOTE = "https://github.com/tropo-ai/tropo.git"   # the public OS repo; live remote by default
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -195,7 +210,7 @@ def cmd_expect(args, remote: str) -> int:
 
 
 def cmd_status(args, remote: str, root: Path = None) -> int:
-    root = root or Path(__file__).resolve().parents[2]   # <studio root>; test seam via param
+    root = root or tropo_roots.STUDIO_ROOT
     internal = internal_version(root)
     if internal == "UNKNOWN":
         payload = {"status": "unknown_version", "exit_code": 2, "internal_version": "UNKNOWN"}
