@@ -120,6 +120,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -774,6 +775,65 @@ PER_STUDIO_BOOT_DERIVATION_UIDS = frozenset({
 
 #: Where the box tells itself which manifest to ask for updates.
 UPDATE_SOURCE_REL = os.path.join('.tropo', 'update-source.json')
+
+
+BRIEFING_NOTES_REL = 'agents/tropo/briefing-package/current-release-notes.md'
+
+
+def step_3h_stamp_briefing_notes(version):
+    """AC2 (cb194126, mechanism ruled by A149 2026-08-15): stamp at BUILD, not at fire.
+
+    The briefing notes SHIP — v1.86 MANIFEST.md line 235 carries
+    agents/tropo/briefing-package/current-release-notes.md at 5,467 bytes. The box
+    is sealed here; the fire runs afterwards in tropo-publish-release.py. So a
+    fire-time stamp would update the studio copy and leave the SEALED copy naming
+    the previous version: a studio-side test would pass and the defect would ship.
+    That is Mike's own rots-by-physics argument one layer down.
+
+    So the write happens here, before the manifest walker copies the file into the
+    box, and the fire VERIFIES the sealed copy instead of writing it.
+
+    Only the mechanical fields are stamped. `description` is authored prose and is
+    never generated: it is REQUIRED to name the firing version and refuses if it
+    does not, the same shape as requiring an authored RELEASE-NOTES entry to exist.
+    """
+    src = os.path.join(tropo_roots.STUDIO_ROOT, BRIEFING_NOTES_REL)
+    label = f'v{version}'
+    if not os.path.exists(src):
+        raise SystemExit(
+            f'  ✗ AC2: {BRIEFING_NOTES_REL} not found — it ships in the box, so the '
+            f'release cannot be assembled without it.'
+        )
+    text = open(src, encoding='utf-8').read()
+    if not text.startswith('---\n'):
+        raise SystemExit(f'  ✗ AC2: {BRIEFING_NOTES_REL} has no frontmatter to stamp.')
+    close = text.index('\n---', 4)
+    fm, body = text[4:close], text[close + 4:]
+
+    def _set(block, key, value):
+        pattern = re.compile(rf'^{key}:.*$', re.MULTILINE)
+        if not pattern.search(block):
+            raise SystemExit(
+                f'  ✗ AC2: {BRIEFING_NOTES_REL} declares no `{key}:` field, so the '
+                f'build cannot stamp it to {label}.'
+            )
+        return pattern.sub(f'{key}: {value}', block, count=1)
+
+    fm = _set(fm, 'release_version', label)
+    fm = _set(fm, 'release_date', f"'{time.strftime('%Y-%m-%d')}'")
+    fm = _set(fm, 'title', f'Tropo Release Notes — {label}')
+
+    description = re.search(r'^description:(.*)$', fm, re.MULTILINE)
+    if description and label not in description.group(1):
+        raise SystemExit(
+            f'  ✗ AC2: {BRIEFING_NOTES_REL} description does not name {label}. The '
+            f'version/date/title stamp is mechanical, but the description is authored '
+            f'prose and this build will not invent it — write the {label} description, '
+            f'then re-run.'
+        )
+    if not DRY_RUN:
+        open(src, 'w', encoding='utf-8').write(f'---\n{fm}\n---{body}')
+    print(f'  ✓ AC2: briefing notes stamped {label} before assembly')
 
 
 def step_3g_write_update_source(build_dir):
@@ -1581,7 +1641,12 @@ def step_9b_regenerate_tropo_nav(build_dir):
         capture_output=True,
         text=True,
     )
-    if result.returncode != 0:
+    # Exit 8 is rebuild's documented "index written; substrate has known FAIL findings"
+    # signal (B8, v1.62) — the write SUCCEEDED. Treating it as failure here deleted the
+    # provisional index (clearing loop above) and then shipped an indexless box that the
+    # L2 harness caught at v1.88 (FAIL 9/11, vault/00-index.jsonl MISSING). Only genuinely
+    # non-8 exits abort the regeneration.
+    if result.returncode not in (0, 8):
         print(f'  ⚠ rebuild-vault.py exited {result.returncode}')
         if result.stderr:
             print(f'    stderr: {result.stderr[:300]}')
@@ -3216,23 +3281,21 @@ def main():
 
     print()
     print('Phase 3 — Build Output (manifest-driven):')
+    # AC2: stamp BEFORE the walker copies it — the box seals below this line.
+    step_3h_stamp_briefing_notes(new_version)
     build_from_manifest(build_dir, manifest_entries)
     step_3f_remove_per_studio_boot_derivations(build_dir)
     step_3g_write_update_source(build_dir)
 
-    # v1.12.1 transitional: RELEASE-NOTES.md is a generated artifact, not a
-    # ship-artifact (per arch-spec 747c33c9 §1 Thesis "RELEASE-NOTES is generated
-    # per release"). Lives at argo-os/RELEASE-NOTES.md (relocated from
-    # argo-os/starter/RELEASE-NOTES.md at v1.12.1 ship). Copy to build root.
-    # v1.12.2 implements proper RELEASE-NOTES.md generation step OR authors a
-    # ship-artifact entry with explicit generated-artifact handling.
-    rn_src = os.path.join(tropo_roots.STUDIO_ROOT, 'RELEASE-NOTES.md')
-    if os.path.exists(rn_src):
-        rn_dst = os.path.join(build_dir, 'RELEASE-NOTES.md')
-        copy_file(rn_src, rn_dst, DRY_RUN)
-        print(f'  RELEASE-NOTES.md: copied from argo-os/RELEASE-NOTES.md to build root')
-    else:
-        print(f'  ⚠ RELEASE-NOTES.md not found at {rn_src} — release ships without notes')
+    # RELEASE-NOTES.md deliberately does NOT ship (Mike-ruled 2026-08-15, weld batch
+    # cb194126 AC1). It describes the LIVING product — release history keeps growing
+    # after the zip is sealed — so an immutable artifact carrying it is stale by
+    # physics, not by neglect: v1.87 shipped a copy two releases out of date, and no
+    # freshness weld can fix a document whose subject moves after the box closes.
+    # Its live home is the website. CHANGELOG.md below is the in-box answer to
+    # "what is this version", and it is frozen-and-accurate forever because it
+    # describes THIS box. The studio still authors RELEASE-NOTES.md at every ship
+    # (the validator's version-section check reads the studio copy, not the box).
     # CHANGELOG.md (public user-facing changelog, Keep a Changelog format). Studio source-of-truth.
     # The ship gate (require_release_authorization with version) enforces this file is current
     # before upload is authorized (Metis G83 anti-drift gate, v1.74).
@@ -3480,14 +3543,20 @@ def main():
         else:
             print(f'  ⚠ Manifest generator not found at {_manifest_gen} — skipped (non-blocking).')
 
-    # Step 10.9 — S10 (v1.80): Release-news delivery watermark refresh.
-    # The Tropo briefing surface (f6a967fd, agents/tropo/briefing-package/current-release-notes.md)
-    # carries `release_version` + `last_delivered_version`. Every release must advance
-    # `release_version` to the shipped version and reset `last_delivered_version: null` so
-    # the release-liaison delivers the new notes to the Studio user. Prior gap: the v1.17.0
-    # notes have been stale since v1.17.0 (last_delivered_version was never set, meaning the
-    # surface was never refreshed by the pipeline). This wires the mechanical refresh so
-    # "the studio's own news tells the truth too" (S10, dev-spec be1979b6 §S10).
+    # Step 10.9 — delivery watermark ONLY. `release_version` moved to step_3h (AC2).
+    #
+    # This step used to advance release_version here too, and that is why the shipped
+    # notes stayed stale while the studio copy looked correct. Phase 3 copies the file
+    # into build_dir; this runs at step 10; Step 11 zips build_dir. So a write here
+    # lands on the STUDIO copy AFTER the box already took its snapshot — the refresh
+    # could never reach the artifact, and being non-blocking it never said so. That is
+    # the v1.87 shipped-stale-notes defect, and duplicating the write in two places
+    # would have left the earlier one true and this one merely redundant.
+    #
+    # release_version is now stamped by step_3h_stamp_briefing_notes BEFORE assembly,
+    # where it reaches the box, and verified against the sealed zip at fire.
+    # last_delivered_version stays here: it is a post-build studio concern (it resets
+    # so the release-liaison re-delivers) and never needed to be in the box.
     if not DRY_RUN:
         import re as _re
         _rn_path = os.path.join(tropo_roots.STUDIO_ROOT, 'agents', 'tropo', 'briefing-package', 'current-release-notes.md')
@@ -3495,15 +3564,13 @@ def main():
             try:
                 _rn_text = open(_rn_path).read()
                 _rn_new = _re.sub(
-                    r'^(release_version:\s*).*$', f'\\g<1>v{new_version}', _rn_text, flags=_re.MULTILINE)
-                _rn_new = _re.sub(
-                    r'^(last_delivered_version:\s*).*$', '\\g<1>null', _rn_new, flags=_re.MULTILINE)
+                    r'^(last_delivered_version:\s*).*$', '\\g<1>null', _rn_text, flags=_re.MULTILINE)
                 if _rn_new != _rn_text:
                     open(_rn_path, 'w').write(_rn_new)
-                    print(f'Step 10.9 — Release-news watermark refreshed: '
-                          f'release_version=v{new_version}, last_delivered_version reset to null')
+                    print('Step 10.9 — Release-news delivery watermark reset '
+                          '(last_delivered_version: null)')
                 else:
-                    print(f'Step 10.9 — Release-news watermark: already at v{new_version} (no-op)')
+                    print('Step 10.9 — Release-news delivery watermark: already reset (no-op)')
             except Exception as _e:
                 print(f'Step 10.9 — Release-news watermark update failed (non-blocking): {_e}')
         else:

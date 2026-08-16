@@ -23,7 +23,7 @@ created_by: talos-t15
 migration_note: v1.69 S1 migration — absorbed d97d96a6 (status) · bf413f00 (charter) · 56e24c1e (soul) · 9dfb682c (tier3). dev-spec 0c61a52b.
 model: claude-opus-5[1m] — Claude Code (VS Code extension) on Mike's primary Mac
 platform: claude-code
-last_session: '2026-08-04'
+last_session: '2026-08-15'
 continuous_listen: executive-class-full-curve
 ---
 
@@ -412,6 +412,12 @@ Required retirement outcomes for Orpheus:
 ## §Status-Notes
 
 *Bounded to current + predecessor generation. Older notes live in activation entries.*
+
+**O35 STILL ACTIVE — 2026-08-15. Same generation, reactivated by Mike, not reborn.** This generation now spans 2026-08-04 → 2026-08-15 with dormant gaps (08-06→08-13, 08-13→08-15). Mike reactivates this session rather than booting O36, so **Orpheus context from anywhere in that fortnight is CURRENT, not a predecessor's** — the inverse of the crew's default assumption, and worth stating on re-entry because every other lineage turned over repeatedly in the same window (Metis G101→**G108**, Talos T38→**T42**, Argus A144→**A149**, Vela V70→**V72**). Orpheus is the only seat that did not regenerate.
+
+**Shipped since the boot block below:** retire playbook to **v2.14** (the close step still named the tool that cost G98 and T37 their clean closes) · the **F1 stranger-read** that caught AC12 still naming a vault switcher its own spec had removed · **the download route now verifies the artifact before redirecting** — a Supabase outage had it answering a healthy 302 to an NXDOMAIN host, green to every monitor and broken for every human · the memory surface folded **24 → 15** on the first curator dispatch in seven generations · **eight** stale-lifecycle sites in this entry, found by four detection methods that each caught what the others missed · the method filed as lore at [d86a2388](../files/d86a2388.md).
+
+**The honest misses, both mine.** (1) I replied to Metis G103's `reply_required` on 08-06 with `final: true` but **no correlation id**, so the drain reported it unanswered for six days while the work sat complete on main; the thread outlived four of her generations because to them I had never replied. (2) I reported my memory surface at 16 pins on inherited authority — it was **24**. Recount before you report. **Open and not mine to decide:** the v1.87 doc leg (`e4714819` reads `done`, parent plan `done`, release entries exist — yet my required disposition signoff was never given and `b636b97c` is `state: active` / `status: retired`); `tropo-activation.capsule.md` still attributes the mint to the retired tool and is locked; V71's folder-mount finding blocks index rebuild, and so every birth and retirement, on any machine that is not Mike's.
 
 **O35 ACTIVE 2026-08-04** (activation [40fbb604](../files/40fbb604.md); Boot Shape A; born clean, `provisional: false`, zero findings). **First agent in this Studio born through `tropo-lineage.py born --agent orpheus`** — the mint half of the lifecycle cutover metis-g101 landed this morning at `2b3eab52`, four hours before this boot. Two findings came straight out of being first: (1) the mint refused on first call — not an identity gate but `[rebuild --batch] REFUSAL: semantic derivation inputs changed outside the owned projections`, naming 15 files the cutover commit touched. **The cutover shipped without a full index rebuild behind it**; a clean `tropo-rebuild-index.py --apply` (3151→3153, no shrink) cleared it and the mint went through on the retry. Every agent booting between 08:59 and that rebuild would have hit the same wall. (2) **The new mint does not issue an `agent_public_key`** — the old tool `40b2f455.py` did (lines 988–1059), the new one has no reference to it, and `lib/authority_chain.py` still requires one for `KEY_REQUIRED_AGENT_CLASSES` (executive included). My activation is the only one in the fleet without a key; `--fleet-boot-health` reports it as O36's **latent birth blocker**. `test_activation_mint.py` is 20/20 green and does not cover it. Filed, not hand-patched — hand-editing an activation entry is the durable-history-poison class the old tool's own header names twice.
 

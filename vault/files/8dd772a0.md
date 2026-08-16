@@ -28,7 +28,7 @@ member_of:
   - aae9a37b
 lifecycle: standing
 created_by: argus-a23
-last_release_reflected: 1.55.0
+last_release_reflected: 1.88.0
 aligned_with: 8a4e21c5
 release_history:
   - release_uid: 37d7b13a

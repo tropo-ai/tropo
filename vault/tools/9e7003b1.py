@@ -91,6 +91,16 @@ from lib import pipeline_obligations as _obligations  # noqa: E402
 # ---------------------- constants ----------------------
 
 VAULT_ROOT = Path(__file__).resolve().parents[2]
+
+# This tool's own identity, declared once. Both emit sites previously stamped the
+# literal 123e12e7, which is "Talos — Agent Root Project" — so every event this
+# runtime wrote claimed an agent's lineage record as its origin. The uid below is
+# the one this file's own frontmatter declares. One constant rather than the literal
+# repeated at each site: a value duplicated at N call sites is corrected at N-1 of
+# them eventually, which is how the wrong one survived in two places.
+TOOL_SOURCE = "/tools/pipeline-runtime"
+TOOL_UID = "9e7003b1"
+
 VAULT_FILES = VAULT_ROOT / "vault" / "files"
 PIPELINE_RUNS_FOLDER = VAULT_ROOT / "vault" / "pipeline-runs"
 VAULT_INDEX = VAULT_ROOT / "vault" / "00-index.jsonl"
@@ -170,7 +180,7 @@ def _emit_pipeline_event(event_type: str, lifecycle: str, data: dict) -> None:
         if str(_sp) not in sys.path:
             sys.path.insert(0, str(_sp))
         from lib.event_emitter import auto_emit
-        auto_emit(event_type, "/tools/pipeline-runtime", "123e12e7", lifecycle=lifecycle, data=data)
+        auto_emit(event_type, TOOL_SOURCE, TOOL_UID, lifecycle=lifecycle, data=data)
     except Exception:
         pass
 
@@ -291,7 +301,7 @@ def _emit_cycle_closed(vault_root: Path, root_uid: str,
             data["activation_uid"] = activation_uid
         if final_commit:
             data["final_commit"] = final_commit
-        emit_mod.emit("tropo.cycle.closed", "/tools/pipeline-runtime", "123e12e7",
+        emit_mod.emit("tropo.cycle.closed", TOOL_SOURCE, TOOL_UID,
                       "evergreen", subject=root_uid, correlationid=root_uid, data=data)
         _rebuild_events_sqlite(vault_root)
         return True
@@ -1465,6 +1475,37 @@ def _run_has_events(run_folder: "Path | None") -> bool:
     return False
 
 
+def _pending_lock_run_created(run_folder: "Path | None", run_fm: dict) -> dict | None:
+    """Return the one lock-authored journal seed this bootstrap may adopt.
+
+    A lock-created run now has a ``run_created`` event before runtime starts,
+    because the run exists at lock time and cannot truthfully point at a missing
+    journal. That one event is not an activation contract. Runtime may adopt it
+    exactly once only when every identity field agrees with the immutable run
+    entry and ``bootstrap_pending`` is explicit. Any other event history remains
+    a hard re-bootstrap refusal.
+    """
+    if run_folder is None or not run_folder.is_dir():
+        return None
+    events = read_events(run_folder)
+    if len(events) != 1:
+        return None
+    event = events[0]
+    data = event.get("data") or {}
+    expected = {
+        "pipeline_run_uid": str(run_fm.get("uid") or ""),
+        "activation_uid": str(run_fm.get("activation") or ""),
+        "activation_root_uid": str(run_fm.get("activation_root_uid") or ""),
+        "dev_spec_uid": str(run_fm.get("dev_spec_uid") or ""),
+        "pipeline_uid": str(run_fm.get("pipeline") or ""),
+    }
+    if event.get("event") != "run_created" or data.get("bootstrap_pending") is not True:
+        return None
+    if any(str(data.get(key) or "") != value for key, value in expected.items()):
+        return None
+    return event
+
+
 def _pipeline_default_trust(pipeline_def, nodes, pipeline_uid):
     """The root's default trust gradient, from the snapshot when the live entry is gone.
 
@@ -1514,6 +1555,7 @@ def action_bootstrap(activation_uid: str, contract_input_path: str | None, dry_r
     # which is now expected to exist before bootstrap runs.
     existing = find_pipeline_run_for(activation_uid)
     adopted_run = None
+    lock_seeded_run_created = None
     if existing is not None:
         efm = existing["frontmatter"]
         if efm.get("activation_superseded") and efm.get("supersession_reason") == "contract-modification":
@@ -1522,11 +1564,15 @@ def action_bootstrap(activation_uid: str, contract_input_path: str | None, dry_r
         else:
             candidate_folder = run_folder_for(efm)
             if _run_has_events(candidate_folder):
-                raise ValidationError(
-                    f"pipeline-run entry {efm.get('uid')!r} for activation "
-                    f"{activation_uid!r} already has events; it has been "
-                    "bootstrapped once and a contract is not re-locked in place."
+                lock_seeded_run_created = _pending_lock_run_created(
+                    candidate_folder, efm
                 )
+                if lock_seeded_run_created is None:
+                    raise ValidationError(
+                        f"pipeline-run entry {efm.get('uid')!r} for activation "
+                        f"{activation_uid!r} already has events; it has been "
+                        "bootstrapped once and a contract is not re-locked in place."
+                    )
             adopted_run = existing
 
     pipeline_uid = afm.get("pipeline_uid")
@@ -1839,17 +1885,20 @@ See `run.jsonl` in the run folder for the full event log; `run.state.json` for d
         "# LLM Working Memory\n\n*Append-only by convention.*\n")
 
     # Seed events: run_created + activation_contract_locked + N step_declared
-    run_created = make_event(
-        "run_created", activated_by,
-        trace_id=activation_uid, parent_span_id=None,
-        data={
-            "pipeline": pipeline_uid,
-            "pipeline_version": pr_frontmatter["pipeline_version"],
-            "members": activation_root_list,
-            "authorized_by": activated_by,
-        },
-    )
-    append_event(run_folder_abs, run_created)
+    if lock_seeded_run_created is not None:
+        run_created = lock_seeded_run_created
+    else:
+        run_created = make_event(
+            "run_created", activated_by,
+            trace_id=activation_uid, parent_span_id=None,
+            data={
+                "pipeline": pipeline_uid,
+                "pipeline_version": pr_frontmatter["pipeline_version"],
+                "members": activation_root_list,
+                "authorized_by": activated_by,
+            },
+        )
+        append_event(run_folder_abs, run_created)
 
     contract_event = make_event(
         "activation_contract_locked", activated_by,
@@ -4315,6 +4364,181 @@ def ensure_releasable_dev_closure(
     return plan
 
 
+_POST_TEST_EVIDENCE_SPEC_KEYS = frozenset({
+    "acceptance_evidence", "cascade_disposition", "modified", "modified_by",
+})
+
+
+def _parse_governed_entry_text(text: str, path: str) -> tuple[dict, str]:
+    match = _FRONTMATTER_RE.match(text)
+    if match is None:
+        raise ValidationError(
+            f"POST-TEST EVIDENCE REFUSED: {path} has no parseable frontmatter")
+    try:
+        frontmatter = yaml.safe_load(match.group(1)) or {}
+    except yaml.YAMLError as exc:
+        raise ValidationError(
+            f"POST-TEST EVIDENCE REFUSED: {path} has invalid YAML: {exc}") from exc
+    if not isinstance(frontmatter, dict):
+        raise ValidationError(
+            f"POST-TEST EVIDENCE REFUSED: {path} frontmatter is not an object")
+    return frontmatter, match.group(2)
+
+
+def _git_file_at(vault_root: Path, commit: str, path: str) -> str:
+    return _git(vault_root, "show", f"{commit}:{path}")
+
+
+def assert_post_test_evidence_descendant(
+    tested_sha: str, head: str, dev_spec_uid: str, activation_uid: str,
+) -> None:
+    """Accept only a proven post-test evidence layer above the tested tree.
+
+    A verification report cannot name the commit containing itself without an
+    infinite amend/re-test loop. The safe shape is therefore two-layered:
+
+      tested tree -> immutable report + dev-spec evidence binding -> close
+
+    This is not an ancestry escape hatch. Every committed byte between the
+    receipt and HEAD is classified semantically: new passing verification
+    reports must name the receipt's tested commit, and existing dev-specs may
+    change only their evidence/cascade metadata while retaining their bodies.
+    Any executable, product, schema, lifecycle, or arbitrary markdown change
+    refuses. The generated dirty counter is admitted only for its monotonic
+    counter field.
+    """
+    ancestry = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", tested_sha, head],
+        cwd=str(VAULT_ROOT), capture_output=True, text=True, timeout=60,
+    )
+    if ancestry.returncode != 0:
+        raise ValidationError(
+            f"POST-TEST EVIDENCE REFUSED: tested tree {tested_sha[:12]} is not "
+            f"an ancestor of current HEAD {head[:12]}")
+
+    raw_delta = _git(
+        VAULT_ROOT, "diff", "--name-status", "--no-renames",
+        f"{tested_sha}..{head}",
+    )
+    changes: list[tuple[str, str]] = []
+    for line in raw_delta.splitlines():
+        pieces = line.split("\t", 1)
+        if len(pieces) != 2:
+            raise ValidationError(
+                f"POST-TEST EVIDENCE REFUSED: cannot classify git delta line {line!r}")
+        changes.append((pieces[0], pieces[1]))
+    if not changes:
+        raise ValidationError(
+            "POST-TEST EVIDENCE REFUSED: HEAD differs from the tested SHA but "
+            "the committed delta is empty")
+
+    changed_specs: dict[str, dict] = {}
+    reports: dict[str, dict] = {}
+    for status, path in changes:
+        if path == ".tropo-studio/dirty-counter.json":
+            if status != "M":
+                raise ValidationError(
+                    f"POST-TEST EVIDENCE REFUSED: dirty counter change is {status}, not M")
+            try:
+                old_counter = json.loads(_git_file_at(VAULT_ROOT, tested_sha, path))
+                new_counter = json.loads(_git_file_at(VAULT_ROOT, head, path))
+            except (json.JSONDecodeError, ValidationError) as exc:
+                raise ValidationError(
+                    f"POST-TEST EVIDENCE REFUSED: cannot validate {path}: {exc}") from exc
+            changed_keys = {
+                key for key in set(old_counter) | set(new_counter)
+                if old_counter.get(key) != new_counter.get(key)
+            }
+            old_writes = old_counter.get("writes_since_full_rebuild")
+            new_writes = new_counter.get("writes_since_full_rebuild")
+            if changed_keys != {"writes_since_full_rebuild"} or not (
+                isinstance(old_writes, int) and isinstance(new_writes, int)
+                and new_writes >= old_writes
+            ):
+                raise ValidationError(
+                    f"POST-TEST EVIDENCE REFUSED: {path} changed beyond its "
+                    "monotonic writes_since_full_rebuild projection")
+            continue
+
+        match = re.fullmatch(r"vault/files/([0-9a-f]{8})\.md", path)
+        if match is None:
+            raise ValidationError(
+                f"POST-TEST EVIDENCE REFUSED: {path} is not governed evidence metadata")
+        uid = match.group(1)
+        current_fm, current_body = _parse_governed_entry_text(
+            _git_file_at(VAULT_ROOT, head, path), path)
+        entry_type = str(current_fm.get("type") or "")
+
+        if status == "A":
+            verdict = str(
+                current_fm.get("verdict") or current_fm.get("status") or ""
+            ).strip().lower()
+            if entry_type != "verification-report" or verdict not in (
+                ACCEPTANCE_PASSING_VERDICTS
+            ):
+                raise ValidationError(
+                    f"POST-TEST EVIDENCE REFUSED: new {path} is not a passing "
+                    "verification-report")
+            if str(current_fm.get("uid") or "") != uid:
+                raise ValidationError(
+                    f"POST-TEST EVIDENCE REFUSED: {path} UID disagrees with its filename")
+            if str(current_fm.get("tested_commit") or "") != tested_sha:
+                raise ValidationError(
+                    f"POST-TEST EVIDENCE REFUSED: {path} names tested_commit "
+                    f"{current_fm.get('tested_commit')!r}, not receipt tree {tested_sha}")
+            reports[uid] = current_fm
+            continue
+
+        if status != "M" or entry_type != "dev-spec":
+            raise ValidationError(
+                f"POST-TEST EVIDENCE REFUSED: {path} ({status}, type {entry_type!r}) "
+                "is not a new verification report or an evidence-only dev-spec amendment")
+        old_fm, old_body = _parse_governed_entry_text(
+            _git_file_at(VAULT_ROOT, tested_sha, path), path)
+        if str(old_fm.get("type") or "") != "dev-spec" or old_body != current_body:
+            raise ValidationError(
+                f"POST-TEST EVIDENCE REFUSED: {path} changes dev-spec identity or body")
+        changed_keys = {
+            key for key in set(old_fm) | set(current_fm)
+            if old_fm.get(key) != current_fm.get(key)
+        }
+        disallowed = changed_keys - _POST_TEST_EVIDENCE_SPEC_KEYS
+        if disallowed:
+            raise ValidationError(
+                f"POST-TEST EVIDENCE REFUSED: {path} changes non-evidence fields "
+                f"{sorted(disallowed)}")
+        changed_specs[uid] = current_fm
+
+    if dev_spec_uid not in changed_specs:
+        raise ValidationError(
+            f"POST-TEST EVIDENCE REFUSED: target dev-spec {dev_spec_uid} has no "
+            "committed evidence-only amendment above the tested tree")
+    for report_uid, report in reports.items():
+        bound_spec = str(report.get("triggering_dev_spec") or "")
+        if bound_spec not in changed_specs:
+            raise ValidationError(
+                f"POST-TEST EVIDENCE REFUSED: report {report_uid} binds dev-spec "
+                f"{bound_spec!r}, which has no paired evidence-only amendment")
+        bound_activation = str(report.get("triggered_by_dev_cycle") or "")
+        if bound_spec == dev_spec_uid and bound_activation != activation_uid:
+            raise ValidationError(
+                f"POST-TEST EVIDENCE REFUSED: report {report_uid} binds activation "
+                f"{bound_activation!r}, not {activation_uid}")
+
+    target_evidence = {
+        str(uid) for uid in changed_specs[dev_spec_uid].get("acceptance_evidence") or []
+    }
+    target_reports = {
+        uid for uid, report in reports.items()
+        if str(report.get("triggering_dev_spec") or "") == dev_spec_uid
+        and str(report.get("triggered_by_dev_cycle") or "") == activation_uid
+    }
+    if not target_reports or not target_reports.issubset(target_evidence):
+        raise ValidationError(
+            f"POST-TEST EVIDENCE REFUSED: dev-spec {dev_spec_uid} does not bind "
+            "its new, matching verification report")
+
+
 def assert_canonical_provenance_exists(
     activation_uid: str, dev_spec_uid: str | None, run_uid: str, run_folder: Path,
 ) -> None:
@@ -4362,14 +4586,20 @@ def assert_canonical_provenance_exists(
         except Exception:
             head = ""  # no repository: the tree cannot be compared, not a defect
         if head and tested and tested != head:
-            raise ValidationError(
-                f"CLOSE REFUSED: the canonical receipt names tested tree "
-                f"{tested[:12]}, but this working tree is {head[:12]}. The close "
-                f"would attest that the verified tree is the one being made "
-                f"terminal, and it is not.\n"
-                f"  Cure: re-run terminal-verify against the current tree, or "
-                f"check out {tested[:12]} if that is the tree you meant to close."
-            )
+            try:
+                assert_post_test_evidence_descendant(
+                    tested, head, str(dev_spec_uid), activation_uid)
+            except ValidationError as evidence_refusal:
+                raise ValidationError(
+                    f"CLOSE REFUSED: the canonical receipt names tested tree "
+                    f"{tested[:12]}, but this working tree is {head[:12]}, and the "
+                    "committed delta is not a canonical post-test evidence layer. "
+                    "The close would otherwise attest untested product changes.\n"
+                    f"  Evidence-layer check: {evidence_refusal}\n"
+                    f"  Cure: re-run terminal-verify against the current tree, or "
+                    f"restore a committed delta containing only matching typed "
+                    "verification evidence and its dev-spec bindings."
+                ) from evidence_refusal
     except ValidationError:
         raise
     except Exception as refusal:
@@ -4803,11 +5033,27 @@ def action_close_release(activation_uid: str, actor: str, receipt_sha256: str,
         closed.extend(run_close_out_hook(
             activation, activation["frontmatter"].get("dev_spec_uid"),
             actor, final_commit=None) or [])
+        # AC7 (weld batch cb194126): a correlated close event for EVERY record this
+        # path moves terminal, companions included — not just the root.
+        #
+        # Check 32 requires a correlated completion event for any work-item in a
+        # terminal state. This loop stamps five, and only the root archive ever got
+        # an event, so closing a cycle minted four silent terminal records every
+        # time. The v1.87 build gate found fifteen of them and refused, and the cure
+        # was hand-written events after the fact. Mike's ruling: the close path emits
+        # the event for every record it archives, because a customer's studio would
+        # mint the same silent archives the first time they closed a cycle.
+        #
+        # _emit_cycle_closed is idempotent (skips when a correlated event exists) and
+        # non-blocking (the stamp already succeeded; a failed emit is logged, and the
+        # sweep backstop covers it). Both properties are what make it safe to call
+        # per-record on a path that runs after a release is already public.
         for uid, terminal in ((plan_uid, "done"), (entry_uid, "done"),
                               (root_uid, "archived"), (run_uid, "done"),
                               (activation_uid, "retired")):
             if _stamp_terminal_status(uid, terminal, actor):
                 closed.append(uid)
+                _emit_cycle_closed(VAULT_ROOT, uid, activation_uid=activation_uid)
 
     def _substrate_is_closed() -> bool:
         # All five, re-read. The earlier check omitted the entry and the root.

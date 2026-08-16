@@ -1,14 +1,14 @@
 {
-  "wall_clock_as_of": "2026-08-14",
+  "wall_clock_as_of": "2026-08-15",
   "private_ages": {
-    "a26bbba0": 1,
-    "2490e8ad": 64,
-    "28332b7b": 64,
-    "40b6cfd6": 1,
-    "aeb2df3d": 38,
-    "8a4c1f6e": 37,
-    "6f9a3c72": 37,
-    "839a65f9": 89
+    "a26bbba0": 2,
+    "2490e8ad": 65,
+    "28332b7b": 65,
+    "40b6cfd6": 2,
+    "aeb2df3d": 39,
+    "8a4c1f6e": 38,
+    "6f9a3c72": 38,
+    "839a65f9": 90
   },
   "thresholds": {
     "decay_threshold_unshared_draft_days": 90,

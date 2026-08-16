@@ -2239,9 +2239,37 @@ def _derived_row_title(fm: str, filepath: Path) -> str:
     is DERIVED here, at projection time, and the source file is never touched.
     Precedence ruled by Argus A145 (2026-08-08): title, then agent_name, then
     name, then the filename stem, which always exists and is never empty.
+
+    Derived through the module's CANONICAL YAML PARSER, not get_scalar. get_scalar
+    is a line matcher: it strips the outer quotes of a double-quoted scalar but does
+    not YAML-decode escaped inner quotes, so a valid title such as
+    `"\\"Import your work\\" — Get-Started onboarding step"` projected as a single
+    backslash, and process_file then wrote that corruption into JSONL and onward to
+    SQLite and FTS. One file in 4,740 uses an escaped quote in a title, which is why
+    it went unseen until the row-freshness check (6c538b6a AC2) asked whether rows
+    still agree with their files.
+
+    The parser is the one this module already trusts for pruning, structured
+    frontmatter and record bodies — routing one more field through it rather than
+    adding a decoder. get_scalar remains the fallback for a frontmatter block YAML
+    cannot parse at all: a malformed file should still project a usable display
+    title rather than collapse to its filename stem.
     """
+    parsed: Any = None
+    try:
+        loaded = _yaml_safe_load(fm)
+        if isinstance(loaded, dict):
+            parsed = loaded
+    except Exception:
+        parsed = None  # unparseable frontmatter — fall back per key below
     for key in ('title', 'agent_name', 'name'):
-        value = (get_scalar(fm, key) or '').strip()
+        value = ''
+        if parsed is not None:
+            raw = parsed.get(key)
+            if raw is not None and not isinstance(raw, (dict, list)):
+                value = str(raw).strip()
+        if not value:
+            value = (get_scalar(fm, key) or '').strip()
         if value:
             return value
     return filepath.stem

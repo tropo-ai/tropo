@@ -66,4 +66,4 @@ Apache License 2.0 — see [LICENSE](LICENSE) for the full text. See [ADR 4a4a12
 
 ---
 
-*Tropo-OS v1.87.0 | The file is the agent. The folder is the workspace. The vault is the OS.*
+*Tropo-OS v1.88.0 | The file is the agent. The folder is the workspace. The vault is the OS.*

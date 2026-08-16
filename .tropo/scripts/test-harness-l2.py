@@ -122,6 +122,23 @@ def main(argv=None):
     # --release mode: outward-refs (UIDs not in the subset index) resolve to [INFO] not [FAIL];
     # safe because the pre-build full-studio pass (0 FAILED) guarantees no genuine broken refs.
     print('\nStep L2.3 — Validator in release-mode (dev-spec f8b51f4d D1):')
+    # First-boot derivation (added 2026-08-15, metis-g108, Mike standing auth): the box ships
+    # INDEX-FREE by ruled design (t41 d677d73d, v1.87+) and the customer's first boot derives the
+    # index via the shipped rebuilder. Validating a pre-derivation state tests a moment no
+    # customer ever occupies — pruning-stamp checks legitimately need the index. Replicate the
+    # real first boot before validating. Exit 8 = derived-with-known-debt (B8): the write succeeded.
+    rebuilder = extract_dir / 'vault' / 'tools' / 'tropo-rebuild-vault.py'
+    if rebuilder.exists() and not (extract_dir / 'vault' / '00-index.jsonl').exists():
+        print('  L2.3a — first-boot index derivation (derive-on-first-boot design):')
+        rb = subprocess.run(
+            [sys.executable, str(rebuilder), '--apply', '--vault-path', str(extract_dir)],
+            capture_output=True, text=True, timeout=900, cwd=str(extract_dir)
+        )
+        if rb.returncode not in (0, 8):
+            print(f'  ✗ first-boot derivation failed (exit {rb.returncode}) — a customer box '
+                  f'cannot derive its own index.', file=sys.stderr)
+            sys.exit(2)
+        print(f'    ✓ index derived (exit {rb.returncode})')
     validator_candidates = (
         extract_dir / 'vault' / 'tools' / 'tropo-validate.py',
         extract_dir / 'vault' / 'tools' / 'd2b9c8e6.py',

@@ -1267,6 +1267,77 @@ def _read_lines(read: dict) -> list:
     return lines
 
 
+def render_librarian_feed(answer: dict, body_budget: int) -> str:
+    """Librarian L1 (d317f532 AC1): one feedable artifact — the deterministic
+    evidence exactly as rendered, then the bodies of the top-ranked governed
+    documents up to ``body_budget`` characters. Content past the budget is
+    NAMED, never silently dropped. Deterministic given the index snapshot:
+    same inputs, byte-identical artifact."""
+
+    parts = [
+        "# LIBRARIAN FEED — orientation evidence + governed bodies\n",
+        f"task: {answer['task']} · {answer.get('task_title', '')}\n",
+        "contract: you are a session librarian. You never write. You answer\n"
+        "only with citations by UID from THIS feed. If the answer is not in\n"
+        "your context, say 'not in my context' — never guess. You inherit\n"
+        "AGENT-ORIENTATION's boundaries: an index row is a pointer; absence\n"
+        "of evidence here is not evidence of absence in the studio.\n",
+        "\n## EVIDENCE (deterministic tiers — where to look and why)\n",
+        render_text(answer),
+        "\n## BODIES — top-ranked governed documents, in ranked order\n",
+    ]
+    spent = 0
+    included, excluded = [], []
+    # The task's own body ALWAYS leads — a task is not its own graph
+    # neighbour, so ranking alone omits the one document every question
+    # is about. Found by the librarian's first honest "not in my context"
+    # (2026-08-15, first live exchange).
+    task_uid = str(answer.get("task", ""))
+    task_path = FILES / f"{task_uid}.md"
+    if task_path.is_file():
+        body = task_path.read_text(encoding="utf-8", errors="replace")
+        if len(body) <= body_budget:
+            spent += len(body)
+            included.append(task_uid)
+            parts.append(
+                f"\n### {task_uid} · vault/files/{task_uid}.md · THE TASK "
+                f"ITSELF — read first\n\n{body}\n"
+            )
+        else:
+            excluded.append((task_uid, "task body alone exceeds the budget"))
+    for item in answer.get("items", ()):
+        uid = item.get("uid", "")
+        path = FILES / f"{uid}.md"
+        if not path.is_file():
+            excluded.append((uid, "no governed body under vault/files"))
+            continue
+        body = path.read_text(encoding="utf-8", errors="replace")
+        if spent + len(body) > body_budget:
+            excluded.append((uid, f"body budget ({body_budget} chars) reached"))
+            continue
+        spent += len(body)
+        included.append(uid)
+        parts.append(
+            f"\n### {uid} · vault/files/{uid}.md · {item.get('type','?')}"
+            f" · {item.get('status','?')}\n\n{body}\n"
+        )
+    parts.append(
+        f"\n## FEED LEDGER — honest accounting\n"
+        f"bodies included: {len(included)} ({', '.join(included) or 'none'})\n"
+        f"body characters: {spent} of budget {body_budget}\n"
+    )
+    if excluded:
+        parts.append("excluded, by name — ask your executive to feed these "
+                     "separately if needed:\n")
+        for uid, why in excluded:
+            parts.append(f"  - {uid}: {why}\n")
+    else:
+        parts.append("excluded: none\n")
+    parts.append("\nThe evidence section's one-hop roster is COMPLETE; the "
+                 "bodies above are a budgeted selection. Cite accordingly.\n")
+    return "".join(parts)
+
+
 def render_text(answer: dict) -> str:
     if not answer["ok"]:
         return f"orient could not answer: {answer['error']}"
@@ -1614,6 +1685,15 @@ def main() -> int:
         "--terms", default="",
         help="extra keyword-recall terms, comma-separated, alongside the "
              "task's own title and tags.")
+    parser.add_argument(
+        "--for-librarian", dest="for_librarian", default=None, metavar="PATH",
+        help="Librarian L1 (d317f532): write the deterministic evidence plus "
+             "top-ranked governed bodies to PATH as one feedable artifact. "
+             "No model calls; implies the free path.")
+    parser.add_argument(
+        "--body-budget", type=int, default=400_000,
+        help="--for-librarian only: total body characters included before the "
+             "cap names what it excluded (default 400000).")
     args = parser.parse_args()
 
     people = _principals()
@@ -1652,6 +1732,11 @@ def main() -> int:
         print(json.dumps(answer, indent=1))
         return 0 if answer["ok"] else 1
     print(render_text(answer))
+    if args.for_librarian and answer["ok"]:
+        feed_path = Path(args.for_librarian)
+        feed_path.parent.mkdir(parents=True, exist_ok=True)
+        feed_path.write_text(render_librarian_feed(answer, args.body_budget))
+        print(f"  librarian feed: {feed_path}\n")
     if args.board and answer["ok"]:
         out = ROOT / "boards" / "metis" / f"orient-{args.task}.html"
         out.parent.mkdir(parents=True, exist_ok=True)

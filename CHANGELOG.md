@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.88.0] - 2026-08-15
+### Added
+- **Self-stamping release surfaces:** the briefing note is stamped at build and verified against the sealed package at fire; the version badge (`os-release.json`) is stamped from the release receipt with real size and date. The class of stale shipped release-notes (six releases running) cannot recur silently.
+- **Artifact hand-back as a tool path:** building on a machine without publish credentials produces a verified transfer bundle on its own branch; the credentialed side verifies SHA against the receipt and stages. The v1.87 midnight improvisation is now tested machinery.
+- **Index truth as a property:** the filesystem-to-index completeness invariant covers every governed type (previously one of 63); row freshness is checked against file frontmatter; the 125 files invisible to every index-driven surface are indexed and the class is causally tested shut.
+### Changed
+- The built box no longer ships `RELEASE-NOTES.md` or `TROPO-CAPABILITIES.md` (removed rather than policed, per proportionality); the box ships index-free by design and derives its indexes on first boot via the shipped rebuilder — the release harness now tests exactly that customer path.
+- The release entry flips pre-ship→shipped before manifest generation, and the published event lands in the studio bus and the release run journal in one finalization; closure requires no manual bridging.
+### Fixed
+- The index builder projects titles through the canonical YAML parser (escaped quotes no longer corrupt rows); the dev-spec lock tool seeds a truthful run journal at creation; the closer emits a correlated event for every record it archives; the build treats the box-rebuild's known-debt signal (exit 8) as the successful write it is.
+
 ## [1.87.0] - 2026-08-14
 ### Added
 - **Mounted work in navigation:** external folders and documents receive governed mount identity and appear in the Studio tree without copying or taking ownership of source files.

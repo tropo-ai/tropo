@@ -473,6 +473,27 @@ class TestItem2LockGestureIsolatedFixture(unittest.TestCase):
                  if "type: project" in f.read_text(encoding="utf-8")]
         self.assertEqual(len(roots), 1, f"expected one activation root, got {roots}")
 
+        # The run entry points at a journal the SAME atomic lock authored.
+        runs = [
+            lock_dev_spec_mod.parse_frontmatter(f.read_text(encoding="utf-8"))
+            for f in self.files_dir.glob("*.md")
+            if "type: pipeline-run" in f.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(len(runs), 1)
+        run_folder = self.tmp / runs[0]["run_folder"]
+        journal = run_folder / "run.jsonl"
+        self.assertTrue(journal.is_file(), "lock-created run points at no run.jsonl")
+        events = [
+            json.loads(line) for line in journal.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        self.assertEqual(len(events), 1, "lock authors exactly one pre-bootstrap event")
+        seed = events[0]
+        self.assertEqual(seed.get("event"), "run_created")
+        self.assertIs((seed.get("data") or {}).get("bootstrap_pending"), True)
+        self.assertEqual((seed.get("data") or {}).get("pipeline_run_uid"), runs[0]["uid"])
+        self.assertEqual((seed.get("data") or {}).get("activation_uid"), activation_uid)
+
     def test_failure_path_leaves_dev_spec_byte_for_byte_unchanged(self) -> None:
         """The atomicity guarantee, retriggered through a failure that still exists.
 
@@ -498,6 +519,38 @@ class TestItem2LockGestureIsolatedFixture(unittest.TestCase):
         # And no activation file leaked onto disk either.
         self.assertEqual(self._authored_entries(path.stem), [],
                          "the refusal authored substrate")
+
+    def test_bounded_backfill_writes_one_seed_and_never_overwrites(self) -> None:
+        self._write_dev_spec("bbbb3333", status="draft")
+        code, msg = lock_dev_spec_mod.lock_dev_spec(
+            "bbbb3333", "talos-test", files_dir=self.files_dir,
+            vault_root=self.tmp,
+        )
+        self.assertEqual(code, 0, msg)
+        run_fm = next(
+            lock_dev_spec_mod.parse_frontmatter(f.read_text(encoding="utf-8"))
+            for f in self.files_dir.glob("*.md")
+            if "type: pipeline-run" in f.read_text(encoding="utf-8")
+        )
+        journal = self.tmp / run_fm["run_folder"] / "run.jsonl"
+        journal.unlink()  # reproduce the pre-fix writer gap
+
+        repaired = lock_dev_spec_mod.backfill_missing_run_journal(
+            run_fm["uid"], files_dir=self.files_dir, vault_root=self.tmp,
+            backfilled_by="argus-a149",
+        )
+        self.assertEqual(repaired, journal)
+        events = [json.loads(line) for line in journal.read_text().splitlines()]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["event"], "run_created")
+        self.assertIs(events[0]["data"]["bootstrap_pending"], True)
+        self.assertEqual(events[0]["data"]["backfilled_by"], "argus-a149")
+
+        with self.assertRaises(FileExistsError):
+            lock_dev_spec_mod.backfill_missing_run_journal(
+                run_fm["uid"], files_dir=self.files_dir, vault_root=self.tmp,
+                backfilled_by="argus-a149",
+            )
 
     def test_idempotent_reuse_when_already_correlated_no_duplicate_activation(self) -> None:
         """If a correlated activation ALREADY exists (e.g. a prior retroactive

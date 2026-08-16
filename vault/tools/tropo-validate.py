@@ -4662,6 +4662,145 @@ def check_working_copy_sidecar_equivalence(vault: Path) -> tuple[list[str], int,
     return findings, checked, defects
 
 
+_UID_RE_STRICT = re.compile(r'[0-9a-f]{8}')
+_LITERAL_ESCAPE_RE = re.compile(r'\\u([0-9a-fA-F]{4})')
+
+
+def _decode_literal_escapes(value: str) -> str:
+    """Turn a literal ``\\uXXXX`` sequence back into its character.
+
+    Some index rows store the six characters rather than the character itself.
+    Comparisons that care about MEANING rather than encoding normalize first.
+    """
+    return _LITERAL_ESCAPE_RE.sub(lambda m: chr(int(m.group(1), 16)), value)
+
+
+def check_index_union_completeness(vault: Path) -> tuple[list[str], int, int]:
+    """AC1 (6c538b6a) — every on-disk governed file has a row in the union.
+
+    THE ROOT CAUSE THIS CLOSES. The disk->union invariant already existed in this
+    validator, enforced for exactly ONE of the 63 indexed types:
+    check_working_copy_index_sync walks the filesystem and reds a `type:
+    working-copy` file with no row, added to close defect family fa026415. Nothing
+    equivalent covered any other type. Every other integrity check enumerates INDEX
+    ROWS and confirms they resolve to files, so the direction of travel was
+    union->disk and a governed file with no row was not flagged, not counted, simply
+    absent — which is how 125 of them accumulated unnoticed.
+
+    Row derivation is an opt-in SECOND gesture: tropo-mint-id, archive,
+    gardener-verdict, activate and publish-release call the freshener, while direct
+    authoring — how essentially every governed entry in this studio is created —
+    calls nothing, and the first gesture succeeds completely without the second.
+    Rather than add type #2 to a list, this asks the question the list was
+    approximating: is every governed file on disk represented?
+
+    Severity is WARN for one cycle (A149's call): turning it FAIL the day it lands
+    would refuse the build on files authored hours earlier by the agent whose work
+    surfaced the class.
+    """
+    findings: list[str] = []
+    files_dir = vault / 'vault' / 'files'
+    if not files_dir.is_dir():
+        return findings, 0, 0
+    union = _index_union_uids(vault)
+    checked = 0
+    defects = 0
+    for path in sorted(files_dir.glob('*.md')):
+        fm_text = split_frontmatter(path.read_text(errors='replace'))
+        if fm_text is None:
+            continue  # not a governed entry; frontmatter checks own that finding
+        uid = get_scalar(fm_text, 'uid')
+        if not uid:
+            continue  # check_uid_presence owns the missing-uid finding
+        uid = str(uid)
+        if str(path.stem) != uid or not _UID_RE_STRICT.fullmatch(uid):
+            # A malformed or filename-mismatched uid is an IDENTITY defect, owned by
+            # the UID-consistency gate, not an indexable omission. Counting it here
+            # would be wrong twice: it inflates the omission census with a file that
+            # can never be indexed, and its cure would read
+            # `--only 1361518` — an instruction that cannot succeed, because there is
+            # no valid UID to rebuild. A finding whose cure is impossible teaches the
+            # reader to distrust the finding. Named, not counted, and not silent.
+            findings.append(
+                f'[WARN] {path.relative_to(vault)} — declares uid={uid!r}, which is not '
+                f'a valid 8-hex UID matching its filename. Not counted as an index '
+                f'omission (it cannot be indexed until its identity is repaired); this '
+                f'is a UID-consistency defect and that gate owns the cure.'
+            )
+            continue
+        checked += 1
+        if uid not in union:
+            findings.append(
+                f'[WARN] {path.relative_to(vault)} — uid={uid!r} is on disk but absent '
+                f'from the current+archive index union. Every consumer that asks "what '
+                f'exists?" reads the union, so this entry is invisible to all of them. '
+                f'Cure: python3 vault/tools/tropo-rebuild-index.py --only {uid}'
+            )
+            defects += 1
+    return findings, checked, defects
+
+
+def check_index_row_freshness(vault: Path) -> tuple[list[str], int, int]:
+    """AC2 (6c538b6a) — a row's identity fields agree with its file's frontmatter.
+
+    Completeness is not enough: a row can exist and be years out of date. The
+    motivating case is f6a967fd, whose file read `v1.87.0` while its row still
+    titled it `v1.17.0` — seventy releases apart on a live surface, and invisible
+    because the row existed and resolved.
+
+    Title is checked because it is the field humans and generated surfaces read,
+    and because version-bearing titles are exactly where the drift shows. This is
+    the same class as the two other receipts from 2026-08-15: a file edited whose
+    row was never re-derived, including one that made a verifier's PASS wrong.
+
+    WARN for the same reason as completeness above.
+    """
+    findings: list[str] = []
+    files_dir = vault / 'vault' / 'files'
+    if not files_dir.is_dir():
+        return findings, 0, 0
+    rows = {str(r['uid']): r for r in _index_union(vault) if r.get('uid')}
+    checked = 0
+    defects = 0
+    for path in sorted(files_dir.glob('*.md')):
+        fm_text = split_frontmatter(path.read_text(errors='replace'))
+        if fm_text is None:
+            continue
+        uid = get_scalar(fm_text, 'uid')
+        if not uid or str(uid) not in rows:
+            continue  # completeness check above owns the absent-row finding
+        # A real YAML parse, not get_scalar: that helper is a line matcher and
+        # truncates a single-quoted scalar at an embedded apostrophe, so
+        # "…When Nobody's Looking" reads as "…When Nobody". Thirteen titles in this
+        # vault contain one, and every one of them reported false staleness on the
+        # first run of this check. A freshness gate whose findings are mostly noise
+        # trains people to ignore the real ones.
+        try:
+            parsed = fast_yaml.safe_load(fm_text) or {}
+        except Exception:
+            continue  # malformed frontmatter is another check's finding
+        file_title = str(parsed.get('title') or '').strip()
+        row_title = str(rows[str(uid)].get('title') or '').strip()
+        if not file_title:
+            continue
+        # Normalize literal \uXXXX escapes before comparing. 104 of 1,939 ARCHIVE
+        # rows (against 2 of 3,409 current) store an em dash as the six characters
+        # \u2014 rather than the character, so the archive writer double-encodes.
+        # That is a real defect and it is NOT staleness — reporting it here would
+        # make this check's headline count wrong about its own subject. Filed
+        # separately; this check measures whether a row's title tracks its file.
+        row_title = _decode_literal_escapes(row_title)
+        checked += 1
+        if file_title != row_title:
+            findings.append(
+                f'[WARN] {path.relative_to(vault)} — index row is stale: row title '
+                f'{row_title!r} but frontmatter says {file_title!r}. '
+                f'Cure: python3 vault/tools/tropo-rebuild-index.py --only {uid}'
+            )
+            defects += 1
+    return findings, checked, defects
+
+
 def check_working_copy_index_sync(vault: Path) -> tuple[list[str], int, int]:
     """Check 4 per arch-spec §3.10 — index-sync (closes v1.25.0 fa026415 sibling).
 
@@ -12732,6 +12871,32 @@ def main() -> int:
             total_fails += 1
         if len(wcse_findings) > 10:
             print(f'  ... and {len(wcse_findings) - 10} more')
+
+    # --- Index Union Completeness (6c538b6a AC1 — the disk->union invariant, all types) ---
+    print('\n--- Index Union Completeness (6c538b6a AC1 — every on-disk governed file has a row) ---')
+    iuc_findings, iuc_checked, iuc_defects = check_index_union_completeness(vault)
+    if not iuc_findings:
+        print(f'[PASS] {iuc_checked} governed files all present in the current+archive union')
+        total_passes += 1
+    else:
+        print(f'[WARN] {iuc_checked} governed files checked; {iuc_defects} absent from the union')
+        for line in iuc_findings[:10]:
+            print(f'  {line}')
+        if len(iuc_findings) > 10:
+            print(f'  ... and {len(iuc_findings) - 10} more')
+
+    # --- Index Row Freshness (6c538b6a AC2 — a row's title tracks its file) ---
+    print('\n--- Index Row Freshness (6c538b6a AC2 — row identity agrees with frontmatter) ---')
+    irf_findings, irf_checked, irf_defects = check_index_row_freshness(vault)
+    if not irf_findings:
+        print(f'[PASS] {irf_checked} index rows agree with their file frontmatter')
+        total_passes += 1
+    else:
+        print(f'[WARN] {irf_checked} rows checked; {irf_defects} stale against their file')
+        for line in irf_findings[:10]:
+            print(f'  {line}')
+        if len(irf_findings) > 10:
+            print(f'  ... and {len(irf_findings) - 10} more')
 
     # --- Working-Copy Index-Sync (closes fa026415 family; spec 5a89297a §3.10 check 4) ---
     print('\n--- Working-Copy Index-Sync (closes fa026415 family; spec 5a89297a §3.10 check 4) ---')

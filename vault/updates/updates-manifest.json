@@ -1,5 +1,5 @@
 {
-  "current": "1.86.0",
+  "current": "1.87.0",
   "minimum_supported": "1.2.0",
   "updates": [
     {
@@ -617,6 +617,13 @@
       "description": "Lifecycle, self-testing, typed minting, the model edge, and real-file workflows delivered through a verified published update path.",
       "url": "https://hnghnxyevylqjhtrbtvw.supabase.co/storage/v1/object/public/releases/updates/tropo-update-v1.86.0.zip",
       "min_compatible": "1.85.1"
+    },
+    {
+      "version": "1.87.0",
+      "type": "feature",
+      "description": "Mounted work in navigation, a clean newcomer box, compaction-safe continuation, and the first operational two-pipeline release.",
+      "url": "https://hnghnxyevylqjhtrbtvw.supabase.co/storage/v1/object/public/releases/updates/tropo-update-v1.87.0.zip",
+      "min_compatible": "1.86.0"
     }
   ]
 }

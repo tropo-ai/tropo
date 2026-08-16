@@ -3,20 +3,20 @@
   "archive_cache_reuse_disabled": true,
   "archive_record_count": 2,
   "archive_source_skip_count": 0,
-  "assembled_record_count": 485,
+  "assembled_record_count": 489,
   "authoritative_for": {
     "federation": false,
     "local": true,
     "ratchet_baseline": false,
     "release": false
   },
-  "current_record_count": 483,
+  "current_record_count": 487,
   "derived_from_uncommitted": true,
   "mode": "initial-worktree-derived",
-  "parsed_record_count": 485,
-  "run_started_at": "2026-08-14T22:55:15Z",
+  "parsed_record_count": 489,
+  "run_started_at": "2026-08-16T03:30:29Z",
   "schema_version": 2,
-  "source_inventory_sha256": "c17c247c46bddf1355b883f743ced8e53b85b231efbf029d9e727d1f65b6c282",
+  "source_inventory_sha256": "ef6b38887710150cf357c648789314d153a7b50df8ec600073325435924c59a0",
   "uncommitted_inputs": [
     {
       "content_sha256": "8d08f809e717ab51616dd0448ffd324fbf1228c248f4807a94a3674450956c17",
@@ -46,6 +46,12 @@
       "content_sha256": "0c14371b354082e49fcc9d66bf30d685a33f4e861dc25e2f920589ea11a7090c",
       "mode": "100644",
       "path": ".tropo/HUMAN-NAVIGATION.md",
+      "symlink_target_sha256": null
+    },
+    {
+      "content_sha256": "56cc7e27542d98601a620a14b6494b8d8d776d0648c561f28684d1d2ea855c4a",
+      "mode": "100644",
+      "path": ".tropo/MODES-AND-PROTOCOLS.md",
       "symlink_target_sha256": null
     },
     {
@@ -157,7 +163,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "bfd35b6b0db09c91b5a343c4000bdd8b44bf68ba545482989b804a98cd00110b",
+      "content_sha256": "0d1a7cdacf16b56b83a41d9f4e64b2baa663743bf1a12303e9caa3485c02bcda",
       "mode": "100644",
       "path": "CHANGELOG.md",
       "symlink_target_sha256": null
@@ -175,25 +181,19 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "548863e1eaea7a1351b267d32b399ca08d54f5ecf710d7059f3c5848798a212c",
+      "content_sha256": "e11dfaba4f1f937fa4b4b724b8d5deb53ae69c619ca115801775c307d723da50",
       "mode": "100644",
       "path": "MANIFEST.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "911d7db12a147a84f492b1a42822f61a6723f1ee7b93610ec013163157196cc6",
+      "content_sha256": "33b927642a379caf2055bc7029cbc69d917561212dc18dd850082a91c3699637",
       "mode": "100644",
       "path": "README.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "b3edf110f8615f9cd2d395e580273149906d3efb6db33bc7c4852644202879fb",
-      "mode": "100644",
-      "path": "RELEASE-NOTES.md",
-      "symlink_target_sha256": null
-    },
-    {
-      "content_sha256": "cca873b3b57b34c5f2f7b718616ee88882149af2f4080416b286145581eb37a6",
+      "content_sha256": "911012d1d508f3fd95697f645fc4f9ef763ca70f2c70a843421aa8a9cc6005f3",
       "mode": "100644",
       "path": "RELEASING.md",
       "symlink_target_sha256": null
@@ -271,7 +271,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "0a66ab89b7e4ab1616b540d66ba1739ce18dc485f32e2011a89f8d09b4358ad4",
+      "content_sha256": "af99dc6ebcc91e8af837a55b5aab3ccf94ebaeab4612e46a6358766271289166",
       "mode": "100644",
       "path": "agents/tropo/briefing-package/current-release-notes.md",
       "symlink_target_sha256": null
@@ -343,7 +343,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "52a9d650adca08530f365b5deda801c166c2400d22ff6020d79c10d9dd83b3c5",
+      "content_sha256": "f9481b07db02f45d2a591cc59bba8220bcc7dc2a515867e22dcad88704aacb11",
       "mode": "100644",
       "path": "vault/agents/3031ffa3.md",
       "symlink_target_sha256": null
@@ -367,13 +367,13 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "3d0f9f3987745f05bb39273e9aa5d051e881948216504906424fbe7dab00c67b",
+      "content_sha256": "5f7afbe5470f81b758bdcccadc1306d4f2aaa4515114a852334e1e119e0e5c17",
       "mode": "100644",
       "path": "vault/agents/8b81aecf.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "cc6163525ce95d49d84da2bc222f599821028eae86531216a1434be51dbe69cf",
+      "content_sha256": "cd8df66f7aff05b11f3a22914baff9190f48b7d9a47c82b688a73c2ba3e45640",
       "mode": "100644",
       "path": "vault/agents/9fc001c3.md",
       "symlink_target_sha256": null
@@ -1597,7 +1597,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "65970cc38d37318f5daf5a674bb84d2ae2206121903f6b7a20106826d1979d7a",
+      "content_sha256": "2ad1d415696032e5809932af60f611b1f237121b591f5df798d89bc558eae923",
       "mode": "100644",
       "path": "vault/files/8dd772a0.md",
       "symlink_target_sha256": null
@@ -1873,7 +1873,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "a1ba0a3b9a92b61f70f356d6c974985b1a16423fa51a7b716646276b1672ef2b",
+      "content_sha256": "d16519caba81454f40dcae790b4105ab8aeed010f99fec5b08b69f8aecb97864",
       "mode": "100644",
       "path": "vault/files/c3b9e1a5.md",
       "symlink_target_sha256": null
@@ -1939,7 +1939,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "7e66291cf65576e0292f304c46009845b19dbd95dd21d42a539724013ffa9824",
+      "content_sha256": "3735bb718bb2f7bb695ed35261a56dff935b4a1a1590ccd902b7b52d00282484",
       "mode": "100644",
       "path": "vault/files/d1a4f8e2.md",
       "symlink_target_sha256": null
@@ -2107,7 +2107,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "d9b19a7f99e55cff29fe2dbdf941a63d0f62349255e4aaf4edcb1e870400ac17",
+      "content_sha256": "be410712c9fae5a8ec75145e002ed87e2b594eda43f3d0f63013b87a42eccba6",
       "mode": "100644",
       "path": "vault/files/f2a7d3c8.md",
       "symlink_target_sha256": null
@@ -2401,6 +2401,12 @@
       "symlink_target_sha256": null
     },
     {
+      "content_sha256": "61c696ad485e2b8762b53303fdec824a9c03e81f1f156f3111944ecd7fd23cfb",
+      "mode": "100644",
+      "path": "vault/skills/tropo-active-mode.md",
+      "symlink_target_sha256": null
+    },
+    {
       "content_sha256": "9c8dd0b5a064ec8af8621b05e66e290e83f95352bd8482425b4b99b220e5db54",
       "mode": "100644",
       "path": "vault/skills/tropo-channel-projection-migration.md",
@@ -2464,6 +2470,12 @@
       "content_sha256": "a4cec82e653abd5ef18ab7b61b86073b52729aeb521cd1410f5622ed1cb791f5",
       "mode": "100644",
       "path": "vault/skills/tropo-groom-subsystem-hub.md",
+      "symlink_target_sha256": null
+    },
+    {
+      "content_sha256": "875ee92c771d5e3af49fe71c03d9d25b35f50b94492c4afe0dd1a291d93a5b39",
+      "mode": "100644",
+      "path": "vault/skills/tropo-librarian.md",
       "symlink_target_sha256": null
     },
     {
@@ -2647,7 +2659,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "25d3c9147db7fb439ee149136a8643fdfacf7a046ace216ba9afd5d831616a73",
+      "content_sha256": "fa3d2157c537ea98d515c5f9be8eaa39938aa321f5d3b0d36b1d709a872d74f3",
       "mode": "100644",
       "path": "vault/tools/9e7003b1.py",
       "symlink_target_sha256": null
@@ -2761,7 +2773,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "20969d316b8c5012c1fe12483b6e64023bd71812e5828be87807df383a8dc8ee",
+      "content_sha256": "164b436d8e8d46a040bb277f2e7efae2e74c97947e35bab56be74fb96577b69a",
       "mode": "100644",
       "path": "vault/tools/tropo-build-release.py",
       "symlink_target_sha256": null
@@ -2911,7 +2923,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "a866ab55eff41a7e615d7b9ae8eb12dfad1cd992cb1cf4cc33b64023e74bd2ba",
+      "content_sha256": "1473e0bda85146d4f41ccc75d45fc36708e02287ff5232ac5180702b0bb2a7c3",
       "mode": "100644",
       "path": "vault/tools/tropo-lock-dev-spec.py",
       "symlink_target_sha256": null
@@ -2959,7 +2971,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "04e11df8939cfd681b132cb45a79f254d79d27b950619767b64b0e90e444dd66",
+      "content_sha256": "767fc244d28a71aed44a0f09e99849901347aa07d54d4bf57d09d383143c88d2",
       "mode": "100755",
       "path": "vault/tools/tropo-orient.py",
       "symlink_target_sha256": null
@@ -2971,7 +2983,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "dae254f53a65e92f5a0dde7d97afcd409300fe6d02515874efc1a1419c732479",
+      "content_sha256": "a82341ee1c57d172b52dc2463bb03ca7f98282ee9878185ffeb4aeeec1d9bbdd",
       "mode": "100644",
       "path": "vault/tools/tropo-publish-release.py",
       "symlink_target_sha256": null
@@ -3007,7 +3019,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "3f0581023570d0c7e88ce906969e6d697c48ead1ada8fc511a734c8939286c1c",
+      "content_sha256": "d71001a81c37897d2f8047d8cff1d2667af0baab29683d6348bd9d89f5700699",
       "mode": "100644",
       "path": "vault/tools/tropo-rebuild-index.py",
       "symlink_target_sha256": null
@@ -3025,7 +3037,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "59b4339d22eeed3f7863c1026ea4a752edde22e8a02b903c70ac5550573e5bf0",
+      "content_sha256": "c210c4e476215ad2e0a207a9faf9b02c6b43373ec762d1a9931ff4511de0731c",
       "mode": "100644",
       "path": "vault/tools/tropo-recycle.py",
       "symlink_target_sha256": null
@@ -3121,13 +3133,19 @@
       "symlink_target_sha256": null
     },
     {
+      "content_sha256": "ccc28d9c648f03f689b5e9574c99144c4917627bbc3eb0632f850eb4732de9dc",
+      "mode": "100755",
+      "path": "vault/tools/tropo-validate-package-links.py",
+      "symlink_target_sha256": null
+    },
+    {
       "content_sha256": "7942b8643451f63ba415e75d25e099db77cdfeb714cbcbdced482e58a09e2570",
       "mode": "100644",
       "path": "vault/tools/tropo-validate-release-manifest.py",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "999386e43bf805ab849a2ceef1ea044a677b6c7e35aa6f37c40ab526ae7720c3",
+      "content_sha256": "efec99a84e0f07279f7b9ba54ae1ac738f4d9e5096c58facecc73e2af1757fbf",
       "mode": "100644",
       "path": "vault/tools/tropo-validate.py",
       "symlink_target_sha256": null
@@ -3151,7 +3169,7 @@
       "symlink_target_sha256": null
     }
   ],
-  "wall_clock_seconds": 1.3509951989981346,
+  "wall_clock_seconds": 1.361584583,
   "worktree_derived": true,
   "worktree_derived_paths": [
     ".gitattributes",
@@ -3159,6 +3177,7 @@
     ".tropo/00-index.md",
     ".tropo/CAPSULE.md",
     ".tropo/HUMAN-NAVIGATION.md",
+    ".tropo/MODES-AND-PROTOCOLS.md",
     ".tropo/SELF-HEALING.md",
     ".tropo/TROPO-CONTROL.md",
     ".tropo/WAKE-DISCIPLINE.md",
@@ -3182,7 +3201,6 @@
     "GEMINI.md",
     "MANIFEST.md",
     "README.md",
-    "RELEASE-NOTES.md",
     "RELEASING.md",
     "START-TROPO.md",
     "STUDIO.md",
@@ -3551,6 +3569,7 @@
     "vault/session-agents/cec903e9.md",
     "vault/session-agents/d6e11740.md",
     "vault/session-agents/eaf9302a.md",
+    "vault/skills/tropo-active-mode.md",
     "vault/skills/tropo-channel-projection-migration.md",
     "vault/skills/tropo-check-sa-catalog.md",
     "vault/skills/tropo-check-vault-health.md",
@@ -3562,6 +3581,7 @@
     "vault/skills/tropo-dispatch-sa-step.md",
     "vault/skills/tropo-export-to-word.md",
     "vault/skills/tropo-groom-subsystem-hub.md",
+    "vault/skills/tropo-librarian.md",
     "vault/skills/tropo-maintain-channel.md",
     "vault/skills/tropo-memory-sovereignty-floor-test.md",
     "vault/skills/tropo-memory-write.md",
@@ -3671,6 +3691,7 @@
     "vault/tools/tropo-validate-canonical-l0.py",
     "vault/tools/tropo-validate-capability-membership.py",
     "vault/tools/tropo-validate-no-absolute-paths.py",
+    "vault/tools/tropo-validate-package-links.py",
     "vault/tools/tropo-validate-release-manifest.py",
     "vault/tools/tropo-validate.py",
     "vault/tools/tropo-vault-git-commit.py",

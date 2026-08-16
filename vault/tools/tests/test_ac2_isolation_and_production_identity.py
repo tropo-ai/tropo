@@ -366,7 +366,9 @@ class ProductionIsUntouched(unittest.TestCase):
             "run = eng.find_pipeline_run_for(activation_uid)\n"
             "assert run is not None, 'the locked run is invisible to the runtime'\n"
             "folder = eng.run_folder_for(run['frontmatter'])\n"
-            "print('HAS_EVENTS_BEFORE', eng._run_has_events(folder))\n"
+            "before = eng.read_events(folder)\n"
+            "print('EVENTS_BEFORE', len(before))\n"
+            "print('PENDING_BEFORE', (before[0].get('data') or {}).get('bootstrap_pending'))\n"
             "# THE REAL PRODUCTION ENTRY POINT, not a helper.\n"
             "# Non-TTY bootstrap requires an explicit contract input; an empty\n"
             "# one is the honest 'no skips, no overrides' answer.\n"
@@ -378,16 +380,22 @@ class ProductionIsUntouched(unittest.TestCase):
             "print('BOOTSTRAPPED')\n"
             "declared = sorted(eng.get_step_declarations(eng.read_events(folder)).keys())\n"
             "print('DECLARED', ','.join(declared))\n"
-            "print('HAS_EVENTS_AFTER', eng._run_has_events(folder))\n")
+            "after = eng.read_events(folder)\n"
+            "print('HAS_EVENTS_AFTER', eng._run_has_events(folder))\n"
+            "print('RUN_CREATED_AFTER', sum(1 for e in after if e.get('event') == 'run_created'))\n")
         self.assertEqual(result.returncode, 0,
                          f"stdout={result.stdout}\nstderr={result.stderr[-2500:]}")
-        self.assertIn("HAS_EVENTS_BEFORE False", result.stdout,
-                      "a freshly locked run already looked bootstrapped")
+        self.assertIn("EVENTS_BEFORE 1", result.stdout,
+                      "the lock did not author exactly one journal seed")
+        self.assertIn("PENDING_BEFORE True", result.stdout,
+                      "the lock seed is not explicitly pending bootstrap")
         self.assertIn("BOOTSTRAPPED", result.stdout,
                       "the real bootstrap refused the run its own lock created")
         self.assertIn("DECLARED 0c6518ef,fa3a49c8", result.stdout,
                       f"step_declared does not match the snapshot: {result.stdout}")
         self.assertIn("HAS_EVENTS_AFTER True", result.stdout)
+        self.assertIn("RUN_CREATED_AFTER 1", result.stdout,
+                      "bootstrap duplicated the lock-authored run_created event")
 
     def test_no_live_root_leaks_into_the_contract_after_the_root_is_EDITED(self) -> None:
         """The leak my delete-the-sources test could not see.

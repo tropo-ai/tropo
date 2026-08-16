@@ -22,7 +22,11 @@ REQUIRED = [
     "AGENTS.md", "README.md", "START-TROPO.md", "CAPSULE.md", "CLAUDE.md",
     ".tropo/version.md", ".tropo/orientation.md", ".tropo/playbooks",
     ".tropo/concierge/activate.md",
-    "vault/00-index.jsonl",
+    # vault/00-index.jsonl removed from required set 2026-08-15 (metis-g108, Mike standing auth):
+    # the box ships INDEX-FREE by ruled design since v1.87 (talos-t41 d677d73d "ship no SQLite",
+    # evt 113) — Step 10.2 purges all derived index surfaces for digest determinism; the customer's
+    # first boot derives them via the shipped rebuilder. The rebuilder shipping is checked below.
+    "vault/tools/tropo-rebuild-vault.py",
 ]
 PRIVATE_SCOPES = ("argo-private", "reference-only")  # must NEVER ship
 
@@ -126,7 +130,10 @@ def run_checks(root: Path):
         results.append(_check("index parses (every row valid JSON + uid/type)", ok,
                               f"{rows} rows, {bad} malformed" if rows > 0 else "EMPTY — index has 0 rows"))
     else:
-        results.append(_check("index parses", False, "00-index.jsonl absent"))
+        # Index-free box is the ruled design (t41 d677d73d): derived on first boot by the
+        # shipped rebuilder, whose presence is asserted in the required-files check above.
+        results.append(_check("index parses", True,
+                              "not shipped (derive-on-first-boot design, v1.87+); rebuilder ships"))
 
     # 3. Version stamped — accept either bare "v1.71.0" or frontmatter `version: "1.71.0"`
     # (the build stamps version.md as a formatted markdown doc; source is bare — handle both)

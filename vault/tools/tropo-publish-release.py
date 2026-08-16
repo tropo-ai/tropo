@@ -85,6 +85,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import zipfile
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -158,6 +159,9 @@ def _load_vault_lib(module_name, file_name):
 # Stage-6 AC7: the four-instrument receipt set is the sole Verify authority.
 release_verify = _load_vault_lib("tropo_publish_release_verify", "release_verify.py")
 release_package = _load_vault_lib("tropo_publish_release_package", "release_package.py")
+# AC5 (cb194126): the finalizer mirrors its published event into the run journal,
+# so it needs the same assertion closure uses to read that journal back.
+release_closure = _load_vault_lib("tropo_publish_release_closure", "release_closure.py")
 
 _TROPO_SCRIPTS = tropo_roots.STUDIO_ROOT / ".tropo" / "scripts"
 if str(_TROPO_SCRIPTS) not in sys.path:
@@ -317,6 +321,322 @@ def _stamp_release_entry(version: str, **fields):
     except Exception as e:
         print(f"  ⚠ Could not stamp release entry {path}: {e}", file=sys.stderr)
         return False
+
+
+BRIEFING_NOTES_REL = "agents/tropo/briefing-package/current-release-notes.md"
+OS_RELEASE_REL = "tropo-app/os-release.json"
+
+
+def _human_size(size_bytes: int) -> str:
+    """The badge's display string, derived from the same integer it reports.
+
+    Two fields that state the same fact in different units are a drift pair unless
+    one is computed from the other — os-release.json carries both fileSize and
+    sizeBytes, and hand-maintenance is how the badge reached six releases stale.
+    """
+    return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+
+def _stamp_os_release_badge(version: str, dist_dir: Path, released_at: str) -> None:
+    """AC3 (cb194126): the website badge, stamped from the artifact that shipped.
+
+    Unlike the briefing notes this is genuinely fire-time — os-release.json lives
+    outside the box and feeds the website, so nothing about it is sealed. It was
+    SIX releases stale on the night v1.87 shipped (badge said v1.80), because it
+    was a hand-maintained surface with no gate.
+
+    sizeBytes is measured off the real zip rather than copied from a receipt
+    field: the badge's job is to describe the download a visitor is about to
+    start, so it should be derived from the bytes that download serves.
+    """
+    zip_path = dist_dir / f"tropo-os-v{version}.zip"
+    if not zip_path.is_file():
+        raise PublishError(
+            f"cannot stamp {OS_RELEASE_REL}: no package at {zip_path} to measure. "
+            f"The badge reports the size of a real download."
+        )
+    badge_path = Path(tropo_roots.STUDIO_ROOT) / OS_RELEASE_REL
+    if not badge_path.is_file():
+        raise PublishError(
+            f"cannot stamp {OS_RELEASE_REL}: file not found at {badge_path}. The "
+            f"website badge is a shipped-state surface and must exist to be stamped."
+        )
+    try:
+        badge = json.loads(badge_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise PublishError(f"{OS_RELEASE_REL} is not readable/parseable: {exc}") from exc
+
+    size_bytes = zip_path.stat().st_size
+    badge.update({
+        "version": f"v{version}",
+        "fileSize": _human_size(size_bytes),
+        "sizeBytes": size_bytes,
+        "releasedAt": released_at,
+    })
+    try:
+        badge_path.write_text(json.dumps(badge, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        raise PublishError(f"{OS_RELEASE_REL} could not be written: {exc}") from exc
+    print(f"  ✓ Website badge stamped v{version} ({_human_size(size_bytes)}, "
+          f"{size_bytes} bytes)")
+    # The site split is a separate deploy this tool does not own. Naming the exact
+    # command keeps the manual step explicit instead of leaving the badge stamped
+    # in the studio and stale on the website — which is the same
+    # correct-here-wrong-there shape the briefing notes had.
+    print(f"  → NEXT (manual): publish the site split so the website serves the new "
+          f"badge:\n      cd tropo-app && npm run deploy   # serves {OS_RELEASE_REL}")
+
+
+def _verify_sealed_briefing_notes(version: str, dist_dir: Path) -> None:
+    """AC2 second half (mechanism ruled by A149): the fire VERIFIES, it does not write.
+
+    The briefing notes ship inside the box, so by the time this runs the bytes are
+    already sealed in the zip. Writing here would update the studio copy and leave
+    the artifact naming the previous version — green studio-side, defect shipped.
+    The build stamps (step_3h_stamp_briefing_notes); this reads the sealed copy back
+    and refuses if it does not name the firing version, so the two halves cannot
+    drift apart silently.
+    """
+    zip_path = dist_dir / f"tropo-os-v{version}.zip"
+    if not zip_path.is_file():
+        raise PublishError(
+            f"cannot verify the sealed {BRIEFING_NOTES_REL}: no package at {zip_path}"
+        )
+    label = f"v{version}"
+    try:
+        with zipfile.ZipFile(zip_path) as box:
+            member = next(
+                (n for n in box.namelist() if n.endswith(BRIEFING_NOTES_REL)), None
+            )
+            if member is None:
+                raise PublishError(
+                    f"the package at {zip_path} contains no {BRIEFING_NOTES_REL}. It is a "
+                    f"shipped surface; a box without it cannot carry release notes to the "
+                    f"recipient."
+                )
+            sealed = box.read(member).decode("utf-8", errors="replace")
+    except zipfile.BadZipFile as exc:
+        raise PublishError(f"package at {zip_path} is not readable: {exc}") from exc
+    stamped = re.search(r"^release_version:\s*(\S+)\s*$", sealed, re.MULTILINE)
+    found = stamped.group(1).strip("'\"") if stamped else "(no release_version field)"
+    if found != label:
+        raise PublishError(
+            f"the SEALED {BRIEFING_NOTES_REL} names {found}, not {label}. The build "
+            f"stamps this surface before assembly; a mismatch means the box was built "
+            f"before the stamp landed. Rebuild — a fire-time write cannot reach bytes "
+            f"already inside the package."
+        )
+    print(f"  ✓ Sealed briefing notes verified at {label}")
+
+
+TRANSFER_BRANCH_FMT = "transfer/v{version}-dist"
+HANDBACK_PAYLOAD_DIR = "handback"
+
+
+def _handback_payload_dir(version: str, root: Path | None = None) -> Path:
+    return (root or Path(tropo_roots.STUDIO_ROOT)) / HANDBACK_PAYLOAD_DIR / f"v{version}"
+
+
+def write_transfer_bundle(
+    version: str,
+    zip_path: Path,
+    payload_dir: Path,
+    provenance: dict | None = None,
+) -> dict:
+    """AC6 produce side: the bundle a credential-less build host hands back.
+
+    v1.87 was built on a host whose principal had no write credential for the
+    public repo, and the transfer was improvised at 3am: a branch, a zip, a
+    SHA256SUMS, `sha256sum -c` on the far side. It worked, and then it existed
+    only in one agent's memory. This is that improvisation with a name and a test.
+
+    The digest comes from release_package.hash_final_zip — the same function the
+    freeze used — rather than a fresh hashlib call. A hand-back that computes its
+    digest a second way can disagree with the receipt while both are "correct",
+    and then nobody can say which artefact shipped.
+    """
+    zip_path = Path(zip_path)
+    if not zip_path.is_file():
+        raise PublishError(
+            f"nothing to hand back: no package at {zip_path}. Build first."
+        )
+    digest = release_package.hash_final_zip(zip_path)
+    payload_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(zip_path, payload_dir / zip_path.name)
+    # `sha256sum -c SHA256SUMS` must work verbatim on the receiving side, so the
+    # format is the coreutils one (digest, two spaces, bare filename) and the
+    # filename is relative — an absolute path here would only verify on this host.
+    (payload_dir / "SHA256SUMS").write_text(
+        f"{digest}  {zip_path.name}\n", encoding="utf-8"
+    )
+    record = {
+        "version": version,
+        "package_sha256": digest,
+        "package_name": zip_path.name,
+        "size_bytes": zip_path.stat().st_size,
+        "produced_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "produced_by": os.environ.get("USER", "unknown"),
+        "reason": "build host lacks a publish credential for the release remote",
+    }
+    if provenance:
+        record.update(provenance)
+    (payload_dir / "build-provenance.json").write_text(
+        json.dumps(record, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"  ✓ Transfer bundle written to {payload_dir} "
+          f"({digest[:12]}…, {record['size_bytes']} bytes)")
+    return record
+
+
+def verify_transfer_bundle(version: str, payload_dir: Path, expected_sha256: str) -> str:
+    """AC6 receive side: verify the handed-back bytes against the frozen receipt.
+
+    On mismatch this prints BOTH digests, because the failure it exists to catch —
+    a truncated or re-zipped transfer — is indistinguishable from corruption unless
+    the reader can see the two values side by side. v1.87's release was halted once
+    by a hash mismatch that read as corruption and was actually a lock capturing
+    evidence mid-correction; naming both values is what turns that into a diagnosis.
+    """
+    payload_dir = Path(payload_dir)
+    candidates = sorted(payload_dir.glob(f"tropo-os-v{version}.zip"))
+    if not candidates:
+        raise PublishError(
+            f"no handed-back package for v{version} in {payload_dir}; expected "
+            f"tropo-os-v{version}.zip beside SHA256SUMS"
+        )
+    actual = release_package.hash_final_zip(candidates[0])
+    if not expected_sha256:
+        raise PublishError(
+            f"cannot verify the hand-back: no frozen package_sha256 recorded for "
+            f"v{version}, so there is nothing to compare {actual[:12]}… against"
+        )
+    if actual != expected_sha256:
+        raise PublishError(
+            "handed-back package does not match the frozen receipt — refusing to stage.\n"
+            f"    expected (receipt): {expected_sha256}\n"
+            f"    actual   (bundle) : {actual}\n"
+            "  These are different artefacts. Re-produce the bundle on the build "
+            "host; do not re-zip on this side."
+        )
+    print(f"  ✓ Hand-back verified against the frozen receipt ({actual[:12]}…)")
+    return actual
+
+
+def reconstruct_build_dir(version: str, zip_path: Path, builds_root: Path) -> Path:
+    """Unpack a verified hand-back into the canonical box directory stage consumes.
+
+    A149's NO-GO, and it was a real functional gap rather than a test gap: receive
+    verified the digest and copied the zip to dist/, but cmd_stage stages the
+    UNPACKED box at builds/tropo-os-v<version>/ and exits 3 when it is absent. A
+    hand-back that verifies and then cannot stage has moved the artefact and not
+    the release.
+
+    Extraction is guarded because the bytes arrive from another host:
+      - every member must live under the single expected box root, so a bundle
+        carrying a second tree cannot quietly place files elsewhere;
+      - no absolute paths and no `..` traversal, so a crafted archive cannot
+        escape builds/ and write into the studio.
+    Both refuse rather than skipping the member — a hand-back is verified bytes or
+    it is nothing, and silently dropping part of a box would stage an incomplete
+    release that still passed its digest check.
+    """
+    expected_root = f"tropo-os-v{version}"
+    target = builds_root / expected_root
+    with zipfile.ZipFile(zip_path) as box:
+        names = [n for n in box.namelist() if not n.endswith("/")]
+        if not names:
+            raise PublishError(f"handed-back package {zip_path} is empty")
+        for name in names:
+            member = Path(name)
+            if member.is_absolute() or ".." in member.parts:
+                raise PublishError(
+                    f"refusing to unpack {name!r} from the hand-back: absolute or "
+                    f"traversing paths could write outside {builds_root}"
+                )
+            if member.parts[0] != expected_root:
+                raise PublishError(
+                    f"handed-back package contains {member.parts[0]!r} but this "
+                    f"release expects a single {expected_root!r} box root; refusing "
+                    f"to unpack a bundle whose shape is not the one stage consumes"
+                )
+        if target.exists():
+            shutil.rmtree(target)
+        builds_root.mkdir(parents=True, exist_ok=True)
+        box.extractall(builds_root)
+    if not target.is_dir():
+        raise PublishError(
+            f"unpack produced no {target} — stage would exit 3 on the next line"
+        )
+    print(f"  ✓ Box reconstructed at {target} ({len(names)} files)")
+    return target
+
+
+def _freshen_index_row(uid: str) -> bool:
+    """Re-derive one index row from its file. Best-effort, loud on failure.
+
+    _stamp_release_entry writes the FILE; every consumer that asks "what shipped?"
+    reads the INDEX. Stamping without freshening leaves the two disagreeing, which
+    is invisible until something queries the index and gets the pre-stamp answer.
+    """
+    rebuild = tropo_roots.VAULT_DIR / "tools" / "tropo-rebuild-index.py"
+    if not rebuild.is_file():
+        print(f"  ⚠ {rebuild} not found — index row for {uid} not freshened",
+              file=sys.stderr)
+        return False
+    try:
+        result = subprocess.run(
+            [sys.executable, str(rebuild), "--only", uid],
+            cwd=str(tropo_roots.STUDIO_ROOT),
+            capture_output=True, text=True, timeout=120,
+        )
+    except Exception as exc:
+        print(f"  ⚠ index freshen for {uid} could not run: {exc}", file=sys.stderr)
+        return False
+    if result.returncode != 0:
+        print(f"  ⚠ index freshen for {uid} failed (exit {result.returncode}): "
+              f"{result.stderr.strip()}", file=sys.stderr)
+        return False
+    return True
+
+
+def _flip_release_entry_to_shipped(version: str) -> None:
+    """AC4 (cb194126): the entry says shipped BEFORE the manifest is generated.
+
+    tropo-generate-update-manifest.py selects `type:release, status:shipped` rows
+    from the index union to decide what `current` is. At v1.87 the entry was still
+    pre-ship when the manifest generated, so the manifest named the PRIOR version
+    as current, and the fix was a hand-flip plus a regenerate — the retry loop this
+    removes. Ordering is the whole content of this weld: flipping after upload
+    produces a correct entry and a wrong manifest, which is the same defect.
+
+    Idempotent: an entry already `shipped` is left alone, so a retried fire does
+    not rewrite provenance recording a flip that already happened.
+    """
+    path, fm = _find_release_entry(version)
+    if path is None:
+        raise PublishError(
+            f"no type:release entry for {version}, so the update manifest cannot "
+            f"name it current — the manifest reads shipped release entries"
+        )
+    current_status = str((fm or {}).get("status") or "")
+    if current_status == "shipped":
+        return
+    stamped = _stamp_release_entry(
+        version,
+        status="shipped",
+        shipped_provenance=(
+            f"pre-ship→shipped flipped by tropo-publish-release.py before update-manifest "
+            f"generation (weld cb194126 AC4); prior status {current_status or 'unset'!r}"
+        ),
+    )
+    if not stamped:
+        raise PublishError(
+            f"release entry for {version} could not be flipped to shipped; the "
+            f"generated manifest would not name {version} as current"
+        )
+    uid = str((fm or {}).get("uid") or "")
+    if uid:
+        _freshen_index_row(uid)
 
 
 def _confirm_tty(prompt: str) -> bool:
@@ -778,10 +1098,81 @@ def _validated_receipt_observation(
         raise PublishError(f"release observations are invalid: {exc}") from exc
 
 
+def _run_journal_folder(ac7_context: dict | None) -> Path | None:
+    """Absolute run folder for the release run being finalized, or None.
+
+    The identity is already in hand — both callers of the finalizer receive
+    ac7_context and it carries `identity.run_uid` — but the run_folder lookup
+    itself lived ~250 lines away in the verify path, which is why the published
+    event reached the bus and not the journal.
+    """
+    if not ac7_context:
+        return None
+    identity = ac7_context.get("identity")
+    run_uid = getattr(identity, "run_uid", None)
+    if not run_uid:
+        return None
+    runtime = _load_pipeline_runtime()
+    run_entry = runtime.read_vault_entry(run_uid) or {}
+    run_folder = str((run_entry.get("frontmatter") or {}).get("run_folder") or "")
+    if not run_folder:
+        return None
+    return Path(tropo_roots.STUDIO_ROOT) / run_folder
+
+
+def _mirror_published_event_to_journal(
+    ac7_context: dict | None,
+    event_data: dict,
+    receipt_sha256: str,
+) -> None:
+    """AC5 (cb194126): the same publication, recorded in the run's own journal.
+
+    Closure calls assert_one_published_event() against the RUN JOURNAL, but the
+    finalizer emitted only to the studio bus, so v1.87 closed only after a human
+    copied the event across by hand. One publication should produce both records
+    in one finalization or neither.
+
+    Idempotent by the same rule the bus emission uses: scan for a matching event
+    first and append only when absent, because a retry that appends a second
+    record makes closure refuse for the opposite reason (two events, cannot say
+    which artefact the second carried).
+    """
+    run_folder = _run_journal_folder(ac7_context)
+    if run_folder is None:
+        return
+    runtime = _load_pipeline_runtime()
+    try:
+        existing = release_closure.assert_one_published_event(
+            runtime.read_events(run_folder), receipt_sha256
+        )
+    except Exception:
+        existing = None
+    if existing is not None:
+        return
+    journal_event = {
+        "type": release_closure.PUBLISHED_EVENT,
+        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": release_receipt.PUBLISHER_TOOL_SOURCE,
+        "source_uid": release_receipt.PUBLISHER_TOOL_UID,
+        "data": dict(event_data),
+    }
+    try:
+        runtime.append_event(run_folder, journal_event)
+    except Exception as exc:
+        # The bus already carries the event, so this is recoverable by re-running
+        # finalization: the scan above will skip the bus emit and land only this.
+        raise PublishError(
+            f"published event reached the bus but not the run journal at "
+            f"{run_folder}: {exc}. Closure reads the journal, so re-run "
+            f"finalization to complete the pair."
+        ) from exc
+
+
 def _finalize_verified_publication_locked(
     version: str,
     state: dict,
     candidate: dict,
+    ac7_context: dict | None = None,
 ) -> tuple[dict, str, str]:
     receipts = release_receipt.load_release_receipts(tropo_roots.STUDIO_ROOT)
     existing = [
@@ -828,6 +1219,7 @@ def _finalize_verified_publication_locked(
         raise PublishError(
             "publication finalization requires exactly one receipt pointer event"
         )
+    _mirror_published_event_to_journal(ac7_context, event_data, receipt_sha256)
 
     state.update(
         {
@@ -866,7 +1258,7 @@ def _finalize_verified_publication(
         ac7_context=ac7_context,
     )
     with _finalization_lock(version):
-        return _finalize_verified_publication_locked(version, state, candidate)
+        return _finalize_verified_publication_locked(version, state, candidate, ac7_context)
 
 
 def _complete_verified_publication(
@@ -887,7 +1279,7 @@ def _complete_verified_publication(
     )
     with _finalization_lock(version):
         receipt, receipt_sha256, fired_by = (
-            _finalize_verified_publication_locked(version, state, candidate)
+            _finalize_verified_publication_locked(version, state, candidate, ac7_context)
         )
         version_md = tropo_roots.STUDIO_ROOT / ".tropo" / "version.md"
         try:
@@ -1477,6 +1869,15 @@ def cmd_fire(args) -> int:
             tropo_roots.RELEASES_DIR / f"v{version}", version, dist_dir
         )
         print("  ✓ Supabase zip uploaded")
+        # AC2: the build stamped it; confirm the SEALED bytes agree before we go on.
+        _verify_sealed_briefing_notes(version, dist_dir)
+        # AC3: badge is outside the box, so the fire owns it end to end.
+        _stamp_os_release_badge(
+            version, dist_dir, datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        )
+        # AC4: flip BEFORE generation — the generator reads shipped entries from
+        # the index, so a later flip yields a manifest naming the prior version.
+        _flip_release_entry_to_shipped(version)
         _upload_update_manifest()
         _verify_published_update_manifest(version)
     except PublishError as e:
@@ -1616,6 +2017,130 @@ def cmd_verify_only(args) -> int:
     return 0
 
 
+def _frozen_package_sha256(version: str, activation_uid: str) -> str:
+    """The digest the release run froze — the receipt side of the comparison."""
+    runtime = _load_pipeline_runtime()
+    identity = release_package.resolve_release_run(
+        runtime, activation_uid=activation_uid, version=version
+    )
+    run_entry = runtime.read_vault_entry(identity.run_uid) or {}
+    run_folder = str((run_entry.get("frontmatter") or {}).get("run_folder") or "")
+    if not run_folder:
+        raise PublishError(
+            f"release run {identity.run_uid} declares no run_folder, so its frozen "
+            f"package digest cannot be read"
+        )
+    events = runtime.read_events(Path(tropo_roots.STUDIO_ROOT) / run_folder)
+    frozen = release_package.active_frozen_payload(events, identity.run_uid)
+    if not frozen:
+        raise PublishError(
+            f"release run {identity.run_uid} has no package_frozen event; there is "
+            f"no receipt digest to verify a hand-back against"
+        )
+    return str(frozen.get("package_sha256") or "")
+
+
+def _git(args, cwd, check=True, timeout=120):
+    # This later definition SHADOWS the module's original _git (line ~202) for every caller
+    # in the module — Python module-level redefinition. It arrived with the AC6 hand-back
+    # work signature-narrowed, which crashed _require_clone_origin(check=False) at the v1.88
+    # stage gesture (TypeError). Restored to delegate to the module's own _run exactly like
+    # the original, so both definitions are behaviorally one.
+    return _run(["git"] + list(args), cwd=cwd, check=check, timeout=timeout)
+
+
+def cmd_handback(args) -> int:
+    """Produce the transfer bundle on transfer/v<version>-dist. Credential-less side."""
+    version = args.version
+    root = Path(tropo_roots.STUDIO_ROOT)
+    dist_dir = tropo_roots.RELEASES_DIR / f"v{version}" / "dist"
+    zip_path = dist_dir / f"tropo-os-v{version}.zip"
+    payload_dir = _handback_payload_dir(version, root)
+    branch = TRANSFER_BRANCH_FMT.format(version=version)
+
+    print(f"=== HAND-BACK v{version} ===\n")
+    try:
+        record = write_transfer_bundle(version, zip_path, payload_dir)
+    except PublishError as exc:
+        print(f"  ✗ {exc}", file=sys.stderr)
+        return 3
+
+    if args.no_branch:
+        print("  → bundle only (--no-branch); nothing committed")
+        return 0
+
+    current = _git(["rev-parse", "--abbrev-ref", "HEAD"], root).stdout.strip()
+    checkout = _git(["checkout", "-B", branch], root)
+    if checkout.returncode != 0:
+        print(f"  ✗ could not create {branch}: {checkout.stderr.strip()}", file=sys.stderr)
+        return 4
+    try:
+        _git(["add", "-f", str(payload_dir.relative_to(root))], root)
+        commit = _git(
+            ["commit", "-m",
+             f"handback: v{version} transfer bundle ({record['package_sha256'][:12]})"],
+            root,
+        )
+        if commit.returncode != 0 and "nothing to commit" not in commit.stdout:
+            print(f"  ✗ commit failed: {commit.stderr.strip()}", file=sys.stderr)
+            return 5
+        push = _git(["push", "-u", "origin", branch], root)
+        if push.returncode != 0:
+            # The whole premise is a host that cannot push everywhere. Say which
+            # push failed rather than implying the bundle is unusable.
+            print(f"  ⚠ bundle committed on {branch} but push failed: "
+                  f"{push.stderr.strip()}", file=sys.stderr)
+            print("  → the bundle is on the local branch; transfer it by any means "
+                  "the credentialed host can read.")
+            return 6
+        print(f"  ✓ {branch} pushed — the credentialed host can now run:\n"
+              f"      python3 vault/tools/tropo-publish-release.py receive "
+              f"--version {version} --activation-uid <uid>")
+    finally:
+        if current and current != branch:
+            _git(["checkout", current], root)
+    return 0
+
+
+def cmd_receive(args) -> int:
+    """Verify a handed-back bundle against the frozen receipt, then stage it."""
+    version = args.version
+    root = Path(tropo_roots.STUDIO_ROOT)
+    payload_dir = (
+        Path(args.payload_dir) if args.payload_dir
+        else _handback_payload_dir(version, root)
+    )
+
+    print(f"=== RECEIVE HAND-BACK v{version} ===\n")
+    try:
+        expected = _frozen_package_sha256(version, args.activation_uid)
+        verify_transfer_bundle(version, payload_dir, expected)
+    except PublishError as exc:
+        print(f"  ✗ {exc}", file=sys.stderr)
+        return 3
+
+    dist_dir = tropo_roots.RELEASES_DIR / f"v{version}" / "dist"
+    dist_dir.mkdir(parents=True, exist_ok=True)
+    placed = dist_dir / f"tropo-os-v{version}.zip"
+    shutil.copy2(payload_dir / f"tropo-os-v{version}.zip", placed)
+    print(f"  ✓ verified bundle placed at {dist_dir}")
+
+    # cmd_stage consumes the UNPACKED box, not dist/. Reconstruct it here or the
+    # next line exits 3 with the artefact sitting one directory away.
+    builds_root = tropo_roots.RELEASES_DIR / f"v{version}" / "builds"
+    try:
+        reconstruct_build_dir(version, placed, builds_root)
+    except PublishError as exc:
+        print(f"  ✗ {exc}", file=sys.stderr)
+        return 4
+
+    if args.verify_only:
+        print("  → --verify-only: not staging")
+        return 0
+    print("\nHanding to the existing stage path —")
+    return cmd_stage(args)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Release Coupling — stage, fire, defer, or verify-only")
     sub = ap.add_subparsers(dest="cmd")
@@ -1638,6 +2163,23 @@ def main() -> int:
     d.add_argument("--version", default=None, help="default: the most recently staged version")
     d.add_argument("--reason", required=True)
     d.set_defaults(func=cmd_defer)
+
+    h = sub.add_parser("handback", help="AC6: produce the transfer bundle (credential-less build host)")
+    h.add_argument("--version", required=True)
+    h.add_argument("--no-branch", action="store_true",
+                   help="write the bundle without committing/pushing a transfer branch")
+    h.set_defaults(func=cmd_handback)
+
+    r = sub.add_parser("receive", help="AC6: verify a handed-back bundle against the receipt, then stage")
+    r.add_argument("--version", required=True)
+    r.add_argument("--activation-uid", required=True)
+    r.add_argument("--payload-dir", default=None, help="override the handback payload directory")
+    r.add_argument("--verify-only", action="store_true", help="verify and place, do not stage")
+    r.add_argument("--remote", default=None)
+    r.add_argument("--clone", default=None)
+    r.add_argument("--clone-dir", default=None)
+    r.add_argument("--allow-delete", action="store_true")
+    r.set_defaults(func=cmd_receive)
 
     v = sub.add_parser("verify-only", help="re-verify a live version (attested-class SOP path)")
     v.add_argument("--version", required=True)

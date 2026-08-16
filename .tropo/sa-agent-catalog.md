@@ -3,7 +3,7 @@ uid: sa-agent-catalog
 name: sa-agent-catalog
 type: catalog
 kind: sa-agent
-generated_at: 2026-08-14
+generated_at: 2026-08-15
 generated_by: generate-capability-catalogs.py (v1.15)
 source: agents/sa/*/<name>.md filtered by type:session-agent + extraction_scope:ship
 governed_by: b4e2a718   # session-agent.capsule v1.4
@@ -12,7 +12,7 @@ extraction_scope: ship
 
 # Tropo sa.* Agent Catalog
 
-*Auto-generated 2026-08-14 from `agents/sa/<name>/<name>.md` activation files with `type: session-agent` + `extraction_scope: ship`. Sa.\* agents are SEMI-AUTONOMOUS (own context + judgment + [QUERY] mid-execution capacity) — a category boundary, not a flavor variation. Plus dual-purpose: real fleet-ops work AND living-example pattern library for users authoring their own. The user-facing 'sa-agent' filename mirrors Claude Code's tool-catalog pattern; underlying schema type is `session-agent`. Hand-authored content lives in each activation file's `trigger_description:` field.*
+*Auto-generated 2026-08-15 from `agents/sa/<name>/<name>.md` activation files with `type: session-agent` + `extraction_scope: ship`. Sa.\* agents are SEMI-AUTONOMOUS (own context + judgment + [QUERY] mid-execution capacity) — a category boundary, not a flavor variation. Plus dual-purpose: real fleet-ops work AND living-example pattern library for users authoring their own. The user-facing 'sa-agent' filename mirrors Claude Code's tool-catalog pattern; underlying schema type is `session-agent`. Hand-authored content lives in each activation file's `trigger_description:` field.*
 
 ## How to commission
 
@@ -82,4 +82,4 @@ Sa.\* agents are dispatched, not invoked directly. To commission one: read [`age
 
 ---
 
-*Tropo sa.\* Agent Catalog | Generated 2026-08-14 | v1.15 substrate*
+*Tropo sa.\* Agent Catalog | Generated 2026-08-15 | v1.15 substrate*

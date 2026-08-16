@@ -56,22 +56,48 @@ import re
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 VAULT_ROOT = Path(__file__).resolve().parents[2]
 VAULT_FILES = VAULT_ROOT / "vault" / "files"
-VAULT_SESSION_AGENTS = VAULT_ROOT / "vault" / "session-agents"
 RECYCLE_ROOT = VAULT_ROOT / "recycle"
 INDEX = VAULT_ROOT / "vault" / "00-index.jsonl"
 ARCHIVE_INDEX = VAULT_ROOT / "vault" / "00-archive-index.jsonl"
 TODAY = time.strftime("%Y-%m-%d")
 NOW = time.strftime("%Y-%m-%dT%H:%M:%S")
 
-# Ordered search paths: vault/files/ first (canonical), vault/session-agents/ second (v1.62 Lane S-migrate).
-# Extended per Vela V56 event 00000504 finding: tropo-recycle only covered vault/files/;
-# vault/session-agents/ retirement has no canonical gesture without this extension.
-VAULT_SEARCH_PATHS = [VAULT_FILES, VAULT_SESSION_AGENTS]
-
 _UID_RE = re.compile(r'\b([0-9a-f]{8})\b')
+
+
+def uid_search_paths(vault_root: Optional[Path] = None) -> "list":
+    # Optional[...] rather than PEP-604 `Path | None`: this tool SHIPS, and the
+    # supported floor is Python 3.9 (the stock macOS interpreter), where `X | None`
+    # in a signature raises at import. `from __future__ import annotations` is the
+    # usual cure and is not available here — the module carries a second docstring
+    # before the imports, so a __future__ import is a SyntaxError. Caught by the
+    # release build's ship-floor gate, which I had broken this morning.
+    """Directories a bare ``<uid>`` may resolve in — discovered, not enumerated.
+
+    This was a hardcoded pair (vault/files/, vault/session-agents/) and each entry
+    on it was added after someone hit the gap: V56 added session-agents when a
+    retirement had no gesture, and 2c6afe9e was filed when a Green City agent entry
+    SKIPped as "source not found". At that point vault/agents/, vault/capsules/,
+    vault/entities/ and vault/playbooks/ all held UID-named entries the gesture
+    could not reach, so adding the one directory the finding named would have left
+    three instances of the same bug behind it.
+
+    "Never rm; always the gesture" has no carve-out for a directory nobody thought
+    of, so the lookup asks a question instead of consulting a list: every immediate
+    subdirectory of vault/ is a candidate root. A directory added next year is
+    covered the day it exists. vault/files/ stays first — it holds ~99% of entries,
+    so the common case resolves on the first probe, and the order is deterministic.
+    """
+    root = (vault_root or VAULT_ROOT) / "vault"
+    files_dir = root / "files"
+    if not root.is_dir():
+        return [files_dir]
+    others = sorted(p for p in root.iterdir() if p.is_dir() and p != files_dir)
+    return [files_dir, *others]
 
 
 def _find_inbound_refs(target_uid: str) -> list[str]:
@@ -136,7 +162,7 @@ def _remove_from_index(uid: str):
 
 
 def recycle_uid(uid: str, reason: str, dest_dir: Path) -> tuple[bool, str]:
-    """Soft-delete by UID — searches VAULT_SEARCH_PATHS for <uid>.md.
+    """Soft-delete by UID — searches uid_search_paths() for <uid>.md.
 
     S6 fix (v1.80): also accepts an explicit path argument when ``uid`` contains
     a path separator. This lets callers outside vault/files/ (e.g. vault/playbooks/,
@@ -161,11 +187,11 @@ def recycle_uid(uid: str, reason: str, dest_dir: Path) -> tuple[bool, str]:
         if not raw_path.endswith(".md") and not Path(raw_path).suffix:
             path_variants.append(raw_path + ".md")
         src = None
-        # S6(b) fix (v1.80): also try the canonical search dirs (vault/files/,
-        # vault/session-agents/) as bases — so a bare `<uid>.md` arg with no directory
-        # component (which is path-shaped per the `.md` suffix, and therefore no longer
-        # pre-stripped in main()) still resolves the same way it always has.
-        for base in [VAULT_ROOT, Path.cwd(), *VAULT_SEARCH_PATHS]:
+        # S6(b) fix (v1.80): also try the canonical search dirs as bases — so a bare
+        # `<uid>.md` arg with no directory component (which is path-shaped per the `.md`
+        # suffix, and therefore no longer pre-stripped in main()) still resolves the same
+        # way it always has.
+        for base in [VAULT_ROOT, Path.cwd(), *uid_search_paths()]:
             for variant in path_variants:
                 candidate = base / variant if not Path(variant).is_absolute() else Path(variant)
                 if candidate.exists():
@@ -178,15 +204,20 @@ def recycle_uid(uid: str, reason: str, dest_dir: Path) -> tuple[bool, str]:
         # Use the stem as the UID token for the log entry
         uid = src.stem
     else:
-        src = None
-        for search_dir in VAULT_SEARCH_PATHS:
-            candidate = search_dir / f"{uid}.md"
-            if candidate.exists():
-                src = candidate
-                break
-        if src is None:
-            searched = ", ".join(str(p.relative_to(VAULT_ROOT)) for p in VAULT_SEARCH_PATHS)
+        search_paths = uid_search_paths()
+        matches = [d / f"{uid}.md" for d in search_paths if (d / f"{uid}.md").exists()]
+        if len(matches) > 1:
+            # UIDs are unique by OS invariant, so two homes for one UID is drift, and
+            # picking the first silently would soft-delete a file the caller did not name.
+            where = ", ".join(str(m.relative_to(VAULT_ROOT)) for m in matches)
+            return False, (
+                f"  REFUSED {uid}: resolves in {len(matches)} directories ({where}). "
+                f"Pass the explicit path of the one you mean."
+            )
+        if not matches:
+            searched = ", ".join(str(p.relative_to(VAULT_ROOT)) for p in search_paths)
             return False, f"  SKIP {uid}: source not found (searched: {searched})"
+        src = matches[0]
     # Non-.md governed artifacts keep their real extension in the recycle bin (a .jsonl
     # file silently renamed to .md would misrepresent its own type); the existing <uid>.md
     # convention is unchanged for the primary markdown case (both explicit-path .md hits
@@ -243,7 +274,7 @@ def main():
         # every such arg down to a bare stem BEFORE recycle_uid ever saw it, so that
         # branch (recycle_uid lines ~105-132) was permanently unreachable dead code:
         # `agents/sa/foo/foo.md` became `foo`, which then fails recycle_uid's bare-UID
-        # lookup (VAULT_SEARCH_PATHS has no `foo.md`) instead of resolving the real path.
+        # lookup (no search dir has `foo.md`) instead of resolving the real path.
         #
         # `uid_str` below is a SEPARATE bare-UID derivation used only for the inbound-ref
         # guard (which needs an 8-hex UID to look up in the index) and for event logging;

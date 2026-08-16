@@ -88,6 +88,21 @@ A built release that is neither `live` nor `deferred-by-mike` is drift. Drift re
 
 Write changes under `## [Unreleased]` in `CHANGELOG.md` as they land. Before build, promote them to `## [X.Y.Z] - YYYY-MM-DD` and update the comparison links. Stage checks that the release extract's changelog exactly matches the Studio source; rebuild is the cure for divergence, never a hand-sync.
 
+## Shipped doc surfaces — check BEFORE build (v1.87 lesson)
+
+Four reader-facing surfaces drift silently because each is a manual step. At v1.87 they were
+2, 2, ~3-months, and **6 releases** stale respectively while every gate stayed green. Until the
+fire enforces this mechanically (weld task `01dc1abd`), verify each names the firing version
+**before** the build:
+
+- [ ] `RELEASE-NOTES.md` — an authored entry for `X.Y.Z` exists at the top.
+- [ ] `agents/tropo/briefing-package/current-release-notes.md` — `release_version`, title, date, and description all say `X.Y.Z`.
+- [ ] `TROPO-CAPABILITIES.md` — reviewed against this release's features (not just "unchanged since last time").
+- [ ] `tropo-app/os-release.json` — version, `sizeBytes` (from the built zip), and `releasedAt`; then publish the site split so the website badge matches.
+
+A release whose package, manifest, and website disagree about the current version is telling
+strangers three different stories. One version, every surface.
+
 ## Attested-class releases
 
 An attested-manual release has no normal pipeline run, so the coupled stage/fire path refuses it. Mike performs that release manually, then records remote proof with:

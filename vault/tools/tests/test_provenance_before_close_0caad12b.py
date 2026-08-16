@@ -113,6 +113,39 @@ class _ProvenanceCase(fan_in_suite.DevClosureFanInWeldTests):
         self.assertNotEqual(self.fm(self.RUN).get("status"), "complete",
                             "a refused close completed the run")
 
+    def commit_post_test_evidence(self, *, tested_commit: str | None = None,
+                                  mutate_spec=None) -> str:
+        """Commit the exact two-layer shape used by a real independent report."""
+        import subprocess
+        import yaml
+
+        report_uid = "e1de0001"
+        claimed = tested_commit or self.tested_sha
+        self.write(report_uid, fan_in_suite.entry(
+            report_uid, type="verification-report", title="independent report",
+            status="accepted", verdict="pass", tested_commit=claimed,
+            triggering_dev_spec=self.SPEC,
+            triggered_by_dev_cycle=self.ACT))
+
+        spec_path = self.files / f"{self.SPEC}.md"
+        raw = spec_path.read_text(encoding="utf-8")
+        _empty, frontmatter, body = raw.split("---", 2)
+        spec_fm = yaml.safe_load(frontmatter) or {}
+        spec_fm["acceptance_evidence"] = [report_uid]
+        if mutate_spec is not None:
+            mutate_spec(spec_fm)
+        spec_path.write_text(
+            "---\n" + yaml.safe_dump(spec_fm, sort_keys=False) + "---" + body,
+            encoding="utf-8")
+
+        run = lambda *args: subprocess.run(  # noqa: E731
+            ["git", *args], cwd=str(self.tmp), capture_output=True, text=True,
+            check=True)
+        run("add", str(spec_path.relative_to(self.tmp)),
+            str((self.files / f"{report_uid}.md").relative_to(self.tmp)))
+        run("commit", "-qm", "bind independent post-test evidence")
+        return run("rev-parse", "HEAD").stdout.strip()
+
 
 _ProvenanceCase._drop_inherited_cases()
 
@@ -282,6 +315,61 @@ class BindingMismatchTests(_ProvenanceCase):
         with self.assertRaises(Exception) as refused:
             self._fannable_row()
         self.assertIn("receipt", str(refused.exception).lower())
+
+
+# ─── Recovery — the report cannot contain itself ────────────────────────────
+class PostTestEvidenceDescendantTests(_ProvenanceCase):
+    """A typed report may follow its tested tree; product changes may not."""
+
+    def verify_then_commit_report(self, **kwargs) -> str:
+        eng.action_terminal_verify(
+            self.ACT, "talos", tested_sha=self.tested_sha)
+        return self.commit_post_test_evidence(**kwargs)
+
+    def test_matching_evidence_only_descendant_closes_and_fans_in_old_tree(self) -> None:
+        evidence_head = self.verify_then_commit_report()
+        self.assertNotEqual(evidence_head, self.tested_sha)
+
+        result = self.close(verify=False)
+
+        self.assertIn("workflow_complete", result)
+        self.assertEqual(self.fm(self.SPEC).get("status"), "done")
+        self.assertEqual(
+            self._fannable_row()["tested_final_commit"], self.tested_sha,
+            "post-test report commit replaced the tree that actually ran the tests")
+
+    def test_product_change_above_tested_tree_still_refuses(self) -> None:
+        self.verify_then_commit_report()
+        import subprocess
+
+        product = self.tmp / "vault" / "tools" / "untested.py"
+        product.parent.mkdir(parents=True)
+        product.write_text("raise RuntimeError('untested')\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "add", str(product.relative_to(self.tmp))], cwd=str(self.tmp),
+            check=True)
+        subprocess.run(
+            ["git", "commit", "-qm", "unverified product change"], cwd=str(self.tmp),
+            check=True)
+
+        with self.assertRaises(SystemExit):
+            self.close(verify=False)
+        self.assertNotEqual(self.fm(self.SPEC).get("status"), "done")
+
+    def test_report_naming_another_tested_tree_refuses(self) -> None:
+        self.verify_then_commit_report(tested_commit="b" * 40)
+
+        with self.assertRaises(SystemExit):
+            self.close(verify=False)
+        self.assertNotEqual(self.fm(self.SPEC).get("status"), "done")
+
+    def test_non_evidence_dev_spec_edit_refuses(self) -> None:
+        self.verify_then_commit_report(
+            mutate_spec=lambda fm: fm.__setitem__("title", "scope changed after test"))
+
+        with self.assertRaises(SystemExit):
+            self.close(verify=False)
+        self.assertNotEqual(self.fm(self.SPEC).get("status"), "done")
 
 
 # ─── AC5 — retry and isolation ───────────────────────────────────────────────

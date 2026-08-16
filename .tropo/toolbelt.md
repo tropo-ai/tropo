@@ -3,7 +3,7 @@ uid: toolbelt
 name: toolbelt
 type: catalog
 kind: belt
-generated_at: 2026-08-14
+generated_at: 2026-08-15
 generated_by: generate-capability-catalogs.py
 extraction_scope: ship
 ---
@@ -161,4 +161,4 @@ python3 vault/tools/tropo-vault-search.py \"<query>\"
 
 *Anything not here? → `python3 vault/tools/tropo-vault-search.py <query>`*
 
-*Tropo Toolbelt | 2026-08-14 | v1.15 substrate*
+*Tropo Toolbelt | 2026-08-15 | v1.15 substrate*

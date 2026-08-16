@@ -101,6 +101,8 @@ Exit codes:
 """
 
 import argparse
+import hashlib
+import json
 import re
 import subprocess
 import sys
@@ -115,6 +117,60 @@ VAULT_FILES = VAULT_ROOT / "vault" / "files"
 PIPELINE_ACTIVATE_SCRIPT = Path(__file__).resolve().parent / "e337f1dd.py"
 DEFAULT_PIPELINE_UID = "cd1fcd25"  # dev-pipeline
 LOCKABLE_STATUSES = {"draft"}
+
+
+def render_lock_run_created(
+    *,
+    run_uid: str,
+    activation_uid: str,
+    root_uid: str,
+    dev_spec_uid: str,
+    pipeline_uid: str,
+    pipeline_version: str,
+    actor: str,
+    timestamp: Optional[str] = None,
+    backfilled_by: Optional[str] = None,
+) -> str:
+    """Render the single journal seed authored atomically by the lock.
+
+    The lock creates the run identity and folder, so it owns the first event.
+    ``bootstrap_pending`` tells pipeline-runtime this is a lock seed, not a
+    completed bootstrap: runtime adopts this exact event once, then appends the
+    immutable activation contract and step declarations without duplicating
+    ``run_created``.
+    """
+    ts = timestamp or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    span_id = hashlib.sha256(
+        f"{activation_uid}:{run_uid}:run_created".encode("utf-8")
+    ).hexdigest()[:16]
+    data = {
+        "pipeline": pipeline_uid,
+        "pipeline_uid": pipeline_uid,
+        "pipeline_version": pipeline_version,
+        "pipeline_run_uid": run_uid,
+        "dev_spec_uid": dev_spec_uid,
+        "activation_uid": activation_uid,
+        "activation_root_uid": root_uid,
+        "members": [root_uid],
+        "authorized_by": actor,
+        "bootstrap_pending": True,
+    }
+    if backfilled_by:
+        data["backfilled_by"] = backfilled_by
+    event = {
+        "event": "run_created",
+        "ts": ts,
+        "actor": actor,
+        "actor_label_resolved": None,
+        "step": None,
+        "stage": None,
+        "data": data,
+        "schema_version": 2,
+        "trace_id": activation_uid,
+        "span_id": span_id,
+        "parent_span_id": None,
+    }
+    return json.dumps(event, ensure_ascii=False) + "\n"
 
 
 def split_frontmatter(text: str) -> Optional[str]:
@@ -135,6 +191,58 @@ def parse_frontmatter(text: str) -> dict:
     except yaml.YAMLError:
         return {}
     return fm if isinstance(fm, dict) else {}
+
+
+def backfill_missing_run_journal(
+    run_uid: str,
+    *,
+    files_dir: Path = VAULT_FILES,
+    vault_root: Path = VAULT_ROOT,
+    backfilled_by: str,
+) -> Path:
+    """Create only the missing lock seed for one already-declared run.
+
+    This is intentionally refusal-heavy: it never overwrites a journal, never
+    guesses a folder, and only repairs a pipeline-run whose lock declaration
+    snapshot is present. The caller supplies an explicit UID, keeping a bounded
+    principal-approved backfill bounded.
+    """
+    entry_path = files_dir / f"{run_uid}.md"
+    if not entry_path.is_file():
+        raise ValueError(f"pipeline-run {run_uid} does not resolve")
+    fm = parse_frontmatter(entry_path.read_text(encoding="utf-8"))
+    if fm.get("type") != "pipeline-run":
+        raise ValueError(f"{run_uid} is not type:pipeline-run")
+    run_folder = str(fm.get("run_folder") or "")
+    if not run_folder:
+        raise ValueError(f"pipeline-run {run_uid} declares no run_folder")
+    folder = (vault_root / run_folder).resolve()
+    try:
+        folder.relative_to(vault_root.resolve())
+    except ValueError as exc:
+        raise ValueError(f"pipeline-run {run_uid} run_folder escapes the Studio") from exc
+    if not (folder / "declaration-snapshot.json").is_file():
+        raise ValueError(
+            f"pipeline-run {run_uid} has no declaration-snapshot.json; "
+            "this is not the bounded lock-writer gap"
+        )
+    journal = folder / "run.jsonl"
+    if journal.exists():
+        raise FileExistsError(f"pipeline-run {run_uid} already has run.jsonl")
+    journal.write_text(
+        render_lock_run_created(
+            run_uid=run_uid,
+            activation_uid=str(fm.get("activation") or ""),
+            root_uid=str(fm.get("activation_root_uid") or ""),
+            dev_spec_uid=str(fm.get("dev_spec_uid") or ""),
+            pipeline_uid=str(fm.get("pipeline") or ""),
+            pipeline_version=str(fm.get("pipeline_version") or ""),
+            actor=str(fm.get("created_by") or fm.get("owner") or "unknown"),
+            backfilled_by=backfilled_by,
+        ),
+        encoding="utf-8",
+    )
+    return journal
 
 
 def find_correlated_activation(dev_spec_uid: str, files_dir: Path = VAULT_FILES) -> Optional[dict]:
@@ -335,6 +443,18 @@ def plan_dev_snapshot_transaction(
     plan.create(runs / run_name / "declaration-snapshot.json",
                 _json.dumps(dict(snapshot.as_dict(), **inputs),
                             indent=2, sort_keys=True) + "\n")
+    plan.create(
+        runs / run_name / "run.jsonl",
+        render_lock_run_created(
+            run_uid=run_uid,
+            activation_uid=activation_uid,
+            root_uid=root_uid,
+            dev_spec_uid=dev_spec_uid,
+            pipeline_uid=DEFAULT_PIPELINE_UID,
+            pipeline_version=snapshot.pipeline_version,
+            actor=locked_by,
+        ),
+    )
     plan.create(files_dir / f"{run_uid}.md", "---\n" + "\n".join([
         f"uid: {run_uid}", "type: pipeline-run",
         f'title: "Dev run {run_name}"',

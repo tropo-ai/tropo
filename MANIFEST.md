@@ -1,8 +1,8 @@
-# Tropo-OS v1.87.0 — Build Manifest
+# Tropo-OS v1.88.0 — Build Manifest
 
-**Generated:** 2026-08-14 22:55
-**Files:** 1191
-**Total size:** 19,901,378 bytes (19434.9 KB)
+**Generated:** 2026-08-15 23:31
+**Files:** 1199
+**Total size:** 20,001,101 bytes (19532.3 KB)
 
 | Path | Size | SHA-256 |
 |------|-----:|--------|
@@ -16,8 +16,8 @@
 | .tropo-studio/bindings/CAPSULE.md | 1,721 | `a9f8ae21cecb7ab375f45cfbd0ae15ab6a648bf96c52c57240d348365f347825` |
 | .tropo-studio/directives/CAPSULE.md | 1,796 | `44ad3b3b4807b6f5cc1a8f2bf43ed9622eddc691da0bec1d5bdd668b07988827` |
 | .tropo-studio/directives/example.directive.md | 3,824 | `fb9436fbf73d6e24d515395856f3a189b3b431c3fe715604e3f56946f1cf68fd` |
-| .tropo-studio/dirty-counter.json | 106 | `71225ab42b8f107e606d36286a88c770ce4e606c356b2377438dcd89122a53af` |
-| .tropo-studio/gardener-wall-clock.json | 366 | `31ebb0f7340a9b538a0a10698a1b5a643e46d87fe4e8c08c68a3172556d47273` |
+| .tropo-studio/dirty-counter.json | 106 | `3161e08fd8dabcb11a7ef52f24bedcd97dd16ddac5aee354770539e04298ccc7` |
+| .tropo-studio/gardener-wall-clock.json | 366 | `5a69963fdabf19e1894ccb479babff416af21d2b28f3c185ef37fd6117edd262` |
 | .tropo-studio/memory/CAPSULE.md | 2,189 | `18067bfbca3e9b89cef2642fbf79f56af726f2114a5f42a28433f207e53620ca` |
 | .tropo-studio/memory/MEMORY.md | 1,528 | `96f63b6ffc2419dd2fbfeba3b514d1357a1f84d63e48971d37632f209454221a` |
 | .tropo-studio/memory/entries/839a65f9.md | 2,276 | `32a11c3a659c1ad5a7bb1e699d9531aad02692efbe88b438eb9dd998c981a336` |
@@ -31,17 +31,18 @@
 | .tropo-studio/registries/registry.jsonl | 0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
 | .tropo-studio/runs/CAPSULE.md | 1,758 | `6debe814b196e1f7afab3c4e8169e2ead60a9f3136e755e632687f23bc6f6b6d` |
 | .tropo-studio/scripts/CAPSULE.md | 2,616 | `a7a9da2ab628723f0f940d0f995d99cb7a15f6537f4752e8b7b688cfad0d5524` |
-| .tropo-studio/shards/index-rebuild-run.json | 130,906 | `f58d9737c67b2dc133cf094b142330d44fd805c5e0cbc88d9a558acd9b8898f8` |
+| .tropo-studio/shards/index-rebuild-run.json | 131,712 | `88ae9043d283b52337c6429512746f4bd2a3f933484f2c0dc700241795a87b83` |
 | .tropo/00-index.md | 7,694 | `c3bac54166a650afd166461d6373a40e990ad78a5863c1f12dbab349047bd54a` |
 | .tropo/AGENTS.md | 616 | `a67a4311be1c5ecc73a7c5e8458a4e5c2b93d631aecfb4d30df57617feceef6c` |
 | .tropo/CAPSULE.md | 1,974 | `b66b39c83e93af57eba2c84bddff8aef2cd1c152dbe718fc856637bb284b0021` |
 | .tropo/HUMAN-NAVIGATION.md | 24,148 | `0c14371b354082e49fcc9d66bf30d685a33f4e861dc25e2f920589ea11a7090c` |
+| .tropo/MODES-AND-PROTOCOLS.md | 4,229 | `56cc7e27542d98601a620a14b6494b8d8d776d0648c561f28684d1d2ea855c4a` |
 | .tropo/SELF-HEALING.md | 17,447 | `7f83d40414f338b854c04b2f7a3335fcb83e9a6d077281835c9f2071c02e3d18` |
 | .tropo/TROPO-CONTROL.md | 9,433 | `2ffcbd1a2164a015560851cbe50d57b8866b8cc252785a344d0f796dadf01efd` |
 | .tropo/WAKE-DISCIPLINE.md | 13,794 | `cb12de6efb869e8a0bc47c79c8979dad43e71bba96d701c021a8a4f54e9f17b1` |
 | .tropo/app-ship.manifest.md | 5,808 | `db8fceaa83861e4780b4fb1d071ec42c1a8cd8e3bb89e5c70d838f41ef871f26` |
 | .tropo/boot-config.md | 2,474 | `ff7290ce3b023167b6aa9885a05e2a67170cc960e6cac0c0aefc132209c991d4` |
-| .tropo/concierge/activate.md | 70,320 | `9ec1aef48a19255eee51262723b225c636866390ee018b0897d494175c276056` |
+| .tropo/concierge/activate.md | 70,320 | `08659d17f7e90ea4124fd3f43dc29c4598b323abc6782d9eff247d7b54cd01e0` |
 | .tropo/definitions/AGENTS.md | 642 | `4bd007d469c7ea2f8594c461ed7a56870d2fa84a84466fc22048d24a62c188bb` |
 | .tropo/definitions/CAPSULE.md | 4,487 | `642f21d631f3c053bd60be30d03fd1eb1e60eb780ff4dd2bcee7b2a1fdd6b312` |
 | .tropo/definitions/edge-types.definitions.jsonl | 2,729 | `1d3c533688feeb25757879c88238d67f1e88b6e476600be5535194baa4420592` |
@@ -77,7 +78,7 @@
 | .tropo/playbooks/setup-new-pipeline.playbook.md | 407 | `7ad4aab54c0bb3b4d3b1cd2def8282f24647d955b688f1da7eaa73dad902ffe5` |
 | .tropo/playbooks/team-onboarding-day2.playbook.md | 416 | `4ec317001f3462f1e3f742b32a4b32e0a9f2e6812da7b789469a9fe56cb13b53` |
 | .tropo/playbooks/test-harness.playbook.md | 8,713 | `d1769dc7cd42b035a3beb1f8159bbb6bd80a9d8f62d0b6abf6a1d104b735e652` |
-| .tropo/sa-agent-catalog.md | 5,996 | `f87d056189026f6de2f907f95ecd6138605bdd947521bc1eeb9bd9828d56d1f1` |
+| .tropo/sa-agent-catalog.md | 5,996 | `48dcf7d0e194c0c580228cc6c1b529202ff4fd109d5479335064b9cf840f8f40` |
 | .tropo/scheduled-agents.md | 5,054 | `e8870c74a7dc39f577890eb3b1a304e81404519dc0af4fd98924866f3238f147` |
 | .tropo/schema/agents-md-compatibility.md | 3,870 | `c259bd654f0f58501762be12d198c88ac090cd46b692b049f505656b8b47c8aa` |
 | .tropo/schema/charter-schema.md | 2,142 | `05b7dd6342059f6f2dc1f94cfc83a648ee65751bf374319cd59119bfbdac11c9` |
@@ -136,8 +137,8 @@
 | .tropo/scripts/publish_targets/docx.py | 14,892 | `1c4859d7257463d8e102d6e0daaaaf1d0e19e1538cb4c5e208c09e26367d1c44` |
 | .tropo/scripts/publish_targets/web.py | 22,325 | `1b9d3c426621611d2aff1f7470406fad3b4c2e8d2d3902e9b9dc5a52e27add9a` |
 | .tropo/scripts/publish_types.py | 1,223 | `089d072b25e397f1618e40ad60f88cd4ae9d9e2451d4e67c061b4cc0bee04081` |
-| .tropo/scripts/test-harness-check.py | 12,968 | `c9e340e48c592833c0b8acf5e036281af96927d72d08c4dbc33e0a1dce28e970` |
-| .tropo/scripts/test-harness-l2.py | 8,275 | `e452af9b69e0682a203bfba721ff4c8be1c0be7b657c9f5e3f0f321607ac8f9e` |
+| .tropo/scripts/test-harness-check.py | 13,632 | `f1b77e535a2de96a246d17a06eb3cd75966a93d469bef7225f40f15cfab9ea83` |
+| .tropo/scripts/test-harness-l2.py | 9,508 | `726a3c716b618241b997100d1e696bd1736445729a22c3102667145ee3cc7a15` |
 | .tropo/scripts/test_bootstrap_replay_b1_v154.py | 9,114 | `aebc6b0a35f6a12f92d7f11aca6f497b85e012ea183987954fd42b5079cd3a51` |
 | .tropo/scripts/test_dev_spec_activation_input.py | 5,129 | `ba83d008211b5b8e118e890b08cf554135897980e074ee5f81f876e4b909b26d` |
 | .tropo/scripts/test_engine_race_lock.py | 7,680 | `c531d2d8b2130738e7a59769e70496e29f5ae916a18e7fba3f4077bc0605ca9f` |
@@ -149,20 +150,19 @@
 | .tropo/scripts/view/view-by-status.py | 5,032 | `c02999d1d9ef5e8650849b62c4aaca74a3a715e99c557b8f2d7e4b4116e10ad1` |
 | .tropo/scripts/view/view-by-tag.py | 3,793 | `220d75071192097aee1c146452bb63d61b7984dcd8c614ed34f7d6c8885a0f64` |
 | .tropo/seed/vault/project-board.board-definition.md | 4,898 | `f2616c6d03c5caa73a03df5476a89c39a56513e55e2701ca0fabe14aa9aefa13` |
-| .tropo/skill-catalog.md | 23,003 | `37ce8e1471fa01330e90a98031a43110de1b5a874f2949f6eef519549d0b8c86` |
+| .tropo/skill-catalog.md | 24,438 | `89b4259ebf77704f5d75f89f91c05bbd5c39942ca11b638e86e6bd94f0ad82f6` |
 | .tropo/system/README.md | 334 | `818601329126658b406024375ea51f40f0de10fb5153c4b4d72488f83fc43563` |
 | .tropo/system/vault-steward.template.md | 30,294 | `8a40fcdb4b0f540b4c6d9ec0a9c807a742b04fd9d52b2588c12e4ade74aa216d` |
-| .tropo/tool-catalog.md | 52,624 | `dda7c55ddab103fb47810f58cf81883546276992aeea04e21c7bddda8c88776d` |
-| .tropo/toolbelt.md | 4,394 | `2a092434953dfa49936da5dee0cfdd31b59af578de1a769ae90619d919d71ea4` |
+| .tropo/tool-catalog.md | 53,268 | `b350950f7cb4a29cc10c8759bab6f871c1d563d89af91148f8a289bfea598ea1` |
+| .tropo/toolbelt.md | 4,394 | `3f2ea8feea78cca9d2ba755cb09399df0ee850d842f0a1d498af331464eec5e5` |
 | .tropo/update-source.json | 428 | `d730fc04413708a6b0cabce4b8d738de2becfe4b57d7370b3d708cdddb3d3de9` |
-| .tropo/version.md | 8 | `fe7e0870e475ae13216be870b1a42efb0bb7301f45335520b36f8815e786fa26` |
+| .tropo/version.md | 8 | `0f4315c593824254522d297fe65e902c02182251fd6fbbc1142667fd5dd9d966` |
 | .tropo/vocabulary/edge-types.md | 3,300 | `53899e8768430bd032ffd6d80c7fd0db7ee270f20b8d277be8797b5432ae0af9` |
 | 00-tropo-nav/00-tropo-active/01-studio-inbox/2d5f9b04 — 01-studio-inbox.md | 3,856 | `4cdb0a5e05cb05ecf93429c7ec521f022c237c1feeaea64677a535cdce1ebb04` |
 | 00-tropo-nav/00-tropo-active/external-context/48f8c52c — external-context.md | 1,673 | `f6ecd517a9a792232c731e28c450efa01b946e81a1e211b627081c53f97545af` |
-| 00-tropo-nav/00-tropo-active/hello-tropo/board.md | 1,109 | `7993f84b5458c98c32d16b3014785df3b8e569c91271c0ace1122ac8db6a39a5` |
 | 00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Agents/99ed55fd — Tropo Agents.md | 39,493 | `bdca4d87e4548cd1a8c474d2e1abf5612dae90120ef9f0619f4900eec09417ff` |
 | 00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Documentation/f87e33f0 — Tropo Documentation.md | 54,398 | `705b1597b0faa722b93ed26df836f740b91a96e978ee3e276cb6155230fbaa36` |
-| 00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Governance/8dd772a0 — Tropo Governance.md | 97,189 | `a3689db6e0bd406243c0e66972c0af5c72d8de0234fc7efef9e9c2844df334be` |
+| 00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Governance/8dd772a0 — Tropo Governance.md | 97,189 | `1e8eb223edd6a609a88214e55aa3f2a2c1b801a29790649f6fe0adf9350c3dbf` |
 | 00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Governance/Import Primitive — Capability Overview/58722bdf — Import Primitive — Capability Overview.md | 9,325 | `ab6f70d87468fa1ea5b5ebe75e947fee2337c3c30dc4af20f4dedf9cd5390681` |
 | 00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Governance/Tropo Link/3a207ed3 — Tropo Link.md | 12,284 | `5d6f4e2aae5f28e9a673d811d3a9626c8814c9f8c5fd28058e167a1141932fb4` |
 | 00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Library/1aba710c — Tropo Library.md | 26,724 | `5bbc7c3feb5b04b72ca384cac4731d008c5cffd20a82a2e6f041019f902e6347` |
@@ -265,7 +265,7 @@
 | 00-tropo-nav/00-tropo-all/external-context/48f8c52c — external-context.md | 1,673 | `f6ecd517a9a792232c731e28c450efa01b946e81a1e211b627081c53f97545af` |
 | 00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Agents/99ed55fd — Tropo Agents.md | 39,493 | `bdca4d87e4548cd1a8c474d2e1abf5612dae90120ef9f0619f4900eec09417ff` |
 | 00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Documentation/f87e33f0 — Tropo Documentation.md | 54,398 | `705b1597b0faa722b93ed26df836f740b91a96e978ee3e276cb6155230fbaa36` |
-| 00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Governance/8dd772a0 — Tropo Governance.md | 97,189 | `a3689db6e0bd406243c0e66972c0af5c72d8de0234fc7efef9e9c2844df334be` |
+| 00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Governance/8dd772a0 — Tropo Governance.md | 97,189 | `1e8eb223edd6a609a88214e55aa3f2a2c1b801a29790649f6fe0adf9350c3dbf` |
 | 00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Governance/Import Primitive — Capability Overview/58722bdf — Import Primitive — Capability Overview.md | 9,325 | `ab6f70d87468fa1ea5b5ebe75e947fee2337c3c30dc4af20f4dedf9cd5390681` |
 | 00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Governance/Tropo Link/3a207ed3 — Tropo Link.md | 12,284 | `5d6f4e2aae5f28e9a673d811d3a9626c8814c9f8c5fd28058e167a1141932fb4` |
 | 00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Library/1aba710c — Tropo Library.md | 26,724 | `5bbc7c3feb5b04b72ca384cac4731d008c5cffd20a82a2e6f041019f902e6347` |
@@ -372,14 +372,13 @@
 | AGENT-ORIENTATION.md | 5,443 | `4fdefd0b15999fcebf3e34760166c121251597060dbf5cc32590ab45a4d180d6` |
 | AGENTS.md | 1,504 | `59f5fd31df53a6430049201db664a475f1e0abcd54f759015fc99420e502d591` |
 | CAPSULE.md | 7,766 | `b882e038ba2675155054822210c2e0d76393d48431288a2984ee1ed5dd9522ed` |
-| CHANGELOG.md | 17,989 | `bfd35b6b0db09c91b5a343c4000bdd8b44bf68ba545482989b804a98cd00110b` |
+| CHANGELOG.md | 19,749 | `0d1a7cdacf16b56b83a41d9f4e64b2baa663743bf1a12303e9caa3485c02bcda` |
 | CLAUDE.md | 3,570 | `ed890ce634b204d3f7b2941629ea43b574c674817bcdf482ef6a353c279f1a25` |
 | GEMINI.md | 1,082 | `b4204b3e191cac521ed1120c0c554225ff6ae007e2325048ccf9f0171545faa5` |
 | LICENSE | 11,301 | `177efa1f59a62625c95e35018abbe6f2f6a69d956ee61b72cb4991501967397a` |
-| MANIFEST.md | 115,596 | `548863e1eaea7a1351b267d32b399ca08d54f5ecf710d7059f3c5848798a212c` |
-| README.md | 4,684 | `911d7db12a147a84f492b1a42822f61a6723f1ee7b93610ec013163157196cc6` |
-| RELEASE-NOTES.md | 90,395 | `b3edf110f8615f9cd2d395e580273149906d3efb6db33bc7c4852644202879fb` |
-| RELEASING.md | 5,559 | `cca873b3b57b34c5f2f7b718616ee88882149af2f4080416b286145581eb37a6` |
+| MANIFEST.md | 116,779 | `e11dfaba4f1f937fa4b4b724b8d5deb53ae69c619ca115801775c307d723da50` |
+| README.md | 4,684 | `33b927642a379caf2055bc7029cbc69d917561212dc18dd850082a91c3699637` |
+| RELEASING.md | 6,567 | `911012d1d508f3fd95697f645fc4f9ef763ca70f2c70a843421aa8a9cc6005f3` |
 | START-TROPO.md | 3,791 | `ffc8061e0f748ea8b8aa4c428c1e368ad9a4ffe4bf07fc7fec2a3bea690454e7` |
 | STUDIO.md | 5,406 | `5561a86bbf24c979bafdf9179eaf157caa028204895d8c5388224064235a8eff` |
 | TROPO-CAPABILITIES.md | 28,285 | `ee7a58c33e452400d8127a8479a13528bca35bdda290d98287d3e0ad547fb6ed` |
@@ -392,14 +391,14 @@
 | agents/sa/sa.vault-janitor/sa.vault-janitor.md | 8,781 | `b090e188482d8e0a92b991de460ccfdde43e373d01fabe207bd030114317d5e0` |
 | agents/tropo/CAPSULE.md | 9,391 | `884fcc471475a28b1d522e6c11753b6555e60b163c7cb655f1516f048980821b` |
 | agents/tropo/briefing-package/00-index.md | 4,663 | `db754e224814b93c5bc255f5fcc52b3e212e7df7e825647b76bd5536578f89b9` |
-| agents/tropo/briefing-package/current-release-notes.md | 5,467 | `0a66ab89b7e4ab1616b540d66ba1739ce18dc485f32e2011a89f8d09b4358ad4` |
+| agents/tropo/briefing-package/current-release-notes.md | 2,600 | `af99dc6ebcc91e8af837a55b5aab3ccf94ebaeab4612e46a6358766271289166` |
 | channels/AGENTS.md | 644 | `62ca9e1620b4120c565ff379ee0a01e2c6e453f14185cf9c671941609b71fe7a` |
 | channels/CAPSULE.md | 1,895 | `7b088b55774c7b7391f88ec3a484da8d5523852cad40cee24c94100bad4c9917` |
 | context/AGENTS.md | 1,037 | `e0dc584dfa4878be1964fe432144ce56683d56ae80ae4b012830b35ceaeefc68` |
 | operating-agreement.md | 7,013 | `6dcc78437a6c8f68c189210bcc7c78bccc54c919d660535bf439d0597a059981` |
 | operating-agreement/AGENTS.md | 1,061 | `6c25a061ef31b9845d04c39621a30ddbb23e5c9d02e1b875d13bdf9a174d0255` |
 | package.json | 889 | `44f8e72043d940d5678da5fc1bacd2f12b85012277f523c3f62ccb335d5f68db` |
-| test-report.md | 1,193 | `44522be383efda681cdf2aca5dd75185b6b4e936f796422ebf2d2c01a2640efa` |
+| test-report.md | 1,207 | `0acba3b684bf28329263b8aeb68b3b152739f0da0c728ea123e5302d50bbce4e` |
 | vault/AGENTS.md | 23,273 | `cbc1006c942a645cc00585314b483498349a5bb13b7996d8653a11ea68a8d205` |
 | vault/CLAUDE.md | 877 | `e89c49b115b21f0b916c25ee75887eab30aa692d6b58abc37cfe0f45b333338f` |
 | vault/actions/tropo-create-collection.md | 8,931 | `5100a984e6a523834501360eac8f9da5fc7bf2aab6a2741879a581307b173b67` |
@@ -412,12 +411,12 @@
 | vault/actions/tropo-delete-entry.md | 22,196 | `28625aacdbe34fcf73cb96e496f0254ae8583153ac55011953bc5464f5e96314` |
 | vault/actions/tropo-generate-view.md | 10,775 | `870e1249bef5cd1a01e7fb374e797da4b1b77322fc175f68f5f777827fc86ea0` |
 | vault/actions/tropo-refresh-view.md | 10,864 | `1176ca2c84e991f2752d4cc92ea435dcabe56fb11998bb1c8d3d0be27649a101` |
-| vault/agents/3031ffa3.md | 22,845 | `52a9d650adca08530f365b5deda801c166c2400d22ff6020d79c10d9dd83b3c5` |
+| vault/agents/3031ffa3.md | 22,021 | `f9481b07db02f45d2a591cc59bba8220bcc7dc2a515867e22dcad88704aacb11` |
 | vault/agents/523d663d.md | 44,256 | `7d0ea80b0f26e7a836d70dbb623416be93bb4afc5b45518c8eaeaa76f91c5d00` |
 | vault/agents/566770f7.md | 38,955 | `1ae92eb02600499cb40eca3a1782dd70dbb1dea9443f324034be0460369ee3d2` |
 | vault/agents/615d1620.md | 12,686 | `0a797d1655e62171da2daf94d3317669b34e998cb648a9916da2a9ae4082a622` |
-| vault/agents/8b81aecf.md | 45,031 | `3d0f9f3987745f05bb39273e9aa5d051e881948216504906424fbe7dab00c67b` |
-| vault/agents/9fc001c3.md | 46,693 | `cc6163525ce95d49d84da2bc222f599821028eae86531216a1434be51dbe69cf` |
+| vault/agents/8b81aecf.md | 47,235 | `5f7afbe5470f81b758bdcccadc1306d4f2aaa4515114a852334e1e119e0e5c17` |
+| vault/agents/9fc001c3.md | 46,693 | `cd8df66f7aff05b11f3a22914baff9190f48b7d9a47c82b688a73c2ba3e45640` |
 | vault/capsules/mint-registry.json | 18,466 | `97eb86d6e8081fbebdbf992c0ec41ca7fa955de3f5618aa3e7f72228b25fe645` |
 | vault/capsules/templates/design-brief.template.md | 1,057 | `88c2357f748d00a6cf95e6484330a0f514556b0d3a6b17fb8d060ad9df922abf` |
 | vault/capsules/templates/dev-spec.template.md | 4,652 | `1514c4624a1a4a1d6acd2c2fa2a48e33cee88c13709641e034f84f4babaa7b0d` |
@@ -489,7 +488,7 @@
 | vault/capsules/tropo-vault-ops-spec.capsule.md | 9,778 | `c38f37af2e23d96287d6d912766b8900e09d2ad66de14feefe614a6dd7d32fdd` |
 | vault/capsules/tropo-vault.capsule.md | 9,077 | `eb2fe1851b5d180cb713de869a3cac9db2e42915317dc724aa0e9f94c418af62` |
 | vault/capsules/tropo-working-copy.capsule.md | 16,440 | `eb0bc5fea2022f0ed3869acb1010d93290c221fc6281be8da2a22277330f7357` |
-| vault/events/00-events.jsonl | 1,520 | `d696a03185ed8a061f6fc8e107d5a55a7863e3f761e80c14037d73c30509f572` |
+| vault/events/00-events.jsonl | 1,534 | `e9df1b6ead25b9a4344aa8bd572338dd9bf79f666f4b48a9fdf0f172ff2b2f55` |
 | vault/files/008b86cc.md | 6,653 | `46b5638ef88217b7530bacdb273f2990010b61b3647dbc746831b9ec341de77e` |
 | vault/files/021fe0c9.md | 6,270 | `0bfc7e74ba85038e00cc84a27908ed8cb41b55e615b1d4f4819f4cead0112c20` |
 | vault/files/03624b7a.md | 3,213 | `0fca5df7b64d51213c19dd7b5c29fa82ee0cd6611dc67fc64ab8ee8a99f32238` |
@@ -627,7 +626,7 @@
 | vault/files/8d3e6f4b.md | 4,070 | `b326e9314a611e17a5ec0108e4a4d58fa60b67ad754d6dba928dfb55f4dc9855` |
 | vault/files/8d92ae37.md | 2,030 | `8458e7c6a903b51d37f88de55b96a30c5b8b2ccb4cc07f352a5b4da462d5bfa0` |
 | vault/files/8dd292e3.md | 18,497 | `faea1efc56ad5650cc895d98fe6bcedeecc90394dec434c4e412d6a32a11c6c2` |
-| vault/files/8dd772a0.md | 97,189 | `a3689db6e0bd406243c0e66972c0af5c72d8de0234fc7efef9e9c2844df334be` |
+| vault/files/8dd772a0.md | 97,189 | `1e8eb223edd6a609a88214e55aa3f2a2c1b801a29790649f6fe0adf9350c3dbf` |
 | vault/files/8e03f8d6.md | 975 | `11294e395e931a6a79d27fa010ee1bd66a39af566690393ea26e65ec25975cef` |
 | vault/files/8f3a6b4d.md | 9,841 | `907c88e2ed96014f51c35870d65cdc9466eb33745d3aaf655f20f5460e76298f` |
 | vault/files/913006f9.md | 5,527 | `73859c56a078a2bc4e06c90235b8c8078af60d91dd456694658c1618df160b99` |
@@ -673,7 +672,7 @@
 | vault/files/bd298097.md | 3,868 | `abf3b37baffddce03df5cd543814276c0ba829c5f12513825e6e125ce403074c` |
 | vault/files/be7e3792.md | 1,346 | `e2e29c24a0fc51b1681827c68ef2cc2ad588df0ec8cc58cce22beb70b2259b21` |
 | vault/files/c1f5e8a2.md | 15,941 | `5981b05d1283d7c65d15e2c613ef7f0acdca1ad0a8018eb6971ba91385f18252` |
-| vault/files/c3b9e1a5.md | 2,646 | `556216202c06abef41bf251f87ada3a91f94e044261585210b44eda6ccbbdf93` |
+| vault/files/c3b9e1a5.md | 2,646 | `062ac4d444cd0d5a44363511f5d3dd21615ead87edbbf99ad24414b6ef7d66de` |
 | vault/files/c3f9a1e7.md | 6,367 | `f7fca7ff5a4dfb6983616da3321e096291494c19ed33a02b9bccaac810c818bf` |
 | vault/files/c6a1f483.md | 2,507 | `dba6a43c867dfa262a15eefe1a4950488eabcfdd0f4d58228bcbc222c94d34bc` |
 | vault/files/c6b61fb9.md | 12,803 | `548a57cca13a2960b3fd1296ce0c6bc971fe6da261e482c6d79743915aff5f61` |
@@ -684,7 +683,7 @@
 | vault/files/cd1fcd25.md | 17,202 | `7c192468c1be2348071334b0d4e0a5761c8ea45ec9e209272ba084b16e2cfaeb` |
 | vault/files/cf8c3be9.md | 27,561 | `33450f36d65d71d774b66b836bbc1801487c9d6f88cfa3b4abbd48c986e6400b` |
 | vault/files/cfe79756.md | 4,990 | `cfc23c4a1655ec509d86e72ffa3fea6c978145ffa97b9e35f18bc888c405b9dd` |
-| vault/files/d1a4f8e2.md | 2,853 | `e4aa8af1b542b416292dedf4324f32e10edf8d9583fa532eab12f232f38b113d` |
+| vault/files/d1a4f8e2.md | 2,849 | `5dfaad8143a336421c715ff7ebe7ae67ad56ddacda4c46f48265284a6a3c60fd` |
 | vault/files/d28e95b1.md | 2,483 | `6c18ec64362c6bde7d3da0740843f1be425706372792a1668d8565a374288b8b` |
 | vault/files/d3511487.md | 5,323 | `765bfafa6b13ee2401fcdf9a2743b4343fb51d0d82c76a42bd7c897333db53cc` |
 | vault/files/d4c11288.md | 10,445 | `a13af78585fdf4fb23c94e6650fbae4f396ea7f68481816a4e3d1cf910fcd8f2` |
@@ -712,7 +711,7 @@
 | vault/files/ea9e9f61.md | 5,335 | `77eb35956c7b8123eb29d21f058f4eb04e176a51c32a87eac9723e7681598421` |
 | vault/files/ebfa7fcc.md | 3,128 | `472b2ed73a3499cfe4cd512db60765d09daa8506683c25f2ab0525c3ab305cdb` |
 | vault/files/eca73d77.md | 44,906 | `f431051765fad39b3b92e4f87b4fa833b4f547cd60bcf4ea8b956d70db5147dd` |
-| vault/files/f2a7d3c8.md | 3,863 | `9b2b1e4bf1bc295f007ec2efa057f913aa7f8a97096db1d1a9798f32070e067f` |
+| vault/files/f2a7d3c8.md | 3,863 | `fb7571de0c46eae63880279fa9316dc9b568f37e94a2cc53f2eae70f0ea35cb0` |
 | vault/files/f3906b76.md | 14,659 | `639ddb81a1e4353160d77c86599ce50a97daa198b164f6454b147c9261683d87` |
 | vault/files/f3a2c819.md | 7,049 | `682a75496d9d678f1c038eec1e936c99a1486cd039737d198d367464ab7eeb61` |
 | vault/files/f3c7a291.md | 18,130 | `7aa42444648d4e3724775f4b9c07010b9094bf83c2cdf00af6f1aa7574acfc39` |
@@ -761,6 +760,7 @@
 | vault/session-agents/cec903e9.md | 7,815 | `c987e4aab33e308b7800842526dfc57c086271d42a4456fcadeb6e5fe23b7efb` |
 | vault/session-agents/d6e11740.md | 8,635 | `a5817c7b9ff75d89afcd25c9c8a159ad92d83389ede8b7b77e36f1dbcb49ccd4` |
 | vault/session-agents/eaf9302a.md | 14,980 | `c854189467b02f04fd1a9c73a9c44c25a29b53ef69e043a7a55a44abee7d3f36` |
+| vault/skills/tropo-active-mode.md | 6,211 | `61c696ad485e2b8762b53303fdec824a9c03e81f1f156f3111944ecd7fd23cfb` |
 | vault/skills/tropo-channel-projection-migration.md | 14,168 | `9c8dd0b5a064ec8af8621b05e66e290e83f95352bd8482425b4b99b220e5db54` |
 | vault/skills/tropo-check-sa-catalog.md | 3,259 | `af94c6c1899c6469bd001ccccd441883449c9c8d61d023ec86bc3722240d69c7` |
 | vault/skills/tropo-check-vault-health.md | 2,757 | `08ce9170b091c425e16f7403ad500072ca19f9fe2a3b9db3ff317644b5c7032d` |
@@ -772,6 +772,7 @@
 | vault/skills/tropo-dispatch-sa-step.md | 9,933 | `adda1bb7718e652a0273079a42043d6a2ca1582d6191ed14337268d79baeffe2` |
 | vault/skills/tropo-export-to-word.md | 4,012 | `8c9194819282a401f2a73144e4fd2027bfaa49d91f4ef7cd60bf64ce3cdb2e35` |
 | vault/skills/tropo-groom-subsystem-hub.md | 8,932 | `a4cec82e653abd5ef18ab7b61b86073b52729aeb521cd1410f5622ed1cb791f5` |
+| vault/skills/tropo-librarian.md | 3,604 | `875ee92c771d5e3af49fe71c03d9d25b35f50b94492c4afe0dd1a291d93a5b39` |
 | vault/skills/tropo-maintain-channel.md | 4,017 | `187f30a90a2346b795553e48b1d3a03bc2c15ad1671d95778b2d91dc10c9fe29` |
 | vault/skills/tropo-memory-sovereignty-floor-test.md | 9,406 | `1b3d1b31304e5468973feb6409c0dde0eb45cf01348957d837987529c15fb748` |
 | vault/skills/tropo-memory-write.md | 6,374 | `8b76cb4d6105a423f729fff6500717880bd6a99ba865f4136e6dfb13bec8b952` |
@@ -827,7 +828,7 @@
 | vault/tools/6510afc7.py | 13,801 | `94659796269aac01890daedfb498198e8cfc2bb40b97f21c74c8b862fc9648d0` |
 | vault/tools/81e168d6.py | 10,418 | `480913bee39492d379e36d500a4c0e977db52c3f906bb59aa692302f583ec6ec` |
 | vault/tools/8c4cea94.py | 18,410 | `0d9be44abf6be3331532e37cf9ec94c2d0935f55a46a749b858bbde2ead991de` |
-| vault/tools/9e7003b1.py | 280,414 | `25d3c9147db7fb439ee149136a8643fdfacf7a046ace216ba9afd5d831616a73` |
+| vault/tools/9e7003b1.py | 292,467 | `fa3d2157c537ea98d515c5f9be8eaa39938aa321f5d3b0d36b1d709a872d74f3` |
 | vault/tools/c778f748.py | 8,723 | `4caf9cad7e3fcfd1798074af262bf58d6c7937bac4c09e77c43006b9c7cf7f0d` |
 | vault/tools/e337f1dd.py | 44,020 | `62f7e42191a496ffe0a9ae3ea3c3857b548b9286a6e3660033e30e570ef731d3` |
 | vault/tools/federation/README.md | 4,388 | `78b109d09b19928fc53a3eb9f16a516ab285a06b5bbc49b8b09f3f858e3cc819` |
@@ -943,7 +944,7 @@
 | vault/tools/tests/prove-boot-arc.sh | 4,543 | `8b573ae5dd474418861dcb4edd478b615cccfb0b8f2e17693d5b06d958ec32c8` |
 | vault/tools/tests/sandbox_dev_v2_reference_run.py | 6,308 | `9552060064f1cb4656c5fafb133750b45f88621fc998dcca86c3168511182a99` |
 | vault/tools/tests/sandbox_release_v1_reference_run.py | 24,775 | `8d96c5efbd8cf87cd358269a5443cb933a5247e65d118116ffbbb8e0f1a61c6e` |
-| vault/tools/tests/studio-validator-debt-baseline.json | 1,889 | `7ec03d93bf952cf55d3dcdc2d47eb78eeaa0b00ef9a421106efb89d774a6b730` |
+| vault/tools/tests/studio-validator-debt-baseline.json | 2,440 | `94303ae9b2f73fd5748b53af5361975f95a578b3b156779907be390eaacd7879` |
 | vault/tools/tests/studio_debt_classes.py | 4,624 | `f3e091bf5a40cfb4e40927438de6c00f4a8d84a797ada98bd168ce34a5719da1` |
 | vault/tools/tests/temp_studio.py | 7,469 | `8a5525f8076fae87d9a777b9527798c0e4bbc679fe22145a54d41854c68abf55` |
 | vault/tools/tests/test_ac06_final_package_entry_weld.py | 10,429 | `045f0d6324055808baf34b21b65aaa0abfcb810556dc9dfaa211621d2d0d5852` |
@@ -954,7 +955,8 @@
 | vault/tools/tests/test_ac08_closure_saga.py | 15,910 | `c57e0e54d287faa9983089063aa1fdd754b9788308e9b66ff9bfde64f288c772` |
 | vault/tools/tests/test_ac08_receipt_v2_identity_chain.py | 6,109 | `a0dbf853b84932a84926dd8e1db55cae04b61ff28ae5567238495bd0da8be5f6` |
 | vault/tools/tests/test_ac2_dev_lock_snapshot_transaction.py | 18,160 | `9edb3d0c58d437908cece8519560c58729deec2e5ec40a3651e3dcab2fb54f6e` |
-| vault/tools/tests/test_ac2_isolation_and_production_identity.py | 43,636 | `722d4a4a3a865e66bb7ca898d936f77915c784d8840103b6fe4a3a1fb6aa1101` |
+| vault/tools/tests/test_ac2_isolation_and_production_identity.py | 44,179 | `20cdb1fcfa75b63c4e776a5ce7fb1c6626779c8e778b7d88ac6995ed05a40af3` |
+| vault/tools/tests/test_ac7_closer_companions_runtime_cb194126.py | 14,974 | `a21bf31393448e68ac67823f68449cf6e99a86196f5e28e39587729bef07e767` |
 | vault/tools/tests/test_activation_mint.py | 30,082 | `01872ef95bf252c9334fa123ad51ec4dae77f80837570ff1e5a0e42cd8fce06c` |
 | vault/tools/tests/test_appship_scope_gate_498e88fc.py | 19,816 | `8322ff6a27cd911bb9c4ad0e66212913991fab4a3e3c71382b28074f438ac4ea` |
 | vault/tools/tests/test_archive_index_split_adr047.py | 23,296 | `42b452bc2d29c3b5bbf2dc4056ed0b75bd0b442cdb0543c3c81e88fe40dfc0b9` |
@@ -1031,12 +1033,14 @@
 | vault/tools/tests/test_history_only_diagnosis.py | 6,665 | `ecb5d39c39ada784ae05cbcc6f4460c26d6c8889d01ecf5553e1ff37059bbf08` |
 | vault/tools/tests/test_ignition_snapshots.py | 17,259 | `89023a716eaba6059b608771e573a6b44623a2560b5c1c2130a668d302bcf648` |
 | vault/tools/tests/test_index_coverage_no_330.py | 3,813 | `75b2c2d1c62af5ef252a7da4c9d0bfe23adf50bb43e4c5efff1d3300cc7603c0` |
+| vault/tools/tests/test_index_integrity_6c538b6a.py | 16,943 | `00168b9276adb2efdd6ddfb15b7a330af4b16350bc7960d2cf7ce46221a1de50` |
 | vault/tools/tests/test_index_lifecycle.py | 239,353 | `c36ac7d15c59c25fe760f4936f8a90d0a14ea0037ec892738af1dae2c9fd7e3f` |
 | vault/tools/tests/test_kernel_boundary_by_frontmatter.py | 2,454 | `b12b2e41ac26b12bfefc6905fc2eab124154f3ae3f7a1ace43e17d272ec4d049` |
 | vault/tools/tests/test_keyless_lifecycle_adr066.py | 9,448 | `7583ba492e455ec6ce39df8e36b254686b8c9e0e802deb2160064b55a6c95b67` |
 | vault/tools/tests/test_l1v3_data_contract.py | 21,557 | `fb66aedb9ad68488501d7866a563c7da082d9a03d9288c649ee0f428e12333fd` |
 | vault/tools/tests/test_l1v3_writepath_service.py | 20,824 | `d0e72e679db277288b10aa100301020aa92f385f9285f13118124b8f49b691eb` |
 | vault/tools/tests/test_launch_prompt.py | 967 | `a8f6239952a69c0645c5aac1c3172371b3ebeb079721eda32c50771339ce8bc2` |
+| vault/tools/tests/test_librarian_l1_d317f532.py | 5,445 | `586e899bd296292bbdd9a7771f45ae6767ffa74e1c5e3479c8ba8a65465763fa` |
 | vault/tools/tests/test_lifecycle_end_to_end.py | 12,656 | `35641c4dd9d514218e2dc12e18e6c3fc4f138c8b060536d56c67edc678504c0e` |
 | vault/tools/tests/test_lifecycle_machine_projection.py | 20,850 | `4bbd96b798425406a3bf525672b179dac088968a56734c05398e6d78c0199fbd` |
 | vault/tools/tests/test_lineage.py | 9,525 | `ed0da5e6c2f823f77ef56b23821ce7c9b658d1c321c2db003ee6fa1e8c9b1390` |
@@ -1063,15 +1067,17 @@
 | vault/tools/tests/test_orient_cascade_phase1_4883fa94.py | 11,949 | `a0863fe76fbe700cbfea0d5a9c135d7bb09a1ebefbe5419dbdabac7c2b1c4119` |
 | vault/tools/tests/test_orient_stage_c.py | 98,079 | `b5a7ca5775c55879b1ae0d63be33230c5f1435e3e0b0314fac86cc803d2c84ef` |
 | vault/tools/tests/test_orient_tool_read.py | 40,164 | `af0b73ed4f8cf8354c5882b2face637ddeadb7f1b6652440fbbf22bcf64e40b5` |
+| vault/tools/tests/test_package_link_integrity_d7170a1d.py | 6,069 | `aa50d07a3752e212220c6c50c789622cdebd16d9a434fddd84d422793482e85d` |
 | vault/tools/tests/test_package_operations_generator.py | 7,528 | `319b2099e27d8a7ae94c3a83515f77b2e7fff941ce6b878d4ebe6d49833ef380` |
 | vault/tools/tests/test_package_state_exclusions.py | 10,255 | `4c44c60f9bd4e214b6422a8b30b18dc8706090161d8858796d2cf5e00ef7c3ef` |
 | vault/tools/tests/test_pipeline_durable_closure.py | 26,324 | `b2d6934e4d5d400bd645726e009199cd76b623b2d51d9559e777327228de92b2` |
 | vault/tools/tests/test_post_migration_release_clean.py | 11,807 | `4957178da0a98a363af25baf773bf57201325b15dc55c2a2ec4916f8ad9e3db3` |
-| vault/tools/tests/test_provenance_before_close_0caad12b.py | 15,311 | `19686fe94c25985db26a82081de19749421db45cb990b500f45620a4431c28da` |
+| vault/tools/tests/test_provenance_before_close_0caad12b.py | 19,263 | `424f996c32a770933450c25d984fd853846f5c6d4063f9e8a7e7cc0e9bce8f72` |
 | vault/tools/tests/test_pruning_contract.py | 45,429 | `b9cd07ee82609056a3384c1d974a4c1b791d0de23f4c7e9cc34664634af63abe` |
 | vault/tools/tests/test_public_receipt_projection.py | 13,134 | `60ccefec0e98ddf3724257183cb1de17894c90aead5b9ac58528874d14ab5236` |
 | vault/tools/tests/test_public_snapshot_export.py | 71,585 | `644d029b45d17554aaf2609f8afde299b146bfd719a913eece91628e860d387d` |
 | vault/tools/tests/test_q9_harness_evidence.py | 8,685 | `cfb49fa82ca1d4ba8dd07ba259a3c75b4d0076e3b21d8943d234debd3012a597` |
+| vault/tools/tests/test_recycle_search_paths_2c6afe9e.py | 7,227 | `aa0d4be3aba0186b2cd263eb2911d034f0cc8b2e4a9565a2566ae5b47828064b` |
 | vault/tools/tests/test_regenerated_carveout_d9.py | 6,601 | `7308e3bb341fa5c7eb872c385c71c3ee491b68f9eaa9d3a0126db3718bd8a081` |
 | vault/tools/tests/test_rehydrate_navigation_components.py | 19,159 | `31795282c2110dae6cd6ed2a7a4d20d02838b1ba9b042cfa73dc4ba776e6061f` |
 | vault/tools/tests/test_release_authorization.py | 17,775 | `bd784923cba6e3db0cbfde1719912c1facf58ccae762a60b90ec22d36db1dfe5` |
@@ -1097,7 +1103,7 @@
 | vault/tools/tests/test_studio_debt_classes.py | 8,916 | `b2c5234096359c19af5e214ec81b2dddfbcd282b5d44401a53959af6bd0e0d25` |
 | vault/tools/tests/test_studio_identity_32067bea.py | 13,286 | `f513a7b052885e9d25edb6a11dc029acab55c2160e4d0e259010de0999beb66c` |
 | vault/tools/tests/test_sweep_safety.py | 10,557 | `a4db85b827381ac73413a7e0080d5bc793d8101ac723427e5edd5676407215a7` |
-| vault/tools/tests/test_systemic_feed_pipeline_v184.py | 39,197 | `8fb079769fc2867af14b835c0b2fcb1b3619e219188d35f8d1a081166d2a895b` |
+| vault/tools/tests/test_systemic_feed_pipeline_v184.py | 41,799 | `b84018d05a11bbaed8a28c15fd8233654a428ce50b57a435a6a9c04170e622c9` |
 | vault/tools/tests/test_task_circle.py | 38,369 | `c7995b9f4e5b29802db4bd8016090dfaa20ac11419e144a228d850e02417aab4` |
 | vault/tools/tests/test_test_spec_mint_v13.py | 19,607 | `4157751b8a66c89bc053cd3acc777b0d904dfc41809d858edf7e112e927d4319` |
 | vault/tools/tests/test_tropo_folder.py | 186,752 | `a36811f249a8f772cb56561ce79b38d68e226fd4ac149db03d5269fd19f9a207` |
@@ -1112,6 +1118,7 @@
 | vault/tools/tests/test_typed_findings_engine_phase1.py | 4,152 | `fe94645710388ce8fdf8f55fc8f3d994cf1755099a57ded56830a65baee3adbe` |
 | vault/tools/tests/test_typed_mint_phase1.py | 53,603 | `bcac91a62a822cbb62ce929e3b993a2d6050e8d27a862ace589e8fd482d67fc0` |
 | vault/tools/tests/test_v187_legacy_convergence_58e8b6cf.py | 6,642 | `d8141e9b2780028919c9181fb634ef29440d6495319330a68b52cfd574a59c7c` |
+| vault/tools/tests/test_v188_weld_batch_cb194126.py | 43,169 | `e13e78f0d786736df69a8945ce51005a943ceb368c1ce3a031d3c68e969c9594` |
 | vault/tools/tests/test_v1_84_1_closeout_hardening_8c8ca68c.py | 31,740 | `c753ddc475f54558d9106e58aee6880911200caecccf52bc8afdb2b936439d34` |
 | vault/tools/tests/test_validator_checks_14_32_ef65fccd.py | 14,062 | `37a391e538de745cdf78d97b7809348cad91861892e6a80692a9f768207f03d0` |
 | vault/tools/tests/test_validator_result_labels.py | 13,666 | `465f66f62f89c50004e6b13c564a0058393d16d37b7d549d9a3a09789ad29da9` |
@@ -1123,7 +1130,7 @@
 | vault/tools/tropo-archive.py | 11,567 | `94c8c4ae700b38d67e2555dfc9caa7f112922c7ddfb2a85a80be6c30a79b3e09` |
 | vault/tools/tropo-backfill-styles.py | 23,699 | `ec3c2939a0f7d2666cd94e2cd0bc77f911c44b7baadcd8c08c8a77db227c0544` |
 | vault/tools/tropo-build-candidate-box.py | 15,474 | `f86351e2d32b1595d651a468585921140bd8ed359c93d49bb801cd7a807d7d73` |
-| vault/tools/tropo-build-release.py | 181,584 | `ae681898fef2770f53dd296db06954d95b677914b5bdcc48e1080a427925bbed` |
+| vault/tools/tropo-build-release.py | 184,967 | `ac5034fdbaa118c0895a50ee0d35d2658a0d0c0d4293ec072e7662150b8aead1` |
 | vault/tools/tropo-check-events.py | 36,083 | `4ad5a68e66b43dd2706116413cccd4b55e70c412dc26c3f3efbe40b6a725f4db` |
 | vault/tools/tropo-check-harness-receipt.py | 9,389 | `ef421452b7d8b95992e15411856625ea61cc61ec40e17f4bdb68093cd7838f24` |
 | vault/tools/tropo-check-one.py | 19,050 | `09142a3c14f14b5e86ae556ee530b9d5153d269448bd37d184d5da60debe8067` |
@@ -1148,7 +1155,7 @@
 | vault/tools/tropo-import-walker.py | 116,777 | `1c393b77b56c33a340da724ce40f1d42e629e9e4e981af7af389fb914f9d234a` |
 | vault/tools/tropo-lineage-backfill.py | 4,106 | `61897da8548044944c76e160d423d032536c874987518df04735c096cc5cd647` |
 | vault/tools/tropo-lineage.py | 13,028 | `b72120bc1b448bcc2a9e22602f96352260732b703db8260c9686098e13db9419` |
-| vault/tools/tropo-lock-dev-spec.py | 26,991 | `a866ab55eff41a7e615d7b9ae8eb12dfad1cd992cb1cf4cc33b64023e74bd2ba` |
+| vault/tools/tropo-lock-dev-spec.py | 31,271 | `1473e0bda85146d4f41ccc75d45fc36708e02287ff5232ac5180702b0bb2a7c3` |
 | vault/tools/tropo-lock-release-plan.py | 31,652 | `853a6a9ed560ef0466906de9a3935c57b05010639b7700c56405f17415532790` |
 | vault/tools/tropo-migrate-memory-schema.py | 9,025 | `a3f3b08d5d8c46394d4e82a5ed6bbcc512cbc22f3329bbb8cb2647e3eff6f077` |
 | vault/tools/tropo-migrate-mount-identity.py | 19,439 | `26768e2b294014f60dbdcf9f8cd0cd790b2e507be37e372425821549d1ab93fe` |
@@ -1156,18 +1163,18 @@
 | vault/tools/tropo-mount.py | 44,390 | `684a235d0ac8f4ac575293d2c126102152e9c8b7ea018b276ff3ca0753269217` |
 | vault/tools/tropo-navblock-strip.py | 25,160 | `1c3c0f32a45ae39d029c192cbf722546b3edeae196a7a9de31c881d830104340` |
 | vault/tools/tropo-office-styles.py | 19,233 | `de48cb1260cf4959d31bfcd416b6f5b7c1094f3cd95253489047dc49e7e5ed7a` |
-| vault/tools/tropo-orient.py | 70,996 | `04e11df8939cfd681b132cb45a79f254d79d27b950619767b64b0e90e444dd66` |
+| vault/tools/tropo-orient.py | 75,160 | `767fc244d28a71aed44a0f09e99849901347aa07d54d4bf57d09d383143c88d2` |
 | vault/tools/tropo-preflight.py | 8,094 | `7e099a7eb2c1a2875a3bacf7bd0ac82f77ec27eb18bdd764fd0a93e60c2a4a0f` |
-| vault/tools/tropo-publish-release.py | 68,497 | `dae254f53a65e92f5a0dde7d97afcd409300fe6d02515874efc1a1419c732479` |
+| vault/tools/tropo-publish-release.py | 93,402 | `a82341ee1c57d172b52dc2463bb03ca7f98282ee9878185ffeb4aeeec1d9bbdd` |
 | vault/tools/tropo-publish-scope-gate.py | 26,575 | `262491d795ddff4402deaea794065ca01db7b9c89b92f9690ebe1c3b2e24fdc8` |
 | vault/tools/tropo-publish.py | 32,064 | `a9b5902b70570cf5d74bf1dcefcc94cc2871a7f19636bcba933ff9a97637a68f` |
 | vault/tools/tropo-query-events.py | 13,612 | `81cfd7c080946e58c9c0f735396d4a85b07d9b49a86afda7d5a4e472c794fffa` |
 | vault/tools/tropo-rebuild-events-sqlite.py | 4,100 | `2091a1a01586cb83f40dbfcd7e0b556d467c458335420e53c2d8ae8ed9a25e4b` |
 | vault/tools/tropo-rebuild-group-registry.py | 35,039 | `a3441fb769f2c09606378c16c6aac984b4535df826429be74ce30269ad3fd97e` |
-| vault/tools/tropo-rebuild-index.py | 327,292 | `3f0581023570d0c7e88ce906969e6d697c48ead1ada8fc511a734c8939286c1c` |
+| vault/tools/tropo-rebuild-index.py | 328,731 | `d71001a81c37897d2f8047d8cff1d2667af0baab29683d6348bd9d89f5700699` |
 | vault/tools/tropo-rebuild-project-index.py | 14,311 | `2b2f355ff96b44e6577e53a0611a311ae1b02a68621317b6415ccad123960435` |
 | vault/tools/tropo-rebuild-vault.py | 31,581 | `602f6c06cfddec34fa3b478d74fcd39475bdcdf94ef5c1a708e958efc04dab8f` |
-| vault/tools/tropo-recycle.py | 13,563 | `59b4339d22eeed3f7863c1026ea4a752edde22e8a02b903c70ac5550573e5bf0` |
+| vault/tools/tropo-recycle.py | 15,409 | `c210c4e476215ad2e0a207a9faf9b02c6b43373ec762d1a9931ff4511de0731c` |
 | vault/tools/tropo-register-kernel.py | 9,538 | `1d88f20f7fee12778470f1d42fce1d9fa20c0457a155b3380f38f2713fc614e2` |
 | vault/tools/tropo-register-template.py | 34,237 | `717b859b9a0d8436fac8c175f6db124223ea7c67e59c0b695cda528afbd6f497` |
 | vault/tools/tropo-rehydrate.py | 25,935 | `6c5da547f84ec36a3607a515afcf1d1809ed3d30bf2baf9d28ec5196b5d7b57b` |
@@ -1183,8 +1190,9 @@
 | vault/tools/tropo-validate-canonical-l0.py | 23,105 | `f3482d21de8288c7c31b4cec76b2ef16a83fe23dc6d5ccf59deddfbc61ebd6b0` |
 | vault/tools/tropo-validate-capability-membership.py | 52,295 | `61b70c2d03747def8139f75e6d3f8310f966b15991b3eff762e9fb17f8462d05` |
 | vault/tools/tropo-validate-no-absolute-paths.py | 13,480 | `b335a207ac7cf0992630ccc90585de584d24a2ac2832c4e3e2b0a81b5c76e080` |
+| vault/tools/tropo-validate-package-links.py | 7,398 | `ccc28d9c648f03f689b5e9574c99144c4917627bbc3eb0632f850eb4732de9dc` |
 | vault/tools/tropo-validate-release-manifest.py | 30,009 | `7942b8643451f63ba415e75d25e099db77cdfeb714cbcbdced482e58a09e2570` |
-| vault/tools/tropo-validate.py | 663,326 | `999386e43bf805ab849a2ceef1ea044a677b6c7e35aa6f37c40ab526ae7720c3` |
+| vault/tools/tropo-validate.py | 671,874 | `efec99a84e0f07279f7b9ba54ae1ac738f4d9e5096c58facecc73e2af1757fbf` |
 | vault/tools/tropo-vault-git-commit.py | 1,832 | `ca21390b3590a5a1038579906fd0248d44b052343c735fc4346b8f5b1d39cc5c` |
 | vault/tools/tropo-vault-search.py | 8,237 | `a91dcac3350422b7cc4439e97c1d477e4dc6b93c1a3b10df936f06c78bf5e020` |
 | vault/tools/tropo-verify-authority.py | 9,699 | `02ce34ffe5c04552ea2698d6a9c63def56fe104fc0b3777a029659cba2c7040f` |
@@ -1195,5 +1203,5 @@
 | vault/updates/pending/.gitkeep | 0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
 | vault/updates/receipts/.gitkeep | 0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
 | vault/updates/update-history.jsonl | 0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
-| vault/updates/updates-manifest.json | 37,260 | `3101bea2f7bf7b080c4a12b56d6b09a3f2c928ec74608ae47937858f95662c2e` |
-| vault/vendor-refs-manifest.json | 5,318 | `e3cd89ac5598998d1548cb48293aef31ad0ee110c0866f2a7a0bbf55b48f93ec` |
+| vault/updates/updates-manifest.json | 37,634 | `3a2f232ffe2300a16e845d6c70aeb2a909aae1368cedf72cf76e419b730cbe8d` |
+| vault/vendor-refs-manifest.json | 5,366 | `92b2f12ab942bbd01134de5001c70ed93c654088d7a4ec6dd9ebe19e1a39a96f` |
