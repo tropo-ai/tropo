@@ -124,12 +124,15 @@ def render_lock_run_created(
     run_uid: str,
     activation_uid: str,
     root_uid: str,
-    dev_spec_uid: str,
+    dev_spec_uid: str = "",
     pipeline_uid: str,
     pipeline_version: str,
     actor: str,
     timestamp: Optional[str] = None,
     backfilled_by: Optional[str] = None,
+    subject_kind: str = "dev-spec",
+    subject_uid: str = "",
+    extra: Optional[dict] = None,
 ) -> str:
     """Render the single journal seed authored atomically by the lock.
 
@@ -143,18 +146,29 @@ def render_lock_run_created(
     span_id = hashlib.sha256(
         f"{activation_uid}:{run_uid}:run_created".encode("utf-8")
     ).hexdigest()[:16]
+    # v1.89 2fae6312: one seed renderer for every pipeline. The subject is a
+    # dev-spec for a dev cycle and a release-plan for a release; keying the seed
+    # on dev_spec_uid alone made a release seed unrecognisable to the very
+    # runtime its lock had just opened. dev_spec_uid stays populated for the dev
+    # dialect so historical readers and existing runs are unaffected.
+    resolved_subject = subject_uid or dev_spec_uid
     data = {
         "pipeline": pipeline_uid,
         "pipeline_uid": pipeline_uid,
         "pipeline_version": pipeline_version,
         "pipeline_run_uid": run_uid,
-        "dev_spec_uid": dev_spec_uid,
+        "subject_kind": subject_kind,
+        "subject_uid": resolved_subject,
         "activation_uid": activation_uid,
         "activation_root_uid": root_uid,
         "members": [root_uid],
         "authorized_by": actor,
         "bootstrap_pending": True,
     }
+    if subject_kind == "dev-spec":
+        data["dev_spec_uid"] = dev_spec_uid or resolved_subject
+    if extra:
+        data.update(extra)
     if backfilled_by:
         data["backfilled_by"] = backfilled_by
     event = {

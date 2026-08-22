@@ -208,6 +208,12 @@ class FixtureStudio:
         self.root = root
         self.files = root / "vault" / "files"
         self.files.mkdir(parents=True)
+        # rebuild-index --apply generates the mint registry, which refuses a
+        # studio with no capsule directory. Every CLI-invoking case here exited
+        # 8 before its own assertions ran once that dependency arrived
+        # (8e920912, 2026-08-03). An empty directory is enough: the generator
+        # globs it and writes zero rows.
+        (root / "vault" / "capsules").mkdir(parents=True)
         (root / ".tropo").mkdir()
         _git(root, "init", "-q")
         _git(root, "config", "user.email", "fixture@test.local")
@@ -3779,7 +3785,7 @@ class IndexLifecycleTests(unittest.TestCase):
             tools = fixture.root / "vault" / "tools"
             capsules = fixture.root / "vault" / "capsules"
             tools.mkdir(parents=True)
-            capsules.mkdir(parents=True)
+            capsules.mkdir(parents=True, exist_ok=True)
             for name in (
                 "tropo-generate-mint-registry.py",
                 "tropo-generate-relations-header.py",
@@ -5640,6 +5646,176 @@ class KernelDoctrineIndexingTests(unittest.TestCase):
         admitted = rebuild._tropo_kernel_admitted(self.root)
         self.assertIn('.tropo/WAKE-DISCIPLINE.md', admitted)
         self.assertNotIn('.tropo/toolbelt.md', admitted)
+
+
+class LifecyclePairingProjectionTests(unittest.TestCase):
+    """v1.89 271d28d7 AC5 — the derived candidate projects, clears, and never spoofs.
+
+    These drive apply_gardener_pass, the door the rebuild actually calls. The
+    live studio currently has no record of a declared type carrying a current
+    divergent verdict, so without a fixture that reaches the stamping branch
+    these would pass while proving nothing.
+    """
+
+    def setUp(self) -> None:
+        import shutil as _shutil
+        import sys as _sys
+
+        if str(TOOLS_DIR) not in _sys.path:
+            _sys.path.insert(0, str(TOOLS_DIR))
+        from lib import gardener as _gardener
+
+        self.g = _gardener
+        self._tmp = tempfile.mkdtemp(prefix="t44-projection-")
+        self.root = Path(self._tmp).resolve()
+        (self.root / "vault" / "files").mkdir(parents=True)
+        (self.root / "vault" / "capsules").mkdir(parents=True)
+        (self.root / ".tropo").mkdir()
+        _shutil.copy2(
+            TOOLS_DIR.parent / "capsules" / "tropo-task.capsule.md",
+            self.root / "vault" / "capsules" / "tropo-task.capsule.md",
+        )
+        self.addCleanup(_shutil.rmtree, self._tmp, True)
+
+    def _open_task_record(self, uid: str = "cafe0001") -> dict:
+        return {
+            "uid": uid,
+            "type": "task",
+            "status": "active",
+            "state": "active",
+            "path": f"vault/files/{uid}.md",
+        }
+
+    def test_a_stale_candidate_is_cleared_before_recompute(self) -> None:
+        record = self._open_task_record()
+        record[self.g.CLOSURE_REVIEW_KEY] = {"verdict": "finished", "stale": True}
+        self.g.apply_gardener_pass(self.root, [record], False)
+        self.assertNotIn(
+            self.g.CLOSURE_REVIEW_KEY,
+            record,
+            "a prior pass's candidate must not survive into this one",
+        )
+
+    def test_clearing_happens_on_every_path_including_cache_reuse(self) -> None:
+        # Full, incremental and archive-cache reuse all funnel through the same
+        # pass; the clear must not be conditional on which one called it.
+        records = [
+            dict(self._open_task_record("cafe0002"),
+                 **{self.g.CLOSURE_REVIEW_KEY: {"verdict": "abandoned"}}),
+            dict(self._open_task_record("cafe0003"),
+                 **{self.g.CLOSURE_REVIEW_KEY: {"verdict": "superseded"}}),
+        ]
+        for _ in range(2):
+            self.g.apply_gardener_pass(self.root, records, False)
+            for record in records:
+                self.assertNotIn(self.g.CLOSURE_REVIEW_KEY, record)
+
+    def test_the_pass_reports_how_many_candidates_it_derived(self) -> None:
+        stats = self.g.apply_gardener_pass(self.root, [self._open_task_record()], False)
+        self.assertIn("closure_review_candidates", stats)
+        self.assertEqual(stats["closure_review_candidates"], 0)
+
+    def test_source_declared_candidate_is_refused_as_spoofing(self) -> None:
+        self.assertTrue(
+            self.g.source_declared_closure_candidate(
+                {"uid": "cafe0004", self.g.CLOSURE_REVIEW_KEY: {"verdict": "finished"}}
+            )
+        )
+
+    def test_the_pass_does_not_rewrite_source_bytes(self) -> None:
+        source = self.root / "vault" / "files" / "cafe0005.md"
+        source.write_text(
+            "---\nuid: cafe0005\ntype: task\nstatus: active\nstate: active\n"
+            "title: probe\nowner: talos\ncreated: '2026-08-16'\n"
+            "modified: '2026-08-16'\nschema_version: 2\n---\n\n# probe\n",
+            encoding="utf-8",
+        )
+        before = source.read_bytes()
+        self.g.apply_gardener_pass(self.root, [self._open_task_record("cafe0005")], False)
+        self.assertEqual(source.read_bytes(), before, "derivation never touches source")
+
+    def test_an_undeclared_type_receives_no_candidate(self) -> None:
+        record = {"uid": "cafe0006", "type": "note", "status": "open", "state": "active"}
+        self.g.apply_gardener_pass(self.root, [record], False)
+        self.assertNotIn(self.g.CLOSURE_REVIEW_KEY, record)
+
+    def _stub_pruning(self, uid: str, verdict: str, override: bool = False):
+        """Substitute the canonical evaluator at the seam the pass imports.
+
+        The other cases here all assert ABSENCE, so without this one the
+        stamping branch is never executed and the whole class would pass while
+        proving the feature does nothing. Fabricating a cryptographically valid
+        pruning block is not the point; proving verdict reaches record is.
+        """
+        import sys as _sys
+        from types import SimpleNamespace
+
+        module = _sys.modules.get("lib.pruning_contract")
+        if module is None:
+            from lib import pruning_contract as module  # noqa: F401
+
+            module = _sys.modules["lib.pruning_contract"]
+        original = module.check_pruning_vault
+        module.check_pruning_vault = lambda root, current_records=None: [
+            SimpleNamespace(uid=uid, effective_verdict=verdict, override_current=override)
+        ]
+        self.addCleanup(setattr, module, "check_pruning_vault", original)
+
+    def test_a_current_terminal_verdict_on_an_open_record_projects_a_candidate(self) -> None:
+        record = self._open_task_record("cafe0007")
+        record["pruning"] = {
+            "judge_policy_uid": "341823aa",
+            "judge_version": "2.1.0",
+            "normalized_body_hash_judged": "b" * 64,
+        }
+        self._stub_pruning("cafe0007", "finished")
+        stats = self.g.apply_gardener_pass(self.root, [record], False)
+
+        self.assertEqual(stats["closure_review_candidates"], 1)
+        candidate = record[self.g.CLOSURE_REVIEW_KEY]
+        self.assertEqual(candidate["source"], self.g.CLOSURE_REVIEW_SOURCE)
+        self.assertEqual(candidate["verdict"], "finished")
+        self.assertEqual(candidate["status"], "active")
+        self.assertEqual(candidate["judge_policy_uid"], "341823aa")
+        self.assertEqual(candidate["normalized_body_sha256"], "b" * 64)
+
+    def test_a_human_keep_override_stops_the_projection(self) -> None:
+        record = self._open_task_record("cafe0008")
+        record["pruning"] = {
+            "judge_policy_uid": "341823aa",
+            "judge_version": "2.1.0",
+            "normalized_body_hash_judged": "c" * 64,
+        }
+        self._stub_pruning("cafe0008", "finished", override=True)
+        stats = self.g.apply_gardener_pass(self.root, [record], False)
+        self.assertEqual(stats["closure_review_candidates"], 0)
+        self.assertNotIn(self.g.CLOSURE_REVIEW_KEY, record)
+
+    def test_a_terminal_record_is_not_queued_for_closure_review(self) -> None:
+        record = dict(self._open_task_record("cafe0009"), status="closed")
+        record["pruning"] = {
+            "judge_policy_uid": "341823aa",
+            "judge_version": "2.1.0",
+            "normalized_body_hash_judged": "d" * 64,
+        }
+        self._stub_pruning("cafe0009", "finished")
+        stats = self.g.apply_gardener_pass(self.root, [record], False)
+        self.assertEqual(stats["closure_review_candidates"], 0)
+        self.assertNotIn(self.g.CLOSURE_REVIEW_KEY, record)
+
+    def test_a_projected_candidate_is_replaced_not_accumulated(self) -> None:
+        record = self._open_task_record("cafe0010")
+        record["pruning"] = {
+            "judge_policy_uid": "341823aa",
+            "judge_version": "2.1.0",
+            "normalized_body_hash_judged": "e" * 64,
+        }
+        self._stub_pruning("cafe0010", "finished")
+        self.g.apply_gardener_pass(self.root, [record], False)
+        first = dict(record[self.g.CLOSURE_REVIEW_KEY])
+        self.g.apply_gardener_pass(self.root, [record], False)
+        self.assertEqual(record[self.g.CLOSURE_REVIEW_KEY], first,
+                         "recompute is idempotent, not additive")
 
 
 if __name__ == "__main__":

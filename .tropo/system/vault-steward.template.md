@@ -60,7 +60,7 @@ Check `last_updated` fields on living documents: memory files, session logs, ops
 
 ### 3. Registry Consistency
 
-Verify the matched-primitive registries match file frontmatter across the vault per [Registry Topology Consolidation (adac1f10)](../../vault/files/adac1f10.md): `vault/00-index.jsonl` for ledger entries, `.tropo-studio/registries/agent-registry.yaml` for agent identity, `.tropo-studio/registries/registry.jsonl` for runtime callables. Kernel content (capsules / playbooks / skills) is folder-listed and doesn't have a separate registry to validate against.
+Verify the matched-primitive registries match file frontmatter across the vault per [Registry Topology Consolidation (adac1f10)](../../vault/files/adac1f10.md): `vault/00-index.jsonl` for vault entries and runtime callables, `.tropo-studio/registries/agent-registry.yaml` for agent identity. Kernel content (capsules / playbooks / skills) is folder-listed and doesn't have a separate registry to validate against.
 
 **Checks:**
 - Files with YAML frontmatter that lack a `uid:` field (missing UID)
@@ -76,7 +76,7 @@ Verify the matched-primitive registries match file frontmatter across the vault 
 
 **Auto-Repair:** ✅ ENABLED for two sub-cases:
 
-1. **Missing UIDs on files with frontmatter.** The steward generates an 8-character lowercase hex UID (use `openssl rand -hex 4` if available, otherwise generate deterministically), writes it to the file's frontmatter, and triggers a rebuild of the appropriate matched-primitive index (`vault/tools/tropo-rebuild-vault.py` for vault entries, `scripts/rebuild-registry.ts` for runtime callables; agent-registry.yaml updates are surfaced as findings, not auto-applied). Conservative because it only adds a field — it never modifies an existing `uid:` value.
+1. **Missing UIDs on files with frontmatter.** The steward generates an 8-character lowercase hex UID (use `openssl rand -hex 4` if available, otherwise generate deterministically), writes it to the file's frontmatter, and triggers a rebuild of the appropriate matched-primitive index (`vault/tools/tropo-rebuild-vault.py` for vault entries and runtime callables; agent-registry.yaml updates are surfaced as findings, not auto-applied). Conservative because it only adds a field — it never modifies an existing `uid:` value.
 2. **Missing registry entries for files with UIDs.** If a file has `uid: abc12345` in frontmatter but is absent from its matched-primitive registry, the steward triggers the appropriate rebuild — the file is the source of truth and the registry is the projection. Conservative because the rebuilders are deterministic from frontmatter.
 
 **Auto-Repair:** ❌ DISABLED for:
@@ -412,7 +412,7 @@ The vault steward ran on [date] and applied auto-repair fixes inside this worksp
 **If any of these fixes are wrong:**
 
 - Frontmatter field values (like `status: active`) are conservative defaults. If a file should be `draft` or `superseded`, correct it manually — the steward won't overwrite your correction on the next run.
-- If a UID was generated for a file that already had one elsewhere (collision), check the appropriate matched-primitive registry (`vault/00-index.jsonl`, `agent-registry.yaml`, or `registry.jsonl` depending on file class) for the mismatch and fix it. This is rare but not impossible.
+- If a UID was generated for a file that already had one elsewhere (collision), check the appropriate matched-primitive index (`vault/00-index.jsonl` or `agent-registry.yaml`, depending on file class) for the mismatch and fix it. This is rare but not impossible.
 - If you disagree with any auto-repair decision, raise it with the user — the steward's auto-repair scope is documented at `.tropo/system/vault-steward.template.md` and can be narrowed.
 
 **Full report:** `vault/tropo-vault-steward/workspace/[YYYY-MM-DD]-health-report.md`

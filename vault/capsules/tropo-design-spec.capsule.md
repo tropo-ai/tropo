@@ -142,7 +142,7 @@ Extends `core`. Inherits all core rules.
 **Tools available:**
 - `vault/00-index.jsonl` — grep `type: design-spec` for live specs; check for prior specs covering the same surface before authoring (drift prevention)
 - `vault/00-index.jsonl` — grep `type: design-brief` for briefs upstream of this spec
-- `.tropo-studio/registries/registry.jsonl` — verify cross-references resolve (`refs:`, `consistent_with:`, `supersedes:` UIDs)
+- `vault/00-index.jsonl` — verify cross-references resolve (`refs:`, `consistent_with:`, `supersedes:` UIDs)
 - Reference instances: [Playbook Executor State Machines (12d8918c)](../../vault/files/12d8918c.md) (`stage: done`, locked); [Tropo Work Architecture v0.3 (2d016ecf)](../../vault/files/2d016ecf.md); [Playbook → Task Integration Spec (468783eb)](../../vault/files/468783eb.md)
 - Sibling capsule for heavier specs: [arch-spec.capsule v2.1 (a7f2e9c4)](arch-spec.capsule.md) — when the spec needs 5 REQUIRED body sections + non-empty `derived_from:`, prefer arch-spec
 

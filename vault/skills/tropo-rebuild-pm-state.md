@@ -18,7 +18,7 @@ capsule_version: '1.3'
 extraction_scope: ship
 schema_version: 2
 purpose: Rebuilds vault/00-pm-state.json from the vault index and project tree
-when: When the PM state is stale (filesystem mtime older than significant ledger activity) before booting sa.project-manager
+when: When the PM state is stale (filesystem mtime older than significant vault activity) before booting sa.project-manager
 trigger_description: 'Reach for this when PM state at vault/00-pm-state.json is stale — typically before booting sa.project-manager (which loads PM state at boot for fast project navigation queries) or after substantial work-management changes (new tasks, projects, board updates). Reads vault/00-index.jsonl + vault/00-project-tree.jsonl, writes the consolidated PM-state JSON. Companion to rebuild-vault.py: rebuild the vault first, then rebuild PM state from the rebuilt index.'
 reads:
   - vault/00-index.jsonl
@@ -32,14 +32,14 @@ subsystem_hub:
 # rebuild-pm-state — Skill
 
 *Rebuilds `vault/00-pm-state.json` from the vault index and project tree.*
-*Run when the PM state is stale (filesystem mtime older than significant ledger activity) before booting sa.project-manager.*
+*Run when the PM state is stale (filesystem mtime older than significant vault activity) before booting sa.project-manager.*
 
 ---
 
 ## When to Use
 
 - sa.project-manager checks `00-pm-state.json` mtime at boot and finds it older than the most recent vault entry's modified date
-- After significant ledger changes (bulk task updates, project restructuring)
+- After significant vault changes (bulk task updates, project restructuring)
 
 ---
 

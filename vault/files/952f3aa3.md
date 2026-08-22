@@ -3,7 +3,7 @@ uid: 952f3aa3
 type: project
 subsystem_name: tropo-test-harness
 title: Tropo Test Harness
-description: 'First-class Tropo-OS subsystem for release-cycle test infrastructure. Hosts the canonical discovery surface for the four-primitive test harness Vela authored during the v1.40-v1.42 cycle arc: vela-test-plan (cycle-specific substrate verification; Argus-authored per cycle) + release-cold-boot-walk (user-experience first-encounter persona walks; ships in every release) + release-tropo-work-walk (PROPOSED — user-experience tropo-work depth walks; extends personas with scenario tails first per earn-the-abstraction-strict) + feature-specific test cases (PROPOSED — persistent per-feature mechanical verification; Mike-V47 pinned idea 2026-05-18). Each component lives at its canonical type-location (playbooks at .tropo/playbooks/; personas at .tropo/personas/; test cases will live at .tropo/test-cases/; per-cycle runs at argo-os/playbook-runs/; aggregate reports at /Users/mike/dev/tropo-releases/v<X.Y.Z>/); this hub indexes the substrate as a coherent subsystem. Elevated to subsystem-class
+description: 'First-class Tropo-OS subsystem for release-cycle test infrastructure. Hosts the canonical discovery surface for the four-primitive test harness Vela authored during the v1.40-v1.42 cycle arc: vela-test-plan (cycle-specific substrate verification; Argus-authored per cycle) + release-cold-boot-walk (user-experience first-encounter persona walks; ships in every release) + release-tropo-work-walk (PROPOSED — user-experience tropo-work depth walks; extends personas with scenario tails first per earn-the-abstraction-strict) + feature-specific test cases (PROPOSED — persistent per-feature mechanical verification; Mike-V47 pinned idea 2026-05-18). Each component lives at its canonical type-location (playbooks at .tropo/playbooks/; personas at .tropo/personas/; test cases will live at .tropo/test-cases/; per-cycle runs at argo-os/playbook-runs/; aggregate reports at <RELEASES_DIR>/v<X.Y.Z>/); this hub indexes the substrate as a coherent subsystem. Elevated to subsystem-class
   per Mike-V47 directive 2026-05-18 — load-bearing release-cycle infrastructure that compounds across every release; deserves first-class subsystem treatment alongside Tropo Work, Tropo Governance, Tropo Agents.'
 status: active
 state: active
@@ -163,7 +163,7 @@ That clears the substrate-subsystem-class bar. Tropo Work earned it; Tropo Gover
 | Cold-boot persona substrate | `.tropo/personas/cold-boot/` (CAPSULE `a7c9d4e2`; engineer + operator + enterprise) | `.tropo/personas/cold-boot/CAPSULE.md` |
 | Per-cycle vela-test-plans | `vault/files/<uid>.md` with `note_subtype: vela-test-plan` | grep `note_subtype: vela-test-plan` in vault index |
 | Per-cycle run folders | `argo-os/playbook-runs/release-cold-boot-walk-v<X.Y.Z>-<date>/` | folder naming convention; gitignored |
-| Per-cycle aggregate reports | `/Users/mike/dev/tropo-releases/v<X.Y.Z>/cold-boot-walk-report.md` | release artifact convention; outside platform repo |
+| Per-cycle aggregate reports | `<RELEASES_DIR>/v<X.Y.Z>/cold-boot-walk-report.md` | release artifact convention; outside platform repo |
 | Cycle-finding briefs | `vault/files/<uid>.md` with `type: design-brief` routed to dev-pipeline 01-inbox | grep `member_of: 0a1a36fe` |
 | (Future) Tropo-work-walk substrate | Persona scenario tails first; later potentially `.tropo/playbooks/release-tropo-work-walk.playbook.md` | TBD when shape proven |
 | (Future) Feature-specific test cases | `.tropo/test-cases/v<X.Y.Z>-<feature>.md` | TBD when authored |
@@ -190,7 +190,7 @@ Personas: three production (engineer / operator / enterprise); Studios may amend
 
 - **v1.40 cycle (2026-05-17):** harness concept first walked (Mike-V47 brainstorm); release-cold-boot-walk.playbook v0.1 authored
 - **v1.41 cycle (2026-05-18):** harness v1.0 LOCKED; first-cycle dogfood — verdict MIXED; aggregate avg 7.33/10; two P0 ship-defects surfaced (channels/ + system/ folders missing — earning the harness's keep on first cycle); brief `5f9d9e3e` filed for v1.43 absorption
-- **v1.42 cycle (2026-05-18):** second-cycle dogfood — verdict MIXED; aggregate avg 7.33/10 (zero net movement; cycle thesis empirically validated — v1.42 was infrastructure-class); path migration to `/Users/mike/dev/tropo-releases/` outside platform repo (Mike-V47 directive); harness v1.0 → v1.1 amendment landed (per-persona Studio clones at dispatch + Step 1 collapse + verify-aggregate discipline added per V47 authoring-discipline failure A72 caught)
+- **v1.42 cycle (2026-05-18):** second-cycle dogfood — verdict MIXED; aggregate avg 7.33/10 (zero net movement; cycle thesis empirically validated — v1.42 was infrastructure-class); path migration to `<RELEASES_DIR>/` outside platform repo (Mike-V47 directive); harness v1.0 → v1.1 amendment landed (per-persona Studio clones at dispatch + Step 1 collapse + verify-aggregate discipline added per V47 authoring-discipline failure A72 caught)
 - **2026-05-18 (this hub):** subsystem-class elevation per Mike-V47 directive; first-class Tropo subsystem; member_of tropo-subsystems
 
 ---

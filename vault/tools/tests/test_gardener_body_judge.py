@@ -216,6 +216,9 @@ class LoopMintScratch:
             "tropo-rebuild-index.py",
             "tropo-generate-relations-header.py",
             "tropo-navblock-strip.py",
+            # rebuild-index --apply shells out to this sibling by a path
+            # derived from its own location; copying the script alone exits 8.
+            "tropo-generate-mint-registry.py",
         ):
             shutil.copy2(TOOLS / name, tools / name)
         shutil.copytree(TOOLS / "lib", tools / "lib")
@@ -1108,7 +1111,14 @@ class BodyJudgeQueueTests(unittest.TestCase):
         policy = _frontmatter(watched[0])
         self.assertEqual(before, after)
         self.assertEqual(queue["policy_uid"], "341823aa")
-        self.assertEqual(queue["policy_version"], "2.1.0")
+        # UPDATED 2026-08-21 (talos-t47): pinned "2.1.0" rotted when the
+        # judge policy shipped 2.2.0 — the property under test is that the
+        # queue computation uses the LIVE policy, so assert against the
+        # active policy's own version, read from the same frontmatter.
+        self.assertEqual(
+            queue["policy_version"],
+            _frontmatter(watched[0])["version"],
+            "the queue must compute under whatever policy version is ACTIVE")
         self.assertEqual(policy["cadence"], "weekly")
         self.assertEqual(policy["consent_mode"], "auto")
         self.assertEqual(policy["trigger"]["kind"], "schedule")

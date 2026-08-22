@@ -196,7 +196,21 @@ class TestAC1ReinforceField(unittest.TestCase):
         # curator-mutable governance + version bump
         self.assertIn("reinforcement_count", text)
         self.assertIn("reinforced_by", text)
-        self.assertRegex(text, r"(?m)^version:\s*1\.6\s*$", "capsule must be v1.6")
+        # The capsule must be AT OR PAST the version that introduced these
+        # fields — not pinned to it. Pinning to 1.6 meant the 1.7 lifecycle
+        # cutover, which touched neither field, turned this red. A test that
+        # hardcodes a value it does not own fails the moment someone changes
+        # that value correctly, and then it is measuring the version rather
+        # than the contract it names.
+        declared = re.search(r"(?m)^version:\s*'?([\d.]+)'?\s*$", text)
+        self.assertIsNotNone(declared, "memory capsule declares no version")
+        version = tuple(int(part) for part in declared.group(1).split("."))
+        self.assertGreaterEqual(
+            version,
+            (1, 6),
+            "reinforcement_count/reinforced_by arrived at capsule v1.6; a lower "
+            "version cannot be documenting them",
+        )
 
     def test_validator_reinforcement_count_must_be_nonneg_int(self):
         vault = TempVault()

@@ -37,6 +37,10 @@ RELEASE_GRAPH_UIDS = (
     "634913c2", "471dd767", "8a4f802b", "8e03f8d6",
     "f9365ede", "8654900a", "0cf86ea5", "4f64ec3c", "37996741",
     "2e9b1db7", "4262d5fa", "a0f2bea8", "bc6b17ec", "c6b61fb9",
+    # The freeze, between the fourth instrument and Publish (2fae6312 step 4).
+    # A node the stage claims but the scratch studio lacks is a dangling
+    # depends_on_steps, and bootstrap refuses on E2 before any test runs.
+    "7de2c49f",
     "3dd817cb",
 )
 
@@ -163,9 +167,18 @@ class ReleaseLockEndToEnd(unittest.TestCase):
             ]) + "\n---\n\n# run\n")
             self._close_receipt(run)
 
+        # v1.89 2fae6312: the lock now authors a pre-ship release entry from
+        # the plan's lock-time fields, so a plan that declares none of them
+        # cannot be locked. The real plan c45da26c carries all six; this
+        # fixture carries them for the same reason.
         self._write("b1a00001", "---\n" + "\n".join([
             "uid: b1a00001", "type: release-plan", "title: test release plan",
             "status: specify", "state: active", "release_version: 9.9.9",
+            "capabilities_touched:", "  - cap00001",
+            "kernel_substrate_touched:", "  - vault/tools/tropo-release.py",
+            "foundation:", "  - fnd00001",
+            "ratchet_targets:", "  mike_gestures_max: 3",
+            "hub_summaries:", "  8dd772a0: test hub summary",
             "dev_spec_uids:", "  - 5ec00001", "  - 5ec00002",
         ]) + "\n---\n\n# plan\n")
 
@@ -539,12 +552,16 @@ class ReleaseLockEndToEnd(unittest.TestCase):
 
         Random minting made this a roughly two-percent flake: the transaction
         succeeded, but runtime adoption returned an integer run UID while the
-        locked plan carried a string. Force all three ignition identities into
-        that shape and drive the real bootstrap boundary.
+        locked plan carried a string. Force every ignition identity into that
+        shape and drive the real bootstrap boundary.
+
+        v1.89 2fae6312: the lock mints a fourth identity, the pre-ship release
+        entry, so the all-digit shape must be forced on that one too — it is
+        written into the plan, the run and the journal seed like the others.
         """
         studio = temp_studio.TempStudio(self.tmp).build()
         production_before = temp_studio.production_fingerprint()
-        minted = iter(("12345678", "23456789", "34567890"))
+        minted = iter(("12345678", "23456789", "34567890", "45678901"))
         original_mint = rl._mint_uid
         rl._mint_uid = lambda *_args, **_kwargs: next(minted)
         try:
@@ -651,6 +668,8 @@ class ReleaseLockEndToEnd(unittest.TestCase):
             "print('AFTER_EXTERNAL', ','.join(eligible()))\n"
             "verify('c6b61fb9')\n"
             "print('AFTER_VERIFY_CHAIN', ','.join(eligible()))\n"
+            "verify('7de2c49f')\n"
+            "print('AFTER_FREEZE', ','.join(eligible()))\n"
             "verify('3dd817cb')\n"
             "print('AFTER_PUBLISH', ','.join(eligible()))\n",
             encoding="utf-8",
@@ -676,7 +695,7 @@ class ReleaseLockEndToEnd(unittest.TestCase):
             "INITIAL", "AFTER_FAN_IN", "AFTER_DOC_TRIGGER",
             "AFTER_BRANCHES", "AFTER_NOTIFY", "BEFORE_PACKAGE", "AFTER_PACKAGE",
             "AFTER_FULL_VALIDATION", "AFTER_HARNESS", "AFTER_EXTERNAL",
-            "AFTER_VERIFY_CHAIN", "AFTER_PUBLISH",
+            "AFTER_VERIFY_CHAIN", "AFTER_FREEZE", "AFTER_PUBLISH",
         }
         observed = {
             key: value
@@ -695,7 +714,8 @@ class ReleaseLockEndToEnd(unittest.TestCase):
         self.assertEqual(observed.get("AFTER_FULL_VALIDATION"), "a0f2bea8")
         self.assertEqual(observed.get("AFTER_HARNESS"), "bc6b17ec")
         self.assertEqual(observed.get("AFTER_EXTERNAL"), "c6b61fb9")
-        self.assertEqual(observed.get("AFTER_VERIFY_CHAIN"), "3dd817cb")
+        self.assertEqual(observed.get("AFTER_VERIFY_CHAIN"), "7de2c49f")
+        self.assertEqual(observed.get("AFTER_FREEZE"), "3dd817cb")
         self.assertEqual(observed.get("AFTER_PUBLISH"), "")
         for point in (
             "INITIAL", "AFTER_FAN_IN", "AFTER_DOC_TRIGGER", "AFTER_BRANCHES",
@@ -709,6 +729,9 @@ class ReleaseLockEndToEnd(unittest.TestCase):
             "INITIAL", "AFTER_FAN_IN", "AFTER_DOC_TRIGGER", "AFTER_BRANCHES",
             "AFTER_NOTIFY", "BEFORE_PACKAGE", "AFTER_PACKAGE",
             "AFTER_FULL_VALIDATION", "AFTER_HARNESS", "AFTER_EXTERNAL",
+            # Publication is not eligible off the cold walk any more; the
+            # freeze stands between them (2fae6312 step 4).
+            "AFTER_VERIFY_CHAIN",
         ):
             self.assertNotIn(
                 "3dd817cb", observed.get(point, ""),
@@ -1055,3 +1078,249 @@ class ReleaseLockEndToEnd(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OnePromptReleaseLockTests(ReleaseLockEndToEnd):
+    """AC5's named entry point: the abandonment half of the lock transaction.
+
+    A lock opens five correlated records and reserves every member. AC5's claim
+    is that abandoning it closes all of them in one transaction, releases the
+    members, and cannot be used to retract something already public.
+
+    This class inherits the lock harness deliberately. Abandonment is only
+    meaningful against a REAL lock, and building a hand-written "locked-looking"
+    fixture would let the abandonment pass against a shape the lock never
+    produces — which is the failure mode the spec's crash-matrix language is
+    aimed at.
+    """
+
+    REASON = "scope withdrawn before ship"
+
+    def _abandon(self, reason: str = REASON, by: str = "mike"):
+        return rl.abandon_release_plan("b1a00001", by, reason, self.files)
+
+    def _locked(self) -> dict:
+        code, message = self._lock()
+        self.assertEqual(code, 0, message)
+        return rl.read_entry("b1a00001", self.files)["frontmatter"]
+
+    def _fm(self, uid: str) -> dict:
+        entry = rl.read_entry(uid, self.files)
+        self.assertIsNotNone(entry, f"{uid} does not resolve")
+        return entry["frontmatter"]
+
+    def _correlated(self, locked: dict) -> dict:
+        """Every record the lock created, by role."""
+        activation_uid = locked["release_activation_uid"]
+        root_uid = str(
+            self._fm(activation_uid).get("activation_root_uid")
+            or self._fm(activation_uid).get("activation_root_project")
+        )
+        return {
+            "plan": "b1a00001",
+            "activation": activation_uid,
+            "run": locked["release_pipeline_run_uid"],
+            "root": root_uid,
+            "release_entry": locked["release_entry_uid"],
+        }
+
+    # ------------------------------------------------------------------ states
+
+    def test_abandonment_terminates_every_correlated_record(self) -> None:
+        locked = self._locked()
+        uids = self._correlated(locked)
+
+        result = self._abandon()
+        self.assertTrue(result["applied"])
+
+        for role, uid in uids.items():
+            with self.subTest(role=role):
+                fm = self._fm(uid)
+                for field, expected in rl.ABANDON_TERMINAL_STATES[role].items():
+                    self.assertEqual(
+                        str(fm.get(field)), expected,
+                        f"{role} {uid} has {field}={fm.get(field)!r}, expected "
+                        f"{expected!r}",
+                    )
+
+    def test_the_release_entry_is_preserved_not_deleted(self) -> None:
+        """pre-ship + archived. The record of the attempt outlives it."""
+        locked = self._locked()
+        release_uid = locked["release_entry_uid"]
+        self._abandon()
+
+        self.assertTrue(
+            (self.files / f"{release_uid}.md").is_file(),
+            "the release entry was removed rather than archived",
+        )
+        fm = self._fm(release_uid)
+        self.assertEqual(fm["status"], "pre-ship")
+        self.assertEqual(fm["state"], "archived")
+
+    def test_the_root_carries_a_final_commit(self) -> None:
+        locked = self._locked()
+        root_uid = self._correlated(locked)["root"]
+        self._abandon()
+        self.assertTrue(self._fm(root_uid).get("final_commit"))
+
+    def test_no_correlated_record_remains_live(self) -> None:
+        """The whole point: nothing is left running beside a cancelled plan."""
+        locked = self._locked()
+        uids = self._correlated(locked)
+        self._abandon()
+
+        live = []
+        for role, uid in uids.items():
+            fm = self._fm(uid)
+            if str(fm.get("status") or "").strip().lower() == "active":
+                live.append(f"{role}={uid}")
+            if str(fm.get("state") or "").strip().lower() == "active" and role in (
+                "root", "release_entry"
+            ):
+                live.append(f"{role}={uid} state")
+        self.assertEqual(
+            live, [],
+            "a record is still live after abandonment; a run left active beside "
+            "a cancelled plan is neither running nor over",
+        )
+
+    # ------------------------------------------------------------ reservations
+
+    def test_member_reservations_are_released(self) -> None:
+        locked = self._locked()
+        members = locked["dev_spec_uids"]
+
+        plans = rl.all_release_plans(self.files)
+        held = [
+            m for m in members
+            if fan_in.find_conflicting_reservation(m, plans, "other0001")
+        ]
+        self.assertEqual(
+            sorted(held), sorted(members),
+            "the lock did not reserve its members, so releasing them proves nothing",
+        )
+
+        self._abandon()
+
+        plans = rl.all_release_plans(self.files)
+        still_held = [
+            m for m in members
+            if fan_in.find_conflicting_reservation(m, plans, "other0001")
+        ]
+        self.assertEqual(
+            still_held, [],
+            "members are still reserved after abandonment — cancelling a release "
+            "would strand them forever with no cure but editing history",
+        )
+
+    # ---------------------------------------------------------------- receipt
+
+    def test_one_shared_receipt_and_reason_across_every_record(self) -> None:
+        locked = self._locked()
+        uids = self._correlated(locked)
+        result = self._abandon()
+
+        receipts, reasons = set(), set()
+        for role, uid in uids.items():
+            fm = self._fm(uid)
+            with self.subTest(role=role):
+                self.assertTrue(fm.get("abandon_receipt"), f"{role} has no receipt")
+                self.assertTrue(fm.get("abandon_reason"), f"{role} has no reason")
+                self.assertTrue(fm.get("abandoned_by"), f"{role} has no principal")
+                self.assertTrue(fm.get("abandoned_at"), f"{role} has no time")
+            receipts.add(str(fm.get("abandon_receipt")))
+            reasons.add(str(fm.get("abandon_reason")))
+
+        self.assertEqual(
+            len(receipts), 1,
+            f"the records carry {len(receipts)} different receipts; one "
+            f"abandonment is one fact",
+        )
+        self.assertEqual(len(reasons), 1)
+        self.assertEqual(receipts.pop(), result["abandon_receipt"])
+        self.assertEqual(reasons.pop(), self.REASON)
+
+    # ------------------------------------------------------------------- retry
+
+    def test_an_exact_retry_writes_nothing(self) -> None:
+        locked = self._locked()
+        first = self._abandon()
+        self.assertTrue(first["applied"])
+
+        before = self._snapshot()
+        second = self._abandon()
+
+        self.assertTrue(second["no_op"], "the retry re-applied the transaction")
+        self.assertFalse(second["applied"])
+        self.assertEqual(
+            second["abandon_receipt"], first["abandon_receipt"],
+            "the retry minted a second receipt for one abandonment",
+        )
+        self.assertEqual(
+            self._snapshot(), before,
+            "an exact retry changed bytes on disk",
+        )
+
+    def test_a_retry_with_a_different_reason_does_not_rewrite_the_record(self) -> None:
+        """The first reason is the reason. A later one does not overwrite it."""
+        self._locked()
+        first = self._abandon()
+        second = self._abandon(reason="a different story")
+
+        self.assertTrue(second["no_op"])
+        self.assertEqual(
+            self._fm("b1a00001")["abandon_reason"], self.REASON
+        )
+        self.assertEqual(second["abandon_receipt"], first["abandon_receipt"])
+
+    # ---------------------------------------------------------------- refusals
+
+    def test_abandonment_after_shipment_refuses(self) -> None:
+        """Forward-only compensation, never retracting a public fact."""
+        locked = self._locked()
+        release_uid = locked["release_entry_uid"]
+        entry = rl.read_entry(release_uid, self.files)
+        (self.files / f"{release_uid}.md").write_text(
+            entry["raw"].replace("status: pre-ship", "status: shipped", 1),
+            encoding="utf-8",
+        )
+
+        before = self._snapshot()
+        with self.assertRaises(rl.LockRefused) as caught:
+            self._abandon()
+        self.assertIn("shipped", str(caught.exception))
+        self.assertEqual(
+            self._snapshot(), before,
+            "a refused abandonment wrote something",
+        )
+
+    def test_a_published_receipt_also_blocks_abandonment(self) -> None:
+        locked = self._locked()
+        release_uid = locked["release_entry_uid"]
+        entry = rl.read_entry(release_uid, self.files)
+        (self.files / f"{release_uid}.md").write_text(
+            entry["raw"].replace(
+                "status: pre-ship",
+                "status: pre-ship\npublication_receipt_sha256: " + ("a" * 64),
+                1,
+            ),
+            encoding="utf-8",
+        )
+        with self.assertRaises(rl.LockRefused) as caught:
+            self._abandon()
+        self.assertIn("publication_receipt_sha256", str(caught.exception))
+
+    def test_abandonment_requires_a_reason(self) -> None:
+        self._locked()
+        before = self._snapshot()
+        with self.assertRaises(rl.LockRefused) as caught:
+            self._abandon(reason="   ")
+        self.assertIn("reason", str(caught.exception))
+        self.assertEqual(self._snapshot(), before)
+
+    def test_an_unlocked_plan_has_nothing_to_abandon(self) -> None:
+        before = self._snapshot()
+        with self.assertRaises(rl.LockRefused) as caught:
+            self._abandon()
+        self.assertIn("only a locked plan", str(caught.exception))
+        self.assertEqual(self._snapshot(), before)

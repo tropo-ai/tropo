@@ -146,7 +146,7 @@ Extends `core`. Inherits all core rules.
 **Tools available:**
 - `vault/00-index.jsonl` — grep existing ADRs before proposing (Rule 4: decision numbers are sequential)
 - [All Decisions collection (417898d0)](../../vault/files/417898d0.md) — every ADR in number order with supersession chains visible; walk this to assign the next decision number
-- `vault/files/<uid>.md` writer — decisions live as flat ledger entries
+- `vault/files/<uid>.md` writer — decisions live as flat vault entries
 
 **Skills:**
 - `propose-decision.skill.md` *(forthcoming v1.5)* — scaffold frontmatter + body sections (Context / Options / Decision / Alternatives Considered / Consequences)

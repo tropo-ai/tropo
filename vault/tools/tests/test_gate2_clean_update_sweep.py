@@ -23,6 +23,7 @@ Exit 0 = all non-skipped behaviors PASS, Exit 1 = at least one FAIL.
 
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -82,7 +83,12 @@ def b1_namespace_predicate():
     # LOCK-AMENDMENT 2 re-verify F1/F2 — parse a REAL shipped MANIFEST.md (not a fixture)
     # and confirm the truncated-hash prefix-match works. Non-fatal if the real release
     # artifact isn't present on this machine (e.g. a CI runner without tropo-releases/).
-    real_manifest_path = Path("/Users/mike/dev/tropo-releases/v1.77.0/builds/tropo-os-v1.77.0/MANIFEST.md")
+    # Portability (v1.90.0 ship gate): the releases tree lives outside the repo
+    # (build-release.py RELEASES_DIR). Point TROPO_RELEASES_DIR at it to exercise this
+    # arm; unset, the path does not resolve and the arm self-skips below, as it already
+    # does on any machine without the artifact.
+    real_manifest_path = (Path(os.environ.get("TROPO_RELEASES_DIR", ""))
+                          / "v1.77.0/builds/tropo-os-v1.77.0/MANIFEST.md")
     if real_manifest_path.exists():
         real_index, real_skipped = mod.parse_manifest_md(real_manifest_path.read_text())
         real_format_ok = len(real_index) == 957 and real_skipped <= 1

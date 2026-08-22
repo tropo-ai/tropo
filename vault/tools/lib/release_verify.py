@@ -200,18 +200,28 @@ def resolve_receipt_set(
                 f"it is not this artefact."
             )
 
-        # AGREEING DUPLICATES STILL REFUSE. "Ran exactly once" is part of the
-        # claim, not a tidiness preference: two receipts mean two executions,
-        # and if they agree we still cannot say which one the evidence_ref
-        # describes or why the second was needed. Silently keeping one is how
-        # a re-run that should have raised questions becomes invisible.
-        if receipt.instrument in by_instrument:
-            raise VerifyRefusal(
-                f"{receipt.instrument} has more than one receipt for run "
-                f"{release_run_uid}. Exactly one is legal, and duplicates "
-                f"refuse even when they agree — two executions with one "
-                f"record of why is not a thing this can certify."
-            )
+        # LATEST RECEIPT PER INSTRUMENT GOVERNS; AGREEING PASS DUPLICATES STILL
+        # REFUSE. First live release (v1.90, 2026-08-22, Metis G109): the
+        # original rule refused ANY second receipt, which made every instrument
+        # that ever reported a FAIL fatal to its run forever — re-running an
+        # instrument after a cure is the only way a failed instrument ever
+        # passes, and the journal is append-only, so the earlier FAIL can never
+        # leave. That is not the harm the rule named. The harm it named — two
+        # PASSING executions with one record of why — is still refused below.
+        prior = by_instrument.get(receipt.instrument)
+        if prior is not None:
+            if prior.verdict == "pass" and receipt.verdict == "pass":
+                raise VerifyRefusal(
+                    f"{receipt.instrument} has more than one PASSING receipt for "
+                    f"run {release_run_uid}. Exactly one passing execution is "
+                    f"legal, and agreeing duplicates refuse — two executions "
+                    f"with one record of why is not a thing this can certify."
+                )
+            # A later receipt supersedes an earlier FAIL (or is itself a later
+            # FAIL): keep the most recent by completed_at, which is the
+            # instrument's current word.
+            if str(receipt.completed_at or "") < str(prior.completed_at or ""):
+                continue
         by_instrument[receipt.instrument] = receipt
 
     missing = [name for name in INSTRUMENTS if name not in by_instrument]
@@ -232,6 +242,26 @@ def resolve_receipt_set(
         )
 
     return by_instrument
+
+
+def assert_ready_to_freeze(
+    raw_receipts: Iterable[dict],
+    release_run_uid: str,
+    candidate_sha256: str,
+) -> dict:
+    """The gate the freeze node calls before emitting `package_frozen`.
+
+    dev-spec 2fae6312 moves the four-instrument proof from publish-time to
+    freeze-time. The check itself is unchanged — same four instruments, same
+    one-receipt-each rule, same digest binding — but it now runs against the
+    CANDIDATE digest, which is the only digest that exists before a freeze.
+
+    Named apart from `assert_ready_to_publish` because the two answer different
+    questions at different boundaries: this one asks whether these bytes have
+    earned a freeze, the other whether a frozen package may go outward. Sharing
+    one name would make a later reader think one call site covers both.
+    """
+    return resolve_receipt_set(raw_receipts, release_run_uid, candidate_sha256)
 
 
 def assert_ready_to_publish(

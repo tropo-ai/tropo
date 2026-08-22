@@ -53,10 +53,11 @@ from lib import governed_body
 # so drift is machine-caught rather than assumed away.
 NAV_BLOCK_START = "<!-- nav-block:start -->"
 NAV_BLOCK_END = "<!-- nav-block:end -->"
-_NAV_BLOCK_RE = re.compile(
-    re.escape(NAV_BLOCK_START) + r".*?" + re.escape(NAV_BLOCK_END) + r"\n*",
-    re.DOTALL,
-)
+# v1.89 271d28d7 AC6: the sentinel STRINGS stay declared here (the floor test
+# cross-checks them against the real generator), but the SPAN pattern comes
+# from governed_body so this module cannot disagree with the renderer, the T2
+# hash, or the clean filter about where a block begins and ends.
+_NAV_BLOCK_RE = governed_body._NAV_BLOCK_RE
 
 
 class PostReceiptWriteError(RuntimeError):

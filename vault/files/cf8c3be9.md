@@ -134,7 +134,7 @@ These rules preserve the safety-net value of the prior channel-read protocol wit
 - Creating the record file is not commissioning. The agent is not running until it writes `[QUERY]` to the record.
 - This rule applies universally. Tier 3 extensions that declare sa.* agents inherit this requirement automatically.
 
-**Status card vs. ledger reconciliation:**
+**Status card vs. Vault reconciliation:**
 - As part of Group 3, before writing the Operationally Grounded milestone, grep [vault/00-index.jsonl](../vault/00-index.jsonl) for each task the inbound status card lists as open. Flag any with `stage: done` to the startup signal. This catches transfer drift at boot rather than mid-session. Low cost: one grep.
 
 ---
@@ -277,7 +277,7 @@ Startup signal format is Tier 3 (agent charter / extension declares). This vault
 ## Vault References
 
 - **Active crew:** authoritative source is [agent-registry.yaml](registries/agent-registry.yaml).
-- **Ledger:** [vault/00-index.jsonl](../vault/00-index.jsonl) — authoritative store. Navigate via project tree + cascade files first, not full-scan.
+- **Vault index:** [vault/00-index.jsonl](../vault/00-index.jsonl) — authoritative store. Navigate via project tree + cascade files first, not full-scan.
 - **Vault administrator:** Mike Maziarz (principal). Vela (operational delegate).
 
 ---

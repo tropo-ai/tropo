@@ -98,12 +98,11 @@ def apply_cleanup_rules(content, entry, target='release', target_uids=None):
 
     # Rule: strip_nav_blocks — remove <!-- nav-block:start -->...<!-- nav-block:end --> blocks
     if rules.get('strip_nav_blocks', False):
-        content = re.sub(
-            r'\n*<!--\s*nav-block:start\s*-->.*?<!--\s*nav-block:end\s*-->\n*',
-            '\n',
-            content,
-            flags=re.DOTALL,
-        )
+        # v1.89 271d28d7 AC6: ship extraction uses the canonical span. Its own
+        # pattern was unanchored, so extracting a shipped file could delete an
+        # author's sentence that merely QUOTED the sentinels — the worst place
+        # for this bug, because the customer receives the result.
+        content = _strip_nav_block(content)
 
     # Rule: strip_relations_table — remove **Relations** heading + GFM table that follows
     if rules.get('strip_relations_table', False):
@@ -225,3 +224,27 @@ def _apply_broken_link_policy(content, policy, target_uids):
         return match.group(0)
 
     return re.sub(r'\[([^\]]+)\]\(([a-f0-9]{8})\.md\)', _handle_link, content)
+
+
+def _strip_nav_block(content: str) -> str:
+    """Delegate to governed_body, falling back only if it cannot be reached."""
+    import importlib.util
+    import sys
+    from pathlib import Path as _Path
+
+    for parent in _Path(__file__).resolve().parents:
+        candidate = parent / "vault" / "tools" / "lib" / "governed_body.py"
+        if candidate.is_file():
+            spec = importlib.util.spec_from_file_location(
+                "_ship_extract_governed_body", candidate
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module.strip_nav_block(content)
+    raise RuntimeError(
+        "ship extraction cannot find vault/tools/lib/governed_body.py. Refusing "
+        "to strip nav blocks with a local pattern: this output is what a "
+        "customer receives, and a second regex is exactly how an author's "
+        "quoted sentinel gets deleted from their own document. Restore the "
+        "canonical helper rather than degrading to a private copy."
+    )

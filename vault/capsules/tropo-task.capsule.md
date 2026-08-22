@@ -5,7 +5,8 @@ uid: 3289712a
 name: task
 type: capsule-definition
 extends: core
-version: '4.7'
+version: '4.8'
+lifecycle_pairing_amendment_2026_08_16: "v4.7 -> v4.8 amendment 2026-08-16 by talos-t44 under Mike-locked v1.89 dev-spec 271d28d7 (activation 7a47c089), whose committed_substrate assigns this amendment to the pairing package. Purely additive: adds the OPTIONAL lifecycle_pairing declaration (core.capsule v2.1) so this type's archived-state law is machine-readable. No enum, alias, state-machine, transition, rollup, template, or validation-rule change; every existing instance stays valid. Version bumped 2026-08-16 on Argus A150's ruling (evt_dd132e700471fc5e_00000014, verbatim: 'semantic capsule changes bump all six'), after T44 measured the effect and asked rather than deciding. For dev-spec specifically A150 held template_enforced_from_version at 1.8 in the same ruling, so v1.8+ stable-AC-ID behaviour is unchanged by the bump. Mint registry regenerated in the same commit."
 mint_mode: human
 mint_template: vault/capsules/templates/task.template.md
 mint_template_version: '1.0'
@@ -26,11 +27,13 @@ v4_4_amendment_note: 'v4.3 -> v4.4 amendment 2026-07-13 by talos-t29 per Mike-lo
 tier: os
 author: tropo
 created: 2026-04-10
-modified: 2026-08-03
-modified_by: argus-a144
+modified: '2026-08-16'
+modified_by: talos-t44
 status: locked
 locked_by: argus-a98
 locked_at: 2026-06-04
+lifecycle_pairing:
+  archived_state_allowed_statuses: [closed]
 enforced_enums:
   status:
     - new

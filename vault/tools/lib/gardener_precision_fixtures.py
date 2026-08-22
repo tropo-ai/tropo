@@ -25,7 +25,20 @@ from .normalized_body_hash import normalized_body_sha256, raw_body_sha256
 
 
 FIXTURE_ID = "gardener-pruning-precision-v1"
-FIXTURE_VERSION = "1.0.0"
+# 1.0.0 -> 1.1.0, 2026-08-16, per A150's ruling on the v1.89 AC6 transform.
+# The nav-block strip converged on governed_body, and the canonical strip
+# removes the blank lines around a block where the old per-caller regex left
+# them. Exactly one of the eighteen frozen cases carries a nav block, so
+# exactly one T2 hash moved; raw and T1 are unchanged on that case and all
+# three are unchanged on the other seventeen. Causal evidence for the
+# transform, not fixture drift.
+#
+# The version bump is the mechanism, not bookkeeping: `freeze_manifest`
+# refuses to re-stamp a frozen manifest and says to publish a new version
+# instead. Bodies, human marks, thresholds, judge prompt and evidence are
+# untouched; only T2-derived and composite hashes and the freeze provenance
+# move. v1.0.0 is preserved in git history and was never hand-edited.
+FIXTURE_VERSION = "1.1.0"
 SYNTHETIC_UID_RE = re.compile(r"^ff00[0-9a-f]{4}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")

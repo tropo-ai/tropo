@@ -58,7 +58,7 @@ A session-agent (sa.\*) is a session-resident specialist — loads a domain once
 
 Tropo sa.\* agents are Tropo's closest internal analog to "callable tools." They exist as markdown activation files with a prose-based commissioning protocol ([sa/CAPSULE.md, UID e863a1e0](../../vault/files/e863a1e0.md)) and an append-only record channel (`activation-log/NNN-*.md`).
 
-This capsule defines the **typed session-agent** — a sa.\* with an explicit name, domain, spawnable-by scope, and optional JSON Schema for inputs and outputs. Typed session-agents are registry-discoverable (their entry in `registry.jsonl` carries their schemas and dispatch name) and can be invoked with confidence by any agent or, at L2, by the Librarian as a routed service.
+This capsule defines the **typed session-agent** — a sa.\* with an explicit name, domain, spawnable-by scope, and optional JSON Schema for inputs and outputs. Typed session-agents are index-discoverable (their row in `vault/00-index.jsonl`, surfaced in the generated `.tropo/sa-agent-catalog.md`, carries their dispatch name) and can be invoked with confidence by any agent or, at L2, by the Librarian as a routed service.
 
 **This capsule does not replace [sa/CAPSULE.md](../../vault/files/e863a1e0.md).** The sibling CAPSULE governs the universal commissioning protocol (6 steps, record format, termination semantics) that applies to every sa.\*. This capsule defines the governed *shape* of every sa.\* activation file — required and optional frontmatter, required body sections, state machine, validation. The two capsules are complementary.
 
@@ -141,7 +141,7 @@ Canonical status enum: `status:` ∈ {draft, active, deprecated, superseded}
 **Transitions:**
 
 - `draft → active` requires: all required frontmatter present, all required body sections (or synonyms), cold-boot stranger test PASS (Vela dispatches via sa.cold-boot)
-- `active → deprecated` requires: explicit note in activation file body explaining retirement. Entry flagged in `registry.jsonl` as deprecated.
+- `active → deprecated` requires: explicit note in activation file body explaining retirement. `status: deprecated` in the activation file's frontmatter is the flag; the index and catalog pick it up at the next rebuild.
 - `active → superseded` requires: new sa.\* at `active` with `supersedes:` pointing here. This agent gains `superseded_by:` + `status: superseded`.
 
 **Activation files persist** for deprecated and superseded agents (audit trail). They are NOT deleted.
@@ -162,9 +162,9 @@ sa.\* activation files at `agents/sa/<name>/<name>.md` are **agent-lifecycle art
 4. **Output schemas are the contract (when declared).** A sa.\* that declares `output:` JSON Schema but returns non-conforming output is a capsule violation. Cold-boot stranger test verifies schema compliance. Sa.\* without declared schemas evaluated against prose Output Format section.
 5. **Terminal — one level only.** sa.\* agents cannot spawn sub-agents (mirrors sa/CAPSULE.md). Capsule does not relax this.
 6. **Ephemeral — single-session lifetime.** Persistent domain specialists are Service Directors (per ADR-022), not sa.\*. Activation files persist across sessions; agent instances do not.
-7. **Registry writes are generated, not hand-edited.** `registry.jsonl` entries for any `active` sa.\* are produced by the registry builder. Activation files are hand-written; registry entries are derived.
+7. **Index entries are generated, not hand-edited.** A sa.\*'s row in `vault/00-index.jsonl` and its entry in the generated `.tropo/sa-agent-catalog.md` are produced by `vault/tools/tropo-rebuild-vault.py`. Activation files are hand-written; index entries are derived.
 
-### Validation Checks (18, ERROR-severity at check-in / registry rebuild)
+### Validation Checks (18, ERROR-severity at check-in / index rebuild)
 
 1. All 8 required frontmatter slots present with correct types: `uid`, `name`, `class` (OR `type` — v1.1), `status`, `owner`, `domain`, `spawnable_by`, provenance-pair (either `created`+`created_by` OR `commissioned`+`commissioned_by`)
 2. `name` matches parent folder name exactly (both with `sa.` prefix)
@@ -172,7 +172,7 @@ sa.\* activation files at `agents/sa/<name>/<name>.md` are **agent-lifecycle art
 4. `status` ∈ {`draft`, `active`, `deprecated`, `superseded`}
 5. `domain` is non-empty string, ≤160 chars
 6. `spawnable_by` is YAML array OR bare string (legacy form accepted). Values resolve to registered executives or `"all-executives"`. Array form preferred.
-7. `uid` registered in `registry.jsonl`; reverse lookup matches `name`
+7. `uid` indexed in `vault/00-index.jsonl`; reverse lookup matches `name`
 8. If `governed_by` present, referenced UID resolves to a valid spec/decision/capsule
 9. Provenance pair present — either (`created`+`created_by`) OR (`commissioned`+`commissioned_by`). Legacy form accepted indefinitely on existing sa.\*; new sa.\* should prefer `created`+`created_by`.
 10. For `active`: body documents all 6 intents (Purpose / Boot Sequence / Invocation Protocol / Output Format / Guardrails-Constraints / Termination) — detectable by canonical heading OR any declared synonym. For `draft`: Purpose intent required; others optional.
@@ -200,7 +200,6 @@ The 8 existing sa.\* are inventoried: 6 green-retrofit, 2 yellow (arch-specs, me
 
 ### Phase 2 — 2–4 weeks later, opt-in
 
-- Populate `registry.jsonl` from capsule + existing agent frontmatter.
 - Begin typed-I/O backfill. Priority order: sa.cold-boot (canonical), sa.research, sa.project-tree, then sa.vault-janitor / sa.channel-health-monitor / sa.repair-agent.
 
 ### Phase 3 — Address the 2 yellow agents
@@ -220,13 +219,13 @@ The 8 existing sa.\* are inventoried: 6 green-retrofit, 2 yellow (arch-specs, me
 ## 5. Composes-With
 
 - **[sa/CAPSULE.md (e863a1e0)](../../vault/files/e863a1e0.md)** — sibling. Universal commissioning protocol (`aligned_with`). This capsule extends it with typing. The two capsules are complementary, not redundant.
-- **[how-to.capsule (a7c3f489)](how-to.capsule.md)** — companion typed primitive (v1.2 Pillar 1; `composes_with` + `pattern_family`). Skills are markdown behaviors; session-agents are callable specialists. Both go in registry.jsonl.
+- **[how-to.capsule (a7c3f489)](how-to.capsule.md)** — companion typed primitive (v1.2 Pillar 1; `composes_with` + `pattern_family`). Skills are markdown behaviors; session-agents are callable specialists. Both are indexed in `vault/00-index.jsonl`.
 - **[tool.capsule (d5e1b4a3)](tool.capsule.md)** — companion typed primitive (v1.2 Pillar 1). External MCP tools expose typed I/O via their own schema; sa.\* are internal typed specialists. sa.\* can be wrapped as tools via `transport: sa`.
 - **[playbook-run.capsule (f2a8c3e1)](playbook-run.capsule.md)** — sa.\* invocations can produce playbook-run entries when the sa.\* executes a playbook-like sequence.
 - **[action.capsule (9b7f5e34)](action.capsule.md)** — composed substrate. Compound operations distinct from sa.\* callable specialists.
 - **[core.capsule (ee814120)](core.capsule.md)** — extended (with explicit reconciliation; sa.\* are agent-lifecycle artifacts, not vault entries).
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — governs this capsule.
-- **[`.tropo-studio/registries/registry.jsonl`](../../.tropo-studio/registries/registry.jsonl)** — runtime callable catalog (sa.\* project here per [e2f7d195](../../vault/files/e2f7d195.md)). Registry writes generated from activation file frontmatter (Rule 7).
+- **[`vault/00-index.jsonl`](../../vault/00-index.jsonl)** — the index every runtime callable projects into. sa.\* rows are generated from activation-file frontmatter (Rule 7).
 - **[`agents/sa/commission-quickref.md`](../../agents/sa/commission-quickref.md)** — hot-path commissioning quickref. Read at commission time.
 - **[`.tropo/sa-agent-catalog.md`](../sa-agent-catalog.md)** — v1.15 ship surface. Catalog generator emits `trigger_description:` (v1.4 field) verbatim alongside structural fields. The user-facing filename uses Mike's preferred language; underlying schema type is `session-agent`.
 

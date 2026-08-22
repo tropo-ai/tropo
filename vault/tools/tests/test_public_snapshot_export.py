@@ -19,7 +19,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 TOOLS = ROOT / "vault" / "tools"
-CLI_SOURCE = TOOLS / "1a8be354.py"
+CLI_SOURCE = TOOLS / "tropo-export-public-snapshot.py"
 VALIDATOR_SOURCE = TOOLS / "tropo-validate.py"
 sys.path.insert(0, str(TOOLS))
 
@@ -813,7 +813,7 @@ class ProjectionPrivacyTests(unittest.TestCase):
 class EventUnionTests(unittest.TestCase):
     def test_mixed_legacy_stream_union_dedupes_private_identity(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             _write_agent(root)
             legacy = _legacy_event(1)
             stream = _stream_event(
@@ -842,7 +842,7 @@ class EventUnionTests(unittest.TestCase):
 
     def test_source_rederivation_uses_only_out_of_band_bound_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             _write_agent(root)
             _write_event_union(root, [_legacy_event(1)])
             bundle = public_snapshot.discover_public_snapshot(
@@ -868,7 +868,7 @@ class EventUnionTests(unittest.TestCase):
 
     def test_dual_read_identity_conflict_refuses_before_projection(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             _write_agent(root)
             stream = _stream_event(1, data_extra={"body": "private-a"})
             conflict = copy.deepcopy(stream)
@@ -982,7 +982,7 @@ class ReceiptAndOverrideTests(unittest.TestCase):
             public_snapshot.validate_bundle_bytes(edited_files)
 
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             edited_dir = root / "edited"
             edited_dir.mkdir()
             for name, payload in edited_files.items():
@@ -1005,7 +1005,7 @@ class ReceiptAndOverrideTests(unittest.TestCase):
     def test_bundle_metadata_check_is_python39_safe_and_rejects_symlinks(self) -> None:
         bundle = _build([])
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             bundle_dir = root / "bundle"
             _write_bundle(bundle_dir, bundle)
 
@@ -1170,7 +1170,7 @@ class ReceiptAndOverrideTests(unittest.TestCase):
 class CliFilesystemAndBindingTests(unittest.TestCase):
     def test_dry_run_zero_writes_real_bundle_and_fixture_validation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             cli = _copy_cli_fixture(root)
             output = root / "02-outbox" / "web-v4" / "public-snapshot-v1"
             command = _fixture_command(cli, output)
@@ -1211,7 +1211,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
 
     def test_clean_head_offline_receipt_rederivation_exports_one_fact(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             event, receipts = _receipt_event()
             cli = _copy_cli_fixture(
                 root,
@@ -1237,7 +1237,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
 
     def test_source_commit_override_requires_explicit_fixture_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             cli = _copy_cli_fixture(root)
             output = root / "02-outbox" / "web-v4" / "bundle"
             refused = _run(
@@ -1258,7 +1258,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
 
     def test_fixture_mode_requires_sentinel_env_and_no_origin(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             cli = _copy_cli_fixture(root)
             output = root / "02-outbox" / "web-v4" / "bundle"
             command = _fixture_command(cli, output) + ["--dry-run"]
@@ -1298,7 +1298,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
 
     def test_fixture_mode_sanitizes_git_routing_before_origin_check(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            parent = Path(temporary)
+            parent = Path(temporary).resolve()
             root = parent / "origin-repository"
             decoy = parent / "decoy-repository"
             root.mkdir()
@@ -1334,7 +1334,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
 
     def test_fixture_mode_refuses_gitfile_pointer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             cli = _copy_cli_fixture(root)
             (root / ".git").rename(root / "fixture-git-dir")
             (root / ".git").write_text(
@@ -1352,7 +1352,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
 
     def test_in_repo_output_scope_and_symlink_plants_refuse(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             cli = _copy_cli_fixture(root)
             unsafe = root / "other" / "bundle"
             refused = _run(_fixture_command(cli, unsafe) + ["--dry-run"], root)
@@ -1389,9 +1389,9 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
     def test_out_of_repo_output_is_refused_even_without_aliases(self) -> None:
         with tempfile.TemporaryDirectory() as source_temporary:
             with tempfile.TemporaryDirectory() as output_temporary:
-                root = Path(source_temporary)
+                root = Path(source_temporary).resolve()
                 cli = _copy_cli_fixture(root)
-                output = Path(output_temporary) / "bundle"
+                output = Path(output_temporary).resolve() / "bundle"
                 result = _run(_fixture_command(cli, output), root)
                 self.assertEqual(result.returncode, 2)
                 self.assertIn(
@@ -1411,7 +1411,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
 
     def test_hardlinked_bundle_file_and_unsafe_force_contents_refuse(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             cli = _copy_cli_fixture(root)
             output = root / "02-outbox" / "web-v4" / "bundle"
             command = _fixture_command(cli, output)
@@ -1422,7 +1422,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
             self.assertIn("unlinked", hardlink_refusal.stderr)
 
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             cli = _copy_cli_fixture(root)
             output = root / "02-outbox" / "web-v4" / "bundle"
             output.mkdir(parents=True)
@@ -1467,7 +1467,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
 
     def test_normal_cli_binds_clean_head_and_refuses_dirty_source(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             cli = _copy_cli_fixture(root)
             head = self._init_git(root)
             output = root / "02-outbox" / "web-v4" / "bundle"
@@ -1499,7 +1499,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
         plants = ("authority-code", "root-authority-code", "receipt")
         for plant in plants:
             with self.subTest(plant=plant), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
+                root = Path(temporary).resolve()
                 if plant == "receipt":
                     event, receipts = _receipt_event()
                     cli = _copy_cli_fixture(
@@ -1541,7 +1541,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
     def test_normal_cli_requires_main_attached_and_equal_origin_main(self) -> None:
         for plant in ("feature", "detached", "ahead"):
             with self.subTest(plant=plant), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
+                root = Path(temporary).resolve()
                 cli = _copy_cli_fixture(root)
                 self._init_git(root)
                 if plant == "feature":
@@ -1594,7 +1594,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            parent = Path(temporary)
+            parent = Path(temporary).resolve()
             root = parent / "source-repository"
             decoy = parent / "decoy-repository"
             root.mkdir()
@@ -1633,7 +1633,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
 
     def test_post_discovery_source_state_check_detects_race(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             cli_path = _copy_cli_fixture(root)
             self._init_git(root)
             spec = importlib.util.spec_from_file_location("fixture_snapshot_cli", cli_path)
@@ -1654,7 +1654,7 @@ class CliFilesystemAndBindingTests(unittest.TestCase):
 
     def test_hash_seed_and_event_order_do_not_change_public_hashes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             events = [
                 _legacy_event(2, event_type="tropo.release.published", version="2.0.0"),
                 _legacy_event(1),
@@ -1688,7 +1688,7 @@ class IndependentValidatorTests(unittest.TestCase):
     def test_tampered_and_rehashed_forbidden_field_fails_independent_check(self) -> None:
         bundle = _build([_legacy_event(1)])
         with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary) / "bundle"
+            directory = Path(temporary).resolve() / "bundle"
             _write_bundle(directory, bundle)
             release = copy.deepcopy(bundle.release_facts)
             dormant_fact, _ = _project(_legacy_event(1))
@@ -1709,7 +1709,7 @@ class IndependentValidatorTests(unittest.TestCase):
     def test_rehashed_policy_uid_and_source_commit_metadata_fail(self) -> None:
         bundle = _build([_legacy_event(1)])
         with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary) / "bundle"
+            directory = Path(temporary).resolve() / "bundle"
             _write_bundle(directory, bundle)
 
             release = copy.deepcopy(bundle.release_facts)
@@ -1731,7 +1731,7 @@ class IndependentValidatorTests(unittest.TestCase):
     def test_valid_bundle_passes_independent_check(self) -> None:
         bundle = _build([_legacy_event(1)])
         with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary) / "bundle"
+            directory = Path(temporary).resolve() / "bundle"
             _write_bundle(directory, bundle)
             probe = _independent_validator_probe(directory)
             self.assertEqual(probe.returncode, 0, probe.stderr)
@@ -1740,7 +1740,7 @@ class IndependentValidatorTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             _write_agent(root)
             _write_policy_sources(root)
             _write_event_union(

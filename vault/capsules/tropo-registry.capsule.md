@@ -47,7 +47,7 @@ A `registry` is a **typed governed wrapper around a data file** (JSONL/YAML/etc.
 
 Registries exist for **one reader question:** *"give me the relationships of class X."* Examples:
 - *"which release touched which subsystem, when?"* → `subsystem-registry.jsonl`
-- *"which UID resolves to which file?"* → `registry.jsonl` (main vault UID index)
+- *"which UID resolves to which file?"* → `vault/00-index.jsonl` (the vault UID index)
 - *"which projects are canonical L0?"* → `canonical-l0-projects.yaml`
 - *"which agents are on the crew, and how do they activate?"* → `agent-registry.yaml`
 - *"which pipeline-runs have happened?"* → `playbook-runs.jsonl`

@@ -17,6 +17,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Sequence
 
+try:
+    from .governed_body import NAV_BLOCK_BYTES_RE, strip_nav_block_bytes
+except ImportError:  # direct path-load used by tropo-validate.py
+    _gb_path = Path(__file__).resolve().with_name("governed_body.py")
+    _gb_spec = importlib.util.spec_from_file_location(
+        "_pruning_contract_governed_body", _gb_path
+    )
+    _gb_module = importlib.util.module_from_spec(_gb_spec)
+    _gb_spec.loader.exec_module(_gb_module)
+    NAV_BLOCK_BYTES_RE = _gb_module.NAV_BLOCK_BYTES_RE
+    strip_nav_block_bytes = _gb_module.strip_nav_block_bytes
+
 import yaml
 
 try:
@@ -51,10 +63,10 @@ TOP_LEVEL_PRUNING_RE = re.compile(
     [\t ]*:
     """
 )
-NAV_BLOCK_RE = re.compile(
-    rb"<!-- nav-block:start -->.*?<!-- nav-block:end -->",
-    re.DOTALL,
-)
+# v1.89 271d28d7 AC6: evidence ranges and T2 hashing must agree byte-for-byte
+# about where a nav block is, so the pattern comes from the canonical home
+# rather than being restated here. The name stays exported for existing callers.
+NAV_BLOCK_RE = NAV_BLOCK_BYTES_RE
 VERDICTS = frozenset({"finished", "superseded", "abandoned"})
 POLICY_RUNNER = "gardener-body-judge"
 EVIDENCE_DOCTRINE = (

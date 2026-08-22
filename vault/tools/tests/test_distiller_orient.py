@@ -4713,8 +4713,13 @@ class OrientBootRegressionFloor(unittest.TestCase):
     # recomputed the fifth feature's frozen canonical and added bounded-boost
     # tests. Keep THIS file pinned to PRE_CYCLE_COMMIT while pinning that imported
     # dependency to the reviewed commit that now owns its bytes.
-    IMPORTED_FIXTURE_COMMIT = "993820cb420ddbe9bcfc1f90217c773de557b414"
-    IMPORTED_FIXTURE_BLOB = "b2a4239975203a400c55654debbf3b3f8bc4c8d2"
+    # v1.89 declared re-pin (talos-t46, 2026-08-19): the file was legitimately
+    # amended by talos-t44 at 888a858fd ("three cases outlived the premises
+    # they were written on") and this floor's constant was never re-pinned —
+    # it did not even match the blob at its own old commit. Pinned now to the
+    # commit that last touched the file; content verified byte-identical to HEAD.
+    IMPORTED_FIXTURE_COMMIT = "888a858fd"
+    IMPORTED_FIXTURE_BLOB = "2377b3eacc4cf198904d7dcfb54dfb03bfc37f82"
 
     def _pinned_blob(
         self, relative: str, expected_blob: str, *, commit: str | None = None

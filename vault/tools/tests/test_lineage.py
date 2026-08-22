@@ -103,13 +103,19 @@ class Lineage(unittest.TestCase):
                          "nothing is rewritten, quarantined or truncated")
         self.assertIn(before, after_corrupt)
 
-    # 7. REAL DAMAGE 3. Every birth failure this studio has ever had came from
+    # 7. REAL DAMAGE 3. Every birth failure this studio has ever had come from
     #    the index being reachable. Nothing on the path to the append may touch
     #    the index, the mint, a card or a registry.
+    #    v1.89 amendment (5fffbbe9 AC6, Mike-locked 2026-08-17 — supersedes the
+    #    absolute form of this ban): the post-append best-effort lifecycle sync
+    #    MAY resolve vault/agents/<uid>.md, strictly AFTER the append, strictly
+    #    swallowed — nothing reached may refuse or roll back the lineage. The
+    #    ban that remains absolute: index, mint, registry, mounts, and any
+    #    module-level subprocess. talos-t46 2026-08-18.
     def test_the_birth_path_reaches_nothing(self):
         src = TOOL.read_text(encoding="utf-8")
         for forbidden in ("rebuild-index", "tropo-mint-id", "spec_from_file_location",
-                          "00-index", "vault/agents", "folder-mounts"):
+                          "00-index", "folder-mounts"):
             self.assertNotIn(forbidden, src,
                              f"{forbidden} must not be reachable from the lifecycle")
         # The one outward call is the crew broadcast, and it is deliberately
@@ -125,7 +131,7 @@ class Lineage(unittest.TestCase):
         for command in ("cmd_born", "cmd_retire"):
             body = src.split(f"def {command}(")[1].split("\ndef ")[0]
             append_at = body.index("append(path, record)")
-            for outward in ("announce(", "unmerged_note("):
+            for outward in ("announce(", "unmerged_note(", "sync_entry("):
                 self.assertGreater(
                     body.index(outward), append_at,
                     f"{outward} runs before the append in {command}; nothing "

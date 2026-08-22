@@ -22,7 +22,7 @@ step_owner_role: vela
 step_verifier_role: argus
 verification_class: true
 verification_command: 'python3 -c "pass"'
-verification_command_note: "Fixed 2026-07-09 by Vela V64, flagged by Argus A129 during the v1.84.1 close-out audit -- same wrong-repo shape as 05d9ecc5's original bug (confirmed: /Users/mike/dev/tropo-ai does not exist on this machine at all). Present since original v1.0 authoring 2026-05-23, never exercised until this close-out. This step's real verdict is the aggregate: fail_count == 0 exit-criterion (read from step 3's test_aggregate event), not this command's own exit code -- same design as 05d9ecc5. Set to a harmless no-op + correct cwd rather than a second hardcoded per-release command."
+verification_command_note: "Fixed 2026-07-09 by Vela V64, flagged by Argus A129 during the v1.84.1 close-out audit -- same wrong-repo shape as 05d9ecc5's original bug (confirmed: <tropo-ai-repo> does not exist on this machine at all). Present since original v1.0 authoring 2026-05-23, never exercised until this close-out. This step's real verdict is the aggregate: fail_count == 0 exit-criterion (read from step 3's test_aggregate event), not this command's own exit code -- same design as 05d9ecc5. Set to a harmless no-op + correct cwd rather than a second hardcoded per-release command."
 verdict_cwd: .
 depends_on_steps:
   - 05d9ecc5
@@ -92,4 +92,4 @@ Kept only the ONE criterion the current grammar can genuinely check (`aggregate:
 
 ## verification_command fix (Vela V64, 2026-07-09, per Argus A129's audit)
 
-`npm run test:qa` in `/Users/mike/dev/tropo-ai` — same wrong-repo class as `05d9ecc5`'s original bug, confirmed that directory doesn't exist on this machine at all. Fixed to a harmless no-op + correct cwd (see `verification_command_note` in frontmatter). Never exercised until the v1.84.1 federation close-out; the real verdict for this step is the `aggregate: fail_count == 0` criterion, same as `05d9ecc5`.
+`npm run test:qa` in `<tropo-ai-repo>` — same wrong-repo class as `05d9ecc5`'s original bug, confirmed that directory doesn't exist on this machine at all. Fixed to a harmless no-op + correct cwd (see `verification_command_note` in frontmatter). Never exercised until the v1.84.1 federation close-out; the real verdict for this step is the `aggregate: fail_count == 0` criterion, same as `05d9ecc5`.

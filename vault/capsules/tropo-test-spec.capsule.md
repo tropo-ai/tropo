@@ -5,7 +5,8 @@ ship_scope_lock_break: 'extraction_scope: ship ADDED 2026-07-02 per Mike verbati
 name: test-spec
 type: capsule-definition
 extends: core
-version: '1.3'
+version: '1.4'
+lifecycle_pairing_amendment_2026_08_16: "v1.3 -> v1.4 bounded lock-break 2026-08-16 by talos-t44 under Mike-locked v1.89 dev-spec 271d28d7 (activation 7a47c089), whose committed_substrate assigns this amendment to the pairing package. Two changes. (1) Adds the OPTIONAL lifecycle_pairing declaration. (2) Mike-approved Q1 ruling (verbatim 'approved', evt_105e33c3ce6bb22f_00000229): removes 'archived' from the enforced status enum and from the prose state machine, because archived is a visibility state and never an intrinsic status. Retirement is state: archived at the status actually reached, which preserves honest history instead of inventing completion. Zero instances carried status: archived at the time of the change (measured), so no entry is invalidated. meta_status_rollup is deliberately untouched per comprehensive-rollup doctrine: enforced_enums narrows, the rollup stays total over observed values. Version bumped 2026-08-16 on Argus A150's ruling (evt_dd132e700471fc5e_00000014, verbatim: 'semantic capsule changes bump all six'), after T44 measured the effect and asked rather than deciding. For dev-spec specifically A150 held template_enforced_from_version at 1.8 in the same ruling, so v1.8+ stable-AC-ID behaviour is unchanged by the bump. Mint registry regenerated in the same commit."
 template_enforced_from: '2026-07-17'
 template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
 v1_3_amendment_note: "v1.2 → v1.3 amendment 2026-07-17 by Argus A133 under Mike's 'proceed with the build plan' authorization and Governed Autonomy S2 Template-Leg Contract b933eafb. Adds only the §Template mint scaffold; no bespoke v1.2 schema/check-family or state-machine change. The new leg activates the existing generic template-verifier tier (placeholder, section, enum-hint, capsule-version checks). Birth defaults are draft/active + substrate/smoke with one structural-check behavior; required placeholders force the author to supply real pairing, target, coverage, and acceptance content before verification."
@@ -15,9 +16,9 @@ v1_1_amendment_note: 'v1.0 → v1.1 amendment 2026-05-28 by Argus A87 captain-mo
 tier: os
 author: argus-a80
 created: 2026-05-23
-modified: 2026-07-17
+modified: '2026-08-16'
 created_by: argus-a80
-modified_by: argus-a133
+modified_by: talos-t44
 v1_1_rollup_amendment_note: '2026-06-14 Argus A114 (in-place v1.1 gap-fill; NO version bump — keeps v1.1 deliberately to avoid prematurely tripping the Check-6 v1.2 ERROR ratchet, a separate governance decision): added `locked` + `archived` to meta_status_rollup.done. Rationale: test-spec is a spec-family sibling of dev-spec + design-brief, both of which map locked→done; a test-spec locks WITH its dev-spec. The v1.71 loop-primitive lock (test-spec 18627ea6) surfaced this — a locked test-spec resolved lifecycle-N/A (M2 FAIL). Pure consistency gap-fill; no change to existing mappings.'
 status: active
 walk_completed_at: 2026-05-23
@@ -25,13 +26,15 @@ walk_walked_by:
   - mike-maziarz
   - vela-v51
 walk_locked_by: mike-maziarz
+lifecycle_pairing:
+  terminal_statuses: [done]
+  archived_state_allowed_statuses: any
 enforced_enums:
   status:
     - draft
     - active
     - done
     - locked
-    - archived
 meta_status_rollup:
   in-progress:
     - draft
@@ -93,7 +96,7 @@ The test-pipeline engine refuses to activate without a compliant test-spec entry
 | `target_substrate` | substrate-ref array | Substrate the test coverage exercises, using the ordered/disjoint syntax in [dev-spec §Substrate Reference Syntax](tropo-dev-spec.capsule.md#substrate-reference-syntax-v15-shared-by-the-spec-family). Typically includes every `change_class: NEW` target; additional resolvable scope identifiers are legal. Cross-validates under Rule 3. |
 | `target_subsystem` | UID OR null | The subsystem the substrate composes with (subsystem hub UID), OR null for cross-subsystem. |
 | trigger provenance | UID fields | Exactly one source: `triggered_by_dev_cycle` for a dev activation, OR the complete release triplet `triggered_by_release_pipeline` + `release_plan_uid` + `release_pipeline_run_uid`. The engine writes these; release-triggered specs never fabricate a dev cycle. |
-| `behaviors_covered` | list of objects | **Anti-box-checking gate.** Each object has: `behavior_description` (≤200 chars; what the behavior is), `test_substrate_path` (string; vault-relative path to the test substrate that exercises this behavior — must exist OR be authored as part of cycle), `verification_method` (enum; see below), `target_substrate_refs` (substrate-ref array using the same UID/path/exact-planned-identifier union as `target_substrate`; which dev-spec NEW targets this behavior covers), `dispatch_target` (string; REQUIRED when `verification_method: agentic_review` — names the sa.* class to dispatch, e.g., `sa.skeptic` / `sa.cold-boot`), `verifies_acceptance_criterion` (integer; OPTIONAL per-entry but REQUIRED-via-aggregate per Rule 3 v1.1 extension — every dev-spec.acceptance_criteria entry MUST have at least one paired behaviors_covered entry pointing at it; 1-based positional index into triggering dev-spec.acceptance_criteria list). |
+| `behaviors_covered` | list of objects | **Anti-box-checking gate.** **(v1.89, 271d28d7 AC8)** `verifies_acceptance_criterion` pairs by **stable AC ID** (`AC1`, `AC2`, …) whenever the dev-spec is v1.8 or later — the shape those specs actually declare. A bare integer is a positional pointer into a list, and a list that is reordered or has a criterion inserted silently re-points every test that cited it; the stable ID cannot be re-seated by an edit elsewhere in the file. Integers remain legal ONLY for the frozen pre-v1.8 legacy cohort, which is closed and never grows. Enforced by `check_test_spec_cross_validation_against_dev_spec`: an integer, a missing pointer, or an ID the dev-spec does not declare is a finding. Each object has: `behavior_description` (≤200 chars; what the behavior is), `test_substrate_path` (string; vault-relative path to the test substrate that exercises this behavior — must exist OR be authored as part of cycle), `verification_method` (enum; see below), `target_substrate_refs` (substrate-ref array using the same UID/path/exact-planned-identifier union as `target_substrate`; which dev-spec NEW targets this behavior covers), `dispatch_target` (string; REQUIRED when `verification_method: agentic_review` — names the sa.* class to dispatch, e.g., `sa.skeptic` / `sa.cold-boot`), `verifies_acceptance_criterion` (integer; OPTIONAL per-entry but REQUIRED-via-aggregate per Rule 3 v1.1 extension — every dev-spec.acceptance_criteria entry MUST have at least one paired behaviors_covered entry pointing at it; 1-based positional index into triggering dev-spec.acceptance_criteria list). |
 | `coverage_class` | enum OR non-empty unique enum array | One or more of `regression` / `smoke` / `cold-boot` / `gauntlet` / `property`. A scalar remains valid for compatibility; new multi-lens specs use an array. Semantics + verification_method defaults per §Coverage Class Semantics below. |
 | `acceptance_criteria` | string | Non-empty; Mike-walkable verification that test coverage is real not box-checking; per Captain's Briefing v3.0 Requirement 2 framing. |
 
@@ -124,7 +127,9 @@ A scalar `coverage_class` is treated as a singleton set. An array MUST be non-em
 draft → active → done → (superseded: done + state: archived)
 ```
 
-**Strict status enum:** `status:` ∈ {draft, active, done, locked, archived}
+**Strict status enum:** `status:` ∈ {draft, active, done, locked}
+
+**`archived` is a `state`, never a `status` (v1.2, Mike-approved 2026-08-16).** Retiring a test-spec from view is `state: archived` at whatever intrinsic status it honestly reached — a stale draft retires as `draft` + `state: archived`, not as `done`. Terminality remains `done`. See §Lifecycle Pairing in `core.capsule` v2.1 and the ruling in dev-spec [271d28d7](../files/271d28d7.md) §Q1.
 
 | Stage | State | Meaning |
 |-------|-------|---------|
@@ -132,6 +137,7 @@ draft → active → done → (superseded: done + state: archived)
 | `active` | `active` | LOCKED at v1.0 by locking authority (Argus + Vela paired walk → Mike locks; or captain-mode for established cycles); test-pipeline activation has fired |
 | `done` | `active` | Test-pipeline cycle closed clean; `closed_at` set; tests pass + coverage audit complete |
 | `done` | `archived` | Superseded; requires `superseded_by:` field |
+| any | `archived` | Visibility retirement at the status actually reached; never implies completion |
 
 Valid + invalid transitions same shape as dev-spec.capsule v1.0 + doc-spec.capsule v1.0.
 
@@ -381,7 +387,7 @@ behaviors_covered:
     verification_method: structural_check
     target_substrate_refs:
       - "<!-- REQUIRED: substrate-ref paired to a dev-spec NEW target -->"
-    verifies_acceptance_criterion: 1
+    verifies_acceptance_criterion: "<!-- REQUIRED for a v1.8+ dev-spec: the stable AC ID, e.g. AC1. Integers are legal ONLY for the frozen legacy cohort. -->"
 ---
 
 # <!-- REQUIRED: title (mirror frontmatter) -->
@@ -397,6 +403,7 @@ behaviors_covered:
 |---------|------|--------|--------|
 | 1.3 | 2026-07-17 | Added the mint-stamped §Template leg under [Template-Leg Contract](../files/b933eafb.md); no bespoke v1.2 schema/check-family or state-machine change; activates the generic template-verifier tier. | argus-a133 |
 | 1.2 | 2026-07-17 | Shared [dev-spec substrate-ref](tropo-dev-spec.capsule.md#substrate-reference-syntax-v15-shared-by-the-spec-family), strict identity pairing, activation→dev-spec traversal, and scalar-or-list coverage classes. New v1.2-stamped entries enforce Rules 3.a/3.b and class minima at ERROR; legacy debt remains WARN. Schema-only; template leg intentionally deferred to v1.3 per [Template-Leg Contract](../files/b933eafb.md). Enables the active [Gardener Pruning](../files/a286c210.md) test contract. | argus-a133 |
+| 1.3 (amended, no bump) | 2026-08-16 | **(271d28d7 AC8)** `verifies_acceptance_criterion` pairs by stable AC ID (`AC1`) for v1.8+ dev-specs; integers remain legal only for the frozen legacy cohort. Template emits the stable form. A positional integer silently re-points at every list reorder; a stable ID cannot be re-seated by an edit elsewhere in the file. Validator behaviour already enforced this — the capsule was still teaching the old shape. Version unchanged pending A150's ruling on the pairing-package bump policy (see lifecycle_pairing_amendment_2026_08_16). | talos-t44 |
 | 1.1 | 2026-05-28 / 2026-06-14 | Added `verifies_acceptance_criterion` and Rule 3.b acceptance pairing; later filled the locked/archived meta-status rollup without changing version. | argus-a87 / argus-a114 |
 | 1.0-DRAFT | 2026-05-23 | Initial DRAFT authored. Schema modeled on dev-spec.capsule v1.0 precedent. Substantive first-draft semantics captured for Vela V50 walk: anti-box-checking gate (REAL gate, not 'non-empty' box-checking version — verification_method enum + executable test substrate); coverage_class enum semantics (per-class verification_method defaults + required coverage); cross-validation join mandated (strict; not convention); manual_walk_percentage_ceiling 30% default. Five pre-walk substantive questions surfaced for Vela's call. Authored by Argus A80 as Phase B pre-walk Argus deliverable per v1.51 cycle. **Pending Vela V50 + Mike walk; lock at v1.0 LOCK after.** | argus-a80 |
 | 1.0 | 2026-05-23 | **LOCKED.** Walk Format Doctrine semantics walk with Mike-V51 + Vela V51 + Argus A80 substrate. All 5 substantive questions resolved with Mike-V51 verbatim agreement (5/5 "agree" / "agreed"). Amendments landed in v1.0 LOCK body: (SQ1) cross-validation join MANDATED + structural-only exception via coverage_class:structural_check; (SQ2) verification_method enum extended to 5 entries — added `agentic_review` with `dispatch_target:` sub-field for sa.* dispatched coverage; (SQ3) manual_walk ceiling 30% default + per-cycle `manual_walk_ceiling_override:` field + `override_rationale:` ≥100 chars + 50% hard cap; (SQ4) coverage_class semantics refactored to three cycle classes (substrate / ux / engine-runtime) driving per-cycle-class required minima — clearer at authoring time, less per-entry book-keeping + new optional `cycle_class:` frontmatter field (required at v1.1); (SQ5) `harness_framework_changes_required:` flag — three trigger classes named (new test runner / new assertion-library or DSL extension / new aggregation-reporting shape) + cycle-scope expansion rule (Vela authors + Talos engineers + Argus reviews; cycle close gated on harness extension landing + working). Plus: 2 NEW validation checks (Check 13 harness extension evidence + Check 14 override-valid); Check 6 ratchet tightened (WARN→ERROR at v1.1, not v1.2, per mandate framing); Check 1 cycle_class inference at v1.0 WARN. Phase C (test-pipeline definition v1.0) opens now; Vela primary; Argus engine integration; Talos engineering. | vela-v51 (locking authority delegate) + mike-v51 (lock signal) |

@@ -74,6 +74,10 @@ class ReleaseHarnessPreflightV186(unittest.TestCase):
             "vault/00-index.jsonl",
             "vault/tools/tropo-generate-relations-header.py",
             "vault/tools/tropo-rebuild-index.py",
+            # the shipped harness requires the REBUILDER (index-free box,
+            # v1.87): the customer's first boot derives indexes via this
+            # tool — required set changed 2026-08-15, fixture follows.
+            "vault/tools/tropo-rebuild-vault.py",
             "vault/tools/tropo-validate.py",
         ):
             self._copy(ROOT / relative, release_root / relative)

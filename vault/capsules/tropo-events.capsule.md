@@ -4,9 +4,10 @@ name: events
 title: events — Canonical Event Log Primitive
 type: capsule-definition
 extends: core
-version: '1.10'
-supersedes_version: '1.9'
+version: '1.11'
+supersedes_version: '1.10'
 v1_10_amendment_note: 'v1.9 → v1.10 bounded one-type lock-break authored 2026-07-23 by Talos under Mike-approved locked dev-spec 8078657b (activation 95355ef7; approval verbatim: "I approve the bounded events"). Registers only tropo.distill.usage.recorded. Its top-level segment is mandatory, internally attested from the exact ranked chunk partition, and viewer-filtered; segment remains forbidden on every pre-v1.10 type. CLI usage emission is forbidden. No model/provider/spend/pricing/metering/consent/egress/learning event or behavior is authorized.'
+v1_11_amendment_note: 'v1.10 → v1.11 bounded amendment authored 2026-08-20 by Talos T47 under Mike-locked dev-spec 3f38521a (activation 4ea1b155). Declares the non-authoritative tool-telemetry record class: refused/failed outcomes only, one generated schema registry, most-restrictive derived segment, recursion-impossible enqueue-only producer, sealed local telemetry-only shards with bounded retention. Telemetry is a distinct durability lane, never canonical events; the release journal remains authority. Extending outcomes, instruments, or argument fingerprints requires a new explicit capsule amendment.'
 v1_9_amendment_note: 'v1.8 → v1.9 amendment authored 2026-07-15 by Argus A132 under Mike-approved Event Ledger Distributed Identity dev-spec f15a9b85 (activation 57470c10). Identity/order split: event_uid becomes immutable CloudEvents identity; writer_instance_uid + stream_uid + local_seq identify one per-writer append stream; causationid joins correlationid; display_seq is a disposable projection. New canonical writes target vault/events/streams/<writer>.jsonl after cutover; the existing numeric global log is preserved byte-for-byte as legacy epoch 1 and dual-read during migration. Capsule remains locked; the dev-spec lock is the amendment authority.'
 v1_8_amendment_note: 'v1.7 → v1.8 amendment 2026-07-13 by talos-t29 per Mike-locked Release Coupling dev-spec fbe50871 (activation 807144d1). This spec''s lock IS the lock-break authority (per composition law 3 in the spec body). Registers tropo.release.published — emitted by tropo-publish-release.py --fire on full green (tag + main sha + release object all verified live); never on a partial/unverified outcome. Added to both REGISTERED_TYPES surfaces (.tropo/scripts/lib/event_validators.py + vault/tools/tropo-emit-event.py) in the same gesture. Additive; no schema change to the event envelope itself.'
 v1_7_amendment_note: 'v1.6 → v1.7 amendment 2026-06-13 by Talos T19 per the Mike-locked v1.70 MindBridge MUST-set (dev-spec c036dd4b §S2.3). Registers the receipt-ledger contract: delivered→read→answered three-state. Composes with the recently shipped check-events v1.1 and its per-reader receipt at vault/events/receipts/<party-uid>.jsonl. This is a documentation catch-up in the locked capsule; functional state already matches the contract. Space freed by folding v1.6 + history_split frontmatter into the history companion 63bf7487 (recreated this session).'
@@ -701,6 +702,53 @@ older type; the CLI cannot emit usage. Extending segment to another type or
 adding model/provider, spend/pricing/metering, consent/egress, or learning
 events requires a new explicit capsule amendment.
 
+### Bounded telemetry record class (Rule 15; v1.11)
+
+Mike-locked [dev-spec 3f38521a](../files/3f38521a.md) authorizes a
+NON-authoritative tool-outcome telemetry lane, distinct from canonical
+events in durability, authority, and visibility:
+
+- **Outcomes:** `refused` (execution never began) and `failed` (began, did
+  not complete) only. Recorder persistence failure is neither outcome — it
+  updates recorder health.
+- **Identity:** `tool_uid` + `invocation_uid` (one attempt) +
+  `operation_uid` (retries/idempotency) + positive integer `attempt`.
+  Projection uniqueness is `(tool_uid, invocation_uid, outcome)`.
+- **Privacy:** the generated registry
+  (`vault/schema/tool-telemetry-registry.json`) declares the only legal
+  keys and types. No raw arguments, results, exceptions, credentials,
+  sensitive paths, UID collections, or free text. The MVP records no
+  argument fingerprint — deferred with the spec and forbidden by the schema.
+- **Segment:** derived most-restrictive from the observed operation's
+  governed inputs, never caller authority; unknown or missing segment
+  writes a restricted local reject counter only. Shards partition by
+  segment; query composition filters by viewer segment before counts or
+  ordering and exposes no global sequence.
+- **Recursion and overload:** a ContextVar plus environment guard disables
+  recording in producer, drainer, projector, schema-generator, and
+  health-counter code. The queue is bounded and prioritized — refusal and
+  failure outrank any future sampled success; overload drops the least
+  valuable first and never blocks. Counters (`attempted`, `enqueued`,
+  `sampled_out`, `queue_dropped`, `serialization_rejected`,
+  `persistence_failed`) are read by tooling, never emitted through the bus.
+- **Durability:** telemetry persists in sealed LOCAL telemetry-only shards
+  with hash-bound manifests and bounded age/size retention after all
+  registered consumers checkpoint a shard. Telemetry never edits canonical
+  events, deletes an active shard, or touches evergreen/canonical streams.
+  Shards, spool, counters, and any future Studio-local HMAC keys are
+  Gitignored.
+- **Authority:** the release journal and every canonical metric remain
+  authoritative. Telemetry may report observed occurrence/rates under a
+  named coverage window; it can never prove a zero, certify a release,
+  delete machinery, or gate a verdict.
+- **Pilot:** release orchestrator, build, and publish choke points only.
+  The query surface composes telemetry with canonical events under one
+  envelope but shows it only under explicit all/telemetry filters;
+  `check-events` stays drain-invisible by default.
+
+Extending outcomes (e.g. success-class), universal instrument rollout, or
+argument fingerprints requires a new explicit capsule amendment.
+
 ---
 
 ## 8. Validation Checks
@@ -822,6 +870,6 @@ Full changelog (v1.0 → v1.4 rows verbatim) lives in the [history companion (63
 
 ---
 
-*events capsule definition | UID `72ef5ffe` | v1.10 LOCKED | bounded one-type amendment 2026-07-23 by Talos under Mike-approved dev-spec `8078657b`. History → companion `63bf7487`.*
+*events capsule definition | UID `72ef5ffe` | v1.11 LOCKED | bounded telemetry-record amendment 2026-08-20 by Talos under Mike-locked dev-spec `3f38521a`; prior bounded one-type amendment 2026-07-23 (`8078657b`). History → companion `63bf7487`.*
 
 *"One canonical event log. Drift becomes structurally impossible."*

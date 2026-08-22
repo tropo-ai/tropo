@@ -43,7 +43,10 @@ def _load_engine(sandbox: Path):
 
 
 def _scaffold(tmp: Path) -> Path:
-    root = tmp / "studio"
+    # resolve() first: on macOS the temp root's /var ancestor is a symlink,
+    # and the sandboxed engine's relative_to() against a half-resolved tree
+    # is the sixth organ of that class (fixture cures, engine contract stays).
+    root = tmp.resolve() / "studio"
     (root / "vault" / "tools" / "lib").mkdir(parents=True)
     (root / "vault" / "files").mkdir(parents=True)
     (root / "vault" / "pipeline-runs").mkdir(parents=True)

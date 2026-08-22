@@ -580,7 +580,7 @@ def main() -> int:
             from lib.event_emitter import auto_emit
             auto_emit("tropo.substrate.modified", "/tools/rebuild-vault", "123e12e7",
                       lifecycle="ephemeral",
-                      data={"op": "rebuild-vault", "vault_root": str(vault)})
+                      data={"op": "rebuild-vault", "vault_root": str(vault).rsplit("/", 1)[-1]})  # basename only: this event ships inside the box (v1.90.0 leak class, metis-g110)
         except Exception:
             pass
     else:

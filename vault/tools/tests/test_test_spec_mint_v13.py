@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -118,9 +119,16 @@ class ScratchMintRoot:
         companion_hash = hashlib.sha256(companion.read_bytes()).hexdigest()
         capsule_path = capsules / "tropo-test-spec.capsule.md"
         capsule_text = capsule_path.read_text(encoding="utf-8")
+        # Version-agnostic: this fixture hardcoded "version: '1.3'" and went
+        # silently inert the moment the capsule was legitimately amended to 1.4
+        # — mint_mode never got injected, so every case failed with
+        # "mint_mode 'disabled'" for a reason that had nothing to do with mint.
+        # A fixture that pins a version breaks on every honest edit to the thing
+        # it fixtures.
+        _version_line = re.search(r"^version:.*$", capsule_text, re.MULTILINE).group(0)
         capsule_text = capsule_text.replace(
-            "version: '1.3'\n",
-            "version: '1.3'\n"
+            _version_line + "\n",
+            _version_line + "\n"
             "mint_mode: human\n"
             "mint_template: vault/capsules/templates/test-spec.template.md\n"
             "mint_template_version: 'test-only-1.0'\n"
@@ -142,6 +150,10 @@ class ScratchMintRoot:
                 "tropo-rebuild-index.py",
                 "tropo-generate-relations-header.py",
                 "tropo-navblock-strip.py",
+                # rebuild-index --apply shells out to this sibling by a path
+                # derived from its own location, so copying the script without
+                # it makes every scratch rebuild exit 8 before the case runs.
+                "tropo-generate-mint-registry.py",
             ):
                 shutil.copy2(TOOLS / name, tools / name)
 
@@ -190,7 +202,15 @@ class TestSpecV13MintTests(unittest.TestCase):
         self.addCleanup(scratch.close)
 
         leg = template_leg.load_mint_template(scratch.root, "test-spec")
-        self.assertEqual(leg.capsule_version, "1.3")
+        # Read the capsule's declared version rather than pinning one: the
+        # assertion is that the leg reports what the capsule says, not that the
+        # capsule is frozen at the version this test was written against.
+        declared = re.search(
+            r"^version:\s*'?([\d.]+)'?\s*$",
+            (ROOT / "vault" / "capsules" / "tropo-test-spec.capsule.md").read_text(),
+            re.MULTILINE,
+        ).group(1)
+        self.assertEqual(leg.capsule_version, declared)
         self.assertEqual(
             set(template_leg.MINT_TOKEN_RE.findall(leg.scaffold)),
             {"uid", "date", "author", "capsule_version", "activation_uid"},
@@ -214,7 +234,7 @@ class TestSpecV13MintTests(unittest.TestCase):
         self.assertEqual(frontmatter["type"], "test-spec")
         self.assertEqual(frontmatter["status"], "draft")
         self.assertEqual(frontmatter["state"], "active")
-        self.assertEqual(frontmatter["capsule_version"], "1.3")
+        self.assertEqual(frontmatter["capsule_version"], declared)
         self.assertTrue(
             {
                 "target_substrate",

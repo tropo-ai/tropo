@@ -220,7 +220,7 @@ Locking is not yet covered by its own action file (it is a state transition, not
 | UID collision | Regenerate |
 | Missing How to Validate section | Add placeholder; warn user it must be filled before lock |
 | Supersedes target not locked | Stop — cannot supersede a draft |
-| Ledger not present | Escalate |
+| Vault not present | Escalate |
 | Partial write | Clean up, report |
 
 ---

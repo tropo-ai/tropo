@@ -111,7 +111,7 @@ Extends `core`. Inherits all core rules.
 **Tools available:**
 - `vault/00-index.jsonl` — find existing collection-refs before creating a duplicate
 - `collections/` directory — the actual collection files live here (manual YAML manifests or dynamic query specs; LLM-generated query sources declared in the collection file itself, not a separate enum value per v3 Decision 6)
-- `vault/files/<uid>.md` writer — the ref lives as a flat ledger entry; its UID MUST match the UID inside the collection file's frontmatter (Rule 2)
+- `vault/files/<uid>.md` writer — the ref lives as a flat vault entry; its UID MUST match the UID inside the collection file's frontmatter (Rule 2)
 
 **Skills:**
 - `register-collection.skill.md` *(forthcoming v1.5)* — creates ref + collection file atomically with UIDs matched

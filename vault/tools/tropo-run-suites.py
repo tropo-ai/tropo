@@ -70,7 +70,9 @@ TESTS_DIR = STUDIO_ROOT / "vault" / "tools" / "tests"
 # 180s ceiling it reported TIMEOUT — a red board entry decided by 1.8 seconds
 # and by whatever else the machine was doing. A budget a passing suite loses to
 # by 1% is measuring load, not correctness.
-DEFAULT_TIMEOUT = 300
+DEFAULT_TIMEOUT = 600  # raised from 300 2026-08-21: fresh_box (315s) and
+# capability_chain (~360s) legitimately exceed the old cap on current
+# hardware — the cap classified green suites as timeouts
 
 # Suites that cannot pass on an ordinary developer machine, each with the reason
 # stated. Named here rather than silently tolerated, so the list is auditable and

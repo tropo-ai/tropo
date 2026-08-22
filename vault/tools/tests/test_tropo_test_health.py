@@ -45,7 +45,25 @@ class StudioVersionTests(unittest.TestCase):
         )
 
     def test_actual_studio_version_is_accepted(self) -> None:
-        self.assertEqual(TROPO_TEST.read_studio_version(ROOT), "1.84.1")
+        """The reader parses the LIVE version file, whatever it currently says.
+
+        This case exists to prove the parser survives contact with the real
+        file; the synthetic cases above already cover the accepted shapes. It
+        used to assert the literal "1.84.1", so it went red at the v1.88 ship
+        for recording a correct fact — measuring the studio's version rather
+        than the reader that reads it.
+
+        The expectation is derived here from the file itself, by different
+        means than the reader uses, so agreement is evidence rather than
+        tautology and "unknown" cannot pass.
+        """
+        import re
+
+        declared = (ROOT / ".tropo" / "version.md").read_text(encoding="utf-8")
+        expected = re.search(r"v(\d+\.\d+\.\d+)", declared)
+        self.assertIsNotNone(expected, "the live version file declares no version")
+
+        self.assertEqual(TROPO_TEST.read_studio_version(ROOT), expected.group(1))
 
     def test_malformed_versions_are_unknown(self) -> None:
         malformed = (

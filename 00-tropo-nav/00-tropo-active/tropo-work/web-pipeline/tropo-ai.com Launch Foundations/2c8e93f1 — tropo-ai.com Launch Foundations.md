@@ -2,17 +2,19 @@
 uid: 2c8e93f1
 title: tropo-ai.com Launch Foundations
 type: project
-status: active
+status: done
 name: tropo-ai.com Launch Foundations
 description: Foundational infrastructure + Layer-0 design surface that lets web-pipeline fire its first real deploy
 owner: talos
 state: active
+closed_by: sweep-dd570ea4/metis-g108
+closed_at: '2026-08-18T19:11:50Z'
 lifecycle: versioned
 version: 1.0.0
 created: 2026-05-15
-modified: 2026-05-15
+modified: '2026-08-18'
 created_by: talos-t4
-modified_by: talos-t4
+modified_by: sweep-dd570ea4/metis-g108
 member_of:
   - 7b2e94c1
 scoped_by:

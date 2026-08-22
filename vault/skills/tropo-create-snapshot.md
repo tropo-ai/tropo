@@ -22,7 +22,7 @@ aligned_with: 74fd9b61
 capsule_version: '1.3'
 extraction_scope: ship
 schema_version: 2
-trigger_description: 'Reach for this when a moment deserves a permanent record — release ship, stage close, pre-change baseline, or any state worth preserving. Renders the board against live ledger sources at the moment of call and writes a frozen vault entry (type: board-snapshot) with the rendered markdown + provenance + reason. Distinct from regenerate-board.skill.md which is ephemeral. Examples: snapshot at release ship (''the world at v1.X.Y ship''), at stage close (''the spec at lock''), or before a major restructure (''pre-change baseline'').'
+trigger_description: 'Reach for this when a moment deserves a permanent record — release ship, stage close, pre-change baseline, or any state worth preserving. Renders the board against live Vault sources at the moment of call and writes a frozen vault entry (type: board-snapshot) with the rendered markdown + provenance + reason. Distinct from regenerate-board.skill.md which is ephemeral. Examples: snapshot at release ship (''the world at v1.X.Y ship''), at stage close (''the spec at lock''), or before a major restructure (''pre-change baseline'').'
 subsystem_hub:
   - 76bab75f
 ---
@@ -61,11 +61,11 @@ Use this skill when a moment deserves a permanent record — the state of a proj
 
 2. **Resolve the scope of the definition.** Read the board-definition's `scope:` field. Confirm it matches the scope-type of `scope_ref_uid` (e.g., if definition has `scope: project`, `scope_ref_uid` must be a `type: project` entry). Mismatch is a fail-loud halt.
 
-3. **Render the board against live sources.** Execute each section query in the definition's `sections:` array against the current ledger state. Use the render formats locked in [v0.3 §7.2.1](../../vault/files/74fd9b61.md) — table, list, list-with-links, tree, or null-result — per each section's `render:` field. Assemble the rendered markdown in section order.
+3. **Render the board against live sources.** Execute each section query in the definition's `sections:` array against the current Vault state. Use the render formats locked in [v0.3 §7.2.1](../../vault/files/74fd9b61.md) — table, list, list-with-links, tree, or null-result — per each section's `render:` field. Assemble the rendered markdown in section order.
 
 4. **Generate the snapshot UID.** Call the core UID primitive (8-hex random). Verify the UID is not already in [00-index.jsonl](../../vault/00-index.jsonl); if collision, regenerate. In the Argo vault, the primitive is `scripts/generate-uid` or equivalent; for cold-run environments, any 8-hex random that passes uniqueness check works.
 
-5. **Write the snapshot ledger entry** at `vault/files/<uid>.md` with this frontmatter:
+5. **Write the snapshot vault entry** at `vault/files/<uid>.md` with this frontmatter:
 
 ```yaml
 ---

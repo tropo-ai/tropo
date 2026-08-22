@@ -99,9 +99,9 @@ Every record is a JSON object with the following fields, in this order:
 | `collection-ref` | `active`, `archived` |
 | `board-def` | `active`, `archived` |
 | `team-def` | `active`, `archived` |
-| `release-plan` | **status field uses `stage` + `state` (Schema v2 shape)** — `stage:` ∈ {`design`, `specify`, `build`, `done`, `cancelled`}, `state:` ∈ {`active`, `archived`}. See [`release-plan.capsule.md`](../capsules/release-plan.capsule.md). |
+| `release-plan` | **status field uses `status` + `state`** — `status:` ∈ {`design`, `specify`, `active`, `build`, `done`, `cancelled`, `locked`}, `state:` ∈ {`active`, `archived`}. The `stage:` spelling is retired (v1.89 stage eradication, dev-spec 63aaea28). See [`release-plan.capsule.md`](../capsules/tropo-release-plan.capsule.md). |
 
-**Schema fragmentation note (Argus A28, 2026-04-19):** The `release-plan` capsule (and the already-locked `release` and `design-brief` v2 capsules) use `stage` + `state` as the lifecycle fields, not the `status` field this table enforces. This is genuine schema drift — the Schema v2 shape is in production via multiple locked capsules, but this schema reference document still canonicalizes `status`. A separate ADR is owed to migrate the `core` capsule from `status:` to `stage:` + `state:` across all capsule types. Until that migration lands, readers should consult each capsule's own definition for the authoritative state field.
+**Schema note (v1.89 stage eradication):** the historical `stage`+`state` fragmentation this note described is resolved — `status:` is canonical for every capsule type, the `stage` axis is retired from source frontmatter, index projection, and SQLite (no `entries.stage` column; no synthesized `ideate`), and pipeline position is carried by `current_step` alone (dev-spec 63aaea28). Historical prose keeps its original vocabulary.
 
 - **Constraints:** must be valid for the entry's `type`; state transitions must follow the type's state machine (defined in the capsule definition)
 - **Purpose:** current lifecycle state of the entry
@@ -412,3 +412,8 @@ Five records. About 1.6 KB. Readable, parseable, diff-friendly.
 
 *Vault Index Schema v1.1 | Locked | Metis G38 + G40 + Mike Maziarz | April 10 + 12, 2026*
 *"One record per line. One truth per record. The index is the interface."*
+
+
+## Pipeline Position (v1.89)
+
+Pipeline position is carried by `current_step` alone — a WorkflowNode UID in the pinned pipeline version, or null. The former `current_stage` key is retired from source frontmatter, `run.state.json`, and every runtime write path (dev-spec 63aaea28). Migration is journaled and reversible via `vault/tools/tropo-migrate-stage-eradication.py`.

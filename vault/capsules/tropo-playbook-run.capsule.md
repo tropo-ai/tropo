@@ -51,9 +51,9 @@ Track one execution of one playbook, from authorization to completion. A playboo
 
 | Field | Type | Constraint |
 |-------|------|-----------|
-| `playbook` | UID | The playbook definition this run executes. Must exist in ledger. |
+| `playbook` | UID | The playbook definition this run executes. Must exist in the Vault. |
 | `playbook_version` | string | Version pinned at run start. Executor MUST use this version — not the current version. Version mismatch = indeterminate state. |
-| `member_of` | array of UIDs | Parent project(s). Must exist in ledger with `type: project`. No orphaned runs. Replaces v1 `project:` field. |
+| `member_of` | array of UIDs | Parent project(s). Must exist in the Vault with `type: project`. No orphaned runs. Replaces v1 `project:` field. |
 | `binding` | path | Path to the vault binding file: `.tropo-studio/bindings/<slug>.binding.md` |
 | `started` | ISO 8601 date | When execution began |
 | `executor` | string | Agent ID of the current or last executor |

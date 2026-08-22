@@ -64,9 +64,11 @@ class PolicyFixture:
         (self.root / "vault/files").mkdir(parents=True)
         (self.root / "vault/tools").mkdir(parents=True)
         self.source = self.root / policy.POLICY_RELATIVE_PATH
-        self.runner = self.root / f"vault/tools/{RUNNER_UID}.py"
+        self.runner = self.root / f"vault/tools/tropo-{policy.POLICY_RUNNER}.py"
         self.copy_pre_attestation_policy()
-        shutil.copy2(ROOT / f"vault/tools/{RUNNER_UID}.py", self.runner)
+        shutil.copy2(
+            ROOT / f"vault/tools/tropo-{policy.POLICY_RUNNER}.py", self.runner
+        )
         ruling_event = self.root / policy.OS_GEO_EVENT_RELATIVE_PATH
         ruling_event.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / policy.OS_GEO_EVENT_RELATIVE_PATH, ruling_event)
@@ -106,7 +108,7 @@ class PolicyFixture:
             "state": "active",
             "transport": "library",
             "implementation_kind": "library",
-            "path": f"vault/tools/{RUNNER_UID}.py",
+            "path": f"vault/tools/tropo-{policy.POLICY_RUNNER}.py",
         }
         self.write_index()
 
@@ -1123,6 +1125,30 @@ class StrictPolicyTests(unittest.TestCase):
             contract.segment_egress,
             {"os": "auto", "team": "ask", "private": "ask"},
         )
+
+
+    def test_intermediate_directory_symlink_over_evidence_refuses(self):
+        """metis-g108 spot-check 2026-08-18: the from_root walk was made vacuous
+        by resolving before walking, so an IN-STUDIO directory symlink
+        (vault/events -> forged) returned forged governance bytes. The final
+        component was never the issue — the INTERMEDIATE one was, and no
+        earlier test covered it."""
+        import tempfile
+        from pathlib import Path as _P
+        import lib.distiller_model_policy as _dmp
+        with tempfile.TemporaryDirectory(prefix="evid-symlink-") as td:
+            root = _P(td).resolve()
+            (root / "vault" / "files").mkdir(parents=True)
+            forged_dir = root / "forged"
+            forged_dir.mkdir()
+            (forged_dir / "evidence.json").write_text('{"forged": true}')
+            # in-studio symlink: vault/events -> forged
+            (root / "vault" / "events").symlink_to(forged_dir, target_is_directory=True)
+            try:
+                _dmp._evidence_bytes(root, _P("vault/events/evidence.json"), "test-evidence")
+                self.fail("evidence read through an intermediate directory symlink")
+            except _dmp.PolicyError:
+                pass
 
 
 if __name__ == "__main__":

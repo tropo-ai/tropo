@@ -25,7 +25,7 @@ path: DASHBOARD.md
  to leave untouched.
 
  Hybrid model:
- generated — rebuilt from ledger queries, status cards, vault metrics.
+ generated — rebuilt from vault queries, status cards, vault metrics.
  A generator (board-synthesizer, sub-agent, or the owner)
  can refresh these sections without reading the rest.
  curated — written by the owner. Requires judgment. A generator
@@ -120,7 +120,7 @@ path: DASHBOARD.md
 
 ---
 
-<!-- source: generated | from: ledger query type=project, status=active -->
+<!-- source: generated | from: vault query type=project, status=active -->
 ## Active Projects
 
 <!-- All active projects with health indicators.

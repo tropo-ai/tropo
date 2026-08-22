@@ -13,7 +13,7 @@ PROTOTYPE (Argus A115, 2026-06-17) — lock-ready for the v1.72 cycle, which wir
 Build-Release Phase 3 + the canonical playbook. Golden-output snapshots (diff actual-vs-expected
 per release) are the planned v1.1 hardening; this v0 checks structural + integrity invariants.
 """
-import sys, os, json, re, argparse, ast
+import sys, os, json, re, argparse, ast, subprocess
 from pathlib import Path
 
 # Files/dirs every Tropo release must contain for a stranger to cold-boot.
@@ -180,8 +180,53 @@ def run_checks(root: Path):
                 if f"extraction_scope: {scope}" in head or f'extraction_scope: "{scope}"' in head:
                     leaks.append(p.name)
                     break
-    results.append(_check("no private/reference-only content leaked", not leaks,
+    results.append(_check("no private/reference-only scope leaked into vault/files",
+                          not leaks,
                           "clean" if not leaks else f"LEAKED: {leaks[:5]}{'…' if len(leaks) > 5 else ''}"))
+
+    # 6b. No maintainer machine paths anywhere in the box (v1.90.0, metis-g110).
+    #
+    # Check 6 above was named "no private/reference-only content leaked" and was
+    # read by everyone, me included, as meaning what it says. It scans exactly
+    # one directory (vault/files), only .md files, only the first 1500 bytes,
+    # only for an extraction_scope frontmatter tag. v1.90.0 shipped three of my
+    # own release-execution shell scripts in vault/updates/ — hardcoded to
+    # the maintainer's own studio root (<vault-root>), one of them carrying a note
+    # that the build had passed a gate only by bypass — into the directory README
+    # tells the customer is theirs. Check 6 passed. It could not have failed:
+    # nothing it looks at could contain a .sh file.
+    #
+    # The instrument that catches this already existed and nothing called it:
+    # vault/tools/tropo-validate-no-absolute-paths.py (c9b7d4e2, owner argus),
+    # domain "fails if any committed file contains absolute machine paths".
+    # Zero call sites outside its own unit test. This is the call site.
+    #
+    # It refuses rather than warns, and it earns that: publishing a maintainer's
+    # filesystem layout and internal deliberation to a public repository cannot
+    # be taken back (deb77758). Legitimate examples use the marker the validator
+    # already documents: `<!-- portability:exempt -->`.
+    abs_tool = root / "vault" / "tools" / "tropo-validate-no-absolute-paths.py"
+    if not abs_tool.is_file():
+        results.append(_check("no maintainer machine paths in the box", False,
+                              "validator ABSENT from the package — cannot verify; treat as fail"))
+    else:
+        try:
+            _ap = subprocess.run([sys.executable, str(abs_tool), str(root)],
+                                 capture_output=True, text=True, timeout=180)
+            _hits = [ln.strip() for ln in (_ap.stdout or "").splitlines()
+                     if ln.startswith("  ") and "/Users/" in ln]
+            # The detail string lands in test-report.md, which ships. Echoing a
+            # hit verbatim would reprint the very path we are refusing to ship,
+            # and would make this check permanently unclean by its own output.
+            # Count and file names only; the operator reads the validator itself.
+            results.append(_check(
+                "no maintainer machine paths in the box", _ap.returncode == 0,
+                "clean" if _ap.returncode == 0
+                else (f"{len(_hits)} absolute-path hit(s) — run "
+                      f"vault/tools/tropo-validate-no-absolute-paths.py on the box for the list")))
+        except Exception as exc:  # noqa: BLE001 - a check that cannot run is not a pass
+            results.append(_check("no maintainer machine paths in the box", False,
+                                  f"validator could not run: {exc}"))
 
     # 7. (G) v0.1 fix: .tropo/playbooks/*.md count>0 — dir-exists was PASS even with 0 playbooks
     playbooks_dir = root / ".tropo" / "playbooks"
@@ -240,7 +285,14 @@ def write_report(root: Path, results, stats, mode="mechanical"):
     lines = [
         f"# Release Test-Report — mechanical layer ({verdict})",
         "",
-        f"- release_dir: `{root}`",
+        # NEVER the absolute path. This report is written INTO the directory it
+        # describes and ships inside the box, so an absolute release_dir here put
+        # the build machine's filesystem layout in every customer's package — and,
+        # once check 6b existed, poisoned the very scan that looks for it: the
+        # report is written into the scanned tree, so the check could never come
+        # back clean once a report existed. Self-poisoning found by sa.cold-boot,
+        # v1.90.0. The basename is all a reader needs. metis-g110, 2026-08-22.
+        f"- release_dir: `{root.name}` (basename only — this file ships)",
         f"- mode: {mode} (deterministic regression; the guided stranger-walk is the playbook's other half)",
         f"- result: **{passed}/{total} checks passed**",
         f"- stats: {stats}",

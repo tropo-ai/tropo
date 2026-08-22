@@ -5,7 +5,7 @@
   "types": [
     {
       "capsule_path": "vault/capsules/tropo-action.capsule.md",
-      "capsule_sha256": "1e4ecaaaa79f56b36d76e73f1fcd835a2fde10252b304f58642498d304ce3d07",
+      "capsule_sha256": "805dd9a52b12d16565a05f13cb5b9ab0df161727689cac71b69759d84c1f3b93",
       "capsule_version": "1.2",
       "mint_mode": "disabled",
       "type": "action"
@@ -26,42 +26,42 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-agent.capsule.md",
-      "capsule_sha256": "0d37790465e0370d8ed6aee0b9ffbc1ee2d346d05c46978ca5e21c53e84efebd",
+      "capsule_sha256": "eadf3dd7fa9141ebc2b36b3dc829ec72751fa4c720b45f9cde1bbb2f67ba0eca",
       "capsule_version": "2.1",
       "mint_mode": "disabled",
       "type": "agent"
     },
     {
       "capsule_path": "vault/capsules/tropo-agent-configurator.capsule.md",
-      "capsule_sha256": "e2867c8b0456e50483067eb084665c8d309f738809a216ca8e1f2fe9b994ef9d",
+      "capsule_sha256": "86708006d55570a5d90deed389e1c4ebf84fe5e4ec42c60bcff675abdd878537",
       "capsule_version": "2.2",
       "mint_mode": "disabled",
       "type": "agent-configurator"
     },
     {
       "capsule_path": "vault/capsules/tropo-arch-spec.capsule.md",
-      "capsule_sha256": "550fc309adc38b03114bd99c3307f56266e85038ea8cf49adfce357188f8a3ee",
-      "capsule_version": "2.1",
+      "capsule_sha256": "2c467d550e876ed1800da7e8ba924e532065bef8b55ce9d9a0adeabbc665c7de",
+      "capsule_version": "2.2",
       "mint_mode": "disabled",
       "type": "arch-spec"
     },
     {
       "capsule_path": "vault/capsules/tropo-board-definition.capsule.md",
-      "capsule_sha256": "c611ec982db5b84258e09d15339cc70018aba8a97a6ee86c7df5b630f3884d14",
+      "capsule_sha256": "2f8efcf16c6709230cccfadc5498cdffaae14716af6c056fff0d0e53a27dd325",
       "capsule_version": "1.1",
       "mint_mode": "disabled",
       "type": "board-definition"
     },
     {
       "capsule_path": "vault/capsules/tropo-board-snapshot.capsule.md",
-      "capsule_sha256": "d3acc3dc0a8e016cbe85d662266fb61bb755379b0f80233d0d6c37777d230713",
+      "capsule_sha256": "035258e80293671a60dfd7f21d7f6b2f5579e273c8dd77282173e2fe1b4ca15f",
       "capsule_version": "1.1",
       "mint_mode": "disabled",
       "type": "board-snapshot"
     },
     {
       "capsule_path": "vault/capsules/tropo-build.capsule.md",
-      "capsule_sha256": "14e20a5f85f4ceec1e319f3eb64cd223ac58bf4cf3d88c57a4ce0cf9590c0482",
+      "capsule_sha256": "7ed54b7f758382cae70c1c77db1c508177d1363fd1ecc8622c507454de76dbdd",
       "capsule_version": "2.2",
       "mint_mode": "disabled",
       "type": "build"
@@ -89,14 +89,14 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-collection.capsule.md",
-      "capsule_sha256": "d087597d1a94cfe5f5fbd9cbcea2d3e2e0b52d8e1e8c6403f19ed686923b490f",
+      "capsule_sha256": "4a11f827a26e052aed286e48c03d7044b55d79b430550491f35e71db4d6a315b",
       "capsule_version": "1.1",
       "mint_mode": "disabled",
       "type": "collection"
     },
     {
       "capsule_path": "vault/capsules/tropo-collection-ref.capsule.md",
-      "capsule_sha256": "aa48a7798e0d4c092a77233170751ec1a23e3ec1580a5355f161a290769a44d4",
+      "capsule_sha256": "f09c18820196af95707b17e06ea87c0153003738eead7a54488b1846b7b3ffe8",
       "capsule_version": "3.0",
       "mint_mode": "disabled",
       "type": "collection-ref"
@@ -110,29 +110,29 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-concept.capsule.md",
-      "capsule_sha256": "109efbe75b58651b8b82c3ef5b8d2b84418f4cf8df87a8c15c3ecad5215e15da",
+      "capsule_sha256": "79ef02c1e011045c10ee93208041df1cfa884148b2f31f0a4699af804f68c5e1",
       "capsule_version": "1.0",
       "mint_mode": "disabled",
       "type": "concept"
     },
     {
       "capsule_path": "vault/capsules/tropo-core.capsule.md",
-      "capsule_sha256": "99dd252e2e984334f51654c0612b2b56125c4a62bb2a285e036e38d9672828af",
-      "capsule_version": "2.0",
+      "capsule_sha256": "588bc031f04034290ab915b09cd75af18bf20eb68f38c2b89c8f3084d3d36ef5",
+      "capsule_version": "2.1",
       "mint_mode": "disabled",
       "type": "core"
     },
     {
       "capsule_path": "vault/capsules/tropo-decision.capsule.md",
-      "capsule_sha256": "73914fc890dbec4408025e1c1e1543b181e4df96249ca230dc7167f8dbfe1719",
+      "capsule_sha256": "95f426b92f7213f1d9692a09f9f5a49bc94f9dd98c95968b32cdec6d4a4a3f9f",
       "capsule_version": "3.3",
       "mint_mode": "disabled",
       "type": "decision"
     },
     {
       "capsule_path": "vault/capsules/tropo-design-brief.capsule.md",
-      "capsule_sha256": "ccaabb9d4bd1c6c0de5cb99388da12112458d90fe9598a12ccadceb5d9f5f957",
-      "capsule_version": "3.4",
+      "capsule_sha256": "e69619b9e80d987f8f5b094067f44077f143fb36352dda50ff4c7eef91df7f67",
+      "capsule_version": "3.5",
       "mint_mode": "human",
       "mint_output_home": "vault/files",
       "mint_template": "vault/capsules/templates/design-brief.template.md",
@@ -142,15 +142,15 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-design-spec.capsule.md",
-      "capsule_sha256": "4dcaa4ef0016d0c8be36603ce891f9947b8cca0786912b906f467fc61a332adf",
+      "capsule_sha256": "7276ae3d4626c94fd95e602f78758041e2fa1915904b1b3fdf4d73a4c0961ec9",
       "capsule_version": "2.1",
       "mint_mode": "disabled",
       "type": "design-spec"
     },
     {
       "capsule_path": "vault/capsules/tropo-dev-spec.capsule.md",
-      "capsule_sha256": "07faec49bb8f70d668df5fd5b9b8b77767216b856b27d8982d77c319cb0a6487",
-      "capsule_version": "1.8",
+      "capsule_sha256": "e3e58aecab7b948d854539e3c5c3b1e8307338f1125f7fe3a77e4b26403ef364",
+      "capsule_version": "1.9",
       "mint_mode": "human",
       "mint_output_home": "vault/files",
       "mint_template": "vault/capsules/templates/dev-spec.template.md",
@@ -167,7 +167,7 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-document.capsule.md",
-      "capsule_sha256": "7521a8cd1ea2793ebb3b582c443b43fe5e8c59d646122b8051452d5aae3e96ae",
+      "capsule_sha256": "8ac09c66a5f45c3d7fbf8a59a490af904078a7b3199561f2bf68f2c829421786",
       "capsule_version": "3.2",
       "mint_mode": "disabled",
       "type": "document"
@@ -181,15 +181,15 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-entity.capsule.md",
-      "capsule_sha256": "4f9e04a33af3d2039c77b21d090638e7b29387d1ecd853bb9c8c69282a2702f4",
+      "capsule_sha256": "8a728082656c0b03785f515504568e7cbd08bf69f3e16ac866c1ed931a254504",
       "capsule_version": "1.1",
       "mint_mode": "disabled",
       "type": "entity"
     },
     {
       "capsule_path": "vault/capsules/tropo-events.capsule.md",
-      "capsule_sha256": "dd79e6db92d59d008482eac7abc5e1cec3ea348f3973ed5cf024551acd3b8ca2",
-      "capsule_version": "1.10",
+      "capsule_sha256": "266b0c6e21d86753933898ba920f87999e090ed926d869e0390be18f61f1cea2",
+      "capsule_version": "1.11",
       "mint_mode": "disabled",
       "type": "events"
     },
@@ -202,7 +202,7 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-governance-contract.capsule.md",
-      "capsule_sha256": "e48d4fed5eaf7650104e007bede032efc4dd9a25cdfd5aa4627017de68c2d25e",
+      "capsule_sha256": "f94f349cf3a324d9d03d5aefc04906609e25e2f2a047f0a3ec8a85b904603f18",
       "capsule_version": "1.1",
       "mint_mode": "disabled",
       "type": "governance-contract"
@@ -216,7 +216,7 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-how-to.capsule.md",
-      "capsule_sha256": "1ad504df698b90a4ddd7c843ff68a243361de831d11094185fbbdf4bf1555381",
+      "capsule_sha256": "20f913e19e51e7cbb09decfa7ea3afcf69ad7de27b807afc61bf16f9545cf7e1",
       "capsule_version": "1.5",
       "mint_mode": "disabled",
       "type": "how-to"
@@ -265,7 +265,7 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-note.capsule.md",
-      "capsule_sha256": "d8569c42e7ede20826f7567110f7350df1627ead29f3ab33eaa05133c6e9e723",
+      "capsule_sha256": "969c60eb396f2f6d62300700594472cc37a8bd2fa3b52cd9135e54fc8e3c6003",
       "capsule_version": "3.6",
       "mint_mode": "human",
       "mint_output_home": "vault/files",
@@ -290,14 +290,14 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-pipeline.capsule.md",
-      "capsule_sha256": "0d216fcd43b3f06fa398d85195ac67b7105f645059cfaae6abebb943322ee3c4",
+      "capsule_sha256": "25a8926707574a7c9a70e10dcb8c5239380ff7895a08028ba992c6ac4e4a5406",
       "capsule_version": "3.4",
       "mint_mode": "disabled",
       "type": "pipeline"
     },
     {
       "capsule_path": "vault/capsules/tropo-pipeline-run.capsule.md",
-      "capsule_sha256": "5b6f2ce6d652d5d54d3a03bcb9de407821a6ec463a1fadd3131cab19284ea05c",
+      "capsule_sha256": "e4071d64375e94721932c528b1b98b8ce06e73500b0d4e162c9317e5497b939f",
       "capsule_version": "2.2",
       "mint_mode": "disabled",
       "type": "pipeline-run"
@@ -311,7 +311,7 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-playbook-run.capsule.md",
-      "capsule_sha256": "422256af9146ca9df371626ddf2857fc3a6da606506d064fc5ba63e43c712ad8",
+      "capsule_sha256": "ee9717205273c94e0be79afb8d2458562f2fc73ae4bd2c4f5a3b1801e33361fd",
       "capsule_version": "2.1",
       "mint_mode": "disabled",
       "type": "playbook-run"
@@ -325,8 +325,8 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-project.capsule.md",
-      "capsule_sha256": "2da12fa39eb0930518f8da7f5e38fa6113235322b0667801435ab5a69f080214",
-      "capsule_version": "2.8",
+      "capsule_sha256": "00a9545435b2b6f25755d0c66de96590713a4186dce83faac33f1b7ce5fe4859",
+      "capsule_version": "2.9",
       "mint_mode": "disabled",
       "type": "project"
     },
@@ -353,21 +353,21 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-registry.capsule.md",
-      "capsule_sha256": "4053e5ce934e0f5a8decabdaf5269d5ebb68540db0851356f4eb0222cf4f8c0b",
+      "capsule_sha256": "f8ef03185c6c5c170693eab6e15c83f74ad5c325618d96f69dacbe81e6e89c31",
       "capsule_version": "1.1",
       "mint_mode": "disabled",
       "type": "registry"
     },
     {
       "capsule_path": "vault/capsules/tropo-release.capsule.md",
-      "capsule_sha256": "c7cafebefd4e66cb5e69de3ff1a8b66e0ff11706fd23a71b525841610ff54cdb",
+      "capsule_sha256": "1a050effe9aa14ca0f9da2a0d079e58bf5e1f21b99e54121928d1928595597c5",
       "capsule_version": "3.14",
       "mint_mode": "disabled",
       "type": "release"
     },
     {
       "capsule_path": "vault/capsules/tropo-release-plan.capsule.md",
-      "capsule_sha256": "a416341575827fabbfcc7bba8391efa4c71eff542bd63900f2484d31e1d866fc",
+      "capsule_sha256": "2ecd443422f7fef7e533f9f6cccccbdca6f6b7e38ad6265cf09e1e83b8bfecd6",
       "capsule_version": "1.6",
       "mint_mode": "disabled",
       "type": "release-plan"
@@ -381,7 +381,7 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-session-agent.capsule.md",
-      "capsule_sha256": "78a13993f32b94db7758a1fa0029f8f2f01932be29c68950898fd37a698b0baa",
+      "capsule_sha256": "f0d21fce5e3fad0b668bfb78d3be4ee62a91127ec1d73caf1624b2f4d40210e8",
       "capsule_version": "1.6",
       "mint_mode": "disabled",
       "type": "session-agent"
@@ -402,8 +402,8 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-task.capsule.md",
-      "capsule_sha256": "7fd3c5e8e0b14c9e13016aa60c64ef6186e98674f916278756829c163e0363fd",
-      "capsule_version": "4.7",
+      "capsule_sha256": "ded252005bbe862d6ceee21c31876aa9304ad7b3a1fb5007848285be988e68da",
+      "capsule_version": "4.8",
       "mint_mode": "human",
       "mint_output_home": "vault/files",
       "mint_template": "vault/capsules/templates/task.template.md",
@@ -441,14 +441,14 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-test-spec.capsule.md",
-      "capsule_sha256": "942379cd1f601c1ea531de5bc3a321955a99766844db0f25c0195af4e1b0063f",
-      "capsule_version": "1.3",
+      "capsule_sha256": "6ebc176130e9073c3b82856c2834dbd8aa0a7e65a89caac10c5c5b66ae33d0d1",
+      "capsule_version": "1.4",
       "mint_mode": "disabled",
       "type": "test-spec"
     },
     {
       "capsule_path": "vault/capsules/tropo-tool.capsule.md",
-      "capsule_sha256": "0d01c5793bad978396e78cd6f5d506e3554a6bced4b76639c44b55f8f720fd56",
+      "capsule_sha256": "5066fde351c8a42ac0d8f6c875089e3f1c7547d8a9d5fe39bb55bdc8ef2e0111",
       "capsule_version": "1.8",
       "mint_mode": "disabled",
       "type": "tool"

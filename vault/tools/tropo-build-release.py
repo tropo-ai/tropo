@@ -319,6 +319,7 @@ def step_0_5_publish_state_preflight():
                   file=sys.stderr)
             print('    Pass --offline to proceed anyway (recorded honestly as UNKNOWN).',
                   file=sys.stderr)
+            _record_build_refusal('dependency-missing', 'environment', 'non-retryable')
             sys.exit(2)
         print('  --offline: proceeding, publish_state recorded UNKNOWN.')
         return {"publish_state": "UNKNOWN", "reason": str(e)}
@@ -327,6 +328,7 @@ def step_0_5_publish_state_preflight():
     if status == "unknown_version":
         print('  ✗ Build REFUSED — .tropo/version.md is missing or unparseable.', file=sys.stderr)
         print('    This is never treated as drift — fix version.md, then re-run.', file=sys.stderr)
+        _record_build_refusal('dependency-missing', 'environment', 'non-retryable')
         sys.exit(2)
     if status == "unreachable":
         if not OFFLINE:
@@ -2078,6 +2080,56 @@ def step_10_1_seal_release_index_pair(build_dir, floor_evidence_uid):
     )
 
 
+
+def step_9d_emit_image_manifest(build_dir, new_version):
+    """Step 9d (ea09fc6e): emit the shipped IMAGE MANIFEST.
+
+    The complete file list of the release image with a content hash per
+    entry, version-stamped, machine-parseable, shipped INSIDE the image.
+    At apply time it installs into the studio and becomes the PRIOR
+    manifest for the next update — it is the delete-set's only input, and
+    nothing emitted one before this (verified: grep for image/shipped
+    file-manifests in this tool returns nothing pre-2026-08-21).
+
+    The manifest deliberately excludes ITSELF from its own list (a file
+    cannot hash itself); every other file in the image is listed.
+    """
+    import hashlib
+    from datetime import datetime, timezone
+    if DRY_RUN:
+        print('  Image manifest: [dry run — would generate]')
+        return 0
+    manifest_rel = 'tropo-image-manifest.json'
+    manifest_path = os.path.join(build_dir, manifest_rel)
+    files = {}
+    for root, dirs, names in os.walk(build_dir):
+        dirs.sort()
+        for name in sorted(names):
+            full = os.path.join(root, name)
+            rel = os.path.relpath(full, build_dir)
+            if rel == manifest_rel:
+                continue  # a file cannot hash itself
+            data = open(full, 'rb').read()
+            files[rel.replace(os.sep, '/')] = {
+                'sha256': hashlib.sha256(data).hexdigest(),
+                'bytes': len(data),
+            }
+    payload = {
+        'schema': 'tropo.image-manifest/v1',
+        'version': str(new_version),
+        'generated_utc': datetime.now(timezone.utc).strftime(
+            '%Y-%m-%dT%H:%M:%SZ'),
+        'file_count': len(files),
+        'files': files,
+    }
+    with open(manifest_path, 'w', encoding='utf-8') as handle:
+        json.dump(payload, handle, indent=1, sort_keys=True)
+        handle.write('\n')
+    print(f'  Image manifest: {len(files)} files hashed -> {manifest_rel}')
+    return len(files)
+
+
+
 def step_9_generate_manifest(build_dir, new_version):
     """Step 4i: Generate MANIFEST.md with file listing and checksums."""
     manifest_path = os.path.join(build_dir, 'MANIFEST.md')
@@ -2188,20 +2240,124 @@ def step_10_2_purge_run_local_artifacts(build_dir):
     return removed
 
 
+def step_3j_copy_vault_schema(build_dir):
+    """Step 3j (F1, v1.90.1, Mike-directed; G110 assignment 2026-08-22): ship
+    vault/schema/ wholesale.
+
+    The shipped libs' import-time contracts live here — lib/tool_telemetry.py
+    loads vault/schema/tool-telemetry-registry.json AT MODULE IMPORT, so a box
+    without this directory makes the shipped suites uncollectable (measured
+    0-of-~1029 census entries by sa.release-test-harness, twice, on two v1.90.0
+    packages) and silently deadens the telemetry lane in any studio built from
+    the box — tools that lazy-load the lib take the except branch and keep
+    working, which is exactly the false-green shape this step exists to end.
+    Ships wholesale on the fdef56ea atomic-infrastructure ruling — same shape
+    as vault/tools/: per-file tagging re-opens the omission bug."""
+    src_schema = os.path.join(tropo_roots.VAULT_DIR, 'schema')
+    if not os.path.isdir(src_schema):
+        sys.exit(
+            f'vault/schema/ not found at {src_schema} — the shipped '
+            f'import-time contracts (tool-telemetry registry) cannot ship (F1)')
+
+    dst_schema = os.path.join(build_dir, 'vault', 'schema')
+    if not DRY_RUN:
+        os.makedirs(dst_schema, exist_ok=True)
+
+    copied = 0
+    for root, dirs, files in os.walk(src_schema):
+        dirs.sort()
+        prune_bytecode(dirs, files)
+        for fname in sorted(files):
+            src_file = os.path.join(root, fname)
+            rel = os.path.relpath(src_file, src_schema)
+            dst_file = os.path.join(dst_schema, rel)
+            copy_file(src_file, dst_file, DRY_RUN)
+            copied += 1
+
+    print(f'  vault/schema/: {copied} files copied wholesale (import-time contracts — F1)')
+    return copied
+
+
+def step_10b_assert_shipped_tests_collect(build_dir):
+    """Step 10b (F1 part 2, v1.90.1): every shipped test module must COLLECT
+    in-box before the build passes.
+
+    An import-time dependency that ships missing refuses HERE, at build time,
+    naming the module and the error — instead of dying silently in a customer
+    studio where the telemetry lane quietly turns off (G110: "silent is the
+    part that matters"). The exact failure this gate encodes was measured
+    twice on v1.90.0: the adapters suite could not even be collected."""
+    tests_dir = os.path.join(build_dir, 'vault', 'tools', 'tests')
+    if not os.path.isdir(tests_dir):
+        return True  # nothing shipped to check; the census itself governs that
+    import subprocess as _sp
+    failures = []
+    for fname in sorted(os.listdir(tests_dir)):
+        if not (fname.startswith('test_') and fname.endswith('.py')):
+            continue
+        # Probe with the collector a customer would actually use, not a
+        # hand-rolled loader. The original spec_from_file_location/exec_module
+        # probe reported 3 modules uncollectable that pytest collects without
+        # complaint (9, 90 and 27 tests respectively) -- it does not reproduce
+        # rootdir/sys.path or package semantics, so it answered a question
+        # nobody asks. A homemade instrument giving confident wrong answers is
+        # worse than no instrument: this one nearly cost a release on findings
+        # that were entirely its own. metis-g110, 2026-08-22.
+        proc = _sp.run(
+            [sys.executable, '-m', 'pytest', '--collect-only', '-q',
+             os.path.join('vault', 'tools', 'tests', fname)],
+            # cwd is the BOX ROOT, not the tests dir: seven shipped modules do
+            # `from vault.tools.tests.X import ...`, and from inside the tests
+            # folder `vault` is not on sys.path, so collection dies on an import
+            # that works perfectly for a customer. Measured on v1.90.0: 9 modules
+            # 'failed' from tests_dir; the same two sampled from build_dir collect
+            # 36 and 90 tests. The box root is also the only cwd that MEANS
+            # anything -- it is where a customer stands. (T48's gate, cwd fixed by
+            # metis-g110 2026-08-22; the gate itself is right and stays fail-closed.)
+            cwd=build_dir, capture_output=True, text=True, timeout=120)
+        # pytest exit codes: 0 = collected, 5 = collected nothing (a module with
+        # no pytest-discoverable tests is not a COLLECTION failure and must not
+        # refuse a release -- 11 shipped modules exit 5 legitimately). Anything
+        # else (2 = collection error, 3 = internal, 4 = usage) is the real signal.
+        if proc.returncode not in (0, 5):
+            failures.append((fname, (proc.stderr or '').strip().splitlines()[-1] if (proc.stderr or '').strip() else 'no stderr'))
+    if failures:
+        for fname, err in failures:
+            print(f'  ✗ shipped test module cannot COLLECT in-box: {fname}: {err}',
+                  file=sys.stderr)
+        names = ', '.join(f for f, _ in failures)
+        sys.exit(
+            f'shipped test module(s) cannot collect in-box: {names} — an '
+            f'import-time dependency that ships missing must refuse the build, '
+            f'not fall through silently in a customer studio (F1). Cure: ship '
+            f'the missing file or unship the module.')
+    print(f'  shipped test modules collect in-box: '
+          f'{len([f for f in os.listdir(tests_dir) if f.startswith("test_") and f.endswith(".py")])} modules import clean')
+    return True
+
+
 def step_10_sanitize_argo_identity(build_dir):
-    print('Step 10 — Sanitize the Studio Identity')
+    print('Step 10 — Sanitize Argo Studio Identity')
     # v1.71 (argus-a114, Mike-authorized 2026-06-16): GENERICIZE the public artifact instead of
-    # refusing. The Argo source legitimately references "the Studio" (it IS the Studio — the
+    # refusing. The Argo source legitimately references "Argo Studio" (it IS the Argo Studio — the
     # governance hub, dev-pipeline, capsules correctly describe it); the public template must not.
     # So strip Argo identity from the COPIED build files (source untouched), then VERIFY none
     # remain (fail-closed). Prior behavior refused on legitimate source content that had already
     # shipped in v1.70 — this makes the build self-healing instead of a hard wall.
     _skip = ('.png', '.jpg', '.jpeg', '.gif', '.zip', '.sqlite', '.DS_Store')
+    # v1.90.1 (F1 companion, G110 morning measurement 2026-08-22): the walk
+    # must spare THIS TOOL'S OWN SOURCE. The sanitiser applies its patterns to
+    # the shipped copy of itself, rewriting the pattern STRINGS inside its own
+    # replacements block ('the argo studio' -> 'the Studio' becomes
+    # r'the Studio' -> 'the Studio') — a shipped sanitiser degenerated into
+    # no-ops by its own hygiene. Self-application is the one file whose
+    # sanitation corrupts the sanitiser.
+    _self_exempt = ('tropo-build-release.py',)
     replacements = [
-        (re.compile(r'the development dogfood', re.I), 'the development dogfood'),
-        (re.compile(r'development dogfood', re.I), 'development dogfood'),
-        (re.compile(r'the Studio', re.I), 'the Studio'),
-        (re.compile(r'the Studio', re.I), 'the Studio'),
+        (re.compile(r'the argo dogfood', re.I), 'the development dogfood'),
+        (re.compile(r'argo dogfood', re.I), 'development dogfood'),
+        (re.compile(r'the argo studio', re.I), 'the Studio'),
+        (re.compile(r'argo studio', re.I), 'the Studio'),
         # Metis's cold walk (verdict 62a22664): a recipient has no `argo-os/`
         # directory, so prose naming it as THIS FOLDER points a newcomer at a
         # path that does not exist in the artifact they are holding. Scoped to
@@ -2214,7 +2370,7 @@ def step_10_sanitize_argo_identity(build_dir):
     sanitized = 0
     for root, _, files in os.walk(build_dir):
         for f in files:
-            if f.endswith(_skip):
+            if f.endswith(_skip) or f in _self_exempt:
                 continue
             path = os.path.join(root, f)
             try:
@@ -2255,7 +2411,7 @@ def step_10_sanitize_argo_identity(build_dir):
     if stripped_scope:
         print(f'  Build-metadata frontmatter stripped from {stripped_scope} file(s)')
 
-    argo_isms = ['the Studio', 'the development dogfood', 'this folder, `argo-os/`']
+    argo_isms = ['argo studio', 'the argo dogfood', 'this folder, `argo-os/`']
     findings = []
     for root, _, files in os.walk(build_dir):
         for f in files:
@@ -2883,6 +3039,42 @@ def _run_post_rebuild_validation(attempt_id):
 
 # ─── Main ────────────────────────────────────────────────────────────────────
 
+#: AC9 pilot 2/3 (3f38521a): build pre-flight refusals record telemetry at
+#: the gate boundary, swallowed by contract — never affects the refusal.
+def _record_build_refusal(reason_code, category, retryability):
+    try:
+        import importlib.util as ilu
+        from datetime import datetime, timezone
+        tools_dir = tropo_roots.VAULT_DIR / "tools"  # module-level seam object
+        spec = ilu.spec_from_file_location(
+            "tool_telemetry", tools_dir / "lib" / "tool_telemetry.py")
+        telemetry = ilu.module_from_spec(spec)
+        spec.loader.exec_module(telemetry)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+        telemetry.record_refused(
+            tool_uid="a1b8c2d4",
+            invocation_uid="build:%s" % stamp,
+            operation_uid="build:%s" % stamp[:8],
+            attempt=1,
+            reason_category=category,
+            reason_code=reason_code,
+            retryability=retryability,
+            segment_inputs=["argo-private"],
+            harm_class="reversible-write",
+        )
+        drain_spec = ilu.spec_from_file_location(
+            "tropo_drain_tool_telemetry",
+            tools_dir / "tropo-drain-tool-telemetry.py")
+        drainer_mod = ilu.module_from_spec(drain_spec)
+        drain_spec.loader.exec_module(drainer_mod)
+        drainer = drainer_mod.TelemetryDrainer(tropo_roots.STUDIO_ROOT)
+        drainer.ingest(telemetry.drain())
+        drainer.seal_all()
+    except Exception as exc:  # telemetry must never move a verdict
+        print('WARN: build telemetry handoff failed (non-blocking): %s' % exc,
+              file=sys.stderr)
+
+
 def main():
     # Parse args
     bump_type = None
@@ -2953,6 +3145,7 @@ def main():
                   f'python3 vault/tools/tropo-build-release.py '
                   f'--activation-uid {activation_uid or "<uid>"} '
                   f'{"--bump " + bump_type if bump_type else "--target " + str(target_version)}')
+            _record_build_refusal('gate-refused', 'policy-gate', 'retryable')
             sys.exit(1)
         except Exception as exc:  # noqa: BLE001 -- the wait refuses loudly, never warns
             print(f'REFUSED: release legs are not settled for this package: {exc}')
@@ -2960,6 +3153,7 @@ def main():
                   f'then re-run: python3 vault/tools/tropo-build-release.py '
                   f'--activation-uid {activation_uid or "<uid>"} '
                   f'{"--bump " + bump_type if bump_type else "--target " + str(target_version)}')
+            _record_build_refusal('gate-refused', 'policy-gate', 'retryable')
             sys.exit(1)
 
     if not DRY_RUN:
@@ -3262,6 +3456,9 @@ def main():
     # Step 3e: Copy vault/updates/ wholesale (update apply state machine — finding G2, Gate 2)
     step_3e_copy_vault_updates(build_dir)
 
+    # Step 3j: Copy vault/schema/ wholesale (import-time contracts — F1, v1.90.1)
+    step_3j_copy_vault_schema(build_dir)
+
     # Step 3c: Assert every shim's forward-target is present in build (ruling fdef56ea)
     step_3c_assert_forward_targets(build_dir)
 
@@ -3392,6 +3589,10 @@ def main():
     # Step 9: Manifest
     file_count = step_9_generate_manifest(build_dir, new_version)
 
+    # Step 9d (ea09fc6e): the shipped IMAGE MANIFEST — the machine-parseable
+    # complete file list the lift-and-replace delete-set derives from.
+    step_9d_emit_image_manifest(build_dir, new_version)
+
     # Step 9b: Regenerate 00-tropo-nav/ from the SHIPPED ledger (v1.5 S2)
     # Ensures shipped 00-tropo-nav reflects the SHIPPED ledger, not the source-vault state.
     # Closes Mike Maziarz cold-boot finding 2026-05-03 ("you did ship a 00-tropo-nav/ that was stale").
@@ -3401,8 +3602,12 @@ def main():
     # data for customer-mode classification instead of relying on guesswork.
     step_9c_generate_vendor_ref_manifest(build_dir, new_version)
 
-    # Step 10: Sanitize the Studio identity
+    # Step 10: Sanitize Argo Studio identity
     step_10_sanitize_argo_identity(build_dir)
+
+    # Step 10b (F1): every shipped test module must collect in-box — an
+    # import-time dependency that ships missing refuses here, not silently.
+    step_10b_assert_shipped_tests_collect(build_dir)
     # The in-box gates below still need a working index, so the generation
     # survives until the final freeze before the zip. It is NOT sealed: a seal
     # is evidence about surfaces this package does not ship (evt 114), and the

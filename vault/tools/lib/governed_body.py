@@ -38,6 +38,14 @@ _NAV_BLOCK_RE = re.compile(
 )
 
 
+NAV_BLOCK_BYTES_RE = re.compile(
+    # Byte-space twin of _NAV_BLOCK_RE, same anchors and same trailing-newline
+    # consumption, so text and byte callers cannot disagree about the span.
+    rb"^<!-- nav-block:start -->\n.*?^<!-- nav-block:end -->\n*",
+    re.DOTALL | re.MULTILINE,
+)
+
+
 def strip_nav_block(text: str) -> str:
     """Remove the sentinel-wrapped Navigation block region(s), if present.
 
@@ -55,6 +63,24 @@ def strip_nav_block(text: str) -> str:
     Neither caller reinvents the regex — both import this function.
     """
     return _NAV_BLOCK_RE.sub("", text)
+
+
+def strip_nav_block_bytes(body: bytes) -> bytes:
+    """The same canonical strip, for callers holding raw bytes.
+
+    v1.89 271d28d7 AC6. T2 hashing and the pruning evidence ranges both work on
+    post-fence bytes and each kept a sibling regex to do it. Both siblings were
+    UNANCHORED, so a sentinel quoted mid-line in an author's prose matched and
+    that author's words were deleted from the hashed content; and neither
+    consumed the trailing newlines the canonical strip removes, so the two
+    answers differed on ordinary files as well.
+
+    Decoding to text here would be wrong — T2 decodes with replacement AFTER
+    the strip, by design, so invalid UTF-8 stays legal input. This applies the
+    identical pattern in byte space instead, which keeps one definition of
+    where a nav block starts and ends.
+    """
+    return NAV_BLOCK_BYTES_RE.sub(b"", body)
 
 
 def find_navigation_block(body: str) -> Optional[Tuple[int, int]]:

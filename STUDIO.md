@@ -31,9 +31,9 @@ Key locations in this vault:
 
 | Resource | Path |
 |----------|------|
-| Vault index | `vault/00-index.jsonl` (work artifacts, regenerated) |
+| Vault index | `vault/00-index.jsonl` (work artifacts and runtime callables, regenerated) |
 | Agent registry | `.tropo-studio/registries/agent-registry.yaml` (identity, hand-maintained) |
-| Runtime registry | `.tropo-studio/registries/registry.jsonl` (sa.*/skills/tools, regenerated) |
+| Runtime catalogs | `.tropo/tool-catalog.md`, `.tropo/skill-catalog.md`, `.tropo/sa-agent-catalog.md` (generated from the index) |
 | Operations channel | `channels/ops.md` |
 | Agent home | `agents/` |
 | Knowledge base | `vault/files/` (typed `kb-article`; navigable via subsystem hub member lists, primary `f87e33f0` Tropo Documentation) |
@@ -88,7 +88,7 @@ Key locations in this vault:
 
 ### Audit Trail
 - All file modifications logged to `channels/ops.md` with agent ID, action, and path.
-- The appropriate matched-primitive index updated when files are created, moved, or removed: `vault/00-index.jsonl` (rebuilder), `agent-registry.yaml` (hand-maintained), `registry.jsonl` (rebuilder).
+- The appropriate matched-primitive index updated when files are created, moved, or removed: `vault/00-index.jsonl` (rebuilder), `agent-registry.yaml` (hand-maintained).
 
 ---
 

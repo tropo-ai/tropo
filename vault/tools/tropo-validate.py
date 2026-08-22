@@ -193,6 +193,26 @@ if _index_surfaces_spec is None or _index_surfaces_spec.loader is None:
 index_surfaces = _importlib_util.module_from_spec(_index_surfaces_spec)
 _index_surfaces_spec.loader.exec_module(index_surfaces)
 
+# The one tool-frontmatter parser, path-loaded for the reason stated above.
+# It was briefly a `from lib.` import, which worked only because some other
+# function in this file had already inserted vault/tools into sys.path before
+# the floor check ran. Under a bare `python3 -m unittest` that insert has not
+# happened and `lib` resolves to .tropo/scripts/lib alone, so the check raised
+# instead of running (A150, 18 errors, 2026-08-16).
+_python_tool_frontmatter_spec = _importlib_util.spec_from_file_location(
+    "tropo_python_tool_frontmatter",
+    Path(__file__).resolve().parent / "lib" / "python_tool_frontmatter.py",
+)
+if (
+    _python_tool_frontmatter_spec is None
+    or _python_tool_frontmatter_spec.loader is None
+):
+    raise ImportError("python_tool_frontmatter helper could not be loaded")
+python_tool_frontmatter = _importlib_util.module_from_spec(
+    _python_tool_frontmatter_spec
+)
+_python_tool_frontmatter_spec.loader.exec_module(python_tool_frontmatter)
+
 _EVENT_IDENTITY_MODULE_NAME = "tropo_event_identity"
 if _EVENT_IDENTITY_MODULE_NAME in sys.modules:
     event_identity = sys.modules[_EVENT_IDENTITY_MODULE_NAME]
@@ -6938,7 +6958,23 @@ def _parse_enforced_enums_block(
     return result
 
 
-def check_enforced_enum_compliance(vault: Path) -> tuple[list[str], int, int, int]:
+def _capsule_type_from_filename(capsule_path: Path) -> str:
+    """The governed type a capsule declares, resolved the one canonical way.
+
+    Delegates to vault/tools/lib/lifecycle_machine.py so machine, enum, and
+    pairing loaders cannot drift apart again; falls back to the same transform
+    inline if the library is unavailable, because a validator that cannot import
+    a helper must still check rather than silently skip a type.
+    """
+    try:
+        from lib.lifecycle_machine import capsule_type_from_filename
+        return capsule_type_from_filename(capsule_path)
+    except Exception:
+        name = capsule_path.name.split('.capsule.md')[0]
+        return name[len('tropo-'):] if name.startswith('tropo-') else name
+
+
+def check_enforced_enum_compliance(vault: Path, baseline: dict = None) -> tuple[list[str], int, int, int]:
     """v1.65 + c4512bdc Piece 1 enforce-first enum check; v1.72 Move 7 ratcheted to ERROR.
 
     Reads each type capsule's enforced_enums via yaml.safe_load.  Accepts both
@@ -6954,6 +6990,14 @@ def check_enforced_enum_compliance(vault: Path) -> tuple[list[str], int, int, in
     total_fails; exit code unaffected.  state alias maps are rejected (ERROR).
     """
     findings: list[str] = []
+    # v1.89 bounded amendment (Mike-approved 2026-08-16): the measured
+    # pre-existing signatures WARN so the cleanup window is not doubly red,
+    # while anything new or changed still ERRORs. The baseline never downgrades
+    # an unknown status to normalizable, and it never excuses a row it does not
+    # name exactly.
+    if baseline is None:
+        baseline = load_enum_debt_baseline(vault)
+    known = baseline.get('signatures', {})
 
     # 1. Build type → {field: {canonical, aliases}} map from type capsules
     capsules_dir = vault / 'vault' / 'capsules'
@@ -6976,7 +7020,11 @@ def check_enforced_enum_compliance(vault: Path) -> tuple[list[str], int, int, in
         enums = parsed.get('enforced_enums')
         if not enums or not isinstance(enums, dict):
             continue
-        type_name = capsule_path.name.split('.capsule.md')[0]
+        # v1.89 271d28d7 AC2: resolve the governed type through the one shared
+        # resolver. This keyed 'tropo-project' while source entries carry
+        # 'type: project', so the membership test below never matched and the
+        # check examined ZERO entries while printing PASS.
+        type_name = _capsule_type_from_filename(capsule_path)
         parsed_enums = _parse_enforced_enums_block(
             capsule_path.name, enums, findings
         )
@@ -7054,13 +7102,320 @@ def check_enforced_enum_compliance(vault: Path) -> tuple[list[str], int, int, in
                     )
                     n_warn += 1
                 else:
-                    findings.append(
-                        f'  [ERROR] {rel_path} — {entry_type}.{field} = '
-                        f'"{raw_str}" not in enforced set {field_def["canonical"]}'
+                    signature = _enum_debt_signature(
+                        entry_type, field, raw_str,
+                        _enum_contract_sha256(field_def),
                     )
-                    n_error += 1
+                    if signature in known:
+                        findings.append(
+                            f'  [WARN] {rel_path} — {entry_type}.{field} = '
+                            f'"{raw_str}" not in enforced set '
+                            f'{field_def["canonical"]} (known enum debt; '
+                            f'dd570ea4 must clear it)'
+                        )
+                        n_warn += 1
+                    else:
+                        findings.append(
+                            f'  [ERROR] {rel_path} — {entry_type}.{field} = '
+                            f'"{raw_str}" not in enforced set {field_def["canonical"]}'
+                        )
+                        n_error += 1
 
     return findings, n_checked, n_error, n_warn
+
+
+ENUM_DEBT_BASELINE_RELATIVE_PATH = '.tropo/enum-debt-baseline.json'
+
+
+def _enum_debt_signature(entry_type: str, field: str, raw_value: str,
+                         contract_sha256: str) -> str:
+    """One row's identity: the type, the field, the offending value, the contract.
+
+    The contract hash is part of the signature deliberately. A baseline keyed on
+    type/field/value alone self-heals the wrong way — widen a capsule's enum and
+    the offending rows stop being violations without anyone deciding that. Here,
+    widening the enum changes the contract hash, which retires the row rather
+    than absolving it, and the shrink-only rule keeps meaning what it says.
+    """
+    return '{}|{}|{}|{}'.format(entry_type, field, raw_value.strip().lower(),
+                                contract_sha256)
+
+
+def _enum_contract_sha256(field_def: dict) -> str:
+    """A stable digest of one field's enforced vocabulary."""
+    payload = json.dumps(
+        {
+            'canonical': sorted(str(v).lower() for v in field_def.get('canonical', [])),
+            'aliases': {str(k).lower(): str(v).lower()
+                        for k, v in (field_def.get('aliases') or {}).items()},
+        },
+        sort_keys=True, separators=(',', ':'),
+    )
+    return hashlib.sha256(payload.encode('utf-8')).hexdigest()
+
+
+def load_enum_debt_baseline(vault: Path) -> dict:
+    """Read the measured enum-debt baseline, or an empty one when absent.
+
+    Absent is legal and means no debt is excused: every finding is new.
+    """
+    path = vault / ENUM_DEBT_BASELINE_RELATIVE_PATH
+    if not path.is_file():
+        return {'present': False, 'signatures': {}, 'header': {}}
+    try:
+        raw = json.loads(path.read_text(encoding='utf-8'))
+    except Exception as exc:
+        raise ValueError('{} is unreadable: {}'.format(
+            ENUM_DEBT_BASELINE_RELATIVE_PATH, exc))
+    rows = raw.get('rows')
+    if not isinstance(rows, list):
+        raise ValueError('{} has no rows list'.format(
+            ENUM_DEBT_BASELINE_RELATIVE_PATH))
+    signatures = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError('{} contains a malformed row'.format(
+                ENUM_DEBT_BASELINE_RELATIVE_PATH))
+        signature = row.get('signature')
+        if not isinstance(signature, str) or not signature:
+            raise ValueError('{} contains a row with no signature'.format(
+                ENUM_DEBT_BASELINE_RELATIVE_PATH))
+        signatures[signature] = row
+    header = {k: v for k, v in raw.items() if k != 'rows'}
+    return {'present': True, 'signatures': signatures, 'header': header}
+
+
+def collect_enum_debt_signatures(vault: Path) -> list:
+    """Every current unknown-value signature, measured from source.
+
+    Shared by the writer and by the shrink-only comparison so a baseline can
+    never be written from one census and judged against another.
+    """
+    empty = {'present': False, 'signatures': {}, 'header': {}}
+    findings, _, _, _ = check_enforced_enum_compliance(vault, baseline=empty)
+    rows = []
+    for line in findings:
+        match = re.search(
+            r'\[ERROR\]\s+(\S+)\s+—\s+([\w-]+)\.(\w+)\s+=\s+"([^"]*)"', line
+        )
+        if match:
+            rows.append(match.groups())
+    return rows
+
+
+def write_enum_debt_baseline(vault: Path) -> tuple[list[str], int]:
+    """Capture or shrink the measured enum-debt baseline.
+
+    First write captures the current set. Later writes are SHRINK-ONLY: a subset
+    is legal, growth refuses. An auto-refreshing allowlist would legalize every
+    regression, which is the whole failure this file is supposed to prevent.
+    """
+    messages: list[str] = []
+    path = vault / ENUM_DEBT_BASELINE_RELATIVE_PATH
+
+    type_enums: dict = {}
+    for capsule_path in sorted((vault / 'vault' / 'capsules').glob('*.capsule.md')):
+        fm = split_frontmatter(capsule_path.read_text(errors='replace'))
+        if not fm:
+            continue
+        try:
+            parsed = fast_yaml.safe_load(fm)
+        except Exception:
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        enums = parsed.get('enforced_enums')
+        if isinstance(enums, dict) and enums:
+            block = _parse_enforced_enums_block(capsule_path.name, enums, [])
+            if block:
+                type_enums[_capsule_type_from_filename(capsule_path)] = block
+
+    rows = []
+    for rel_path, entry_type, field, raw_value in collect_enum_debt_signatures(vault):
+        field_def = (type_enums.get(entry_type) or {}).get(field)
+        if field_def is None:
+            continue
+        rows.append({
+            'signature': _enum_debt_signature(
+                entry_type, field, raw_value, _enum_contract_sha256(field_def)
+            ),
+            'type': entry_type,
+            'field': field,
+            'raw_value': raw_value,
+            'contract_sha256': _enum_contract_sha256(field_def),
+            'first_seen_path': rel_path,
+        })
+
+    unique = {row['signature']: row for row in rows}
+    new_signatures = set(unique)
+
+    existing = load_enum_debt_baseline(vault)
+    if existing['present']:
+        old_signatures = set(existing['signatures'])
+        grown = new_signatures - old_signatures
+        if grown:
+            messages.append(
+                '[FAIL] refusing to grow the enum-debt baseline by '
+                '{} signature(s); a baseline that grows is an amnesty'.format(len(grown))
+            )
+            for signature in sorted(grown)[:10]:
+                messages.append('  would add: {}'.format(signature))
+            return messages, 1
+
+    # One digest over every contract these rows were measured against, so the
+    # header can answer 'is this baseline still about the same vocabulary?'
+    contract_digest = hashlib.sha256(
+        '|'.join(sorted({row['contract_sha256'] for row in unique.values()}))
+        .encode('utf-8')
+    ).hexdigest()
+    payload = {
+        'schema_version': 1,
+        'captured_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'contract_sha256': contract_digest,
+        'authority': 'bounded amendment to 271d28d7, Mike-approved 2026-08-16',
+        'contract': 'known signatures WARN; new or changed signatures ERROR; '
+                    'shrink-only; dd570ea4 must empty this file',
+        'row_count': len(unique),
+        'rows': [unique[key] for key in sorted(unique)],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    messages.append('[PASS] wrote {} signature(s) to {}'.format(
+        len(unique), ENUM_DEBT_BASELINE_RELATIVE_PATH))
+    return messages, 0
+
+
+def enum_debt_summary(vault: Path) -> dict:
+    """Enum-side counts for the pairing report's dual-baseline schema.
+
+    Derived from the same check the default pass runs, so the JSON surface and
+    the validator can never disagree about how much enum debt exists.
+    """
+    baseline = load_enum_debt_baseline(vault)
+    findings, _checked, errors, warns = check_enforced_enum_compliance(vault, baseline)
+    known_signatures = set(baseline.get('signatures', {}))
+    seen = set()
+    for rel_path, entry_type, field, raw_value in collect_enum_debt_signatures(vault):
+        for signature in known_signatures:
+            parts = signature.split('|')
+            if len(parts) >= 3 and parts[0] == entry_type and parts[1] == field \
+                    and parts[2] == raw_value.strip().lower():
+                seen.add(signature)
+    return {
+        'present': bool(baseline.get('present')),
+        'row_count': len(known_signatures),
+        'contract_sha256': str(baseline.get('header', {}).get('contract_sha256', '')),
+        'violations': errors + warns,
+        'known_debt': warns,
+        'new_failures': errors,
+        'stale_rows': sorted(known_signatures - seen),
+    }
+
+
+def check_enforced_enum_coverage(vault: Path) -> tuple[list[str], int, int]:
+    """v1.89 271d28d7 AC2 — prove the enum check is not vacuous.
+
+    A check that examines nothing reports the same PASS as a check that examines
+    everything and finds nothing wrong. That is how the enforced-enum resolver
+    stayed broken: it keyed capsule filenames while entries carry bare type
+    names, so it checked zero entries and printed
+    '[PASS] 0 entries checked -- all values PASS' on every run for months.
+
+    Per declared type: discovered source instances must equal checked instances.
+    Zero discovered with zero checked is legal (a fresh Studio owns no entries
+    of that type). Discovered-positive with checked-zero is an ERROR, because
+    that is precisely the shape of a silent skip.
+
+    Returns (findings, types_checked, defects).
+    """
+    findings: list[str] = []
+    capsules_dir = vault / 'vault' / 'capsules'
+    if not capsules_dir.is_dir():
+        return findings, 0, 0
+
+    # Discovery deliberately does NOT use the shared resolver. A gate that polices
+    # a resolver must not depend on it: the first version of this check did, so a
+    # broken resolver made discovery return zero too and the gate went quiet in
+    # exactly the scenario it exists for (caught by its own plant, 2026-08-16).
+    # Both spellings count, so the census survives a mismatch in either direction.
+    declared: set[str] = set()
+    declared_forms: set[str] = set()
+    for capsule_path in sorted(capsules_dir.glob('*.capsule.md')):
+        try:
+            fm = split_frontmatter(capsule_path.read_text(errors='replace'))
+        except OSError:
+            continue
+        if not fm:
+            continue
+        try:
+            parsed = fast_yaml.safe_load(fm)
+        except Exception:
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        enums = parsed.get('enforced_enums')
+        if isinstance(enums, dict) and enums:
+            stem = capsule_path.name.split('.capsule.md')[0]
+            bare = stem[len('tropo-'):] if stem.startswith('tropo-') else stem
+            declared.add(bare)
+            declared_forms.update({stem, bare})
+
+    if not declared:
+        return findings, 0, 0
+
+    # Discovery walks the same corpus the compliance check walks, so the two
+    # counts are comparable by construction rather than by coincidence.
+    discovered: dict[str, int] = {name: 0 for name in declared_forms}
+    search_dirs = [
+        vault / 'vault' / 'files',
+        vault / 'vault' / 'tools',
+        vault / 'vault' / 'session-agents',
+        vault / 'vault' / 'playbooks',
+        vault / 'vault' / 'pipeline-runs',
+        vault / 'vault' / 'loop-runs',
+    ]
+    for d in search_dirs:
+        if not d.is_dir():
+            continue
+        for f in sorted(d.glob('*.md')):
+            try:
+                fm = split_frontmatter(f.read_text(errors='replace'))
+            except OSError:
+                continue
+            if not fm:
+                continue
+            try:
+                parsed = fast_yaml.safe_load(fm)
+            except Exception:
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            entry_type = parsed.get('type')
+            if isinstance(entry_type, str) and entry_type in discovered:
+                discovered[entry_type] += 1
+
+    _, checked_total, _, _ = check_enforced_enum_compliance(vault)
+    discovered_total = sum(discovered.values())
+
+    defects = 0
+    if discovered_total > 0 and checked_total == 0:
+        findings.append(
+            f'  [ERROR] enforced-enum compliance checked 0 entries while '
+            f'{discovered_total} instance(s) of {len(declared)} declared type(s) '
+            f'exist on disk — the check is passing vacuously (type-resolution '
+            f'mismatch between capsule filename and entry type)'
+        )
+        defects += 1
+    else:
+        for name in sorted(declared_forms):
+            if discovered[name] > 0 and checked_total == 0:
+                findings.append(
+                    f'  [ERROR] {name}: {discovered[name]} instance(s) discovered '
+                    f'but none checked'
+                )
+                defects += 1
+
+    return findings, len(declared), defects
 
 
 def check_enforced_enum_coherence(vault: Path) -> tuple[list[str], int, int]:
@@ -7900,102 +8255,6 @@ def check_compact_continue_trigger_copy(vault: Path) -> tuple[list[str], int, in
 SUPPORTED_PYTHON_FLOOR = (3, 9)
 
 
-def check_shipped_python_floor(vault: Path) -> tuple[list[str], int, int]:
-    """Ship-scoped Python must run on the oldest interpreter a Studio presents.
-
-    The demonstrated failure (2026-08-12, gate-1 walk): `tropo-import-walker.py`
-    grew `mount_uid: str | None` — PEP-604, evaluated at def time, 3.10+. Every
-    CI box and every agent VM ran 3.12, so it was green everywhere except the
-    place it mattered: Mike's Mac ships python3 3.9.6 and the walk stopped dead
-    until Metis added postponed annotations mid-session.
-
-    A tool is clean when it either defers annotation evaluation with
-    ``from __future__ import annotations`` or declares a higher floor with
-    ``python_floor:`` in its frontmatter. Deliberately narrow: PEP-604 unions in
-    annotation position only, which is the class that actually broke a
-    deployment target. PEP-585 builtin generics evaluate fine on 3.9.
-
-    Returns (findings, total_checked, defects).
-    """
-    import ast as _ast
-
-    findings: list[str] = []
-    total_checked = 0
-    defects = 0
-
-    def _declares_higher_floor(text: str) -> bool:
-        match = re.search(r'^python_floor:\s*[\'"]?(\d+)\.(\d+)', text, re.M)
-        if not match:
-            return False
-        return (int(match.group(1)), int(match.group(2))) > SUPPORTED_PYTHON_FLOOR
-
-    def _has_postponed_annotations(tree) -> bool:
-        for node in tree.body:
-            if isinstance(node, _ast.ImportFrom) and node.module == '__future__':
-                if any(alias.name == 'annotations' for alias in node.names):
-                    return True
-        return False
-
-    def _pep604_annotation_lines(tree) -> list[int]:
-        lines: list[int] = []
-
-        def scan(annotation) -> None:
-            if annotation is None:
-                return
-            for node in _ast.walk(annotation):
-                if isinstance(node, _ast.BinOp) and isinstance(node.op, _ast.BitOr):
-                    lines.append(getattr(annotation, 'lineno', 0))
-                    return
-
-        for node in _ast.walk(tree):
-            if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
-                for arg in (
-                    *node.args.args,
-                    *node.args.kwonlyargs,
-                    *getattr(node.args, 'posonlyargs', []),
-                ):
-                    scan(arg.annotation)
-                scan(node.returns)
-            elif isinstance(node, _ast.AnnAssign):
-                scan(node.annotation)
-        return sorted(set(lines))
-
-    tools_dir = vault / 'vault' / 'tools'
-    if not tools_dir.is_dir():
-        return findings, total_checked, defects
-
-    for path in sorted(tools_dir.glob('*.py')):
-        try:
-            text = path.read_text(errors='replace')
-        except OSError:
-            continue
-        if not re.search(r'^extraction_scope:\s*ship\s*$', text, re.M):
-            continue
-        total_checked += 1
-        try:
-            tree = _ast.parse(text)
-        except SyntaxError as exc:
-            findings.append(f'[FAIL] {path.relative_to(vault)} — does not parse: {exc}')
-            defects += 1
-            continue
-        if _has_postponed_annotations(tree) or _declares_higher_floor(text):
-            continue
-        lines = _pep604_annotation_lines(tree)
-        if lines:
-            shown = ', '.join(str(n) for n in lines[:5])
-            findings.append(
-                f'[FAIL] {path.relative_to(vault)} — PEP-604 union annotation(s) at '
-                f'line(s) {shown} with no postponed annotations and no declared '
-                f'python_floor. This ships to Studios whose python3 is '
-                f'{SUPPORTED_PYTHON_FLOOR[0]}.{SUPPORTED_PYTHON_FLOOR[1]}, where the '
-                f'def fails at import. Cure: add `from __future__ import annotations` '
-                f'before executable code, or declare `python_floor:` in frontmatter'
-            )
-            defects += 1
-
-    return findings, total_checked, defects
-
-
 def check_ship_python_interpreter_floor(vault: Path) -> tuple[list[str], int, int]:
     """Ship-scoped Python must run on the oldest interpreter a Studio presents.
 
@@ -8012,6 +8271,13 @@ def check_ship_python_interpreter_floor(vault: Path) -> tuple[list[str], int, in
     via ``python_floor:`` in its frontmatter. Runtime PEP-604 (isinstance
     unions, typing at call time) is out of scope — annotations are where this
     class actually bites, because postponing them is a one-line fix.
+
+    Discovery runs through the one canonical tool-frontmatter parser, and the
+    corpus it finds is compared against the corpus this check opens. The first
+    wiring of this gate examined zero tools and printed PASS; the second missed
+    three shipped tools whose frontmatter opens on the docstring line. Both were
+    green. A count that cannot disagree with itself is what turns the third
+    version into evidence.
 
     Returns (findings, total_checked, defects).
     """
@@ -8053,20 +8319,28 @@ def check_ship_python_interpreter_floor(vault: Path) -> tuple[list[str], int, in
         return sorted(set(lines))
 
     tools_dir = vault / 'vault' / 'tools'
-    if not tools_dir.is_dir():
+    # Tools AND the lib/ helpers they import. A shipped tool whose helper
+    # carries a 3.10-only annotation fails on a 3.9 Studio at import, exactly
+    # as if the annotation were its own, so a census of tools alone reports a
+    # floor the shipped code does not meet (A150 ruling, 2026-08-16).
+    census = python_tool_frontmatter.shipped_census(tools_dir)
+    discovered = len(census)
+    if not discovered:
         return findings, total_checked, defects
 
-    for path in sorted(tools_dir.glob('*.py')):
+    for path in census:
         try:
             text = path.read_text(errors='replace')
-        except OSError:
+        except OSError as exc:
+            findings.append(
+                f'[FAIL] {path.relative_to(vault)} — in the ship census but '
+                f'could not be read: {exc}'
+            )
+            defects += 1
             continue
-        # Tool frontmatter lives inside the module docstring, after the shebang,
-        # so the markdown splitter does not see it.
-        block = re.search(r'^---\n(.*?)\n---\s*$', text, re.S | re.M)
-        fm_text = block.group(1) if block else None
-        if fm_text is None or get_scalar(fm_text, 'extraction_scope') != 'ship':
-            continue
+        # Helpers carry no frontmatter, so they can only clear the rule with
+        # postponed annotations — there is nowhere for them to declare a floor.
+        fm_text = python_tool_frontmatter.tool_frontmatter(text) or ''
         total_checked += 1
         try:
             tree = ast.parse(text)
@@ -8094,6 +8368,14 @@ def check_ship_python_interpreter_floor(vault: Path) -> tuple[list[str], int, in
                 f'default interpreter on a stock macOS Studio'
             )
             defects += 1
+
+    if total_checked != discovered:
+        findings.append(
+            f'[FAIL] ship-floor coverage — {discovered} shipped tool(s) discovered, '
+            f'{total_checked} examined. The gate narrowed its own corpus, so its '
+            f'verdict does not cover every tool that ships'
+        )
+        defects += 1
 
     return findings, total_checked, defects
 
@@ -11044,6 +11326,223 @@ def check_every_agent_can_still_boot(vault: Path) -> tuple[list[str], int, int]:
     return findings, checked, blocked
 
 
+# ── v1.89 dev-spec 5fffbbe9: retirement ceremony completeness + card drift ──
+# WARN-ONLY BY CONTRACT. The close is one ungated lineage command; this check
+# observes the practice debt it leaves behind and names each missing artifact.
+# It may never increment the FAIL count, never call tropo-lineage.py, and never
+# suggest fabricating a record — recovery is honest artifacts with real
+# timestamps, after the fact, or the warning stands.
+
+ARGO_EXECUTIVE_SLUGS = {'metis', 'argus', 'talos', 'vela', 'orpheus', 'silas'}
+
+
+def _latest_retired_generation(lines: list) -> tuple:
+    """(gen, retired_at) of the most recent generation that closed, else (None, None)."""
+    live, latest = None, (None, None)
+    for l in lines:
+        if l.get('t') == 'born':
+            live = l
+        elif l.get('t') == 'retired' and live and l.get('gen') == live.get('gen'):
+            latest = (live.get('gen'), l.get('at', ''))
+    return latest
+
+
+def _gen_number(gen: str):
+    """The numeric part of a generation tag ('T46' -> 46; 'G1' -> 1; else None)."""
+    m = re.search(r'(\d+)$', str(gen or '').strip())
+    return int(m.group(1)) if m else None
+
+
+def _names_generation(haystack: str, gen: str) -> bool:
+    """Does `haystack` name this generation? Matches the full tag ('T46') or the
+    number as a token ('T1' names G1 — the prefix is per-agent convention, the
+    number is the identity; token-bounded so T4 never matches T46)."""
+    gen = str(gen or '').strip()
+    if not gen:
+        return False
+    if gen.lower() in haystack.lower():
+        return True
+    n = _gen_number(gen)
+    if n is None:
+        return False
+    return re.search(rf'(?<![0-9]){n}(?![0-9])', haystack) is not None
+
+
+def _has_reflection(agent_dir: Path, gen: str) -> bool:
+    refl = agent_dir / 'reflections'
+    if not refl.is_dir():
+        return False
+    return any(_names_generation(p.stem, gen) for p in refl.glob('*.md'))
+
+
+def _has_fold(agent_dir: Path, gen: str, session_date: str) -> bool:
+    """A fold-boundary event for this generation, or a surface curated at/after it."""
+    jsonl = agent_dir / '.tropo-capsule' / 'memory' / 'agent-memories.jsonl'
+    if jsonl.is_file():
+        try:
+            for raw in jsonl.read_text(encoding='utf-8', errors='replace').splitlines():
+                if not raw.strip():
+                    continue
+                try:
+                    rec = json.loads(raw)
+                except ValueError:
+                    continue
+                if not isinstance(rec, dict):
+                    continue
+                kind = str(rec.get('event') or rec.get('type') or '').lower()
+                if 'fold' not in kind and 'boundary' not in kind:
+                    continue
+                if _names_generation(str(rec.get('generation', '')), gen):
+                    return True
+                dated = str(rec.get('ts') or rec.get('date') or '')[:10]
+                if dated and session_date and dated >= session_date:
+                    return True
+        except OSError:
+            pass
+    surface = agent_dir / '.tropo-capsule' / 'memory' / 'agent-memory.md'
+    if surface.is_file():
+        try:
+            m = re.search(r'^last_curated:\s*["\']?(\d{4}-\d{2}-\d{2})',
+                          surface.read_text(encoding='utf-8', errors='replace'),
+                          re.MULTILINE)
+            if m and (not session_date or m.group(1) >= session_date):
+                return True
+        except OSError:
+            pass
+    return False
+
+
+def check_retirement_ceremony_completeness(vault: Path) -> tuple[list[str], int, int]:
+    """v1.89 5fffbbe9 AC5/AC8 — ceremony completeness, observed and reported.
+
+    Reads the most recent retired generation per agent, scoped to the last 30
+    days. Historical gaps are history, not a to-do list — warning on every
+    retirement that ever happened is how a check trains people to ignore it,
+    and the spec's own risk note names that noise. (Po's July record and the
+    2026-05 Tropo retirement stay silent for exactly this reason; a WARN on a
+    concierge representative's two-month-old close is the noise class Mike
+    pinned out at 9d754abb.) For in-scope generations it observes: the memory
+    fold, the reflection, and the Captain's Log line for Argo executives.
+    Findings are [WARN] strings naming the agent, the artifact and the honest
+    recovery; `defects` is structurally 0 because this check is the observation
+    half of the layered truth — the close already succeeded, and no warning may
+    retroactively fail it.
+    """
+    findings: list[str] = []
+    checked = 0
+    lineage_root = vault / 'agents'
+    if not lineage_root.is_dir():
+        return findings, checked, 0
+    horizon = datetime.now(timezone.utc).date() - timedelta(days=30)
+    for path in sorted(lineage_root.glob('*/lineage.jsonl')):
+        slug = path.parent.name
+        try:
+            lines = [json.loads(l) for l in
+                     path.read_text(encoding='utf-8', errors='replace').splitlines()
+                     if l.strip()]
+        except (OSError, ValueError):
+            continue
+        gen, retired_at = _latest_retired_generation(lines)
+        if not gen:
+            continue
+        closed_date = (retired_at or '')[:10]
+        try:
+            if datetime.strptime(closed_date, '%Y-%m-%d').date() < horizon:
+                continue
+        except ValueError:
+            continue  # no parseable close date: no recency claim, no warning
+        checked += 1
+        session_date = (retired_at or '')[:10]
+        missing = []
+        if not _has_fold(path.parent, gen, session_date):
+            missing.append('memory fold (no fold-boundary dated at or after the '
+                           'session in agent-memories.jsonl / agent-memory.md)')
+        if not _has_reflection(path.parent, gen):
+            missing.append('reflection (nothing at reflections/ matching this '
+                           'generation)')
+        if slug in ARGO_EXECUTIVE_SLUGS:
+            log = vault / 'library' / 'captains-log.md'
+            has_log = log.is_file() and _names_generation(
+                log.read_text(encoding='utf-8', errors='replace'), gen)
+            if not has_log:
+                missing.append("Captain's Log line for this generation")
+        for artifact in missing:
+            findings.append(
+                f'[WARN] retirement practice: {slug} {gen} closed '
+                f'{retired_at or "(date unknown)"} without: {artifact}. Required '
+                f'practice, recoverable after the fact — write the real artifact '
+                f'with its real timestamps; never backdate and never invent a '
+                f'record. This warning clears when the honest artifact lands.'
+            )
+    return findings, checked, 0
+
+
+def check_lifecycle_card_drift(vault: Path) -> tuple[list[str], int, int]:
+    """v1.89 5fffbbe9 — unified-entry lifecycle fields vs lineage truth, WARN-only.
+
+    The lineage file is the record; the entry's status/generation are a
+    convenience surface synced best-effort by tropo-lineage.py after each
+    append. When they disagree, lineage wins (the crew brief already renders
+    lineage), and the disagreement is reported here as a warning — never an
+    error, because a stale card cannot mislead a reader who is told it is stale.
+    """
+    findings: list[str] = []
+    checked = 0
+    lineage_root = vault / 'agents'
+    entries_root = vault / 'vault' / 'agents'
+    if not lineage_root.is_dir():
+        return findings, checked, 0
+    for path in sorted(lineage_root.glob('*/lineage.jsonl')):
+        slug = path.parent.name
+        pointer = lineage_root / slug / f'{slug}-activation.md'
+        if not pointer.is_file():
+            continue
+        m = re.search(r'^agent_uid:\s*([0-9a-fA-F]{8})\s*$',
+                      pointer.read_text(encoding='utf-8', errors='replace'),
+                      re.MULTILINE)
+        if not m:
+            continue
+        entry = entries_root / f'{m.group(1)}.md'
+        if not entry.is_file():
+            continue
+        try:
+            lines = [json.loads(l) for l in
+                     path.read_text(encoding='utf-8', errors='replace').splitlines()
+                     if l.strip()]
+        except (OSError, ValueError):
+            continue
+        live = None
+        retired = False
+        for l in lines:
+            if l.get('t') == 'born':
+                live = l
+                retired = False
+            elif l.get('t') == 'retired' and live and l.get('gen') == live.get('gen'):
+                retired = True
+        if live is None:
+            continue
+        checked += 1
+        text = entry.read_text(encoding='utf-8', errors='replace')
+        truth_gen = str(live.get('gen', ''))
+        truth_status = 'retired' if retired else 'active'
+
+        def field(name: str):
+            fm = re.search(rf'^{name}:\s*(.+)$', text, re.MULTILINE)
+            return fm.group(1).strip().strip('\'"').lower() if fm else None
+
+        card_gen, card_status = field('generation'), field('status')
+        if (card_gen and card_gen.lower() != truth_gen.lower()) or \
+           (card_status and card_status.lower() != truth_status):
+            findings.append(
+                f'[WARN] lifecycle card drift: {slug} entry says '
+                f'generation={card_gen} status={card_status}; lineage says '
+                f'{truth_gen}/{truth_status}. Lineage is the record and renders '
+                f'crew state; the card fields sync best-effort at the next '
+                f'born/retire (5fffbbe9 AC6).'
+            )
+    return findings, checked, 0
+
+
 def _agent_class_has_a_birth_lifecycle(record) -> bool:
     """Whether this activation belongs to something that is BORN, not just run.
 
@@ -11887,12 +12386,121 @@ def main() -> int:
                              "receipt's recorded verification_command and compares exit_code + "
                              'output_sha256 against what was recorded, flagging drift/tamper. '
                              'Off by default (real command re-execution; not a routine-pass default).')
+    parser.add_argument('--write-state-pairing-baseline', action='store_true',
+                        dest='write_state_pairing_baseline',
+                        help='v1.89 271d28d7: capture (or shrink) the measured pairing debt '
+                             'baseline. Known signatures then WARN; any new or changed signature '
+                             'ERRORs. Shrink-only: growth refuses.')
+    parser.add_argument('--write-enum-debt-baseline', action='store_true',
+                        dest='write_enum_debt_baseline',
+                        help='v1.89 bounded amendment: capture (or shrink) the measured '
+                             'enum-debt baseline. Known signatures then WARN while any new or '
+                             'changed signature ERRORs. Shrink-only: growth refuses.')
+    parser.add_argument('--state-pairing-json', action='store_true',
+                        dest='state_pairing_json',
+                        help='v1.89 271d28d7 AC3: exclusive report mode. Emits one stable JSON '
+                             'document on stdout (diagnostics to stderr). Exit 0 means the '
+                             'evaluation completed and violations may be reported; exit 2 means a '
+                             'malformed contract or an incomplete census.')
+    parser.add_argument('--require-state-pairing-zero', action='store_true',
+                        dest='require_state_pairing_zero',
+                        help='v1.89 271d28d7 AC3: exclusive closure gate. Same JSON shape; exits 0 '
+                             'ONLY for a complete census with zero violations and an empty '
+                             'baseline. Violations or stale baseline rows exit 1; malformed or '
+                             'incomplete evaluation exits 2.')
     args = parser.parse_args()
+
+    # The machine modes are mutually exclusive with each other and with the
+    # fingerprint writer, and compose only with --vault-path. A mode that
+    # silently co-runs with another writes two truths to one stdout.
+    _pairing_modes = [
+        name for name, on in (
+            ('--state-pairing-json', args.state_pairing_json),
+            ('--require-state-pairing-zero', args.require_state_pairing_zero),
+            ('--write-enum-debt-baseline', args.write_enum_debt_baseline),
+            ('--write-state-pairing-baseline', args.write_state_pairing_baseline),
+        ) if on
+    ]
+    if len(_pairing_modes) > 1:
+        parser.error('{} are mutually exclusive'.format(' and '.join(_pairing_modes)))
+    if _pairing_modes and args.write_fingerprints is not None:
+        parser.error('{} cannot be combined with --write-fingerprints'.format(_pairing_modes[0]))
+    if _pairing_modes:
+        for flag, on in (('--release', args.release), ('--customer', args.customer),
+                         ('--thorough', args.thorough)):
+            if on:
+                parser.error('{} composes only with --vault-path; got {}'.format(
+                    _pairing_modes[0], flag))
 
     vault = resolve_vault_root(args.vault_path)
     if vault is None:
         print('ERROR: Could not resolve vault root.', file=sys.stderr)
         return 2
+
+    # --- v1.89 271d28d7: pairing-debt baseline capture (early return) ---
+    if args.write_state_pairing_baseline:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        try:
+            from lib import lifecycle_pairing as _lp
+            messages, code = _lp.write_pairing_baseline(vault)
+        except Exception as exc:
+            print('ERROR: pairing baseline capture failed: {}'.format(exc), file=sys.stderr)
+            return 2
+        for message in messages:
+            print(message)
+        return code
+
+    # --- v1.89 bounded amendment: enum-debt baseline capture (early return) ---
+    if args.write_enum_debt_baseline:
+        try:
+            messages, code = write_enum_debt_baseline(vault)
+        except Exception as exc:
+            print('ERROR: enum-debt baseline capture failed: {}'.format(exc), file=sys.stderr)
+            return 2
+        for message in messages:
+            print(message)
+        return code
+
+    # --- v1.89 271d28d7 AC3: exclusive pairing machine modes (early return) ---
+    if args.state_pairing_json or args.require_state_pairing_zero:
+        strict = bool(args.require_state_pairing_zero)
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        try:
+            from lib import lifecycle_pairing as _lp
+        except Exception as exc:
+            print('ERROR: cannot load lifecycle_pairing: {}'.format(exc), file=sys.stderr)
+            return 2
+        try:
+            report = _lp.build_report(
+                vault,
+                mode='require-zero' if strict else 'report',
+                enum_summary=enum_debt_summary(vault),
+            )
+        except Exception as exc:
+            print('ERROR: pairing evaluation failed: {}'.format(exc), file=sys.stderr)
+            return 2
+        # stdout carries the document and nothing else, so a caller can pipe it
+        # straight into a parser without stripping human chatter.
+        print(json.dumps(report, sort_keys=True))
+        if not report['complete']:
+            print('pairing census incomplete; see errors[]', file=sys.stderr)
+            return 2
+        if not strict:
+            return 0
+        if report['gate_pass']:
+            return 0
+        counts = report['counts']
+        baselines = report['baselines']
+        print(
+            'pairing gate not clean: {} pairing violation(s) ({} known), '
+            '{} enum violation(s) ({} known); baseline rows pairing={} enum={}'.format(
+                counts['pairing_violations'], counts['pairing_known_debt'],
+                counts['enum_violations'], counts['enum_known_debt'],
+                baselines['pairing']['row_count'], baselines['enum']['row_count'],
+            ),
+            file=sys.stderr,
+        )
+        return 1
 
     # --- v1.70 S3.5.2: Write Fingerprints Mode ---
     if args.write_fingerprints is not None:
@@ -13972,6 +14580,22 @@ def main() -> int:
         print(f'[FAIL] Check-21 CRASHED: {_e}')
         total_fails += 1
 
+    # --- v1.89 271d28d7 AC2: Enforced-Enum Coverage (vacuous-pass gate; ERROR) ---
+    print('\n--- Enforced-Enum Coverage (v1.89 271d28d7 AC2; anti-vacuous; ERROR) ---')
+    try:
+        cov_findings, cov_types, cov_defects = check_enforced_enum_coverage(vault)
+        if cov_defects == 0:
+            print(f'[PASS] {cov_types} declared type(s) — compliance check examined its corpus')
+            total_passes += 1
+        else:
+            print(f'[FAIL] {cov_types} declared type(s); {cov_defects} coverage defect(s)')
+            for line in cov_findings:
+                print(line)
+                total_fails += 1
+    except Exception as e:
+        print(f'[FAIL] enforced-enum coverage CRASHED: {e}')
+        total_fails += 1
+
     # --- v1.65 + c4512bdc Piece 1: Enforced-Enum Compliance (three-way classify) ---
     print('\n--- Enforced-Enum Compliance (v1.72 Move 7; three-way PASS/WARN/ERROR) ---')
     try:
@@ -14502,6 +15126,43 @@ def main() -> int:
         print(f'[FAIL] dev-spec-activation-coupling check CRASHED: {e}')
         _tb.print_exc()
         total_fails += 1
+
+    # --- v1.89 5fffbbe9: retirement ceremony completeness + card drift (WARN-ONLY) ---
+    # The observation half of the layered truth: the close already succeeded;
+    # these findings name practice debt and stale convenience fields, and by
+    # contract never increment total_fails.
+    print('\n--- Retirement Practice (v1.89 5fffbbe9; WARN-only — observed, never enforced) ---')
+    try:
+        rc_findings, rc_checked, _rc_defects = check_retirement_ceremony_completeness(vault)
+        if rc_checked == 0:
+            print('[INFO] No retired generations found — nothing to observe')
+        elif not rc_findings:
+            print(f'[PASS] {rc_checked} retired generation(s) checked — practice '
+                  f'complete on every one')
+            total_passes += 1
+        else:
+            print(f'[WARN] {rc_checked} retired generation(s) checked; practice '
+                  f'debt on some (never a close gate):')
+            total_warnings += len(rc_findings)
+            for line in rc_findings[:25]:
+                print(f'  {line}')
+            if len(rc_findings) > 25:
+                print(f'  ... and {len(rc_findings) - 25} more')
+    except Exception as e:
+        print(f'[WARN] retirement-practice check CRASHED: {e} (warn-only; not a fail)')
+    try:
+        cd_findings, cd_checked, _cd_defects = check_lifecycle_card_drift(vault)
+        if cd_checked and cd_findings:
+            print(f'[WARN] lifecycle card drift on {len(cd_findings)} entry(ies); '
+                  f'lineage is the record:')
+            total_warnings += len(cd_findings)
+            for line in cd_findings[:25]:
+                print(f'  {line}')
+        elif cd_checked:
+            print(f'[PASS] {cd_checked} unified entry(ies) agree with lineage')
+            total_passes += 1
+    except Exception as e:
+        print(f'[WARN] card-drift check CRASHED: {e} (warn-only; not a fail)')
 
     # --- Fleet Boot Health (metis-g97): can every agent still be born? ---
     print('\n--- Fleet Boot Health (a gate on BIRTH fails when nobody is home) ---')

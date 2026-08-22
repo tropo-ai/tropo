@@ -1538,24 +1538,48 @@ def live_fingerprint() -> tuple:
             if p.is_file()
         )
 
+    # `.tropo-studio/locks` is DELIBERATELY excluded: locks are transient
+    # shared runtime state — any concurrent tool taking a lock changes their
+    # mtimes — so "the live studio was left alone" cannot include them without
+    # failing on normal co-resident use (found red by the 2026-08-21
+    # suite-health baseline; diagnosed in the inbox finding same day).
     return (
         stamp(LIVE_STUDIO / "vault" / "files"),
         stamp(LIVE_STUDIO / "vault" / "agents"),
         stamp(LIVE_STUDIO / "recycle"),
-        stamp(LIVE_STUDIO / ".tropo-studio" / "locks"),
     )
 
 
 _LIVE_AT_START: tuple = ()
 _LIVE_GIT_AT_START: str = ""
+_LIVE_HEAD_AT_START: str = ""
+
+
+def _head_now() -> str:
+    """The live studio's HEAD, for co-residency attribution.
+
+    This crew runs multiple agent sessions against one working tree. A guard
+    that snapshots world state before/after cannot tell 'the suite wrote' from
+    'a co-resident landed mid-window' by state alone — but a moved HEAD is a
+    co-resident COMMIT, and that fact degrades both guards to a recorded
+    warning instead of a false failure. The assertion teeth are preserved for
+    the single-writer window (found red by the 2026-08-21 suite-health
+    baseline: 8 in-flight files were committed by other sessions mid-suite
+    and the teardown read it as suite-caused pollution)."""
+    return git(LIVE_STUDIO, "rev-parse", "HEAD", check=False).stdout.strip()
+
+
+def _coresident_landed(start_head: str) -> bool:
+    return bool(_head_now()) and bool(start_head) and _head_now() != start_head
 
 
 def setUpModule():
-    global _LIVE_AT_START, _LIVE_GIT_AT_START
+    global _LIVE_AT_START, _LIVE_GIT_AT_START, _LIVE_HEAD_AT_START
     for patcher in _SOCKET_PATCHERS:
         patcher.start()
     _LIVE_AT_START = live_fingerprint()
     _LIVE_GIT_AT_START = git(LIVE_STUDIO, "status", "--porcelain", check=False).stdout
+    _LIVE_HEAD_AT_START = _head_now()
 
 
 def tearDownModule():
@@ -1563,6 +1587,16 @@ def tearDownModule():
         patcher.stop()
     after_git = git(LIVE_STUDIO, "status", "--porcelain", check=False).stdout
     if after_git != _LIVE_GIT_AT_START:
+        if _coresident_landed(_LIVE_HEAD_AT_START):
+            print(
+                "WARNING (co-residency): live git state changed during the "
+                "suite AND a co-resident session committed mid-run — the "
+                "delta below is theirs, not the suite's; guard degraded to "
+                "warning (single-writer teeth unchanged).\n"
+                f"before:\n{_LIVE_GIT_AT_START}\nafter:\n{after_git}",
+                file=sys.stderr,
+            )
+            return
         raise AssertionError(
             "this suite changed the LIVE studio's git state; every probe must "
             "run against the fixture it was handed\n"
@@ -1592,11 +1626,25 @@ class SmokeCase(unittest.TestCase):
 
     def setUp(self) -> None:
         self._live_before = live_fingerprint()
+        self._live_head_before = _head_now()
 
-    def tearDown(self) -> None:
+    def tearDown(self):
+        after = live_fingerprint()
+        if after != self._live_before and _coresident_landed(self._live_head_before):
+            # Same attribution rule as the module guard: a co-resident COMMIT
+            # during the case makes the fingerprint delta unattributable to
+            # the suite — record it, don't fail on it.
+            print(
+                "WARNING (co-residency): live fingerprint changed during the "
+                "case AND a co-resident session committed mid-case — delta is "
+                "theirs, not the suite's; guard degraded to warning "
+                "(single-writer teeth unchanged).",
+                file=sys.stderr,
+            )
+            return
         self.assertEqual(
             self._live_before,
-            live_fingerprint(),
+            after,
             msg="a probe wrote to the LIVE studio. Probes must resolve every "
             "path from the studio argument, never from the tool's own location.",
         )
@@ -5009,10 +5057,26 @@ class ORIENTTests(SmokeCase):
         with this test looking in the wrong directory.
         """
         def compiled() -> set:
-            return {
+            # Apple's Python builds default sys.pycache_prefix to a user
+            # cache tree (~/Library/Caches/com.apple.python/<abs-path-mirror>),  # portability:exempt — names the macOS default pycache location
+            # so bytecode NEVER lands beside sources on this machine. The
+            # control arm caught exactly that: the observation was looking
+            # only beside-source and could never see a write. Observe BOTH
+            # trees, filtered to this fixture's paths.
+            beside_source = {
                 path.relative_to(studio).as_posix()
                 for path in (studio / "vault" / "tools").rglob("*.pyc")
             }
+            mirrored = set()
+            prefix = getattr(sys, "pycache_prefix", None)
+            if prefix:
+                mirror_root = Path(prefix) / Path(*studio.parts[1:])
+                if mirror_root.is_dir():
+                    mirrored = {
+                        str(path)[len(str(mirror_root)) + 1:]
+                        for path in mirror_root.rglob("*.pyc")
+                    }
+            return beside_source | mirrored
 
         studio = self.studio()
         before = census(studio)

@@ -80,13 +80,13 @@ Projects that want a different status board declare their own `status_board:` UI
 
 ## Pre-Seed Halt Behavior
 
-If this definition is not in the ledger (e.g., a vault that has never run apply-update), the lookup halts fail-loud per [ADR-035 (a7c4e5b2)](../../../vault/files/a7c4e5b2.md). The vault admin (or their concierge) runs the [apply-update playbook (`.tropo/playbooks/apply-update.playbook.md`)](../../playbooks/apply-update.playbook.md) to land the seed. No silent fallback.
+If this definition is not in the Vault (e.g., a vault that has never run apply-update), the lookup halts fail-loud per [ADR-035 (a7c4e5b2)](../../../vault/files/a7c4e5b2.md). The vault admin (or their concierge) runs the [apply-update playbook (`.tropo/playbooks/apply-update.playbook.md`)](../../playbooks/apply-update.playbook.md) to land the seed. No silent fallback.
 
 ---
 
 ## Provenance
 
-Authored by Argus A29 on 2026-04-20 as part of [Board Reconciliation v0.3 (74fd9b61)](../../../vault/files/74fd9b61.md) Stream 2 implementation. Ships with every Tropo-OS vault via the `.tropo/seed/vault/` propagation mechanism.
+Authored by Argus A29 on 2026-04-20 as part of [Board Reconciliation v0.3 (74fd9b61)](../../../vault/files/74fd9b61.md) Stream 2 implementation. Ships with every Tropo Studio via the `.tropo/seed/vault/` propagation mechanism.
 
 The sections above are lifted from [v0.3 §7.3](../../../vault/files/74fd9b61.md) which is the canonical spec. If future spec revisions change §7.3, this seed is revised in lockstep.
 

@@ -131,8 +131,8 @@ def resolve_vault_root(explicit_path):
         p = Path(explicit_path).resolve()
         if not _has_anchor(p):
             raise SystemExit(
-                f"--vault-path {p} contains no Tropo-OS vault anchor "
-                f"({anchor_list}). Not a Tropo-OS vault."
+                f"--vault-path {p} contains no Tropo Studio anchor "
+                f"({anchor_list}). Not a Tropo Studio."
             )
         return p
 

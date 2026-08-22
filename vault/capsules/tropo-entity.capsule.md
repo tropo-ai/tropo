@@ -197,7 +197,7 @@ Subtype capsules MUST NOT:
 **Tools available:**
 - `python3 vault/tools/tropo-validate.py` — runs entity.capsule's 10 validation checks including principal grounding + cycle detection
 - Activity log protocol — every entity action grounds back to a principal; verify chain resolves
-- Registry pointers per [adac1f10](../../vault/files/adac1f10.md) matched-primitives topology: `.tropo-studio/registries/agent-registry.yaml` (agent-subtype identity), `vault/00-index.jsonl` (entity records that live in the ledger), folder listings (entity records that live elsewhere — discoverable via path).
+- Registry pointers per [adac1f10](../../vault/files/adac1f10.md) matched-primitives topology: `.tropo-studio/registries/agent-registry.yaml` (agent-subtype identity), `vault/00-index.jsonl` (entity records that live in the Vault), folder listings (entity records that live elsewhere — discoverable via path).
 
 **Skills:**
 - `create-entity.skill.md` *(forthcoming v1.4 deliverable)* — authors a new entity with principal grounding + subtype selection

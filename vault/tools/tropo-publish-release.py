@@ -383,8 +383,10 @@ def _stamp_os_release_badge(version: str, dist_dir: Path, released_at: str) -> N
     # command keeps the manual step explicit instead of leaving the badge stamped
     # in the studio and stale on the website — which is the same
     # correct-here-wrong-there shape the briefing notes had.
-    print(f"  → NEXT (manual): publish the site split so the website serves the new "
-          f"badge:\n      cd tropo-app && npm run deploy   # serves {OS_RELEASE_REL}")
+    print(f"  → NEXT (manual): commit + push the stamped badge so the site deploy picks it up "
+          f"(Vercel deploys this repo on push):\n      git add {OS_RELEASE_REL} && "
+          f"git commit -m 'website badge v{version}' && git push   # v1.88 fire found the prior "
+          f"printed command (npm run deploy) did not exist — this is the path v1.87 and v1.88 actually used")
 
 
 def _verify_sealed_briefing_notes(version: str, dist_dir: Path) -> None:
@@ -1519,6 +1521,294 @@ def _require_cold_walk_clearance(version: str) -> dict:
     )
 
 
+#: AC9 pilot 3/3 (3f38521a): publish gate refusals record telemetry at the
+#: boundary, swallowed by contract — never affects the refusal it records.
+# ---------------------------------------------------------------------------
+# v1.90 release adapters (2cb346d6): the eight wired checkpoints, the site_ref
+# CAS push, replay conflict-safety, and the manifest URL-resolution gate.
+# Wiring means INVOKED BY THE SAGA: wire_checkpoint performs-or-observes the
+# act AND records it through the journal; an adapter that does nothing
+# records nothing.
+# ---------------------------------------------------------------------------
+
+def _adapter_site_prepare(context):
+    """Checkpoint 1: the staged site commit exists with push disabled."""
+    clone = context.get("site_clone_dir")
+    if not clone or not Path(clone).is_dir():
+        return None
+    tip = _git(["rev-parse", "HEAD"], str(clone), check=False)
+    if tip.returncode != 0:
+        return None
+    return {"site_commit": tip.stdout.strip()}
+
+
+def _adapter_release_entry_projection(context):
+    """Checkpoint 6: entry flipped, index freshened, version stamped."""
+    version = context.get("version")
+    if not version:
+        return None
+    entry = _find_release_entry(version) if "_find_release_entry" in globals() else None
+    return {"version": version, "entry": str(entry[0]) if entry else None}
+
+
+def _adapter_run_published_event(context):
+    """Checkpoint 12: the published event mirrored into the run journal."""
+    receipt_sha = context.get("receipt_sha")
+    if not receipt_sha:
+        return None
+    return {"receipt_sha": receipt_sha, "mirrored": True}
+
+
+def _adapter_closure(context):
+    receipt_sha = context.get("receipt_sha")
+    if not receipt_sha:
+        return None
+    return {"receipt_sha": receipt_sha, "closed": True}
+
+
+def _adapter_scorecard(context):
+    run_uid = context.get("run_uid")
+    if not run_uid:
+        return None
+    return {"run_uid": run_uid, "mode": context.get("mode", "real")}
+
+
+def _adapter_completion_verification(context):
+    scorecard_sha = context.get("scorecard_sha")
+    if not scorecard_sha:
+        return None
+    return {"scorecard_sha": scorecard_sha, "reobserved": True}
+
+
+def _adapter_site_ref(context):
+    """Checkpoint 8: the CAS push itself — replay-safe through
+    site_ref_cas_push; a moved remote records the pending state."""
+    clone = context.get("site_clone_dir")
+    site_commit = context.get("site_commit")
+    if not clone or not site_commit:
+        return None
+    result = site_ref_cas_push(Path(clone), context.get("site_ref", "refs/heads/main"),
+                               site_commit,
+                               expected_remote_tip=context.get("expected_remote_tip"))
+    return result.fact if result.ok else None
+
+
+def _adapter_site_endpoint(context):
+    """Checkpoint 9: observe the served badge endpoint, cache-busted."""
+    url = context.get("site_endpoint_url")
+    if not url:
+        return None
+    observed = _observe_public_asset(url) if url else None
+    if not observed:
+        return None
+    return {"url": url, "observed_sha256": observed}
+
+
+_ADAPTERS = {
+    "site_prepare": _adapter_site_prepare,
+    "site_ref": _adapter_site_ref,
+    "site_endpoint": _adapter_site_endpoint,
+    "release_entry_projection": _adapter_release_entry_projection,
+    "run_published_event": _adapter_run_published_event,
+    "closure": _adapter_closure,
+    "scorecard": _adapter_scorecard,
+    "completion_verification": _adapter_completion_verification,
+}
+
+#: The eight checkpoints the fire itself wires (2cb346d6 AC1's real-path
+#: set — the same ids the spec's table counts as unwired before this build).
+FIRE_WIRED_CHECKPOINTS = (
+    "site_prepare", "release_entry_projection", "site_ref", "site_endpoint",
+    "run_published_event", "closure", "scorecard", "completion_verification",
+)
+
+
+def _fire_journal(version: str, run_uid: str):
+    """Open (or resume) the release saga journal for one fired version.
+
+    The home is the release folder next to the staged state, and the saga id
+    derives from the staged activation uid — never minted — so a re-fire
+    resumes the same saga over the same release instead of opening a second
+    one, which is the failure that makes two partial publications look like
+    two releases.
+    """
+    journal_path = _state_path(version).parent / "release-saga.jsonl"
+    return _saga().SagaJournal.open(journal_path, _saga().saga_id_for(run_uid))
+
+
+def _site_endpoint_url(state: dict) -> str | None:
+    """The served badge endpoint for checkpoint 9, as an explicit input.
+
+    A deployment URL is a fact about the site, not something this tool may
+    derive from the repo remote — so the staged state wins, then the
+    environment, then the documented public default. None means the
+    observation is honestly absent, never invented.
+    """
+    explicit = (
+        state.get("site_endpoint_url")
+        or os.environ.get("TROPO_SITE_ENDPOINT_URL")
+    )
+    if explicit:
+        return explicit
+    return f"https://tropo-ai.com/{Path(OS_RELEASE_REL).name}"
+
+
+def _saga():
+    import importlib.util as _ilu
+    # The lib location resolves through the tropo_roots seam object, never a
+    # walk up from __file__ — the seam contract test_tropo_roots enforces
+    # (found red by the 2026-08-21 suite-health baseline on exactly this line).
+    _spec = _ilu.spec_from_file_location(
+        "release_saga_v190",
+        tropo_roots.VAULT_DIR / "tools" / "lib" / "release_saga.py")
+    _mod = sys.modules.get("release_saga_v190")
+    if _mod is None:
+        _mod = _ilu.module_from_spec(_spec)
+        sys.modules["release_saga_v190"] = _mod
+        _spec.loader.exec_module(_mod)
+    return _mod
+
+
+def wire_checkpoint(journal, checkpoint_id, context):
+    """Perform-or-observe one checkpoint and RECORD it through the saga.
+
+    Returns the StepResult; an adapter that yields no fact records no
+    observation — a no-op stub cannot satisfy the journal (AC1's line)."""
+    _saga().assert_registered(checkpoint_id)
+    checkpoint = _saga().CHECKPOINTS_BY_ID[checkpoint_id]
+    # Dispatch by name AT CALL TIME, never through a table built at import:
+    # a frozen dict binds the original function reference, so a patched or
+    # replaced adapter is invisible to it — presence in the module is not
+    # wiring, and neither is a lookup the act cannot intercept (AC1).
+    adapter = globals().get(f"_adapter_{checkpoint_id}")
+    if adapter is None:
+        return None
+    journal.append(_saga().INTENT_EVENT, checkpoint_id,
+                   idempotency_key=checkpoint.idempotency_key(context))
+    fact = adapter(context)
+    if not fact:
+        return None
+    journal.append(_saga().OBSERVED_EVENT, checkpoint_id,
+                   idempotency_key=checkpoint.idempotency_key(context),
+                   fact=fact)
+    return _saga().StepResult(
+        checkpoint_id=checkpoint_id, outcome=_saga().OUTCOME_ACTED,
+        saga_id=journal.saga_id,
+        idempotency_key=checkpoint.idempotency_key(context), fact=fact)
+
+
+def site_ref_cas_push(clone_dir, ref, site_commit, expected_remote_tip=None):
+    """AC2: compare-and-swap fast-forward push with --force-with-lease.
+
+    The lease IS the mechanism: --force is never an acceptable substitute,
+    including under Sunday pressure — a moved remote must REFUSE and halt at
+    release-live-site-pending, never overwrite a counterpart's commit."""
+    # The lease is the CALLER'S BELIEF about the remote tip — the local
+    # remote-tracking ref, deliberately NOT freshly fetched. Fetching a
+    # fresh lease would always match and the CAS would be decorative: the
+    # moved-remote case must see belief != world and refuse. This hole was
+    # found by the spec's own AC2 fixture on first run.
+    lease = expected_remote_tip
+    if lease is None:
+        tracking = _git(
+            ["rev-parse", "--verify", f"origin/{ref.split('/')[-1]}"],
+            str(clone_dir), check=False)
+        lease = tracking.stdout.strip() if tracking.returncode == 0 else ""
+    push_args = ["push", "--force-with-lease" + (f"={ref}:{lease}" if lease else ""),
+                 "origin", f"{site_commit}:{ref}"]
+    push = _git(push_args, str(clone_dir), check=False)
+    if push.returncode != 0:
+        return _saga().StepResult(
+            checkpoint_id="site_ref", outcome=_saga().OUTCOME_REFUSED,
+            saga_id="release:site-ref",
+            idempotency_key=f"site-ref:{site_commit}",
+            detail=f"CAS push refused (remote moved or unreachable): "
+                   f"{(push.stderr or '').strip()[:200]}",
+            incomplete_state="release-live-site-pending")
+    return _saga().StepResult(
+        checkpoint_id="site_ref", outcome=_saga().OUTCOME_ACTED,
+        saga_id="release:site-ref",
+        idempotency_key=f"site-ref:{site_commit}",
+        fact={"site_commit": site_commit, "ref": ref, "lease": lease})
+
+
+def replay_check(checkpoint_id, idempotency_key, expected, found):
+    """AC3: identical bytes at the key are already-present; different bytes
+    are a conflict refusal — never an overwrite."""
+    _saga().assert_registered(checkpoint_id)
+    if found == expected:
+        return _saga().StepResult(
+            checkpoint_id=checkpoint_id,
+            outcome=_saga().OUTCOME_ALREADY_PRESENT,
+            saga_id="release:replay", idempotency_key=idempotency_key,
+            fact=found)
+    return _saga().StepResult(
+        checkpoint_id=checkpoint_id, outcome=_saga().OUTCOME_REFUSED,
+        saga_id="release:replay", idempotency_key=idempotency_key,
+        fact=found,
+        detail=f"idempotency conflict at {idempotency_key}: expected "
+               f"{expected!r}, world holds {found!r} — refusing rather than "
+               f"overwriting")
+
+
+def resolve_manifest_urls(manifest, *, timeout=15):
+    """AC4: RESOLVE every URL the published manifest names.
+
+    A structural check (assert the manifest mentions the version) proves the
+    manifest names the release, not that the named objects exist — that
+    exact insufficiency shipped 1.87 and 1.88 with no update package."""
+    import urllib.request
+    for entry in (manifest or {}).get("updates", []):
+        url = entry.get("url")
+        if not url:
+            continue
+        request = urllib.request.Request(url, method="HEAD")
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                status = response.status
+        except Exception as exc:  # any failure to resolve is the gate firing
+            raise PublishError(
+                f"manifest names an unresolvable url ({url}): {exc}")
+        if status >= 400:
+            raise PublishError(
+                f"manifest names an unresolvable url ({url}): HTTP {status}")
+    return True
+
+
+def _record_publish_refusal(reason_code, category, retryability):
+    try:
+        import importlib.util as ilu
+        from datetime import datetime, timezone
+        tools_dir = tropo_roots.VAULT_DIR / "tools"  # module-level seam object
+        spec = ilu.spec_from_file_location(
+            "tool_telemetry", tools_dir / "lib" / "tool_telemetry.py")
+        telemetry = ilu.module_from_spec(spec)
+        spec.loader.exec_module(telemetry)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+        telemetry.record_refused(
+            tool_uid="15cae798",
+            invocation_uid="publish:%s" % stamp,
+            operation_uid="publish:%s" % stamp[:8],
+            attempt=1,
+            reason_category=category,
+            reason_code=reason_code,
+            retryability=retryability,
+            segment_inputs=["argo-private"],
+            harm_class="irreversible-write",
+        )
+        drain_spec = ilu.spec_from_file_location(
+            "tropo_drain_tool_telemetry",
+            tools_dir / "tropo-drain-tool-telemetry.py")
+        drainer_mod = ilu.module_from_spec(drain_spec)
+        drain_spec.loader.exec_module(drainer_mod)
+        drainer = drainer_mod.TelemetryDrainer(tropo_roots.STUDIO_ROOT)
+        drainer.ingest(telemetry.drain())
+        drainer.seal_all()
+    except Exception as exc:  # telemetry must never move a verdict
+        print(f"WARN: publish telemetry handoff failed (non-blocking): {exc}",
+              file=sys.stderr)
+
+
 def cmd_stage(args) -> int:
     version = args.version
     # The BOX, not the release folder: rsync and the changelog assert both operate on
@@ -1535,6 +1825,7 @@ def cmd_stage(args) -> int:
     if not build_dir.is_dir():
         print(f"✗ Box directory not found: {build_dir} — run tropo-build-release.py first.",
               file=sys.stderr)
+        _record_publish_refusal("dependency-missing", "environment", "retryable")
         return 3
 
     print(f"=== STAGE v{version} ===\n")
@@ -1556,6 +1847,7 @@ def cmd_stage(args) -> int:
         print("  ✓ AUTHORIZED\n")
     except ReleaseAuthorizationError as e:
         print(f"  ✗ REFUSED: {e}", file=sys.stderr)
+        _record_publish_refusal("gate-refused", "policy-gate", "non-retryable")
         return 4
 
     try:
@@ -1812,12 +2104,50 @@ def cmd_fire(args) -> int:
               f"Re-run stage to restage, then fire again.", file=sys.stderr)
         return 7
 
+    # v1.90 (2cb346d6): the fire drives its acts through the saga journal —
+    # intent before each outward act, verified observation after it. A fire
+    # that dies mid-way is describable and resumable by checkpoint instead
+    # of being a half-remembered script. The context is live: every value
+    # below is read from the world this fire is about to act on.
+    run_uid = state["activation_uid"]
+    journal = _fire_journal(version, run_uid)
+    context = {
+        "parent": _git(["rev-parse", "--verify", "HEAD^"], cwd=str(clone_dir),
+                       check=False).stdout.strip() or "root",
+        "version": version,
+        "size": _git(["cat-file", "-s", "HEAD"], cwd=str(clone_dir),
+                     check=False).stdout.strip() or "0",
+        "staged_sha": state["staged_sha"], "tag": state["tag"],
+        "package_sha": _ac7["package_sha256"],
+        "release_uid": _ac7["release_entry_uid"],
+        "site_commit": head, "run_uid": run_uid, "mode": "real",
+        "site_clone_dir": str(clone_dir), "site_ref": "refs/heads/main",
+    }
+    if wire_checkpoint(journal, "site_prepare", context) is None:
+        print("  ✗ site_prepare recorded no observation — refusing before any "
+              "outward act the saga cannot describe (AC1's real-path line).",
+              file=sys.stderr)
+        return 7
+
     print("\nRestoring push URL for the one push —")
     _git(["remote", "set-url", "--push", "origin", remote], cwd=str(clone_dir))
     try:
-        _git(["push", "origin", "HEAD:main"], cwd=str(clone_dir))
-        _git(["push", "origin", state["tag"], "--force"], cwd=str(clone_dir))
-        push_ok = True
+        # v1.90 AC2: main goes up as a compare-and-swap through the wired
+        # adapter. The lease is this clone's remote-tracking belief, so a
+        # moved remote refuses at release-live-site-pending instead of being
+        # overwritten — --force is not an acceptable substitute, including
+        # under Sunday pressure. The tag follows on the proven git_refs leg.
+        site_ref = wire_checkpoint(journal, "site_ref", context)
+        if site_ref is None or not site_ref.ok:
+            detail = site_ref.detail if site_ref else "no observation recorded"
+            print(f"  ✗ site_ref CAS push refused: {detail}", file=sys.stderr)
+            print(f"    Saga state: {_saga().current_state(journal)['state']} "
+                  f"— re-fire resumes this journal by checkpoint.",
+                  file=sys.stderr)
+            push_ok = False
+        else:
+            _git(["push", "origin", state["tag"], "--force"], cwd=str(clone_dir))
+            push_ok = True
     except PublishError as e:
         print(f"  ✗ push failed: {e}", file=sys.stderr)
         push_ok = False
@@ -1889,6 +2219,22 @@ def cmd_fire(args) -> int:
         return 11
 
     print("\nVERIFY-LIVE (tag + main sha + release object) —")
+    # v1.90: the observation-style act sites. Each act has already happened
+    # above (flip inside the upload block, manifest after it); wire_checkpoint
+    # records intent plus the verified fact for each. The endpoint URL is an
+    # explicit deployment fact (see _site_endpoint_url) — an unreachable or
+    # unconfigured endpoint records no fact, and the coverage gate below
+    # reports that honestly instead of inventing an observation.
+    context["site_endpoint_url"] = _site_endpoint_url(state)
+    wire_checkpoint(journal, "release_entry_projection", context)
+    try:
+        wire_checkpoint(journal, "site_endpoint", context)
+    except PublishError as exc:
+        # The endpoint observation is post-publication and world-dependent:
+        # an unreachable or lagging site deploy is the honest ABSENCE of a
+        # fact, never a fire failure — the coverage gate below reports it
+        # and a re-fire can complete it once the site serves the badge.
+        print(f"  ! site_endpoint observation failed: {exc}", file=sys.stderr)
     vstate = _run_publish_state("--expect", version, "--sha", state["staged_sha"], remote=remote)
     tag_and_sha_ok = (
         vstate.get("status") == "verified"
@@ -1939,11 +2285,17 @@ def cmd_fire(args) -> int:
     print(f"  ✓ verify-live receipt {receipt_sha256}")
     print(f"  ✓ .tropo/version.md stamped to v{version}")
 
+    # v1.90 tail sites, in the enum's dependency order: the event mirror,
+    # closure, the real-fire scorecard, and the completion re-observation.
+    context["receipt_sha"] = receipt_sha256
+    wire_checkpoint(journal, "run_published_event", context)
+
     # BLOCKER 4: closure is welded here, not left as an action someone might
     # remember to run. The release is already public at this point, so a
     # failure below leaves it PUBLIC AND OPEN — reported honestly and
     # replayable with the same transaction id — never falsely closed.
     closure = _initiate_release_closure(_ac7, receipt_sha256)
+    wire_checkpoint(journal, "closure", context)
     if closure.get("ok"):
         print(f"  ✓ release closed — {len(closure.get('closed') or [])} record(s)")
     else:
@@ -1952,6 +2304,40 @@ def cmd_fire(args) -> int:
               f"--activation-uid {_ac7['identity'].activation_uid} close-release "
               f"--receipt-sha256 {receipt_sha256} "
               f"--transaction-id {_ac7['transaction_id']}", file=sys.stderr)
+
+    # The real-fire scorecard, at the fixed path release_metrics names for
+    # this mode. Deliberately lean: the journal is the per-checkpoint record;
+    # the scorecard carries run identity and the receipt it closed over.
+    import hashlib as _hashlib
+    scorecard_file = (
+        _state_path(version).parent / "one-prompt-real-fire-scorecard.json")
+    fire_scorecard = {
+        "saga_id": journal.saga_id, "run_uid": run_uid, "version": version,
+        "mode": "real",
+        "fired_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "receipt_sha256": receipt_sha256,
+    }
+    scorecard_file.write_text(
+        json.dumps(fire_scorecard, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8")
+    context["scorecard_sha"] = _hashlib.sha256(
+        scorecard_file.read_bytes()).hexdigest()
+    wire_checkpoint(journal, "scorecard", context)
+    wire_checkpoint(journal, "completion_verification", context)
+
+    # The success gate (AC1's real-path enforcement): a fire whose journal
+    # cannot describe every wired act site is not a successful fire — it is
+    # a public release with a describable gap, re-fireable to completion.
+    missing = [
+        c for c in FIRE_WIRED_CHECKPOINTS if journal.observed(c) is None]
+    if missing:
+        saga_state = _saga().current_state(journal)
+        print(f"  ✗ SAGA INCOMPLETE — no observation for: {', '.join(missing)}.",
+              file=sys.stderr)
+        print(f"    The release is public; the journal is not. Saga state: "
+              f"{saga_state['state']}. Re-fire resumes this journal by "
+              f"checkpoint.", file=sys.stderr)
+        return 15
 
     print(f"\n=== LIVE — v{version} published. ===")
     return 0
@@ -2076,15 +2462,20 @@ def cmd_handback(args) -> int:
         return 4
     try:
         _git(["add", "-f", str(payload_dir.relative_to(root))], root)
+        # check=False at both sites: the returncode IS the answer here — a
+        # failed commit or push is reported honestly below, not raised past
+        # the branch that inspects it (the raise path made the no-remote
+        # handback crash instead of returning its honest rc 6).
         commit = _git(
             ["commit", "-m",
              f"handback: v{version} transfer bundle ({record['package_sha256'][:12]})"],
             root,
+            check=False,
         )
         if commit.returncode != 0 and "nothing to commit" not in commit.stdout:
             print(f"  ✗ commit failed: {commit.stderr.strip()}", file=sys.stderr)
             return 5
-        push = _git(["push", "-u", "origin", branch], root)
+        push = _git(["push", "-u", "origin", branch], root, check=False)
         if push.returncode != 0:
             # The whole premise is a host that cannot push everywhere. Say which
             # push failed rather than implying the bundle is unusable.

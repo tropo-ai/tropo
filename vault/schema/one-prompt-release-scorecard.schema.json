@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tropo.local/schema/one-prompt-release-scorecard.schema.json",
+  "title": "Tropo One-Prompt Release Scorecard v1",
+  "description": "Closed schema (draft 2020-12) for the rehearsal and real-fire scorecards written by dev-spec 2fae6312 step 8. Every object is closed (additionalProperties:false) and every metric is required, because the spec's rule is that missing or invalid metrics make the acceptance criterion NON-PASSING. A scorecard that can omit a field is a scorecard that can report a release it did not measure.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mode",
+    "saga_id",
+    "pipeline_run_uid",
+    "release_version",
+    "gestures",
+    "timestamps",
+    "elapsed",
+    "refusals",
+    "verdict"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "mode": {
+      "enum": ["rehearsal", "real-fire"],
+      "description": "Rehearsal and real-fire scorecards live at separate fixed paths and are never merged; a rehearsal that could be read as a real fire is a false public record."
+    },
+    "saga_id": {"type": "string", "pattern": "^release:[0-9a-f]{8}$"},
+    "pipeline_run_uid": {"type": "string", "pattern": "^[0-9a-f]{8}$"},
+    "release_version": {"type": "string", "minLength": 1},
+    "gestures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principal_inputs", "target", "met", "detail"],
+      "description": "The three-gesture target. Machine continuation is not a gesture; every manual resume or re-invocation is another principal input and fails the target.",
+      "properties": {
+        "principal_inputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["input", "at"],
+            "properties": {
+              "input": {
+                "enum": [
+                  "release_scope_locked",
+                  "release_orchestrator_invoked",
+                  "release_fire_authorized",
+                  "manual_resume",
+                  "manual_reinvocation"
+                ]
+              },
+              "at": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "target": {"const": 3},
+        "met": {"type": "boolean"},
+        "detail": {"type": "string"}
+      }
+    },
+    "timestamps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope_locked_at",
+        "orchestrator_started_at",
+        "primary_live_at",
+        "all_targets_live_at"
+      ],
+      "description": "Four distinct moments. primary_live_at and all_targets_live_at differ whenever the site lags the primary publication, which is exactly the partial state the saga refuses to paper over.",
+      "properties": {
+        "scope_locked_at": {"type": "string", "minLength": 1},
+        "orchestrator_started_at": {"type": "string", "minLength": 1},
+        "primary_live_at": {"type": ["string", "null"]},
+        "all_targets_live_at": {"type": ["string", "null"]}
+      }
+    },
+    "elapsed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lock_to_all_targets_live_seconds", "active_machine_seconds"],
+      "description": "Wall-clock from lock to all targets live INCLUDES human waits, retries, provider latency and process loss — it is the number an operator actually experiences. Active machine time is reported separately so the two are never conflated.",
+      "properties": {
+        "lock_to_all_targets_live_seconds": {"type": ["number", "null"], "minimum": 0},
+        "active_machine_seconds": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "refusals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline_version",
+        "baseline_composite_sha256",
+        "classifier_version",
+        "occurrences",
+        "distinct_classes",
+        "known",
+        "unknown"
+      ],
+      "description": "Occurrences and distinct classes are counted separately: five refusals of one class and five of five are different releases. An ID absent from the baseline is new by definition and is never folded in silently.",
+      "properties": {
+        "baseline_version": {"type": "string", "minLength": 1},
+        "baseline_composite_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "classifier_version": {"type": "string", "minLength": 1},
+        "occurrences": {"type": "integer", "minimum": 0},
+        "distinct_classes": {"type": "integer", "minimum": 0},
+        "known": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^R188-[0-9]{2}-[a-z0-9-]+$"}
+        },
+        "unknown": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "description": "New refusal classes. A non-empty list is a finding, not a failure of this schema."
+        }
+      }
+    },
+    "verdict": {
+      "enum": ["pass", "fail"],
+      "description": "pass requires the three-gesture target met, every timestamp present, elapsed measured, and no unknown refusal class."
+    }
+  }
+}

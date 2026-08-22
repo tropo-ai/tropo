@@ -128,6 +128,7 @@ from lib import daily_spend, metered_model  # noqa: E402
 from lib.distiller_model_policy import (  # noqa: E402
     CANARY_CLAIM_NAME,
     CANARY_MAX_RESERVED_NANO_USD,
+    POLICY_RUNNER,
     POLICY_UID,
     POLICY_VERSION,
     PRIOR_RUN_UIDS,
@@ -140,7 +141,9 @@ from lib.distiller_model_policy import (  # noqa: E402
 
 
 RUNNER_UID = "6389dcd4"
-RUNNER_SOURCE = Path(f"vault/tools/{RUNNER_UID}.py")
+# The runner ships under its tropo- name (naming-conform sweep, 472ebfcc);
+# derive the path from the name the same way the policy gate does.
+RUNNER_SOURCE = Path(f"vault/tools/tropo-{POLICY_RUNNER}.py")
 LOOP_RUNS_RELATIVE_PATH = Path("vault/loop-runs")
 SCORECARD_NAME = metered_model.CANARY_SCORECARD_NAME
 PREPARATION_NAME = metered_model.CANARY_PREPARATION_NAME

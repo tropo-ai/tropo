@@ -12,6 +12,7 @@ author: d.pm
 created: 2026-04-19
 modified: 2026-06-09
 modified_by: argus-a105
+v1_89_stage_eradication: 'talos-t46 2026-08-18 per Mike-locked dev-spec 63aaea28 (file named in committed_substrate — the lock authorization). Live contract lines now read canonical status: only; the stage: spellings that remained in field contracts were identity synonyms of the same-named status values (per the v1.6 canonical declaration), so each became status: with no semantic change. Historical amendment notes keep their original vocabulary — history is not rewritten.'
 meta_status_rollup_added: argus-a104 2026-06-08 — new meta_status_rollup per 4acf3f2d v0.4 DERIVE (Mike-signed 7-capsule lock-break batch); additive (type had no rollup); prior modified vela-v59 2026-06-06
 status: locked
 locked_by: argus-a49
@@ -101,15 +102,15 @@ Failure mode prevented: releases shipping without scoped streams, undeclared blo
 | `release_pipeline_run_uid` | UID | **Required for locked v1.87+ plans.** The release run the lock created. |
 | `gates` | UID array | Blocking decisions — `task` entries with `tags: [decision]` that gate the release |
 | `foundation` | UID array | Locked `design-spec` entries this release references (context, not scope) |
-| `ship_criteria` | UID array | Tasks whose `stage: done` collectively signal "ready to ship" |
+| `ship_criteria` | UID array | Tasks whose `status: done` collectively signal "ready to ship" |
 | `supersedes` / `superseded_by` | UID | Bidirectional pair for major re-planning |
-| `shipped_release` | UID | The corresponding `release` entry. Required when `stage: done` |
+| `shipped_release` | UID | The corresponding `release` entry. Required when `status: done` |
 | `target_date` | ISO date | Planned release date (best-effort, not enforced) |
 | `locked_by` / `locked_at` | string / ISO datetime | Required at `status: locked` and every status after it. **v1.6:** written by `tropo-lock-release-plan.py` as part of the lock transaction, so the provenance of the ignition is recorded by the gesture rather than by hand. |
-| `sub_systems` | string array | **v1.1 addition; SOFT-DEPRECATED at v1.2.** Informal subsystem names. v1.2+ release-plans use `capabilities_touched:` instead; `subsystems_touched:` is derived. v1.1 instances still REQUIRE this at `stage: specify`. |
+| `sub_systems` | string array | **v1.1 addition; SOFT-DEPRECATED at v1.2.** Informal subsystem names. v1.2+ release-plans use `capabilities_touched:` instead; `subsystems_touched:` is derived. v1.1 instances still REQUIRE this at `status: specify`. |
 | `arch_specs` | UID array | **v1.1 addition.** Tracking pointer for arch-spec entries authored under this release-plan. No 1:1 validation against `sub_systems:` (deferred). |
-| `capabilities_touched` | UID array | **v1.2+; required under v1.2 opt-in.** TYPED list of governed primitives this release touches. Each UID must resolve to an entry whose `subsystem_hub:` includes at least one subsystem hub UID (v1.5 member_of DISAMBIGUATE — was `member_of:`). Empty `[]` legal at `stage: design`; non-empty at `stage: specify` onward. Mirrored to release.capsule at ship; derived `subsystems_touched:` computed via 1-hop graph traversal. *(v1.3 soft principle: list only substantively-amended capabilities; lifecycle marker change OR non-trivial body content change; metadata-only edits not listed.)* |
-| `hub_summaries` | `{hub_uid: text}` map | **v1.3+; required under v1.3 opt-in.** Per-touched-subsystem-hub 3-5 sentence summary describing what the cycle does to that subsystem. Empty `{}` legal at `stage: design`; populated for every derived hub at `stage: locked` for cycles touching ≥ 1 subsystem (ZERO-touch may keep `{}`). Consumed by dev-pipeline step `update-subsystem-canonical-docs` at ship to write hub `release_history:` rows. Length: 50-1500 chars per entry. |
+| `capabilities_touched` | UID array | **v1.2+; required under v1.2 opt-in.** TYPED list of governed primitives this release touches. Each UID must resolve to an entry whose `subsystem_hub:` includes at least one subsystem hub UID (v1.5 member_of DISAMBIGUATE — was `member_of:`). Empty `[]` legal at `status: design`; non-empty at `status: specify` onward. Mirrored to release.capsule at ship; derived `subsystems_touched:` computed via 1-hop graph traversal. *(v1.3 soft principle: list only substantively-amended capabilities; lifecycle marker change OR non-trivial body content change; metadata-only edits not listed.)* |
+| `hub_summaries` | `{hub_uid: text}` map | **v1.3+; required under v1.3 opt-in.** Per-touched-subsystem-hub 3-5 sentence summary describing what the cycle does to that subsystem. Empty `{}` legal at `status: design`; populated for every derived hub at `status: locked` for cycles touching ≥ 1 subsystem (ZERO-touch may keep `{}`). Consumed by dev-pipeline step `update-subsystem-canonical-docs` at ship to write hub `release_history:` rows. Length: 50-1500 chars per entry. |
 | `capsule_version` | string | **v1.1+ opt-in marker.** Values: `"1.1"` / `"1.2"` / `"1.3"`. Gates which validation checks fire. When absent, instance treated as MIGRATION-PENDING v1.0 (only Checks 1-12 fire). v1.4.4-v1.7 on v1.1; v1.8/v1.9.0/v1.9.1 on v1.2; v1.9.2+ on v1.3. |
 | `relationships` | typed-edge array | Schema-v2 unified relationships for cross-cutting references |
 | `dev_spec_uids` | UID array, **ordered** | **v1.6+ (0a0a6777 §3).** The dev-specs this release fans in, in plan order. Order is part of the plan's identity and feeds `fan_in_digest`, so the same members in a different order are a different plan. Required non-empty at `status: locked`. Each member must be a `done` dev-spec unreserved by another release-plan that still holds reservations (Check 26). |
@@ -128,7 +129,7 @@ Failure mode prevented: releases shipping without scoped streams, undeclared blo
 6. **`## Ship Gates`** — Verification + deploy criteria mapping to `ship_criteria` tasks. **(v1.1+)** MUST include an explicit "Definition of Done" sub-paragraph stated as a discrete claim.
 7. **`## Out of Scope`** — What this release explicitly does NOT include; prevents scope creep.
 8. *(optional)* **`## Triage Notes`** — Record of project moves / rehoming done when the plan was drafted.
-9. *(optional)* **`## Lessons / Reflections`** — Populated after `stage: done` for retrospective value.
+9. *(optional)* **`## Lessons / Reflections`** — Populated after `status: done` for retrospective value.
 
 ---
 
@@ -190,8 +191,8 @@ refuses to re-lock an already-locked plan.
 4. **Streams must be projects.** Every UID in `streams:` resolves to a `project` entry. Tasks and specs cannot be streams.
 5. **Version is immutable.** Once `release_version:` is set, it cannot change. If the target version changes, cancel the plan and create a new one.
 6. **One active plan per version.** Two release-plan entries with the same `release_version:` in `state: active` is a governance violation.
-7. **Stream / gate / ship_criteria edits free during `design` and `specify`.** Once `stage: build`, edits require Founder sign-off.
-8. **Body immutability after `done`.** Once `stage: done`, body is read-only except §Lessons / Reflections which may be appended retrospectively.
+7. **Stream / gate / ship_criteria edits free during `design` and `specify`.** Once at `status: build`, edits require Founder sign-off.
+8. **Body immutability after `done`.** Once `status: done`, body is read-only except §Lessons / Reflections which may be appended retrospectively.
 9. **Default ownership is `d.pm`.** If `owner: d.pm`, the PM Director may update streams / gates / ship_criteria during `design` / `specify` / `build`. If `owner: <founder>`, Founder owns all edits.
 
 ### Validation Checks (ERROR-severity at check-in; version-gated as noted)
@@ -207,8 +208,8 @@ Core checks (1-12; fire on all instances):
 7. `gates:` (if present) — every UID resolves to a `task` with `tags: [decision]`
 8. `foundation:` (if present) — every UID resolves to a `design-spec`
 9. `ship_criteria:` (if present) — every UID resolves to a `task`
-10. If `stage: locked` (or later), `locked_by:` + `locked_at:` present
-11. If `stage: done`, `shipped_release:` present and resolves to a release entry at `stage: done`
+10. If `status: locked` (or later), `locked_by:` + `locked_at:` present
+11. If `status: done`, `shipped_release:` present and resolves to a release entry at `status: done`
 12. If `shipped_release:` present, its `release_version:` equals this plan's `release_version:`
 
 v1.1 checks (gated on `capsule_version: "1.1"`; pre-v1.1 instances grandfathered):
@@ -216,14 +217,14 @@ v1.1 checks (gated on `capsule_version: "1.1"`; pre-v1.1 instances grandfathered
 13. Body contains all 7 required sections in declared order
 14. If `sub_systems:` present, every entry is a non-empty string ≤60 chars
 15. If `arch_specs:` present, every UID resolves to a `design-spec` or `arch-spec`
-16. At `stage: specify` onward, `sub_systems:` is non-empty (legal-empty only at `stage: design`; skipped at `stage: cancelled`)
+16. At `status: specify` onward, `sub_systems:` is non-empty (legal-empty only at `status: design`; skipped at `status: cancelled`)
 17. *(honor-system)* §Thesis opens with explicit intent statement as a discrete claim
 18. *(honor-system)* §Ship Gates contains explicit "Definition of Done" sub-paragraph
 
 v1.2 checks (gated on `capsule_version: "1.2"`):
 
-19. `capabilities_touched:` non-empty at `stage: specify` onward
-20. *(WARN at v1.8-v1.9; ERROR at v1.10)* Every UID in `capabilities_touched:` resolves to a ledger entry whose `subsystem_hub:` includes at least one subsystem hub UID (the dynamic hub set derived from `subsystem_name:`) [v1.5 member_of DISAMBIGUATE: was `member_of:`]
+19. `capabilities_touched:` non-empty at `status: specify` onward
+20. *(WARN at v1.8-v1.9; ERROR at v1.10)* Every UID in `capabilities_touched:` resolves to a vault entry whose `subsystem_hub:` includes at least one subsystem hub UID (the dynamic hub set derived from `subsystem_name:`) [v1.5 member_of DISAMBIGUATE: was `member_of:`]
 
 v1.3 checks (gated on `capsule_version: "1.3"`):
 
@@ -247,7 +248,7 @@ The valid subsystem hub set referenced in Check 20 is the dynamic hub set derive
 - **[release.capsule (b19e8d43)](release.capsule.md)** — atomic-triangle partner. release-plan plans; release records. 1:1 link via `shipped_release:`. At ship, release derives `subsystems_touched:` from this plan's `capabilities_touched:` via 1-hop `subsystem_hub:` graph traversal (v1.5 member_of DISAMBIGUATE).
 - **[build.capsule (b3d7e5a1)](build.capsule.md)** — upstream of the release. Atomic-triangle: `release-plan.shipped_release` ↔ `build.composes_into` ↔ `release.derived_from`.
 - **[project.capsule (34e4cb0b)](project.capsule.md)** — streams are projects with `tags: [stream]`; each stream project may carry a `project-plan` coordinating its deliverables.
-- **[task.capsule (3289712a)](task.capsule.md)** — gates are tasks with `tags: [decision]`; ship_criteria are tasks whose `stage: done` collectively signal ship.
+- **[task.capsule (3289712a)](task.capsule.md)** — gates are tasks with `tags: [decision]`; ship_criteria are tasks whose `status: done` collectively signal ship.
 - **[subsystem-hub.capsule (8a4e21c5)](subsystem-hub.capsule.md)** — release_history rows on each touched hub are derived from this plan's `capabilities_touched:` (computed `subsystems_touched:`) + `hub_summaries:` at ship via dev-pipeline step `update-subsystem-canonical-docs`.
 - **[pipeline.capsule (5a8f3b2c)](pipeline.capsule.md)** — the dev-pipeline cycle executes against this capsule; step `update-subsystem-canonical-docs` consumes `hub_summaries:` at ship.
 - **[design-spec.capsule](design-spec.capsule.md)** / **[arch-spec.capsule (a7f2e9c4)](arch-spec.capsule.md)** — the locked architectural foundation `basis_spec:` resolves to.

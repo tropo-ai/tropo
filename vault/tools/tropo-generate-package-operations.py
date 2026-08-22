@@ -5,7 +5,10 @@ uid: 7e41c0d8
 title: generate-package-operations — Tool
 name: generate-package-operations
 type: tool
-status: active
+status: deprecated
+deprecated_at: '2026-08-21'
+deprecated_by: ea09fc6e
+deprecation_note: 'Delta operation generation is historical — the image already contains the whole answer; the delta was a fragile computation on top of it (ea09fc6e). Retained as history; the lift-and-replace engine supersedes it.'
 owner: talos
 domain: Derive an update package's manifest `operations:` block from ground truth — the package's own files/ tree diffed against the previously shipped surface — instead of authoring 573 entries by hand.
 transport: cli

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.90.0] - 2026-08-21
+### Added
+- **Updating a studio is one command with an honest progress bar.** `plan` computes the full extent of the work before a single byte is written, then `apply` renders progress over that computed list. A bar that can move means the reasoning already finished, so the bar is the acceptance test rather than decoration. The measured run replaces a minutes-long manual procedure and completes in seconds.
+- **The session librarian (coordinator seat).** A small, deterministic warm-context tier that serves cited retrieval to an executive's session instead of having them re-read the same task neighborhood every time. It cites its sources and reports an honest "not in my context" rather than guessing, and it ships behind measurement rather than as a standing service.
+- **Deterministic orientation shows its evidence before escalating.** `orient()` draws wide, ranks everything it found, and surfaces the top results with their provenance before any model call, so what recall actually retrieved is visible instead of hidden behind a summary.
+- **Readable governed filenames.** New governed files are named for what they are, with the UID still the address that cross-references resolve through. Existing files are untouched, and UID resolution works with no index present.
+- **Failure telemetry with a bounded lane.** Tool gates that refuse or fail now leave evidence on a separate bounded-durability lane, deliberately kept off the canonical event bus so sampled or expiring records never masquerade as event-sourced truth. Telemetry is inert in customer studios.
+
+### Changed
+- **The release fires for real.** The one-prompt release saga built in v1.89 had its outward act stubbed; this wires the adapters so it publishes, with the property that matters preserved: a half-finished publish can be described, resumed, or refused rather than left ambiguous.
+- **A package is frozen only after its own evidence.** The candidate is built, the four instruments run against those exact bytes, and the freeze step re-hashes and proves the receipts belong to them before emitting. A freeze that precedes its evidence is a claim; this order makes it a fact.
+- **Retirement is a single ungated command.** Closing an agent places the letter, appends one line to its lineage, and cannot be refused by ceremony. The practice around it (fold, reflection, log entry) is observed and reported, never enforced.
+- **Status is work and position is position.** Pipeline stage state stopped doubling as work state, removing a class of runs that looked complete because the cursor had moved.
+
+### Fixed
+- **316 records got their true lifecycle.** A closure sweep against a locked page corrected records whose status had drifted from their real state, with the exit-side obligation (completion event plus re-parent) cured in the same pass.
+- **Truth before cleanup.** A lifecycle pairing gate now refuses to let a cleanup pass assert a state the substrate does not support, closing the case where tidying a record and verifying it were the same gesture.
+- **A step declaring `verdict_cwd: vault-root` ran its verification command from a literal directory named `vault-root`,** so every receipt it produced came back unbindable. The named handle now resolves, and an unresolvable declaration warns and runs from the vault root instead of failing the step.
+
 ## [1.88.0] - 2026-08-15
 ### Added
 - **Self-stamping release surfaces:** the briefing note is stamped at build and verified against the sealed package at fire; the version badge (`os-release.json`) is stamped from the release receipt with real size and date. The class of stale shipped release-notes (six releases running) cannot recur silently.
@@ -171,7 +190,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Versions prior to 1.69.0 shipped before Tropo's public release; their detailed history is preserved in the project's internal records.
 
-[Unreleased]: https://github.com/tropo-ai/tropo/compare/v1.85.0...HEAD
+[Unreleased]: https://github.com/tropo-ai/tropo/compare/v1.90.0...HEAD
+[1.90.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.90.0
+[1.88.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.88.0
+[1.87.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.87.0
+[1.86.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.86.0
 [1.85.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.85.0
 [1.84.1]: https://github.com/tropo-ai/tropo/releases/tag/v1.84.1
 [1.84.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.84.0

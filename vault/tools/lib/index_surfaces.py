@@ -2525,14 +2525,26 @@ def write_jsonl_pair_atomic(
         vault_root / relative
         for relative in INDEX_TRANSACTION_COMPANION_RELATIVE_PATHS
     }
-    invalid_companions = [
-        resolved
-        for (lexical, _raw), (resolved, _resolved_raw) in zip(
-            companion_inputs,
-            companion_list,
+    # Companion validity, without the macOS break and without the hole a
+    # naive resolved-vs-resolved comparison opens (found by this repo's own
+    # attack test: a symlink at the canonical companion PATH makes BOTH sides
+    # resolve to the attacker target, and the allowlist follows the link).
+    # Rule: parents may be equivalent through upstream symlinks (macOS TMPDIR
+    # is /var -> /private/var), the final component must match by literal
+    # name, and must not itself be a symlink. talos-t46 2026-08-18.
+    allowed_parents = {
+        (_resolved(p.parent), p.name) for p in allowed_companions
+    }
+    invalid_companions = []
+    for (lexical, _raw), (resolved, _resolved_raw) in zip(
+        companion_inputs, companion_list
+    ):
+        ok = (
+            (_resolved(lexical.parent), lexical.name) in allowed_parents
+            and not os.path.islink(lexical)
         )
-        if lexical not in allowed_companions or resolved != lexical
-    ]
+        if not ok:
+            invalid_companions.append(resolved)
     if invalid_companions:
         raise IndexSurfaceRefusal(
             "REFUSAL: unauthorized index transaction companion destination(s): "

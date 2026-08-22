@@ -104,11 +104,11 @@ Collections are almost always `stage: build` — they are living rosters. A coll
 - `ls collections/` — survey the manifest folder; `master/` for vault-wide rosters; `projects/` for per-project rosters
 - `ls collections/master/*.collection.md` — survey shipped master rosters before authoring a duplicate (Rule 2 one-collection-per-filter discipline)
 - `vault/00-index.jsonl` — grep `type: collection-ref` to find existing pointer entries pairing with manifest files
-- `.tropo-studio/registries/registry.jsonl` — collection-refs surface here; manifests live outside the registry as data files
+- `vault/00-index.jsonl` — collection-refs are indexed here; manifests live outside the index as data files
 - Reference instances: [`collections/subsystem-hubs.collection.md`](../../collections/subsystem-hubs.collection.md), [`collections/master/all-active-tasks.collection.md`](../../collections/master/all-active-tasks.collection.md), [`collections/master/all-design-specs.collection.md`](../../collections/master/all-design-specs.collection.md), [`collections/master/all-decisions.collection.md`](../../collections/master/all-decisions.collection.md), [`collections/master/all-boards.collection.md`](../../collections/master/all-boards.collection.md)
 
 **Skills:**
-- `register-collection.skill.md` *(forthcoming v1.5)* — author manifest at `collections/<path>/<name>.collection.md` FIRST, then create paired collection-ref ledger entry at `vault/files/<uid>.md` with the SAME UID (per [collection-ref.capsule v3.0 Rule 2 (c01ec700)](collection-ref.capsule.md))
+- `register-collection.skill.md` *(forthcoming v1.5)* — author manifest at `collections/<path>/<name>.collection.md` FIRST, then create paired collection-ref vault entry at `vault/files/<uid>.md` with the SAME UID (per [collection-ref.capsule v3.0 Rule 2 (c01ec700)](collection-ref.capsule.md))
 - `audit-collection-membership.skill.md` *(forthcoming v1.5)* — verify `filter:` matches actual membership; flag drift between declared filter + maintained roster
 - Existing live action: [`create-collection.action.md`](../../.tropo/actions/create-collection.action.md) — atomic two-file write (manifest + ledger ref), per [action.capsule v1.1 (9b7f5e34)](action.capsule.md)
 
@@ -117,7 +117,7 @@ Collections are almost always `stage: build` — they are living rosters. A coll
 - **Add-to / maintain membership** — Rule 1 (collections are MAINTAINED, not generated): on member add/remove from the parent project, update the manifest's roster
 - **Compose with the project** — Rule 3 follow-the-project: when project archives, archive the collection (`state: archived`)
 - **Verify** — confirm `member_of:` resolves to a project, `filter:` is non-empty, `stage:` ∈ {`build`, `done`}, `state:` ∈ {`active`, `archived`}
-- **Compose with collection-ref** — manifest content edits happen HERE; the paired ledger collection-ref is pointer-only (per collection-ref Rule 3); never edit collection content via the ref entry
+- **Compose with collection-ref** — manifest content edits happen HERE; the paired vault collection-ref is pointer-only (per collection-ref Rule 3); never edit collection content via the ref entry
 - **Tag with `collection_type:` (in collection-ref's frontmatter)** — `manual` (hand-maintained list) or `dynamic` (filter-evaluated by query engine) per collection-ref v3.0 Decision 6 enum
 - **Close — `stage: build → done`** — when the parent project closes; the collection is no longer accumulating but remains navigable
 - **Archive — `state: active → archived`** — mirrors the parent project's archival per Rule 3
@@ -128,7 +128,7 @@ Collections are almost always `stage: build` — they are living rosters. A coll
 3. **Collections follow their project** — when the project archives, the collection archives (state propagation)
 
 **Pitfalls:**
-- **Collection without paired collection-ref** — half-shipped; the manifest is invisible to ledger queries until the ref is registered
+- **Collection without paired collection-ref** — half-shipped; the manifest is invisible to vault queries until the ref is registered
 - **Collection-ref UID ≠ manifest UID** — collection-ref Rule 2 violation; same logical collection, two UIDs; downstream drift
 - **Editing collection content via the Vault ref** — collection-ref Rule 3 violation; edit the manifest, not the ref
 - **Two collections with the same `filter:` for the same project** — Rule 2 violation; consolidate
@@ -160,7 +160,7 @@ Collections are almost always `stage: build` — they are living rosters. A coll
 
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
-| 1.0 | 2026-04-16 | Initial version locked. Membership roster manifest — paired with collection-ref ledger pointer. REQUIRED frontmatter (`title`, `description`, `owner`, `stage`, `state`, `member_of`, `filter`), 2-state state machine (`build` → `done`), 3 governance rules (maintained-not-generated, one-per-filter, follow-the-project). | tropo |
+| 1.0 | 2026-04-16 | Initial version locked. Membership roster manifest — paired with collection-ref vault pointer. REQUIRED frontmatter (`title`, `description`, `owner`, `stage`, `state`, `member_of`, `filter`), 2-state state machine (`build` → `done`), 3 governance rules (maintained-not-generated, one-per-filter, follow-the-project). | tropo |
 | 1.1 | 2026-04-25 | **Stream 3 D3.2 uplift (v1.4 Craftsman's Workshop).** Added §Workshop — Shop Signage section (Tools / Skills / Procedures / Rules-at-a-glance / Pitfalls / Worked examples / Go next) per the v3 capsule shop-signage pattern. Added Relations Header right after H1 — clickable navigation surface mirroring frontmatter (governed_by, aligned_with collection-ref, composes_with collection-ref, pattern_family pair, live registries, project + subsystem-hub composition). Frontmatter `aligned_with: c01ec700` + `composes_with: c01ec700` + `pattern_family: c01ec700` declared. No semantic changes to §Required Frontmatter / §Validation Checks / §Governance Rules / §State Machine. UID preserved at c04e7a91. | argus-a34 |
 
 ---

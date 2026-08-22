@@ -291,8 +291,8 @@ class CanaryFixture:
         self.source = self.root / policy.POLICY_RELATIVE_PATH
         self.copy_pre_attestation_policy()
         shutil.copy2(
-            ROOT / "vault/tools/6389dcd4.py",
-            self.root / "vault/tools/6389dcd4.py",
+            ROOT / "vault/tools/tropo-distiller-model-edge.py",
+            self.root / "vault/tools/tropo-distiller-model-edge.py",
         )
         ruling_event = self.root / policy.OS_GEO_EVENT_RELATIVE_PATH
         ruling_event.parent.mkdir(parents=True, exist_ok=True)
@@ -333,7 +333,7 @@ class CanaryFixture:
             "state": "active",
             "transport": "library",
             "implementation_kind": "library",
-            "path": "vault/tools/6389dcd4.py",
+            "path": "vault/tools/tropo-distiller-model-edge.py",
         }
         self.write_index()
         self.run_dir = self.root / "vault/loop-runs/canary"
@@ -2687,7 +2687,7 @@ class DistillerMeteredCanaryTests(unittest.TestCase):
 
         spec = importlib.util.spec_from_file_location(
             "distiller_runner_signature_target",
-            ROOT / "vault/tools/6389dcd4.py",
+            ROOT / "vault/tools/tropo-distiller-model-edge.py",
         )
         assert spec and spec.loader
         runner = importlib.util.module_from_spec(spec)

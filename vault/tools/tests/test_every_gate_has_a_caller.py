@@ -69,6 +69,29 @@ DECLARED_UNWIRED = {
         "rather than left silent because a silently-unwired gate is exactly the "
         "defect this file exists to catch."
     ),
+    "candidate_built_payload": (
+        "Builds the data block for tropo.release.candidate_built. Its producer "
+        "is the build step of the release orchestrator, which lands with "
+        "2fae6312 steps 6-8; the payload shape landed early because the event "
+        "vocabulary and the freeze node both specify it (step 5 authorizes it, "
+        "step 4's node consumes the receipts it leads to). Declared rather than "
+        "wired to a convenient caller: inventing a production call site to "
+        "satisfy this check would be the gaming it exists to catch."
+    ),
+    "candidate_invalidated_payload": (
+        "Same producer and same stage as candidate_built_payload. It exists "
+        "separately because invalidating a candidate and superseding a frozen "
+        "package are different public facts, and 2fae6312 forbids collapsing "
+        "them; the shape is declared now so the orchestrator cannot quietly "
+        "conflate the two when it arrives."
+    ),
+    "active_candidate": (
+        "Observes which candidate is live for a run. Its consumer is the freeze "
+        "step's executor (7de2c49f), which is not yet wired — the same gap is "
+        "logged in that node's Known Enforcement Gaps table, so this is one gap "
+        "recorded in two places rather than two gaps. Arrives with 2fae6312 "
+        "steps 6-8."
+    ),
 }
 
 #: Not gates: pure formatting and construction helpers whose only job is to

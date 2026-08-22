@@ -77,7 +77,7 @@ Parallels session-agent.capsule's 8-slot convention. Legacy synonym acceptance p
 |---|---|---|
 | `mode` | enum | `inline` / `delegated` / `both`. Invocation mode — whether skill runs in parent context or as spawned sub-agent. Already used by 3 Dialect-A skills. |
 | `category` | enum | `lifecycle` / `governance` / `maintenance` / `debugging` / `discovery` / `content` (or extension). Machine-readable replacement for CURATOR categorization. |
-| `triggers` | string array | Machine-readable triggers — glob patterns (`"**/*.capsule.md"`), event names (`"on-boot"`, `"on-retire"`), keyword matches. Aligns with Cursor `globs:` / Copilot `applyTo:`. Enables registry.jsonl discovery beyond prose `when:`. |
+| `triggers` | string array | Machine-readable triggers — glob patterns (`"**/*.capsule.md"`), event names (`"on-boot"`, `"on-retire"`), keyword matches. Aligns with Cursor `globs:` / Copilot `applyTo:`. Enables index-driven discovery beyond prose `when:`. |
 | `params` | string array | Named substitution parameters (`[memory_path, health_report_path]`). Already used by 3 Dialect-A skills. |
 | `reads` | path array | Files the skill reads. Already used by Dialect B. Enables file-to-skill reverse index. |
 | `writes` | path array | Files the skill writes. Governance-relevant: validator may cross-check against AGENTS.md write-scope. |
@@ -146,9 +146,9 @@ Mirrors session-agent.capsule. `status: published` accepted as legacy synonym fo
 3. **Accept legacy name fields.** `skill:` and `skill_id:` remain valid as synonyms for `name:` indefinitely. Phase 1 migrates opportunistically; no forced rewrite.
 4. **`reads` / `writes` are governance-relevant.** When declared, validator may cross-check against target folders' AGENTS.md write-scope. A skill that writes to a folder it's not authorized for is a capsule violation.
 5. **Skills are read-at-runtime.** They do not produce vault entries; they produce effects in the filesystem. Their invocation may be recorded in `playbook-run` or agent records if called as part of a larger workflow.
-6. **Registry writes are generated, not hand-edited.** `registry.jsonl` entries produced by the registry builder.
+6. **Index entries are generated, not hand-edited.** A skill's row in `vault/00-index.jsonl` and its entry in the generated `.tropo/skill-catalog.md` are produced by `vault/tools/tropo-rebuild-vault.py` from the skill's own frontmatter.
 
-### Validation Checks (17, ERROR-severity at check-in / registry rebuild)
+### Validation Checks (17, ERROR-severity at check-in / index rebuild)
 
 1. All 8 required frontmatter slots present: `uid`, `name` (or legacy `skill`/`skill_id`/`title`), `type`, `status`, `owner`, `purpose` (frontmatter OR implicit purpose rule), `when` (frontmatter OR implicit when rule), provenance pair. **Known Phase-1 exception:** `.tropo/skills/check-sa-catalog.skill.md` has `uid: null` and is marked YELLOW-retrofit. Validator flags but does not block.
 2. Name source (from legacy-source rule) matches filename stem.
@@ -156,7 +156,7 @@ Mirrors session-agent.capsule. `status: published` accepted as legacy synonym fo
 4. `status` ∈ {`draft`, `active`, `deprecated`, `superseded`}. **Accept `published` as legacy synonym for `active`** (Dialect B).
 5. `purpose` is non-empty string, ≤160 chars (frontmatter field OR implicit-purpose paragraph).
 6. `when` is non-empty string (frontmatter field OR implicit-when section content).
-7. **Soft at Phase 1; hard at Phase 2+.** If `uid` is registered in `registry.jsonl` (the runtime callable catalog — skills project here per [e2f7d195](../../vault/files/e2f7d195.md)), reverse lookup matches name-source. If not registered, Phase-1 compliant. Phase 2+ hardens to "MUST be registered."
+7. **Soft at Phase 1; hard at Phase 2+.** If `uid` is indexed in `vault/00-index.jsonl` (skills project here), reverse lookup matches name-source. If not indexed, Phase-1 compliant. Phase 2+ hardens to "MUST be indexed."
 8. Provenance pair present — either (`created` + `created_by`) OR legacy absence accepted on pre-capsule Dialect-A skills.
 9. For `status: active`: body documents all 3 intents (Preamble, Steps with synonyms, Success with synonyms) — including the embedded-in-final-Step pattern. For `draft`: only Preamble required.
 10. *(honor-system)* `purpose` is substantive; `when` is substantive (validator catches empty/placeholder; quality reader-verified)
@@ -185,7 +185,6 @@ Core checks inherited.
 
 ### Phase 2 — 2-4 weeks later, opt-in
 
-- Populate `registry.jsonl` from capsule + existing skill frontmatter
 - Begin `triggers:` machine-readable backfill
 - Begin typed I/O backfill (`reads:`/`writes:` already in Dialect B)
 
@@ -212,7 +211,7 @@ Core checks inherited.
 - **[playbook-run.capsule (f2a8c3e1)](playbook-run.capsule.md)** — skill invocations may be recorded in playbook-run event logs.
 - **[core.capsule (ee814120)](core.capsule.md)** — extended (with explicit reconciliation; skills are kernel infrastructure, not vault entries).
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — governs this capsule.
-- **[`.tropo-studio/registries/registry.jsonl`](../../.tropo-studio/registries/registry.jsonl)** — runtime callable catalog. Skills project here. Registry writes generated from skill frontmatter (Rule 6).
+- **[`vault/00-index.jsonl`](../../vault/00-index.jsonl)** — the index every runtime callable projects into. Skill rows are generated from skill frontmatter (Rule 6).
 - **[`.tropo/skill-catalog.md`](../skill-catalog.md)** — v1.15 ship surface. Catalog generator emits `trigger_description:` (v1.3 field) verbatim alongside structural fields.
 - **The CURATOR** at [`.tropo/skills/index.skill.md`](../skills/index.skill.md) — meta-skill (skill catalog index). Phase 3 decides whether to retrofit to standard shape or formalize as separate `type: index` artifact.
 

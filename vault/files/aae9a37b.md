@@ -39,7 +39,7 @@ Each subsystem is a standing project with its own board, collections, and task f
 
 | Subsystem | UID | Description |
 |-----------|-----|-------------|
-| Tropo Library | [1aba710c](1aba710c.md) | Governed graph document store — ledger + registry + cascade + UID addressing + schemaless substrate + federation (NEW v1.3) |
+| Tropo Library | [1aba710c](1aba710c.md) | Governed graph document store — the Vault + registries + cascade + UID addressing + schemaless substrate + federation (NEW v1.3) |
 | Tropo Work (formerly TWS) | [2d083137](2d083137.md) | Typed work primitives — tasks, projects, decisions, specs, collections, concept→release chain |
 | Tropo Agents (formerly TAS; absorbs TBS) | [99ed55fd](99ed55fd.md) | Executive lifecycle + boot + session agents (sa.*) + v2 three-tier memory + retirement |
 | Tropo Playbooks (formerly TPS) | [76bab75f](76bab75f.md) | Playbook spec v2.2 + playbook.capsule v2.0 + pipeline subtype + skills + actions |

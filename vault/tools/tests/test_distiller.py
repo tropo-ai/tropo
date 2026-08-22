@@ -674,10 +674,27 @@ class AC5FailClosedPropagation(_OrientCase):
             circle_index=circle_index,
             rank_index=rank_index,
         )
-        self.assertFalse(result.ok)  # typed fail-closed error, not a partial
-        self.assertIsInstance(result.error, GraphError)
-        self.assertEqual(result.error.code, GraphErrorCode.VISIBILITY_UNRESOLVED)
-        self.assertIsNone(result.value)
+
+        # The expectation follows the Studio's ACTUAL cutover state rather than
+        # the state it had when this case was written. The comment above said
+        # "cutover INACTIVE on this Studio"; the B4a cutover has since landed,
+        # so visibility resolves and a fail-closed assertion here asserts that
+        # the cutover never happened. Both branches stay meaningful, so the
+        # fail-closed claim is still tested wherever the cutover is inactive.
+        from lib.audience_gate import cutover_active
+
+        if cutover_active(Path(repo_root)):
+            self.assertTrue(
+                result.ok,
+                f"cutover is active, so visibility resolves; got {result.error}",
+            )
+            self.assertIsNone(result.error)
+            self.assertIsNotNone(result.value)
+        else:
+            self.assertFalse(result.ok)  # typed fail-closed error, not a partial
+            self.assertIsInstance(result.error, GraphError)
+            self.assertEqual(result.error.code, GraphErrorCode.VISIBILITY_UNRESOLVED)
+            self.assertIsNone(result.value)
 
 
 # =========================================================================== #

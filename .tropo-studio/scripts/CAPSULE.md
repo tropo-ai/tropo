@@ -48,7 +48,7 @@ This folder mirrors the three-tier architecture at the scripts layer:
 
 ## Governance rules
 
-1. **Vault-scoped only.** Before adding a script here, ask: *"Would any Tropo-OS vault benefit from this, or only this one?"* If the answer is "any," propose graduation to `.tropo/scripts/`.
+1. **Vault-scoped only.** Before adding a script here, ask: *"Would any Tropo Studio benefit from this, or only this one?"* If the answer is "any," propose graduation to `.tropo/scripts/`.
 2. **Portable within the vault.** Don't hardcode the operator's machine path. Resolve dynamically.
 3. **Python.** Keep the language consistent. Engineering-layer tooling belongs elsewhere.
 4. **Document.** Every script has a docstring.

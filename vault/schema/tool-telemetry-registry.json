@@ -1,0 +1,184 @@
+{
+  "content_digest": "1daa89bbcf72c2c16952aba403ffccddcf70b76b3f31bab7e7e0d9eeaf8df6e8",
+  "coverage": {
+    "counter_classes": [
+      "attempted",
+      "enqueued",
+      "sampled_out",
+      "queue_dropped",
+      "serialization_rejected",
+      "persistence_failed",
+      "segment_rejected"
+    ]
+  },
+  "credential_token_prefixes": [
+    "ghp_",
+    "gho_",
+    "ghu_",
+    "ghs_",
+    "github_pat_",
+    "sk-ant-",
+    "sk-",
+    "akia",
+    "asia",
+    "xoxb",
+    "xoxp",
+    "xoxa",
+    "tok_",
+    "bearer "
+  ],
+  "harm_classes": [
+    "irreversible-write",
+    "reversible-write",
+    "read-only",
+    "none"
+  ],
+  "keep_priority": {
+    "failed": 1,
+    "refused": 2
+  },
+  "outcomes": [
+    "refused",
+    "failed"
+  ],
+  "producers": {
+    "pilot": [
+      "vault/tools/tropo-release.py",
+      "vault/tools/tropo-build-release.py",
+      "vault/tools/tropo-publish-release.py"
+    ],
+    "segment_floor": {
+      "15cae798": "argo-private",
+      "4e8d1c60": "argo-private",
+      "a1b8c2d4": "argo-private"
+    }
+  },
+  "query_projection": {
+    "global_sequence_exposed": false,
+    "viewer_filter_before_count": true
+  },
+  "reason_taxonomy": {
+    "environment": {
+      "codes": [
+        "tool-missing",
+        "bad-invocation",
+        "dependency-missing"
+      ],
+      "default_retryability": "non-retryable"
+    },
+    "execution": {
+      "codes": [
+        "subprocess-failed",
+        "timeout",
+        "output-invalid",
+        "exit-nonzero"
+      ],
+      "default_retryability": "retryable"
+    },
+    "persistence": {
+      "codes": [
+        "write-failed",
+        "index-refused",
+        "verify-failed"
+      ],
+      "default_retryability": "retryable"
+    },
+    "policy-gate": {
+      "codes": [
+        "gate-refused",
+        "lock-held",
+        "scope-refused",
+        "authority-missing"
+      ],
+      "default_retryability": "non-retryable"
+    }
+  },
+  "record_schema": {
+    "caller_payload": {
+      "optional": {
+        "gate_uid": "uid8",
+        "harm_class": "enum:harm_classes",
+        "pipeline_run_uid": "token",
+        "release_run_uid": "token",
+        "retryability": "enum:retryability",
+        "segment_inputs": "segment_input_list",
+        "tool_build_sha": "sha_hex"
+      },
+      "required": {
+        "attempt": "positive_int",
+        "invocation_uid": "token",
+        "operation_uid": "token",
+        "reason_category": "taxonomy_category",
+        "reason_code": "taxonomy_code",
+        "tool_uid": "uid8"
+      }
+    },
+    "forbidden": [
+      "argument_fingerprint",
+      "arg_hash",
+      "argv",
+      "args",
+      "result",
+      "results",
+      "exception",
+      "error_message",
+      "message",
+      "text",
+      "path",
+      "paths",
+      "credential",
+      "token",
+      "secret",
+      "env"
+    ],
+    "optional": {
+      "gate_uid": "uid8",
+      "harm_class": "enum:harm_classes",
+      "pipeline_run_uid": "token",
+      "release_run_uid": "token",
+      "tool_build_sha": "sha_hex"
+    },
+    "recorder_stamped": {
+      "dataschema": "dataschema",
+      "event_time_utc": "iso8601_utc",
+      "outcome": "enum:outcomes",
+      "recorder_version": "version",
+      "retryability": "enum:retryability",
+      "segment": "enum:segments"
+    },
+    "required": {
+      "attempt": "positive_int",
+      "dataschema": "dataschema",
+      "event_time_utc": "iso8601_utc",
+      "invocation_uid": "token",
+      "operation_uid": "token",
+      "outcome": "enum:outcomes",
+      "reason_category": "taxonomy_category",
+      "reason_code": "taxonomy_code",
+      "recorder_version": "version",
+      "retryability": "enum:retryability",
+      "segment": "enum:segments",
+      "tool_uid": "uid8"
+    },
+    "required_note": "required = caller_payload.required + recorder_stamped (the shaped record a sealed shard carries). A CALLER constructs a payload from caller_payload alone; the recorder derives the rest."
+  },
+  "recorder_version": "1.0.0",
+  "registry_kind": "tool-telemetry",
+  "registry_version": "1.0.0",
+  "retryability": [
+    "retryable",
+    "non-retryable",
+    "unknown"
+  ],
+  "segment_restrictiveness_order": [
+    "public",
+    "argo-reference",
+    "argo-private"
+  ],
+  "segments": [
+    "public",
+    "argo-reference",
+    "argo-private"
+  ],
+  "spec": "3f38521a"
+}

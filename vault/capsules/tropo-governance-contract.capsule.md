@@ -181,7 +181,7 @@ AGENTS.md at a folder's root is a uniform boilerplate pointer that satisfies the
 After v1.20.0 ships, AGENTS.md body updates to add the governance-contract UID as the canonical authority alongside (or replacing) the pre-v1.20.0 reference to `.tropo-studio/CAPSULE.md`. Pattern:
 
 ```
-This folder is part of a Tropo-OS vault. Before operating, read:
+This folder is part of a Tropo Studio. Before operating, read:
 
 1. .tropo/TROPO-CONTROL.md — OS rules, identity checkpoint, invariants
 2. STUDIO.md (vault root) — Organization defaults and constraints

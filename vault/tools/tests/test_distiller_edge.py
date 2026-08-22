@@ -111,8 +111,14 @@ class EdgeCase(unittest.TestCase):
         )
         self.assertTrue(result.ok, msg=result.error)
         self.deterministic = result.value
+        # note0001 is reached by `refs` and caps0001 by `governed_by`. Since
+        # 993820cb (Metis G99's finding, Mike-walked, A144 GO) relation
+        # specificity is a ranked feature: deliberate references score 1.0 and
+        # structural boilerplate like governed_by scores 0.15, so the note
+        # leads. This fixture still expected caps0001 first — which is the
+        # exact inversion that ruling was made to fix, frozen in a setUp.
         self.assertEqual(
-            self.deterministic.uids(), ("caps0001", "note0001", "memo0001")
+            self.deterministic.uids(), ("note0001", "caps0001", "memo0001")
         )
         self.bound = de.BoundOrientation(
             self.deterministic, self.viewer, SNAPSHOT
@@ -217,10 +223,16 @@ class DeterministicFallbackTests(EdgeCase):
         self.assertEqual(distilled.capture_status, "pending")
 
     def test_fallback_preserves_each_sources_span_order_and_global_budget(self):
+        # The multi-chunk body goes to whichever source the orientation ranks
+        # FIRST, derived rather than named. The claim under test is that one
+        # source's spans fill the budget in order — not which source that is.
+        # Hardcoding caps0001 tied this case to a ranking that 993820cb
+        # deliberately inverted, so it failed for a ruling it does not own.
+        leading = self.deterministic.uids()[0]
         loader = CountingLoader(
             {
                 **self.bodies,
-                "caps0001": "one one one\n\ntwo two two\n\nthree three three",
+                leading: "one one one\n\ntwo two two\n\nthree three three",
             },
             max_chunk_bytes=14,
         )
@@ -228,9 +240,9 @@ class DeterministicFallbackTests(EdgeCase):
         self.assertTrue(result.ok, msg=result.error)
         chunks = result.value.chunks
         self.assertEqual(len(chunks), 3)
-        self.assertEqual({chunk.source_uid for chunk in chunks}, {"caps0001"})
+        self.assertEqual({chunk.source_uid for chunk in chunks}, {leading})
         self.assertEqual(
-            "".join(chunk.text for chunk in chunks), loader._bodies["caps0001"]
+            "".join(chunk.text for chunk in chunks), loader._bodies[leading]
         )
         ranges = [
             (chunk.span_anchor.paragraph_start, chunk.span_anchor.paragraph_end)
@@ -310,13 +322,15 @@ class ConstrainedDoubleTests(EdgeCase):
                 de.SpanSelection(real.source_uid, real.span_anchor),
                 de.SpanSelection(real.source_uid, real.span_anchor),
             ),
-            lambda **_kwargs: (
-                de.SpanSelection(
-                    "note0001", by_uid["note0001"].span_anchor
-                ),
-                de.SpanSelection(
-                    "caps0001", by_uid["caps0001"].span_anchor
-                ),
+            # Two spans in the WRONG order, derived from the deterministic
+            # order and reversed. It used to name (note0001, caps0001)
+            # literally, which was out of order only while caps0001 ranked
+            # first; after 993820cb that pair became the CORRECT order, so the
+            # case stopped testing rejection and started testing acceptance
+            # while still sitting in a tuple called `invalid`.
+            lambda **_kwargs: tuple(
+                de.SpanSelection(uid, by_uid[uid].span_anchor)
+                for uid in reversed(self.deterministic.uids()[:2])
             ),
             raises,
         )

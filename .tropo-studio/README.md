@@ -1,6 +1,6 @@
 # `.tropo-studio/` — Your Vault's Admin Layer
 
-This is the **middle tier** of your Tropo-OS vault. It's where vault-wide defaults, memory, registries, and governance live — the things specific to YOUR vault, distinct from the OS kernel in `.tropo/` that ships with every Tropo-OS release.
+This is the **middle tier** of your Tropo Studio. It's where Studio-wide defaults, memory, registries, and governance live — the things specific to YOUR Studio, distinct from the OS kernel in `.tropo/` that ships with every Tropo-OS release.
 
 ## In plain English
 

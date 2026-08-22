@@ -86,7 +86,10 @@ class RuntimeCase(unittest.TestCase):
         )
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.studio_root = Path(self.temp.name) / "studio"
+        # resolve(): the metered preflight refuses symlinked path components
+        # in studio_root (correct, strict); macOS temp roots live under
+        # /var -> /private/var (symlink class, organ 11).
+        self.studio_root = Path(self.temp.name).resolve() / "studio"
         (self.studio_root / ".tropo").mkdir(parents=True)
         self.ledger_root = self.studio_root / "vault/loop-runs/.model-spend"
         self.ledger_root.mkdir(parents=True)
@@ -292,7 +295,7 @@ class SourceBoundaryTests(unittest.TestCase):
             TOOLS_DIR / "lib/distiller_query.py",
             TOOLS_DIR / "lib/distiller_edge.py",
             TOOLS_DIR / "lib/distiller.py",
-            TOOLS_DIR / "6389dcd4.py",
+            TOOLS_DIR / "tropo-distiller-model-edge.py",
         )
         forbidden_imports = {"requests", "httpx", "anthropic", "socket"}
         forbidden_names = {"emit_event", "capture_write"}

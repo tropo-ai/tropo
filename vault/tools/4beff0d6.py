@@ -506,9 +506,8 @@ Wrapper for source article [{source_uid}](argo-os/vault/files/{source_uid}.md) â
     print()
     print(f'  {_ok(f"Wrapper authored at vault/files/{new_uid}.md")}')
     print(f'  Note: vault index rebuild required before publish.py can see the new wrapper.')
-    print(f'  Run the Studio-native vault rebuild gesture (typically one of):')
-    print(f'    python3 .tropo-studio/scripts/rebuild-vault.py        # canonical Tropo-native')
-    print(f'    npm run vault:rebuild                                 # platform-dev alternate (if package.json available)')
+    print(f'  Run the Studio-native vault rebuild gesture:')
+    print(f'    python3 vault/tools/tropo-rebuild-vault.py --apply')
     print(f'  Then re-run: publish-check.py {source_uid}')
 
     return new_uid

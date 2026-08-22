@@ -307,7 +307,15 @@ def make_release_receipt(
 
 
 def receipt_sha256(receipt: Mapping[str, Any]) -> str:
-    validated = validate_release_receipt(dict(receipt))
+    """The content address of a receipt at whichever schema it declares.
+
+    Dispatches for the same reason the store and loader do. Hashing a v2
+    receipt through the v1 validator does not produce a v1 digest — it raises,
+    because every v2 field reads as unknown. So the address of a v2 receipt
+    was uncomputable, and any caller that needed it failed at a depth that
+    named the schema rather than the seam.
+    """
+    validated = validate_any_release_receipt(dict(receipt))
     return sha256_bytes(canonical_json_bytes(validated))
 
 
@@ -475,7 +483,13 @@ def validate_receipt_mapping(
             raise ReleaseReceiptError("release receipt mapping key must be lowercase sha256")
         if not isinstance(value, Mapping):
             raise ReleaseReceiptError("release receipt mapping value must be an object")
-        receipt = validate_release_receipt(dict(value))
+        # Dispatch on the declared schema. This validator kept calling the
+        # v1-only path after the store and the loader were moved onto
+        # validate_any_release_receipt, so a v2 receipt that wrote and read
+        # back correctly was still rejected here — every v2 field arrived as
+        # "unknown". It is the same one-representation-fixed-twin-missed shape
+        # the dispatcher's own docstring describes, one site further along.
+        receipt = validate_any_release_receipt(dict(value))
         actual = sha256_bytes(canonical_json_bytes(receipt))
         if actual != digest:
             raise ReleaseReceiptError("release receipt mapping hash does not re-derive")

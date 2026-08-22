@@ -96,7 +96,7 @@ For every collection in the work list, do the following:
 
 4. **Update the collection file.** Write a new members list to the body, preserving the existing structure (section headers, manual grouping, render mode). Update `last_modified` and `member_count` in the frontmatter. Update `last_synced` if present.
 
-5. **Update the matching collection-ref entry in the ledger.** The `member_count` and `last_synced` fields in `vault/files/<uid>.md` should reflect the refresh. Update the index record.
+5. **Update the matching collection-ref entry in the Vault.** The `member_count` and `last_synced` fields in `vault/files/<uid>.md` should reflect the refresh. Update the index record.
 
 ### Step 4 — Detect and report drift
 

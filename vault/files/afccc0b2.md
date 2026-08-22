@@ -29,7 +29,7 @@ capsule_version: '2.5'
 
 **Vault** — Your Tropo workspace. A folder on your computer containing all your agents, playbooks, decisions, and governance files. The vault IS the system — there's no hidden state anywhere else.
 
-**Ledger** — The flat, governed store of every work artifact in the vault. All entries live at `vault/files/<uid>.md`. The index at `vault/00-index.jsonl` is the discovery interface — you query it, not walk the filesystem. Machine-first, query-first.
+**Vault entries** — The flat, governed store of every work artifact in the Studio. All entries live at `vault/files/<uid>.md`. ("Ledger" was the pre-v1.8 name for this store; it is retired vocabulary.) The index at `vault/00-index.jsonl` is the discovery interface — you query it, not walk the filesystem. Machine-first, query-first.
 
 **Entry** — A single governed file in the Vault. Has a UID, a type, a status, an owner. Conforms to a capsule definition. Every task, decision, spec, document, and project is an entry.
 
@@ -47,7 +47,7 @@ capsule_version: '2.5'
 
 **Channel** — A shared file where agents log activity and coordinate. `channels/ops.md` is the system-wide operations log. Working channels (e.g., `channels/metis-vela.md`) are for bilateral coordination.
 
-**Board** — A synthesized view of an agent's active work. Generated from ledger data, not maintained by hand. Shows priorities, blockers, and state. Lives in `boards/`.
+**Board** — A synthesized view of an agent's active work. Generated from vault data, not maintained by hand. Shows priorities, blockers, and state. Lives in `boards/`.
 
 ---
 
@@ -91,7 +91,7 @@ capsule_version: '2.5'
 
 **UID** — An 8-character hex unique identifier assigned to every vault entry and every registered agent. Used for cross-referencing, tracking, and identity. Never reused, never changes.
 
-**Registry topology** — Tropo uses matched primitives per domain rather than one universal UID registry. Work artifacts are indexed at `vault/00-index.jsonl`. Agent identity is at `.tropo-studio/registries/agent-registry.yaml`. Runtime callables (sa.\*/skills/tools) are projected into `.tropo-studio/registries/registry.jsonl`. Kernel content (capsules / playbooks / skills) is discoverable via folder listing — filenames are addresses (`task.capsule.md` IS the type "task"). When referencing files across documents, use UIDs — they survive renames and moves. See [Registry Topology Consolidation](../../vault/files/adac1f10.md).
+**Registry topology** — Tropo uses matched primitives per domain rather than one universal UID registry. Work artifacts and runtime callables (sa.\*/skills/tools) are indexed at `vault/00-index.jsonl`, with the generated `.tropo/tool-catalog.md`, `.tropo/skill-catalog.md`, and `.tropo/sa-agent-catalog.md` as the quick-scan surfaces. Agent identity is at `.tropo-studio/registries/agent-registry.yaml`. Kernel content (capsules / playbooks / skills) is discoverable via folder listing — filenames are addresses (`task.capsule.md` IS the type "task"). When referencing files across documents, use UIDs — they survive renames and moves. See [Registry Topology Consolidation](../../vault/files/adac1f10.md).
 
 **Kernel** — The `.tropo/` folder. Contains framework primitives — capsule definitions, action templates, kernel playbooks, skills, and schemas. Receives updates from the Tropo update pipeline. Read from it, don't modify it casually. *(KB articles, formerly at `.tropo/kb/`, migrated to `vault/files/` at v1.19.0 per Universal Storage Convergence Lock A.)*
 
@@ -101,7 +101,7 @@ capsule_version: '2.5'
 
 **Task** — A single unit of work tracked as a vault entry. Has an owner, status, priority, and project. State machine: backlog → active → blocked → review → done → archived. Owner ≠ verifier.
 
-**Project** — A scoped body of work with an owner and a lifecycle. References constituent entries (tasks, specs, decisions) by UID. Projects are the human navigation primitive for a flat ledger — without them, humans see a graveyard of hex filenames.
+**Project** — A scoped body of work with an owner and a lifecycle. References constituent entries (tasks, specs, decisions) by UID. Projects are the human navigation primitive for a flat Vault — without them, humans see a graveyard of hex filenames.
 
 **Decision (ADR)** — An architectural decision record. Immutable once accepted. State machine: proposed → accepted → superseded. Captures the decision, the context, and the alternatives considered.
 

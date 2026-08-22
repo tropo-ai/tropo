@@ -211,7 +211,7 @@ Per sa.research 028, boot is a phase of agent lifecycle, not a sibling subsystem
 ### Three-tier boot configuration chain
 
 Per [ADR-032 (e6c3f410)](e6c3f410.md):
-- **Tier 1 — OS layer** at [.tropo/boot-config.md](../../.tropo/boot-config.md). Universal activation contract; ships with every Tropo-OS vault; cannot be removed by Tier 2/3.
+- **Tier 1 — OS layer** at [.tropo/boot-config.md](../../.tropo/boot-config.md). Universal activation contract; ships with every Tropo Studio; cannot be removed by Tier 2/3.
 - **Tier 2 — Vault layer** at [.tropo-studio/agent-boot.extension.md](../../.tropo-studio/agent-boot.extension.md). Vault-specific requirements (channel declarations, fleet-ops requirement, memory paths).
 - **Tier 3 — Agent layer** at `agents/<name>/agent-boot.extension.md`. Agent-specific additions (soul file path, commissioning list, hard behavioral rules).
 

@@ -3,23 +3,26 @@ uid: a7f2e9c4
 name: arch-spec
 type: capsule-definition
 extends: core
-version: 2.1
+version: 2.2
+lifecycle_pairing_amendment_2026_08_16: "v2.1 -> v2.2 bounded lock-break 2026-08-16 by talos-t44 under Mike-locked v1.89 dev-spec 271d28d7 (activation 7a47c089), whose committed_substrate assigns this amendment to the pairing package. Two changes. (1) Adds the OPTIONAL lifecycle_pairing declaration. (2) Mike-approved Q1 ruling (verbatim 'approved', evt_105e33c3ce6bb22f_00000229): removes 'archived' from the enforced status enum and from the prose state machine, because archived is a visibility state and never an intrinsic status. Retirement is state: archived at the status actually reached, which preserves honest history instead of inventing completion. Zero instances carried status: archived at the time of the change (measured), so no entry is invalidated. meta_status_rollup is deliberately untouched per comprehensive-rollup doctrine: enforced_enums narrows, the rollup stays total over observed values. Version bumped 2026-08-16 on Argus A150's ruling (evt_dd132e700471fc5e_00000014, verbatim: 'semantic capsule changes bump all six'), after T44 measured the effect and asked rather than deciding. For dev-spec specifically A150 held template_enforced_from_version at 1.8 in the same ruling, so v1.8+ stable-AC-ID behaviour is unchanged by the bump. Mint registry regenerated in the same commit."
 supersedes_version: '2.0'
 tier: os
 author: argus
 created: 2026-04-21
-modified: 2026-06-09
-modified_by: argus-a105
+modified: '2026-08-16'
+modified_by: talos-t44
 created_by: argus-a30
 status: locked
 locked_by: argus-a30
 locked_at: 2026-04-21
+lifecycle_pairing:
+  terminal_statuses: [locked, done]
+  archived_state_allowed_statuses: any
 enforced_enums:
   status:
     - draft
     - reviewed
     - locked
-    - archived
     - done
 meta_status_rollup:
   in-progress:
@@ -92,7 +95,7 @@ Arch-specs are the Specify-stage fallback: when a piece of work needs specificat
 | `title` | string | ≤ 120 chars. Format: `"<Thing Being Specified> — Architecture Specification"` |
 | `description` | string | ≤ 200 chars. One-line summary of what this spec covers. |
 | `state` | enum | `active` or `archived`. |
-| `status` | enum | `draft`, `reviewed`, `locked`, `archived`. See state machine below. Required starting state: `draft`. |
+| `status` | enum | `draft`, `reviewed`, `locked`, `done`. See state machine below. Required starting state: `draft`. Retirement is `state: archived`, not a status. |
 | `owner` | string | Agent who authored or owns the spec. |
 | `derived_from` | array of UIDs | Upstream design-briefs this spec formalizes. **MUST be non-empty — every spec derives from at least one brief.** If the spec truly has no prior brief (rare), author a minimal brief first (the "direct-commission rationale brief") and derive this spec from it. This preserves the typed-pipeline composability invariant without the edge case. Each UID must resolve to a `design-brief`. Composability pair with the brief's `composes_into:`. |
 | `member_of` | array of UIDs | At least one live project (typically the project authoring this spec). Pipeline-context addition (optional): the pipeline-stage-bucket (typically `63b69c61` for `3-specify/3-active`) OR a pipeline-run-scoped stage-stub project (see v3 Exercise Run 1 pattern — [9d4c1b87](../../vault/files/9d4c1b87.md) as exemplar). v3 amendment (2026-04-24): both conventions are legal — capsule-instance lifetime vs run-scoped ephemerality determines which fits. Use pipeline-stage-bucket for specs that persist across many runs; use stage-stub for specs authored as part of a single pipeline-run. |
@@ -163,14 +166,16 @@ draft → reviewed → locked → (state: archived on supersession or retirement
 
 **Required starting state:** every new arch-spec file MUST be authored at `status: draft`.
 
-Canonical status enum: `status:` ∈ {draft, reviewed, locked, archived, done}
+Canonical status enum: `status:` ∈ {draft, reviewed, locked, done}
+
+**`archived` is a `state`, never a `status` (v2.1, Mike-approved 2026-08-16).** Retirement and supersession are visibility moves: the spec keeps the intrinsic status it actually reached and gains `state: archived`. A spec retired at `draft` stays `draft` — marking it `locked` or `done` to file it away would invent completion that never happened. Terminality remains `{locked, done}`. See §Lifecycle Pairing in `core.capsule` v2.1 and the ruling in dev-spec [271d28d7](../files/271d28d7.md) §Q1.
 
 | Status | Meaning |
 |--------|---------|
 | `draft` | Spec being authored. Sections being filled. Not yet review-ready. |
 | `reviewed` | Spec has been reviewed (typically by the Specify-stage owner, independent review, or swarm). Ready for lock but not yet committed. |
 | `locked` | Spec committed. Builds following it are bound to its contracts. Amendments require supersession. |
-| `archived` | Historical. Spec is no longer active — either superseded or retired. |
+| `done` | Spec's work is complete. Terminal alongside `locked`. |
 
 ### Valid transitions
 
@@ -179,8 +184,8 @@ Canonical status enum: `status:` ∈ {draft, reviewed, locked, archived, done}
 - `draft → locked` — **fast-path, discouraged but legal.** Skips the `reviewed` gate. Appropriate only for trivial pattern-matched specs where independent review would be ceremony (e.g., an arch-spec mirroring a recently-locked sibling spec closely). Use sparingly; document the reason in §Open Technical Questions.
 - `reviewed → draft` — revision requested
 - `reviewed → locked` — spec committed; `locked_by:` and `locked_at:` set (standard path)
-- `locked → archived (superseded)` — successor spec locks; bidirectional `supersedes:` pair set atomically per project-plan Rule 9 pattern
-- `archived → archived` — terminal; immutable historical record
+- `locked → state: archived (superseded)` — successor spec locks; bidirectional `supersedes:` pair set atomically per project-plan Rule 9 pattern. The intrinsic status stays `locked`; supersession is a visibility move.
+- Retirement at any status — `state: archived` files the spec away without changing what it intrinsically reached; the archived record is immutable history.
 
 **Resolving Rule 6 with this transition list:** cold-boot 051 caught a P0 contradiction between a prior draft's Rule 6 wording and the enumerated transitions. Fast-path `draft → locked` is now explicit in both the rule (§Governance Rule 6) and this transition list — the two no longer disagree.
 
@@ -197,7 +202,7 @@ All other changes require supersession via `supersedes:` / `superseded_by:`.
 4. **`derived_from:` is required non-empty.** Every spec must derive from at least one design-brief. Direct-commissioned specs (no prior brief) are not permitted at v1.0 — if work genuinely has no brief, author a minimal rationale-brief first, then derive the spec from it. This preserves the typed-pipeline composability invariant. (Resolves cold-boot 051 P0 #2: prior draft's Rule 4 + Check 5 contradiction.)
 5. **`composes_into:` bidirectional pair is set at build-authoring time, not spec-lock time.** A spec locks with empty `composes_into:` — downstream builds haven't been authored yet. When a build is authored with `derived_from: [this-spec-uid]`, this spec's `composes_into:` gets the build's UID appended. Per Rule 2, this append is the one permitted post-lock mutation.
 6. **Review before lock is the default; fast-path is the exception.** A spec typically passes through `reviewed` before `locked` so an independent reviewer verifies the formalization. Direct `draft → locked` is legal (see §State Machine) but should be reserved for trivial pattern-matched specs (e.g., a sibling of a recently-reviewed sibling). Document the fast-path reason in §Open Technical Questions.
-7. **`state` and `status` operate at different layers.** `status` is the workflow enum: `draft → reviewed → locked → archived`. `state` is the lifecycle-visibility flag: `active` (shown in default views) or `archived` (hidden from default views but still queryable). A spec at `status: locked` typically has `state: active`. A spec at `status: archived` (superseded or retired) has `state: archived`. They're distinct fields with distinct semantics.
+7. **`state` and `status` operate at different layers.** `status` is the workflow enum: `draft → reviewed → locked`, terminal at `{locked, done}`. `state` is the lifecycle-visibility flag: `active` (shown in default views) or `archived` (hidden from default views but still queryable). A spec at `status: locked` typically has `state: active`. A superseded or retired spec keeps the status it reached and gains `state: archived` — which is why `archived` is not a status here at all (Mike-approved 2026-08-16, dev-spec [271d28d7](../files/271d28d7.md) §Q1). They're distinct fields with distinct semantics.
 8. **Change Log for amendments.** Not currently required in body (open question whether to require), but recommended. Pattern follows subsystem-hub.capsule v1.1 Change Log shape.
 
 ---
@@ -207,7 +212,7 @@ All other changes require supersession via `supersedes:` / `superseded_by:`.
 In addition to core checks. Labeled **[enforced]** (checkable at vault rebuild once v1.4 validator ships) or **[honor-system]** (reader-verified in v1.3).
 
 1. **[enforced]** `type: arch-spec`
-2. **[enforced]** `status` is one of: `draft`, `reviewed`, `locked`, `archived`
+2. **[enforced]** `status` is one of: `draft`, `reviewed`, `locked`, `done`
 4. **[enforced]** `state` is one of: `active`, `archived`
 5. **[enforced]** `derived_from:` present and non-empty; every UID resolves to a `design-brief`
 6. **[enforced]** `member_of:` non-empty; every UID resolves
@@ -255,7 +260,7 @@ Extends `core`. Inherits UID immutability, type immutability, owner/created/modi
 **Tools available:**
 - `vault/00-index.jsonl` — grep upstream briefs (required non-empty `derived_from:` per Rule 4)
 - Cascade indexes at `vault/00-cascade-*.jsonl` — locate adjacent specs + ADRs in the same domain
-- `vault/files/<uid>.md` writer — specs live as flat ledger entries
+- `vault/files/<uid>.md` writer — specs live as flat vault entries
 - Atomic-triangle validator *(forthcoming v1.4 pre-commit hook)* — enforces spec ↔ build ↔ release bidirectional pairs
 - Fast-path audit — search §Open Technical Questions across locked specs for documented fast-path rationale
 
@@ -279,7 +284,7 @@ Extends `core`. Inherits UID immutability, type immutability, owner/created/modi
 4. `derived_from:` required non-empty — every spec derives from at least one brief
 5. `composes_into:` is set at build-authoring time, not spec-lock time (spec locks with empty `composes_into:`)
 6. Review before lock is the default; fast-path is the exception and must be documented
-7. `state` (active/archived) and `status` (draft/reviewed/locked/archived) are distinct layers
+7. `state` (active/archived) and `status` (draft/reviewed/locked/done) are distinct layers
 8. Five required body sections in strict order: Thesis → Architecture → Required Contracts → State Machine → Open Technical Questions
 
 **Pitfalls:**

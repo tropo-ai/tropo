@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
-"""tropo-lock-release-plan.py — the release ignition (0a0a6777 AC4/AC5, §2-§4).
+"""---
+uid: 6a41f0c9
+type: tool
+name: tropo-lock-release-plan
+title: tropo-lock-release-plan.py — the release ignition
+status: active
+owner: talos
+extraction_scope: ship
+schema_version: 2
+modified: '2026-08-16'
+modified_by: talos-t44
+scope_ruling_note: 'extraction_scope declared 2026-08-16 per A150 ruling: the release orchestrator, preflight and lock-release-plan are product surfaces and ship. This tool had carried no frontmatter at all, which is why it sat outside the ship census while its siblings disagreed with each other.'
+---
+
+tropo-lock-release-plan.py — the release ignition (0a0a6777 AC4/AC5, §2-§4).
 
 The symmetric twin of `tropo-lock-dev-spec.py`. Where the dev lock is the only
 way a dev cycle starts, this is the only way a release cycle starts, and the two
@@ -38,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util as _ilu
 import json
 import re
 import subprocess
@@ -52,6 +67,18 @@ PIPELINE_RUNS = VAULT_ROOT / "vault" / "pipeline-runs"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib import fan_in, ignition, lock_transaction as lt  # noqa: E402
+from lib import release_saga
+
+# The seed renderer lives in the dev-spec lock tool and is now pipeline-neutral.
+# Loaded by path because the filename is hyphenated; imported rather than
+# reimplemented, so both locks emit one envelope.
+_lock_dev_spec = _ilu.module_from_spec(
+    _ilu.spec_from_file_location(
+        "_release_lock_seed_renderer",
+        Path(__file__).resolve().with_name("tropo-lock-dev-spec.py"),
+    )
+)
+_lock_dev_spec.__spec__.loader.exec_module(_lock_dev_spec)
 
 try:
     from lib import fast_yaml as _yaml_mod
@@ -467,12 +494,21 @@ def _patch_plan_frontmatter(raw: str, fields: dict) -> str:
             skipping = False
         out.append(line)
 
-    out.append("status: locked")
-    out.append(f"locked_by: {fields['locked_by']}")
-    out.append(f"locked_at: '{fields['locked_at']}'")
-    for key in ("dev_spec_uids", "fan_in_manifest_ref", "fan_in_digest",
-                "release_activation_uid", "release_pipeline_run_uid"):
-        value = fields[key]
+    # FIELD-DRIVEN, not a hardcoded roster. The first version emitted a fixed
+    # five keys and a literal `status: locked`, so `release_entry_uid` and
+    # `saga_id` were passed in by the caller and silently dropped on the floor —
+    # the plan never carried the release identity the spec's bidirectional
+    # table requires, and nothing failed, because the caller had no way to
+    # notice its own arguments being ignored. The literal status also made this
+    # function unusable for any transition other than locking: abandonment
+    # would have re-locked the plan it was ending.
+    if "status" in fields:
+        out.append(f"status: {fields['status']}")
+    for key, value in fields.items():
+        if key == "status":
+            continue
+        if value is None:
+            continue
         if isinstance(value, list):
             out.append(f"{key}:")
             out.extend(f"  - {v}" for v in value)
@@ -504,6 +540,102 @@ def _refuse_duplicate_keys(frontmatter_text: str) -> None:
             "YAML resolves duplicates by taking the last, so the plan would display "
             "one value and be read as another."
         )
+
+
+def _require_lock_time_field(fm: dict, field: str, plan_uid: str):
+    """A lock-time release field must be real, or the lock refuses.
+
+    dev-spec 2fae6312. The release entry is authored at plan lock, so every
+    field it carries is derived from the plan rather than from a shipped
+    artifact. A missing one is refused here instead of being filled with a
+    placeholder: a `TBD`, an empty list, or a null in a costume satisfies the
+    schema and tells the next reader something false with the capsule's
+    authority behind it.
+    """
+    value = fm.get(field)
+    if value is None or value == "" or value == [] or value == {}:
+        raise LockRefused(
+            "release-plan {} declares no {}. The lock authors a release entry "
+            "from these fields, and a placeholder there would be a fabricated "
+            "fact carrying the release capsule's authority.".format(plan_uid, field)
+        )
+    if isinstance(value, str) and value.strip().upper() in ("TBD", "N/A", "NONE"):
+        raise LockRefused(
+            "release-plan {} sets {} to {!r}, which is a placeholder wearing a "
+            "value's clothes.".format(plan_uid, field, value)
+        )
+    return value
+
+
+def _render_release_entry(
+    release_uid: str, plan_uid: str, plan_fm: dict, actor: str, saga_id: str,
+    activation_uid: str, run_uid: str, root_uid: str,
+) -> str:
+    """The pre-ship release entry, derived entirely from the locked plan.
+
+    Born at lock so the release has one identity from the beginning. Ship-only
+    fields are absent rather than invented; the release capsule's v1.89
+    amendment says exactly which those are.
+    """
+    today = time.strftime("%Y-%m-%d")
+    version = _require_lock_time_field(plan_fm, "release_version", plan_uid)
+    capabilities = _require_lock_time_field(plan_fm, "capabilities_touched", plan_uid)
+    kernel = _require_lock_time_field(plan_fm, "kernel_substrate_touched", plan_uid)
+    foundation = _require_lock_time_field(plan_fm, "foundation", plan_uid)
+    ratchets = _require_lock_time_field(plan_fm, "ratchet_targets", plan_uid)
+    hubs = _require_lock_time_field(plan_fm, "hub_summaries", plan_uid)
+    title = str(plan_fm.get("release_title") or "Tropo-OS v{}".format(version))
+    description = str(
+        plan_fm.get("release_description")
+        or "Release {} governed by release-plan {}.".format(version, plan_uid)
+    )
+    members = [plan_uid] + [
+        str(u) for u in (plan_fm.get("release_program_projects") or [])
+    ]
+    return (
+        "---\n"
+        "uid: {uid}\n"
+        "type: release\n"
+        "title: {title}\n"
+        "description: {description}\n"
+        "status: pre-ship\n"
+        "state: active\n"
+        "owner: {actor}\n"
+        "release_version: {version}\n"
+        "shipped_release_plan: {plan}\n"
+        "release_activation_uid: {activation}\n"
+        "release_pipeline_run_uid: {run}\n"
+        "activation_root_uid: {root}\n"
+        "saga_id: {saga}\n"
+        "capabilities_touched: {capabilities}\n"
+        "kernel_substrate_touched: {kernel}\n"
+        "foundation: {foundation}\n"
+        "ratchet_targets: {ratchets}\n"
+        "hub_summaries: {hubs}\n"
+        "member_of: {members}\n"
+        "created: {today}\n"
+        "modified: {today}\n"
+        "created_by: {actor}\n"
+        "schema_version: 2\n"
+        "governed_by: 8dd772a0\n"
+        "---\n"
+        "\n"
+        "# {title_plain}\n"
+        "\n"
+        "Pre-ship release identity, authored by the lock of release-plan "
+        "{plan}. Ship-only fields are absent until the facts exist: this entry "
+        "records what the release IS, not what it will have done.\n"
+    ).format(
+        uid=json.dumps(release_uid), title=json.dumps(title),
+        description=json.dumps(description), actor=actor,
+        version=json.dumps(str(version)), plan=json.dumps(plan_uid),
+        activation=json.dumps(activation_uid), run=json.dumps(run_uid),
+        root=json.dumps(root_uid), saga=json.dumps(saga_id),
+        capabilities=json.dumps(capabilities), kernel=json.dumps(kernel),
+        foundation=json.dumps(foundation), ratchets=json.dumps(ratchets),
+        hubs=json.dumps(hubs), members=json.dumps(members),
+        today=json.dumps(today), title_plain=title,
+    )
 
 
 def plan_release_lock(
@@ -574,6 +706,10 @@ def plan_release_lock(
     root_uid = minter(files_dir)
     activation_uid = minter(files_dir, exclude={root_uid})
     run_uid = minter(files_dir, exclude={root_uid, activation_uid})
+    release_uid = minter(files_dir, exclude={root_uid, activation_uid, run_uid})
+    # Derived, never minted: replay computes the same saga identity from the
+    # same run, so one release can never open a second saga over itself.
+    saga_id = release_saga.saga_id_for(run_uid)
     run_name = f"release-pipeline-{run_uid}-{time.strftime('%Y-%m-%d')}"
     run_folder = runs_dir / run_name
     manifest_rel = f"vault/pipeline-runs/{run_name}/fan-in-manifest.json"
@@ -605,21 +741,227 @@ def plan_release_lock(
     plan.create(files_dir / f"{activation_uid}.md", activation_text, governed=True)
     plan.create(files_dir / f"{run_uid}.md",
                 _render_run(run_uid, activation_uid, release_plan_uid, locked_by,
-                            run_name, snapshot),
+                            run_name, snapshot, release_uid, saga_id, root_uid),
                 governed=True)
+    # dev-spec 2fae6312: the release identity and its journal are born here, in
+    # the SAME transaction as the activation, root and run. Any of them landing
+    # without the others is the partial state AC5 refuses.
+    plan.create(files_dir / f"{release_uid}.md",
+                _render_release_entry(release_uid, release_plan_uid, fm, locked_by,
+                                      saga_id, activation_uid, run_uid, root_uid),
+                governed=True)
+    plan.create(run_folder / "run.jsonl",
+                _lock_dev_spec.render_lock_run_created(
+                    run_uid=run_uid,
+                    activation_uid=activation_uid,
+                    root_uid=root_uid,
+                    pipeline_uid=RELEASE_PIPELINE_UID,
+                    pipeline_version=snapshot.pipeline_version,
+                    actor=locked_by,
+                    subject_kind="release-plan",
+                    subject_uid=release_plan_uid,
+                    extra={"saga_id": saga_id, "release_entry_uid": release_uid},
+                ))
+    plan.notes["release_entry_uid"] = release_uid
+    plan.notes["saga_id"] = saga_id
+
     plan.patch(
         entry["path"], entry["raw"],
         _patch_plan_frontmatter(entry["raw"], {
+            "status": "locked",
+            "locked_by": locked_by,
+            "locked_at": time.strftime("%Y-%m-%d"),
             "dev_spec_uids": ordered,
             "fan_in_manifest_ref": manifest_rel,
             "fan_in_digest": fan_in.manifest_digest(rows),
             "release_activation_uid": activation_uid,
+            # The spec's bidirectional identity table requires all four on the
+            # plan. root and entry were being dropped by the patcher.
+            "activation_root_uid": root_uid,
             "release_pipeline_run_uid": run_uid,
-            "locked_by": locked_by,
-            "locked_at": time.strftime("%Y-%m-%d"),
+            "release_entry_uid": release_uid,
+            "saga_id": saga_id,
         }),
     )
     return plan
+
+
+#: Terminal state each locked record reaches when a release is abandoned.
+#: Declared as a table rather than inline writes so the test can assert the
+#: post-state from the same source the transaction applies, and so a record
+#: added to the lock cannot be silently forgotten here.
+ABANDON_TERMINAL_STATES = {
+    "plan": {"status": "cancelled"},
+    "activation": {"status": "retired"},
+    "run": {"status": "cancelled"},
+    "root": {"status": "cancelled", "state": "archived"},
+    "release_entry": {"status": "pre-ship", "state": "archived"},
+}
+
+
+def _abandon_receipt(plan_uid: str, reason: str, principal: str, at: str) -> str:
+    """One receipt, shared by every record the transaction touches.
+
+    Content-addressed over the abandonment's own facts so the same abandonment
+    computes the same receipt on replay, and two different abandonments of one
+    plan cannot collide.
+    """
+    payload = json.dumps(
+        {"plan": plan_uid, "reason": reason, "principal": principal, "at": at},
+        sort_keys=True, separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _shipped_evidence(release_entry: Optional[dict]) -> Optional[str]:
+    """Why this release may no longer be abandoned, or None.
+
+    Abandonment is a pre-ship act. Once anything is public the honest move is
+    forward-only compensation, never retracting the record of a thing that
+    happened — so this refuses rather than archiving a shipped release.
+    """
+    if release_entry is None:
+        return None
+    fm = release_entry["frontmatter"]
+    status = str(fm.get("status") or "").strip().lower()
+    if status and status != "pre-ship":
+        return f"release entry is status {status!r}, not 'pre-ship'"
+    for field in ("publication_receipt_sha256", "released_at", "public_asset_url"):
+        if fm.get(field):
+            return f"release entry carries {field}, so it has shipped"
+    return None
+
+
+def plan_release_abandon(
+    release_plan_uid: str,
+    abandoned_by: str,
+    reason: str,
+    files_dir: Path = VAULT_FILES,
+) -> lt.LockPlan:
+    """The PURE phase of abandonment: one transaction, or none.
+
+    A lock opens five correlated records and a reservation on every member.
+    Abandoning it has to close all of them together — a run left `active`
+    beside a `cancelled` plan is a release that is neither running nor over,
+    and the next lock attempt reads that as contention.
+
+    Reservations are released by the plan's own status: `cancelled` is in
+    fan_in.RESERVATION_RELEASING_STATUSES, so the members are freed by the same
+    write that ends the plan rather than by a second pass that could fail
+    separately.
+    """
+    entry = read_entry(release_plan_uid, files_dir)
+    if entry is None:
+        raise LockRefused(f"release-plan {release_plan_uid} does not resolve")
+    fm = entry["frontmatter"]
+    if fm.get("type") != "release-plan":
+        raise LockRefused(
+            f"{release_plan_uid} is type {fm.get('type')!r}, not a release-plan"
+        )
+    if not str(reason or "").strip():
+        raise LockRefused(
+            "abandonment requires a reason. The record outlives everyone who "
+            "remembers why, and an unexplained cancellation is indistinguishable "
+            "from a mistake."
+        )
+
+    status = str(fm.get("status") or "").strip().lower()
+    release_uid = str(fm.get("release_entry_uid") or "").strip()
+    activation_uid = str(fm.get("release_activation_uid") or "").strip()
+    run_uid = str(fm.get("release_pipeline_run_uid") or "").strip()
+    release_entry = read_entry(release_uid, files_dir) if release_uid else None
+
+    shipped = _shipped_evidence(release_entry)
+    if shipped:
+        raise LockRefused(
+            f"release-plan {release_plan_uid} cannot be abandoned: {shipped}. "
+            "After shipment the cure is forward-only compensation, never "
+            "retracting a record of something that already happened in public."
+        )
+
+    if status not in {"locked", "cancelled"}:
+        raise LockRefused(
+            f"release-plan {release_plan_uid} is status {status!r}; only a locked "
+            "plan has a transaction to abandon (and an already-cancelled one "
+            "replays as a no-op)"
+        )
+
+    at = time.strftime("%Y-%m-%d")
+    # An exact retry reuses the recorded receipt rather than minting a second
+    # one from today's date, so replay is byte-identical and not merely similar.
+    receipt = str(fm.get("abandon_receipt") or "").strip() or _abandon_receipt(
+        release_plan_uid, reason, abandoned_by, at
+    )
+    recorded_reason = str(fm.get("abandon_reason") or "").strip() or reason
+    recorded_at = str(fm.get("abandoned_at") or "").strip() or at
+    recorded_by = str(fm.get("abandoned_by") or "").strip() or abandoned_by
+
+    plan = lt.LockPlan(kind="release-plan-abandon", subject_uid=release_plan_uid,
+                       actor=abandoned_by)
+    plan.notes = {
+        "abandon_receipt": receipt,
+        "abandon_reason": recorded_reason,
+        "release_entry_uid": release_uid,
+        "release_activation_uid": activation_uid,
+        "release_pipeline_run_uid": run_uid,
+    }
+
+    shared = {
+        "abandoned_by": recorded_by,
+        "abandoned_at": recorded_at,
+        "abandon_reason": recorded_reason,
+        "abandon_receipt": receipt,
+    }
+
+    def _terminate(uid: str, role: str, extra: Optional[dict] = None) -> None:
+        """Patch one correlated record to its terminal state, if it is not there."""
+        if not uid:
+            return
+        record = read_entry(uid, files_dir)
+        if record is None:
+            return
+        target = dict(ABANDON_TERMINAL_STATES[role], **shared, **(extra or {}))
+        patched = _patch_plan_frontmatter(record["raw"], target)
+        # Byte equality is the whole idempotency guard, deliberately the only
+        # one. An earlier version also pre-checked whether each field already
+        # held its target value, which read like a safeguard and was dead: an
+        # already-terminal record patches to identical bytes, so this line
+        # caught it anyway. Two guards where one decides means a mutation to
+        # either survives, and the suite cannot tell you which one is load-
+        # bearing.
+        if patched != record["raw"]:
+            plan.patch(record["path"], record["raw"], patched)
+
+    root_uid = ""
+    if activation_uid:
+        activation = read_entry(activation_uid, files_dir)
+        if activation is not None:
+            root_uid = str(
+                activation["frontmatter"].get("activation_root_uid")
+                or activation["frontmatter"].get("activation_root_project")
+                or ""
+            ).strip()
+
+    _terminate(release_plan_uid, "plan")
+    _terminate(activation_uid, "activation")
+    _terminate(run_uid, "run")
+    _terminate(root_uid, "root", {"final_commit": receipt})
+    _terminate(release_uid, "release_entry")
+    return plan
+
+
+def abandon_release_plan(release_plan_uid: str, abandoned_by: str, reason: str,
+                         files_dir: Path = VAULT_FILES) -> dict:
+    """Plan and apply one abandonment. Returns the applied summary."""
+    with lt.exclusive_workspace_lock(timeout_s=30.0):
+        plan = plan_release_abandon(release_plan_uid, abandoned_by, reason, files_dir)
+        if not plan.operations:
+            # Every record is already terminal. An exact retry writes nothing —
+            # not "writes the same bytes again", which would still touch mtimes
+            # and journal a second transaction over a finished one.
+            return {"applied": False, "no_op": True, **plan.notes}
+        journal = lt.apply_plan(plan)
+        return {"applied": True, "no_op": False, "journal": str(journal), **plan.notes}
 
 
 def _mint_uid(files_dir: Path, exclude: Optional[set] = None) -> str:
@@ -660,7 +1002,8 @@ def _resolve_step_uids(root_uid: str, files_dir: Path) -> list:
 
 
 def _render_run(uid: str, activation_uid: str, plan_uid: str, actor: str,
-                run_name: str, snapshot) -> str:
+                run_name: str, snapshot, release_uid: str = '', saga_id: str = '',
+                root_uid: str = '') -> str:
     today = time.strftime("%Y-%m-%d")
     return f"""---
 uid: {json.dumps(str(uid))}
@@ -674,8 +1017,11 @@ pipeline: {RELEASE_PIPELINE_UID}
 pipeline_version: '{snapshot.pipeline_version}'
 declaration_digest: '{snapshot.digest}'
 activation: '{activation_uid}'
+activation_root_uid: '{root_uid}'
 substrate_authored_by: '{activation_uid}'
 release_plan_uid: '{plan_uid}'
+release_entry_uid: '{release_uid}'
+saga_id: '{saga_id}'
 run_folder: 'vault/pipeline-runs/{run_name}'
 created: '{today}'
 modified: '{today}'
@@ -743,12 +1089,52 @@ def lock_release_plan(release_plan_uid: str, locked_by: str,
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--release-plan-uid", required=True)
-    parser.add_argument("--locked-by", required=True)
+    parser.add_argument("--locked-by")
+    # Abandonment is a flag on the same tool rather than a separate script: it
+    # is the inverse of this transaction and has to know exactly what the lock
+    # created. A second tool would drift the moment the lock adds a record.
+    parser.add_argument(
+        "--abandon", action="store_true",
+        help="abandon a locked release plan: cancel the plan, terminate the "
+             "activation/run/root/entry, release member reservations",
+    )
+    parser.add_argument("--abandoned-by")
+    parser.add_argument("--reason", help="why this release is being abandoned")
     args = parser.parse_args()
 
     if not UID_RE.match(args.release_plan_uid):
         print(f"ERROR: --release-plan-uid must be 8-hex; got {args.release_plan_uid!r}",
               file=sys.stderr)
+        return 3
+
+    if args.abandon:
+        principal = args.abandoned_by or args.locked_by
+        if not principal:
+            print("ERROR: --abandon requires --abandoned-by", file=sys.stderr)
+            return 3
+        if not (args.reason or "").strip():
+            print("ERROR: --abandon requires --reason", file=sys.stderr)
+            return 3
+        try:
+            result = abandon_release_plan(
+                args.release_plan_uid, principal, args.reason
+            )
+        except (LockRefused, lt.LockRefusal) as exc:
+            print(f"REFUSED: {exc}", file=sys.stderr)
+            return 1
+        except lt.LockApplyFailure as exc:
+            print(f"PARTIAL: {exc}", file=sys.stderr)
+            return 2
+        if result.get("no_op"):
+            print(f"{args.release_plan_uid} already abandoned "
+                  f"(receipt={result['abandon_receipt'][:12]}); exact retry wrote nothing")
+        else:
+            print(f"{args.release_plan_uid} ABANDONED "
+                  f"receipt={result['abandon_receipt'][:12]} reason={result['abandon_reason']!r}")
+        return 0
+
+    if not args.locked_by:
+        print("ERROR: --locked-by is required to lock", file=sys.stderr)
         return 3
 
     code, message = lock_release_plan(args.release_plan_uid, args.locked_by)

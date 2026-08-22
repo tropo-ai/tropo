@@ -131,9 +131,13 @@ class TestFeedThePipelineV181V182(unittest.TestCase):
                 # The dev-spec must actually exist and actually be locked +
                 # mike-signed-accepted — the build's provenance must resolve to
                 # something real, not a dangling reference.
+                # UPDATED 2026-08-19 (talos-t47): both specs completed the
+                # pipeline (status: done). The provenance claim survives the
+                # terminal progression — done implies it passed through locked
+                # under the same mike-signed acceptance this asserts below.
                 ds_fm, _ds_body = _load(case["dev_spec_uid"])
                 self.assertEqual(ds_fm.get("type"), "dev-spec")
-                self.assertEqual(ds_fm.get("status"), "locked")
+                self.assertIn(ds_fm.get("status"), ("locked", "done"))
                 self.assertEqual(ds_fm.get("build_status"), "mike-signed-accepted")
 
     def test_build_evidence_is_transcribed_not_fabricated(self) -> None:
@@ -183,13 +187,38 @@ class TestFeedThePipelineV181V182(unittest.TestCase):
                 self.assertIn("build_path", body)
                 self.assertIn("derived_from", body)
 
-    def test_build_composes_into_is_unset(self) -> None:
-        """Rule 3: composes_into is populated AT SHIP TIME by the deploy-stage
-        owner (Vela's lane here) — Talos's build entry must NOT pre-set it."""
+    def test_build_composes_into_points_at_its_own_release(self) -> None:
+        """Rule 3, checked at the only time this file can still witness it.
+
+        The rule is that `composes_into` is populated AT SHIP TIME by the
+        deploy-stage owner, and that the build author must not PRE-set it.
+        Both releases shipped long ago and the field was populated by the
+        activation close (90e08940), which is precisely the gesture the rule
+        names — so asserting the field is absent now asserts that these
+        releases never shipped.
+
+        What the entry can still witness post-ship is that the field points at
+        THIS build's release rather than at nothing or at some other release.
+        The pre-set prohibition is a build-time property whose evidence lives
+        in git history, not in the file's current bytes; a test that cannot see
+        it should not claim to.
+        """
         for label, case in self.CASES.items():
             with self.subTest(label=label):
                 fm, _body = _load(case["build_uid"])
-                self.assertNotIn("composes_into", fm)
+                composed = fm.get("composes_into")
+                self.assertTrue(
+                    composed,
+                    f"{label} shipped, so its build entry should compose into a release",
+                )
+                target = composed[0] if isinstance(composed, list) else composed
+                target_fm, _ = _load(str(target))
+                self.assertEqual(target_fm.get("type"), "release")
+                self.assertIn(
+                    case["build_version"],
+                    str(target_fm.get("title", "")),
+                    f"{label} build composes into {target}, which is not its release",
+                )
 
     # ------------------------------------------------------------------
     # 3. The validator's coupling gate (8f15f08d) no longer flags either UID

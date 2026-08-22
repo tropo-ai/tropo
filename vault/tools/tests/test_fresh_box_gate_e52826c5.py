@@ -561,7 +561,20 @@ class PackageDeterminismTests(BuiltBoxCase):
         the packager ignored it. This re-emits with pruning neutered and
         requires the bytecode to reappear in the box.
         """
-        cached = list((self.source_root / "vault" / "tools" / "lib").rglob("*.pyc"))
+        lib_dir = self.source_root / "vault" / "tools" / "lib"
+        cached = list(lib_dir.rglob("*.pyc"))
+        if not cached:
+            # The materialized source is a git archive of TRACKED files, so it
+            # carries bytecode only when an earlier tool run compiled beside
+            # source — which Apple's Python never does (sys.pycache_prefix
+            # defaults to a user cache tree). Plant one deterministic .pyc so
+            # the control is machine-independent; the packager prunes by
+            # suffix and path shape, and the mutation arm copies bytes.
+            planted_dir = lib_dir / "__pycache__"
+            planted_dir.mkdir(exist_ok=True)
+            planted = planted_dir / "determinism-control.cpython-39.pyc"
+            planted.write_bytes(b"planted bytecode for the determinism control")
+            cached = [planted]
         self.assertTrue(
             cached,
             "no bytecode existed in the materialized source, so this case could "

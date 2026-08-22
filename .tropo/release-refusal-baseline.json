@@ -1,0 +1,73 @@
+{
+  "authored_at": "2026-08-16",
+  "authored_by": "talos-t44",
+  "authored_under": "2fae6312",
+  "baseline_version": "1.0.0",
+  "classes": [
+    {
+      "id": "R188-01-latent-index-debt",
+      "retrospective_row": "debt ratchet surfaced 11 latent findings"
+    },
+    {
+      "id": "R188-02-git-index-conflict",
+      "retrospective_row": "conflicted/autostash index made rebuild nonzero"
+    },
+    {
+      "id": "R188-03-capsule-version-shape",
+      "retrospective_row": "three specs omitted v1.8 capsule declaration"
+    },
+    {
+      "id": "R188-04-release-subsystem-registry",
+      "retrospective_row": "v1.86/v1.87 R11/R12 release history gaps"
+    },
+    {
+      "id": "R188-05-missing-leg-evidence",
+      "retrospective_row": "no doc/test leg evidence"
+    },
+    {
+      "id": "R188-06-missing-activation-key",
+      "retrospective_row": "release run lacked Pipeline Activation Key"
+    },
+    {
+      "id": "R188-07-post-mint-vocabulary",
+      "retrospective_row": "engine's own events looked like tampering"
+    },
+    {
+      "id": "R188-08-missing-briefing-description",
+      "retrospective_row": "AC2 authored prose absent"
+    },
+    {
+      "id": "R188-09-package-index-design",
+      "retrospective_row": "harness expected indexes the package intentionally omits"
+    },
+    {
+      "id": "R188-10-first-boot-derivation",
+      "retrospective_row": "pruning ran before customer first-boot index derivation"
+    },
+    {
+      "id": "R188-11-harness-receipt-absent",
+      "retrospective_row": "harness evidence not produced by its own agent"
+    },
+    {
+      "id": "R188-12-changelog-version-missing",
+      "retrospective_row": "target CHANGELOG entry absent before freeze"
+    },
+    {
+      "id": "R188-13-helper-signature-shadow",
+      "retrospective_row": "duplicate `_git` helper narrowed signature"
+    },
+    {
+      "id": "R188-14-final-instrument-set",
+      "retrospective_row": "final bytes lacked all four AC7 receipts"
+    },
+    {
+      "id": "R188-15-release-entry-absent",
+      "retrospective_row": "target release entry had never been minted"
+    }
+  ],
+  "classifier_version": "1.0.0",
+  "composite_sha256": "141c7eaf0dac27b6cb899b5f8837dcc7a92bbd5064f387717f9a6a86e7d00c83",
+  "note": "The fifteen refusal classes observed in the v1.88 release, as stable IDs. A refusal whose ID is not in this table is NEW by definition \u2014 that is the point of a closed baseline, and it is why an unknown ID may never be silently folded in. Editing these rows requires a separately reviewed baseline version, not an in-place amendment.",
+  "schema_version": 1,
+  "source_retrospective_uid": "5c26a093"
+}

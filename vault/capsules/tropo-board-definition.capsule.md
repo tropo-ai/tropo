@@ -41,7 +41,7 @@ supersedes: b0a4dde7
 
 A `board-definition` is a governed template for rendering boards. It names the target scope (project, team, collection, query), the recursion semantics, and an ordered list of sections — each a prose query against the Vault rendered in a declared format.
 
-The kernel ships one default board-definition: **`project-board`** (UID [c72f1a85](../seed/ledger/project-board.board-definition.md)). Projects inherit it as their status board when they declare no `status_board:`. Agents and humans can author additional board-definitions (custom status boards, grooming boards, sprint boards, portfolio boards) and projects declare which they use via named fields on the project frontmatter.
+The kernel ships one default board-definition: **`project-board`** (UID [c72f1a85](../seed/vault/project-board.board-definition.md)). Projects inherit it as their status board when they declare no `status_board:`. Agents and humans can author additional board-definitions (custom status boards, grooming boards, sprint boards, portfolio boards) and projects declare which they use via named fields on the project frontmatter.
 
 This capsule supersedes [board-def.capsule (b0a4dde7)](board-def.capsule.md) (dead schema — zero live instances) and takes over the "template" half of the pre-v0.3 [board.capsule (00ac0959)](board.capsule.md) (whose rendered-view half is now governed by [board-snapshot.capsule (b5a7c391)](board-snapshot.capsule.md)).
 
@@ -97,7 +97,7 @@ draft → active → superseded
 | `superseded` | Replaced by a newer version with `supersedes:` pointer. Retained for history. |
 
 **Transition rules:**
-- `draft` → `active` requires: (a) verification by the author (cold-boot test optional for custom definitions, required for kernel seeds), (b) unique `(type: board-definition, name, default_for)` triple in the ledger when `default_for:` is set (see [v0.3 §6.2](../../vault/files/74fd9b61.md)).
+- `draft` → `active` requires: (a) verification by the author (cold-boot test optional for custom definitions, required for kernel seeds), (b) unique `(type: board-definition, name, default_for)` triple in the Vault when `default_for:` is set (see [v0.3 §6.2](../../vault/files/74fd9b61.md)).
 - Only one kernel seed per `(name, default_for)` may be `active` at any time.
 
 ---
@@ -173,7 +173,7 @@ draft → active → superseded
 
 ### Worked examples
 
-- **[project-board kernel seed (c72f1a85)](../seed/ledger/project-board.board-definition.md)** — the canonical kernel default that ships with Tropo-OS. Every project without a `status_board:` named-field reference inherits this. Read it as the reference shape for any new board-definition.
+- **[project-board kernel seed (c72f1a85)](../seed/vault/project-board.board-definition.md)** — the canonical kernel default that ships with Tropo-OS. Every project without a `status_board:` named-field reference inherits this. Read it as the reference shape for any new board-definition.
 
 ### Go next
 
@@ -211,7 +211,7 @@ See [project.capsule v2.1 (34e4cb0b)](project.capsule.md) §Optional Frontmatter
 
 ## Example — Kernel Default
 
-See [`project-board` kernel seed (c72f1a85)](../seed/ledger/project-board.board-definition.md) for the shipped default. That file is the canonical example of a valid board-definition.
+See [`project-board` kernel seed (c72f1a85)](../seed/vault/project-board.board-definition.md) for the shipped default. That file is the canonical example of a valid board-definition.
 
 ---
 

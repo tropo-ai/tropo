@@ -33,6 +33,11 @@ DEAD_DEPLOY = "3a7dbdda"
 #: A148's preflight §3, in declaration order.
 FOUR_INSTRUMENTS = ["4262d5fa", "a0f2bea8", "bc6b17ec", "c6b61fb9"]
 
+#: The freeze, inserted 2026-08-16 under locked dev-spec 2fae6312 step 4. The
+#: chain grew by one node; it did not stop being a linear chain ending at
+#: Publish, which is what this file actually asserts.
+FREEZE = "7de2c49f"
+
 
 def frontmatter(uid: str) -> dict:
     text = (FILES / f"{uid}.md").read_text(encoding="utf-8")
@@ -65,7 +70,7 @@ class VerifyResolvesFourInstruments(unittest.TestCase):
                 self.assertEqual(member_of(uid), [VERIFY])
 
     def test_the_verify_chain_is_linear_and_ends_at_publish(self):
-        expected = FOUR_INSTRUMENTS + [PUBLISH]
+        expected = FOUR_INSTRUMENTS + [FREEZE, PUBLISH]
         for current, following in zip(expected, expected[1:]):
             with self.subTest(step=current):
                 self.assertEqual(

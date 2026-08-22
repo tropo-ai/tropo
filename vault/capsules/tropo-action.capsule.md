@@ -100,7 +100,7 @@ One short paragraph naming what the action does and why it exists. The "reader w
 
 ### 2. `## 2. Prerequisites`
 
-List of vault preconditions the invoker must have satisfied. Example: valid parent project UID, writeable ledger, registered owner. Failure of a prerequisite aborts the action before any write.
+List of vault preconditions the invoker must have satisfied. Example: valid parent project UID, writeable Vault, registered owner. Failure of a prerequisite aborts the action before any write.
 
 ### 3. `## 3. Inputs`
 
@@ -191,7 +191,6 @@ The 10 existing actions ([create-task](../actions/create-task.action.md), [creat
 
 1. **Add `governed_by: 9b7f5e34`** to frontmatter.
 2. **Verify body conforms to 6-section shape.** sa.research 025 spot-checked; all conform to convention. Confirming requires reading each once — ~15 min total.
-3. **Index refresh:** capsule rules auto-propagate via `rebuild-registry.ts` since the registry schema matches this capsule's required fields (see registry.jsonl Design Spec).
 
 Retrofit is a v1.3 Stream D item (D5 in the residual cleanup list).
 
@@ -218,7 +217,7 @@ All 10 active actions governed by this capsule on retrofit. Source of truth rema
 | `act-create-project` | [create-project.action.md](../actions/create-project.action.md) | Compound: project + 2 collections + navigation folder |
 | `act-create-design-brief` | [create-design-brief.action.md](../actions/create-design-brief.action.md) | Create one exploratory design-brief |
 | `act-create-design-spec` | [create-design-spec.action.md](../actions/create-design-spec.action.md) | Create one design-spec as draft |
-| `act-create-collection` | [create-collection.action.md](../actions/create-collection.action.md) | Two-file write: manifest + ledger collection-ref |
+| `act-create-collection` | [create-collection.action.md](../actions/create-collection.action.md) | Two-file write: manifest + vault collection-ref |
 | `act-create-decision` | [create-decision.action.md](../actions/create-decision.action.md) | Create one ADR as proposed |
 | `act-create-note` | [create-note.action.md](../actions/create-note.action.md) | Create one governed note |
 | `act-generate-view` | [generate-view.action.md](../actions/generate-view.action.md) | Create a new folder hierarchy of collections |
@@ -235,7 +234,6 @@ All 10 active actions governed by this capsule on retrofit. Source of truth rema
 - `ls .tropo/actions/*.action.md` — survey the 10 shipped actions before authoring a duplicate
 - [`.tropo/actions/00-index.md`](../actions/00-index.md) — action catalog with semantic groupings
 - `vault/00-index.jsonl` — grep `governed_by: 9b7f5e34` to enumerate retrofit-compliant actions
-- `.tropo-studio/registries/registry.jsonl` — once seeded (Phase 2 of tool.capsule), tool entries with `transport: action` surface here
 - Reference instances: [create-project.action.md](../actions/create-project.action.md) (compound multi-artifact, atomic), [create-collection.action.md](../actions/create-collection.action.md) (two-file write — manifest + ledger ref), [create-task.action.md](../actions/create-task.action.md) (single-artifact baseline)
 
 **Skills:**
@@ -274,7 +272,7 @@ All 10 active actions governed by this capsule on retrofit. Source of truth rema
 
 **Worked examples:**
 - [create-project.action.md](../actions/create-project.action.md) v3.1 — compound: project + 2 collections + navigation folder; canonical multi-artifact atomic action; references all 6 REQUIRED body sections + §7 Failure Modes
-- [create-collection.action.md](../actions/create-collection.action.md) — two-file write (manifest + ledger collection-ref); pairs with [collection.capsule (c04e7a91)](collection.capsule.md) + [collection-ref.capsule v3.0 (c01ec700)](collection-ref.capsule.md)
+- [create-collection.action.md](../actions/create-collection.action.md) — two-file write (manifest + vault collection-ref); pairs with [collection.capsule (c04e7a91)](collection.capsule.md) + [collection-ref.capsule v3.0 (c01ec700)](collection-ref.capsule.md)
 - [create-task.action.md](../actions/create-task.action.md) — single-artifact baseline; the simplest shape
 
 **Go next:**

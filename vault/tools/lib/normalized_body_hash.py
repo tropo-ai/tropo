@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
-import re
 import unicodedata
 from functools import lru_cache
 from pathlib import Path
@@ -16,14 +15,22 @@ from types import ModuleType
 from typing import Union
 
 
+try:
+    from .governed_body import strip_nav_block_bytes
+except ImportError:  # direct path-load used by tropo-validate.py
+    _gb_spec = importlib.util.spec_from_file_location(
+        "_normalized_body_hash_governed_body",
+        Path(__file__).resolve().with_name("governed_body.py"),
+    )
+    _gb_module = importlib.util.module_from_spec(_gb_spec)
+    _gb_spec.loader.exec_module(_gb_module)
+    strip_nav_block_bytes = _gb_module.strip_nav_block_bytes
+
+
 PathLike = Union[str, Path]
 
 _OPENING_FENCE = b"---\n"
 _CLOSING_FENCE = b"\n---\n"
-_NAV_BLOCK_RE = re.compile(
-    rb"<!-- nav-block:start -->.*?<!-- nav-block:end -->",
-    re.DOTALL,
-)
 
 
 class BodyBoundaryError(ValueError):
@@ -83,7 +90,7 @@ def normalized_body_bytes(path: PathLike) -> bytes:
     whitespace strip; and exactly one trailing newline.
     """
     body = _post_fence_body_bytes(path)
-    body = _NAV_BLOCK_RE.sub(b"", body)
+    body = strip_nav_block_bytes(body)
     text = body.decode("utf-8", errors="replace")
     text = unicodedata.normalize("NFC", text)
     text = text.replace("\r\n", "\n").replace("\r", "\n")

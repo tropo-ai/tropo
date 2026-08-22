@@ -32,8 +32,8 @@ Use this whenever you create a new file that has YAML frontmatter. Per matched-p
 2. **Add the UID to frontmatter.** Insert `uid: a3f2b918` in the file's YAML frontmatter block (between the `---` delimiters). Include `type:`, `title:`, `status:` (per the file's capsule), `created:`, and `created_by:`.
 
 3. **The rebuilder projects the file into the right index.** Per matched-primitives:
- - **Ledger entries** (governed work artifacts at `vault/files/<uid>.md`) → projected into `vault/00-index.jsonl` by `vault/tools/tropo-rebuild-vault.py` on `python3 vault/tools/tropo-rebuild-vault.py --apply`.
- - **Runtime callables** (sa.\*/skills/tools) → projected into `.tropo-studio/registries/registry.jsonl` by `scripts/rebuild-registry.ts`.
+ - **Vault entries** (governed work artifacts at `vault/files/<uid>.md`) → projected into `vault/00-index.jsonl` by `vault/tools/tropo-rebuild-vault.py` on `python3 vault/tools/tropo-rebuild-vault.py --apply`.
+ - **Runtime callables** (sa.\*/skills/tools) → also indexed in `vault/00-index.jsonl` by the same rebuild, and surfaced by the generated catalogs `.tropo/tool-catalog.md`, `.tropo/skill-catalog.md`, and `.tropo/sa-agent-catalog.md`.
  - **Agent identity** (executive activations, charters) → manually update `.tropo-studio/registries/agent-registry.yaml` with the agent's UID, class, path, and identity.
  - **Kernel content** (capsules, kernel playbooks, kernel skills) → discoverable via folder listing — filename IS the address. No separate index step.
 
@@ -49,7 +49,7 @@ Use this whenever you create a new file that has YAML frontmatter. Per matched-p
 
 ## Success
 
-The file has a `uid:` in frontmatter, the appropriate matched-primitive index reflects it (after rebuild for ledger/runtime; after manual update for agent identity; immediate for folder-listed kernel content), it is listed in the folder's `00-index.md`, and the creation is logged in `channels/ops.md`.
+The file has a `uid:` in frontmatter, the appropriate matched-primitive index reflects it (after rebuild for vault entries and runtime callables; after manual update for agent identity; immediate for folder-listed kernel content), it is listed in the folder's `00-index.md`, and the creation is logged in `channels/ops.md`.
 
 ---
 
@@ -57,14 +57,14 @@ The file has a `uid:` in frontmatter, the appropriate matched-primitive index re
 
 *When a file inside `projects/<slug>/` is created, moved, renamed, or removed, both the filesystem AND the Vault must agree on the file's identity. The Vault holds the canonical record (UID, frontmatter, relationships); the filesystem holds the navigable surface. This section governs the four lifecycle events that keep them in sync.*
 
-*Per [v1.4 Stream 2 §D2.2 (d9f3b8c1)](../../vault/files/d9f3b8c1.md) — "syncs files in projects/<slug>/ with ledger entries." Handles create / move / rename / delete lifecycle. Idempotent; safe to re-run.*
+*Per [v1.4 Stream 2 §D2.2 (d9f3b8c1)](../../vault/files/d9f3b8c1.md) — "syncs files in projects/<slug>/ with vault entries." Handles create / move / rename / delete lifecycle. Idempotent; safe to re-run.*
 
 ### Create — A new file lands in `projects/<slug>/`
 
 Standard `## Steps` above apply. Plus:
 
 - The vault entry MUST declare `member_of:` containing the project's UID — that's what makes it a "project file" rather than a vault-root orphan.
-- If the file is created at `projects/<slug>/<filename>.md` BEFORE the ledger entry exists, treat as a vault-root file pending registration: assign UID, author the ledger entry at `vault/files/<uid>.md`, set `member_of: [<project-uid>]`, then log via §Steps step 5.
+- If the file is created at `projects/<slug>/<filename>.md` BEFORE the vault entry exists, treat as a vault-root file pending registration: assign UID, author the vault entry at `vault/files/<uid>.md`, set `member_of: [<project-uid>]`, then log via §Steps step 5.
 - Update the project's `projects/<slug>/00-index.md` (per [D2.3 00-index auto-maintenance](../../vault/files/d9f3b8c1.md)) — list the new file with type and one-line description.
 
 ### Move — File goes from `projects/<slug-A>/` to `projects/<slug-B>/`
@@ -73,7 +73,7 @@ A move means the file's organizational home changed; its identity (UID) did not.
 
 1. **Read the file's frontmatter.** Capture `uid:` + current `member_of:`.
 2. **Update `member_of:`.** Remove the old project's UID; add the new project's UID. Preserve all other `member_of:` entries. (Files can belong to multiple projects per Principle 2.4.)
-3. **Move the file** on the filesystem from `projects/<slug-A>/<filename>.md` to `projects/<slug-B>/<filename>.md`. The file's `<uid>.md` ledger entry stays at `vault/files/<uid>.md` — the LEDGER path doesn't change.
+3. **Move the file** on the filesystem from `projects/<slug-A>/<filename>.md` to `projects/<slug-B>/<filename>.md`. The file's `<uid>.md` vault entry stays at `vault/files/<uid>.md` — the Vault path doesn't change.
 4. **Run `python3 vault/tools/tropo-rebuild-vault.py --apply`** so `00-index.jsonl` reflects the updated `member_of:`.
 5. **Update both projects' 00-index.md** — remove from old project, add to new.
 6. **Log to ops.md:**
@@ -115,7 +115,7 @@ The UID is the canonical identifier per [STUDIO.md §Cross-References](../../STU
    [YYYY-MM-DD HH:MM] <your-agent-id> — Archived <filename> in <slug>/. UID: <uid>. [superseded_by: <uid> | reason: <one-line>]
    ```
 
-**The ledger entry stays at `vault/files/<uid>.md`.** It is now `state: archived` — readable, refer-able, but not in active views. Hard-delete is a separate destructive operation requiring explicit human authorization per STUDIO.md §Constraints.
+**The vault entry stays at `vault/files/<uid>.md`.** It is now `state: archived` — readable, refer-able, but not in active views. Hard-delete is a separate destructive operation requiring explicit human authorization per STUDIO.md §Constraints.
 
 **Idempotency:** if `state: archived` is already set and the file is already in `99-archive/`, noop.
 
@@ -144,4 +144,4 @@ This makes the skill safe to invoke during recovery passes, audit sweeps, or bat
 ---
 
 *register-file skill v1.1 | Vela V36 | 2026-04-28 — D2.2 project-file sync lifecycle added*
-*"Filesystem and ledger agree. UID is the canonical identifier. Archive, don't delete."*
+*"Filesystem and Vault agree. UID is the canonical identifier. Archive, don't delete."*

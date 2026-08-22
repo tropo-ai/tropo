@@ -14,6 +14,7 @@ Shared by tropo-export.py and vault/tools/tests/test_work_crosses_boundary_v181.
 
 import hashlib
 import re
+from pathlib import Path
 
 from lib.tropo_update_receipt import (
     NAV_BLOCK_END,
@@ -38,10 +39,19 @@ __all__ = [
 
 ANCHOR_RE = re.compile(r'<!--\s*tropo:block\s+idx=\d+\s+hash=[0-9a-f]{8}\s*-->\n?')
 _FRONTMATTER_RE = re.compile(r'^---\s*\n.*?\n---\s*\n', re.DOTALL)
-_NAV_BLOCK_RE = re.compile(
-    re.escape(NAV_BLOCK_START) + r".*?" + re.escape(NAV_BLOCK_END) + r"\n*",
-    re.DOTALL,
-)
+# v1.89 271d28d7 AC6: the span comes from the canonical home. This built its
+# own pattern from the sentinel constants and left it UNANCHORED, so a sentinel
+# quoted mid-line in an author's prose was treated as chrome and removed.
+try:
+    from .governed_body import _NAV_BLOCK_RE as _NAV_BLOCK_RE
+except ImportError:  # direct path-load
+    import importlib.util as _ilu
+    _gb_spec = _ilu.spec_from_file_location(
+        "_round_trip_governed_body", Path(__file__).resolve().with_name("governed_body.py")
+    )
+    _gb = _ilu.module_from_spec(_gb_spec)
+    _gb_spec.loader.exec_module(_gb)
+    _NAV_BLOCK_RE = _gb._NAV_BLOCK_RE
 
 
 def strip_user_content(text):

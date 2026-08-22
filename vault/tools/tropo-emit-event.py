@@ -512,6 +512,16 @@ def emit(event_type: str, source: str, source_uid: str, lifecycle: str,
     strict=True (R3 v1.59 Lane C): raises ValueError on unregistered event type
     instead of printing WARN. Default WARN at v1.59; ratchet to default-strict at v1.60+.
     """
+    if event_type == "tropo.tool.telemetry.recorded":
+        # 3f38521a: telemetry is a distinct LOCAL durability lane, never the
+        # canonical Git event stream. This synchronous emitter is exactly the
+        # wrong door — observed tools enqueue through lib/tool_telemetry.py
+        # and the drainer seals local shards.
+        raise ValueError(
+            "tropo.tool.telemetry.recorded must never ride the canonical "
+            "event bus: enqueue via vault/tools/lib/tool_telemetry.py "
+            "(record_refused/record_failed) and let "
+            "tropo-drain-tool-telemetry.py seal local shards (3f38521a)")
     if event_type not in REGISTERED_TYPES:
         msg = f"unregistered event type {event_type!r} (not in events.capsule v1.1 §3)"
         if strict:

@@ -10,7 +10,7 @@ maintained_by: tropo
 
 # Tropo-OS Governed Folder
 
-This folder is part of a Tropo-OS vault. Before operating, read these files in order:
+This folder is part of a Tropo Studio. Before operating, read these files in order:
 
 1. **`.tropo/TROPO-CONTROL.md`** -- OS rules, identity checkpoint, invariants
 2. **`STUDIO.md`** (vault root) -- Organization defaults and constraints

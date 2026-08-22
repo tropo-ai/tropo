@@ -142,17 +142,17 @@ Run before invoking `vault/tools/tropo-build-release.py`. Per release-test-plan 
 #### Step 1.1 — Vault validate
 *Executor: dispatcher.* Run `python3 vault/tools/tropo-validate.py`. Pass criterion: exit 0; zero unresolved cross-references; AGENTS.md/CAPSULE.md coverage 100% on governed folders.
 
-#### Step 1.2 — Ledger rebuild
+#### Step 1.2 — Vault rebuild
 *Executor: dispatcher.* Run `npx tsx `vault/tools/tropo-rebuild-vault.py`. Pass criterion: all vault entries parse; zero unclosed-frontmatter; index regenerates cleanly.
 
 #### Step 1.3 — KB freshness
-*Executor: dispatcher.* Manual review + `npm run kb:index`. Pass criterion: no KB article contradicts current ledger / capsule conventions.
+*Executor: dispatcher.* Manual review + `npm run kb:index`. Pass criterion: no KB article contradicts current Vault / capsule conventions.
 
 #### Step 1.4 — Capsule worked-examples resolution
 *Executor: dispatcher.* grep + index lookup. Pass criterion: all UIDs cited in capsule "Worked examples" / "Aligned with" / "Relationship to other capsules" sections resolve in `vault/00-index.jsonl`.
 
 #### Step 1.5 — Open ship-blockers query
-*Executor: dispatcher.* Ledger query: `member_of:` includes the release's planning project AND `status: active|accepted` AND `priority: p0`. Pass criterion: zero results.
+*Executor: dispatcher.* Vault query: `member_of:` includes the release's planning project AND `status: active|accepted` AND `priority: p0`. Pass criterion: zero results.
 
 #### Step 1.6 — Stage 1 verdict + milestone
 *Executor: dispatcher.* All 5 sub-steps PASS → write Pre-Build PASS milestone. Any FAIL → HALT; remediate at source; restart Stage 1.

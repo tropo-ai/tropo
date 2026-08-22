@@ -59,9 +59,18 @@ def check_rebuild_index() -> list[str]:
         for name in (
             "tropo-generate-relations-header.py",
             "tropo-navblock-strip.py",
+            # The apply path regenerates the mint registry, and the registry
+            # generator reads vault/capsules. Neither was needed when this
+            # fixture was written; both are now, and their absence made
+            # rebuild-index exit 8 on a studio that was otherwise fine.
+            "tropo-generate-mint-registry.py",
         ):
             shutil.copy2(TOOLS / name, tools / name)
         shutil.copytree(TOOLS / "lib", tools / "lib")
+        shutil.copytree(
+            Path(__file__).resolve().parents[2] / "capsules",
+            studio / "vault" / "capsules",
+        )
 
         seeded: dict[str, str] = {}
         # Capsules are type-gated at index time; seed the three open type-dirs.
@@ -339,7 +348,12 @@ def check_mint_id_chokepoint_gate() -> list[str]:
             capture_output=True, text=True, cwd=str(ROOT),
         )
         combined = result.stdout + result.stderr
-        if "bypasses the tropo-mint-id.py chokepoint" not in combined:
+        # The FIXTURE'S OWN NAME, not the generic phrase. Three standing
+        # bypasses in the tree already emit "bypasses the tropo-mint-id.py
+        # chokepoint", so grepping that phrase passed whether or not the gate
+        # ever looked at the plant — the adversarial half of this check was
+        # satisfied by unrelated debt (found 2026-08-16, talos-t44).
+        if fixture.name not in combined:
             failures.append(
                 "mint-id-chokepoint gate did NOT flag the planted token_hex(4) bypass "
                 f"(exit={result.returncode}; got tail: {combined[-400:]})"
@@ -348,16 +362,33 @@ def check_mint_id_chokepoint_gate() -> list[str]:
         if fixture.exists():
             fixture.unlink()
 
-    # Verify clean after removal
+    # Verify the PLANT's finding is gone. Deliberately not "the whole gate now
+    # reports PASS": this is an adversarial isolation check, and its subject is
+    # the plant. Coupling it to a global zero made it fail for standing debt it
+    # does not own and cannot fix, which is how a real gate ends up ignored.
+    # The standing bypasses are reported below rather than absorbed.
     result = subprocess.run(
         [sys.executable, str(VALIDATE)],
         capture_output=True, text=True, cwd=str(ROOT),
     )
     combined = result.stdout + result.stderr
-    if "no raw token_hex(4) bypass" not in combined:
+    if fixture.name in combined:
         failures.append(
-            "mint-id-chokepoint gate did not PASS after removing the planted fixture "
+            "mint-id-chokepoint gate still names the planted fixture after removal "
             f"(exit={result.returncode}; got tail: {combined[-400:]})"
+        )
+
+    standing = sorted(
+        {
+            line.split("—")[0].split("]")[-1].strip()
+            for line in combined.splitlines()
+            if "bypasses the tropo-mint-id.py chokepoint" in line
+        }
+    )
+    if standing:
+        print(
+            "  NOTE: %d standing token_hex(4) bypass(es) in the tree, unrelated to "
+            "this plant: %s" % (len(standing), ", ".join(standing))
         )
 
     return failures

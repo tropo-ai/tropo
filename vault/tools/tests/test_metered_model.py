@@ -126,7 +126,7 @@ class MeteredCase(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.studio_root, self.root = make_studio(Path(self.temp.name))
+        self.studio_root, self.root = make_studio(Path(self.temp.name).resolve())
         self.policy = contract()
         daily_spend.initialize_ledger(
             self.root,
@@ -1008,7 +1008,7 @@ class ProviderAndReceiptTests(MeteredCase):
         self.temp.cleanup()
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.studio_root, self.root = make_studio(Path(self.temp.name))
+        self.studio_root, self.root = make_studio(Path(self.temp.name).resolve())
         self.policy = contract(daily=tiny)
         self.binding = metered_model.RunBinding(
             "abcd1234",

@@ -38,6 +38,13 @@ operation, so keep the floor exact and small:
 5. Emit a `tropo.broadcast.crew` retirement event. Name the missing canonical
    playbook as `severity: flash`.
 
+The canonical teaches the layered truth this floor compresses: the close is
+one ungated command, and the ceremony (fold, reflection, Captain's Log,
+memory capture, event drain) is required executive practice — before the
+close in the normal order, or honestly recovered afterward with real
+timestamps. Practice never refuses the close; the close never erases the
+practice debt. When the canonical is reachable, it is the procedure.
+
 The lineage tool places the letter create-only and appends the retirement line.
 Never hand-write the destination, overwrite a prior letter, invoke the retired
 activation journal, or reconstruct the full ceremony from this pointer.

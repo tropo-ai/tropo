@@ -649,7 +649,6 @@ def derive_state(events: list[dict]) -> dict:
         "step_spans": {},  # step_uid -> {started: span_id, completed: span_id, ...}
         "last_step_event": {},
         "run_status": "active",
-        "current_stage": None,
         "current_step": None,
         "last_event_ts": None,
         "pause_resumed_pending": set(),
@@ -810,7 +809,6 @@ def write_run_state_json(run_folder: Path, pipeline_run_entry: dict, state: dict
         "substrate_authored_by": fm.get("substrate_authored_by"),
         "pipeline_uid": fm.get("pipeline"),
         "pipeline_version": fm.get("pipeline_version"),
-        "current_stage": state.get("current_stage"),
         "current_step": state.get("current_step"),
         "step_status": state.get("step_status", {}),
         "skip_authorizations": state.get("skip_authorizations", {}),
@@ -1277,15 +1275,26 @@ def _evaluate_criteria_with_obligations(
 # ---------------------- pipeline-run discovery ----------------------
 
 def find_pipeline_run_for(activation_uid: str) -> dict | None:
-    """Reverse-lookup pipeline-run entry via substrate_authored_by. Scans vault/files/."""
+    """Reverse-lookup pipeline-run entry via substrate_authored_by. Scans vault/files/.
+
+    A superseded run yields to a live successor (Metis G109, 2026-08-21, supersession
+    pilot): with restart-from-scratch both the wedged run and its fresh replacement
+    resolve to the same activation, and glob order returned whichever sorted first —
+    aiming terminal-verify/complete-workflow/close-out at the journal the reset had
+    just retired. A superseded entry is returned only when no live one exists.
+    """
+    superseded_fallback = None
     for f in VAULT_FILES.glob("*.md"):
         entry = read_vault_entry(f.stem)
         if entry is None:
             continue
         fm = entry["frontmatter"]
         if fm.get("type") == "pipeline-run" and fm.get("substrate_authored_by") == activation_uid:
+            if fm.get("activation_superseded"):
+                superseded_fallback = superseded_fallback or entry
+                continue
             return entry
-    return None
+    return superseded_fallback
 
 
 # Canonical pipeline-definition UIDs (§10 DSL rider, Talos 2026-07-04): doc-pipeline
@@ -1496,9 +1505,20 @@ def _pending_lock_run_created(run_folder: "Path | None", run_fm: dict) -> dict |
         "pipeline_run_uid": str(run_fm.get("uid") or ""),
         "activation_uid": str(run_fm.get("activation") or ""),
         "activation_root_uid": str(run_fm.get("activation_root_uid") or ""),
-        "dev_spec_uid": str(run_fm.get("dev_spec_uid") or ""),
         "pipeline_uid": str(run_fm.get("pipeline") or ""),
     }
+    # v1.89 2fae6312: the seed binds to its SUBJECT, which is a dev-spec for a
+    # dev cycle and a release-plan for a release. Keying only on dev_spec_uid
+    # made a release seed unrecognisable, so runtime refused a run its own lock
+    # had just opened — a correct guard reading the wrong field.
+    subject_kind = str(data.get("subject_kind") or "").strip()
+    if subject_kind == "release-plan":
+        expected["subject_uid"] = str(run_fm.get("release_plan_uid") or "")
+    elif subject_kind == "dev-spec":
+        expected["subject_uid"] = str(run_fm.get("dev_spec_uid") or "")
+    else:
+        # Historical dialect: no subject_kind, dev-spec by construction.
+        expected["dev_spec_uid"] = str(run_fm.get("dev_spec_uid") or "")
     if event.get("event") != "run_created" or data.get("bootstrap_pending") is not True:
         return None
     if any(str(data.get(key) or "") != value for key, value in expected.items()):
@@ -1558,9 +1578,12 @@ def action_bootstrap(activation_uid: str, contract_input_path: str | None, dry_r
     lock_seeded_run_created = None
     if existing is not None:
         efm = existing["frontmatter"]
-        if efm.get("activation_superseded") and efm.get("supersession_reason") == "contract-modification":
-            print(f"[INFO] prior pipeline-run {efm.get('uid')!r} superseded via contract-modification; "
-                  "allowing re-bootstrap", file=sys.stderr)
+        if efm.get("activation_superseded") and efm.get("supersession_reason") in ("contract-modification", "restart-from-scratch"):
+            # restart-from-scratch added 2026-08-21 (Metis G109, Mike-authorized supersession
+            # pilot): the reason was in mark-superseded's enum from the start but this gate
+            # only honored contract-modification — the reset path had never run live.
+            print(f"[INFO] prior pipeline-run {efm.get('uid')!r} superseded via "
+                  f"{efm.get('supersession_reason')}; allowing re-bootstrap", file=sys.stderr)
         else:
             candidate_folder = run_folder_for(efm)
             if _run_has_events(candidate_folder):
@@ -1836,7 +1859,6 @@ def action_bootstrap(activation_uid: str, contract_input_path: str | None, dry_r
         "substrate_authored_by": activation_uid,
         "status": "active",
         "state": "active",
-        "current_stage": None,
         "current_step": None,
         "members": activation_root_list or [],
         "owner": activated_by,
@@ -2317,6 +2339,42 @@ def _dry_run_report(action: str, would_do: str) -> str:
 RUNTIME_VERSION = "v1.46.0"  # matches the argparse description string below (main())
 
 
+def _resolve_verdict_cwd(declared) -> str:
+    """Resolve a step's declared `verdict_cwd:` to a directory that exists.
+
+    `vault-root` is a NAMED HANDLE in the step-declaration language, not a path.
+    Nothing substituted it, so it reached subprocess as a literal: release run
+    bd86ef44 (v1.90.0) ran the freeze-verified step and every receipt came back
+    with verdict 'error' and no tested_commit_sha — "FileNotFoundError: [Errno 2]
+    No such file or directory: 'vault-root'". Same family as the `{run_folder}` /
+    `{candidate_path}` template that was never substituted on the step above it.
+
+    Unresolvable declarations WARN and fall back to the vault root rather than
+    refusing (deb77758 WARN-SAFE): the command still runs and the receipt still
+    records. Two live steps declare an absolute path from another machine, which
+    this also catches instead of crashing them.
+
+    metis-g110, 2026-08-21.
+    """
+    if not declared:
+        return str(VAULT_ROOT)
+    raw = str(declared).strip()
+    if raw in ("vault-root", "{vault_root}", "{vault-root}"):
+        return str(VAULT_ROOT)
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        candidate = Path(VAULT_ROOT) / raw
+    if candidate.is_dir():
+        return str(candidate)
+    print(
+        f"[WARN] step declares verdict_cwd={raw!r}, which is not a directory on this "
+        f"machine; running the verification command from the vault root instead. "
+        "The receipt records where it actually ran.",
+        file=sys.stderr,
+    )
+    return str(VAULT_ROOT)
+
+
 def _run_verification_command(command_str: str, cwd: str, timeout: int = 120) -> dict:
     """Governed Autonomy S1 (ef65fccd) corollary 1 — receipts are products of execution.
 
@@ -2533,7 +2591,7 @@ def action_step_complete(activation_uid: str, step_uid: str, artifact_links: lis
             for _h, _v in _ctx.items():
                 if _v:
                     _vc_str = _vc_str.replace("{" + _h + "}", str(_v))
-        _verdict_cwd = str(decl.get("verdict_cwd") or VAULT_ROOT)
+        _verdict_cwd = _resolve_verdict_cwd(decl.get("verdict_cwd"))
         _exec = _run_verification_command(_vc_str, _verdict_cwd)
         cmd_verdict = _exec["verdict"]
         data["natural_verdict"] = cmd_verdict
@@ -2760,7 +2818,7 @@ def action_verify_step(activation_uid: str, step_uid: str, actor: str, dry_run: 
                         for _h, _v in _ctx2.items():
                             if _v:
                                 _vc_str = _vc_str.replace("{" + _h + "}", str(_v))
-                    _verdict_cwd2 = str(decl.get("verdict_cwd") or VAULT_ROOT)
+                    _verdict_cwd2 = _resolve_verdict_cwd(decl.get("verdict_cwd"))
                     _exec = _run_verification_command(_vc_str, _verdict_cwd2)
                     cmd_verdict = _exec["verdict"]
                     per_criterion = [{
@@ -2819,6 +2877,24 @@ def action_verify_step(activation_uid: str, step_uid: str, actor: str, dry_run: 
             f"step {step_uid!r}: would emit verification_receipt "
             f"verdict={data.get('verdict', 'unknown')!r} ({data.get('overall_rationale', '')})"
         )
+    # Provenance (2026-08-21, Metis G109, supersession pilot): this receipt is a
+    # PROVENANCE_BEARING event the terminal requires a tested_commit_sha on, but the
+    # criteria/natural-verdict path never stamped one — only _run_verification_command
+    # forensics did. A vc:false step therefore ALWAYS poisoned its run at the terminal,
+    # and the terminal's own cure ("re-run on a clean tree") could not work. Bind the
+    # same tree identity here; WARN-never-invent when unbindable (deb77758).
+    from lib import tested_tree as _tt_vs
+    _identity_vs = _tt_vs.bind_execution(
+        _tt_vs.read_tree_identity(VAULT_ROOT), _tt_vs.read_tree_identity(VAULT_ROOT))
+    if _identity_vs.is_bindable:
+        data["tested_commit_sha"] = _identity_vs.commit_sha
+        data["tested_tree_state"] = _identity_vs.state
+    else:
+        data["tested_tree_state"] = _identity_vs.state
+        data["tested_tree_detail"] = _identity_vs.detail
+        print(f"[WARN] verification receipt for step {step_uid!r} carries NO "
+              f"tested_commit_sha ({_identity_vs.state}: {_identity_vs.detail}). "
+              "Cure: commit, then amend + re-verify on a clean tree.", file=sys.stderr)
     ev = make_event("verification_receipt", actor, step=step_uid,
                     trace_id=activation_uid, parent_span_id=parent, data=data)
     append_event(run_folder, ev)
@@ -3172,10 +3248,19 @@ def unprovenanced_receipts(events: list[dict]) -> list[dict]:
     "Every required receipt carries one identical SHA" is two claims, and the
     second one is worthless without the first.
     """
-    missing: list[dict] = []
+    # LATEST receipt per (event, step) governs (2026-08-21, Metis G109, supersession
+    # pilot): scanning every receipt ever written made this check's OWN cure — "re-run
+    # the affected verifications on a clean tree" — impossible, because the superseded
+    # receipt stayed in the append-only journal and flagged forever. A clean re-run now
+    # cures its predecessors; cross-tree conflict among the evidence that GOVERNS is
+    # still caught by the theatre check, which is unchanged.
+    latest: dict[tuple, dict] = {}
     for ev in events:
         if ev.get("event") not in PROVENANCE_BEARING_EVENTS:
             continue
+        latest[(ev.get("event"), ev.get("step"))] = ev
+    missing: list[dict] = []
+    for ev in latest.values():
         data = ev.get("data") or {}
         sha = data.get("tested_commit_sha", data.get("tested_sha"))
         if not (isinstance(sha, str) and TESTED_SHA_RE.match(sha)):
@@ -3423,7 +3508,9 @@ def action_terminal_verify(activation_uid: str, actor: str, dry_run: bool = Fals
             f"would emit verifier_findings verdict={verdict!r} (gaps={gaps})"
             + (f" and WELD dev closure at tested_sha={tested_sha}" if verdict == "complete" else ""),
         )
-    parent = events[-1]["span_id"] if events else None
+    # A153 finding 2026-08-21: a journal ending in an event with no span_id (e.g.
+    # dev_spec_lock_repin) made this KeyError on 271d28d7's close. .get, not [].
+    parent = events[-1].get("span_id") if events else None
     ev = make_event("verifier_findings", actor,
                     trace_id=activation_uid, parent_span_id=parent, data=data)
     append_event(run_folder, ev)
@@ -3771,7 +3858,6 @@ def _auto_bootstrap_triggered_pipeline(
             "release_pipeline_run_uid": release_pipeline_run_uid,
             "status": "active",
             "state": "active",
-            "current_stage": None,
             "current_step": None,
             "members": [],
             "owner": actor,
@@ -4802,6 +4888,24 @@ def run_close_out_hook(activation: dict, dev_spec_uid: str | None, actor: str,
     return closed
 
 
+
+def _workflow_completed(activation_uid: str):
+    """Has this activation's run reached workflow_complete?
+
+    True / False when a live run exists; None when there is no run at all.
+    None is NOT a failure — close-out is deliberately standalone so the
+    release-ship path can invoke it with no run folder, and a cycle with no
+    run has no evidence to corrupt.
+    """
+    try:
+        _, _, _, events, _ = load_run(activation_uid, inspection=True)
+    except Exception:
+        return None
+    if not events:
+        return None
+    return any(str(e.get("event")) == "workflow_complete" for e in events)
+
+
 def action_close_out(activation_uid: str, actor: str, final_commit: str | None = None,
                      dry_run: bool = False) -> dict:
     """Durable-closure weld entry point (dev-spec c392d833, activation 63988cfb).
@@ -4813,6 +4917,29 @@ def action_close_out(activation_uid: str, actor: str, final_commit: str | None =
     forget. Idempotent + fill-if-absent per run_close_out_hook. Never adds a
     global single-active-root lock; it closes exactly this one root at its ship.
     """
+    # ORDERING GUARD (A153, Mike-directed 2026-08-21). close-out STAMPS
+    # final_commit. Run before complete-workflow, that stamp binds a SECOND
+    # tested tree onto a run whose evidence already named one, and the run
+    # then reads as `theatre` to the release fan-in: it can be superseded but
+    # never repaired. It is a one-way door and it had no sign on it. SEVEN of
+    # eight v1.90 close candidates were wedged this way in one afternoon, by
+    # two executives independently, an hour apart, each doing the obvious
+    # thing. Documentation was not enough; this is the wall.
+    #
+    # SCOPED TO THE HARM, deliberately not wider (deb77758): refuse ONLY when
+    # a live run exists AND has not completed. No run at all -> proceed, which
+    # preserves the standalone release-ship invocation this tool exists to
+    # serve. A refusal that also blocked the standalone path would be the
+    # same over-scoping defect one layer up.
+    if _workflow_completed(activation_uid) is False:
+        raise ValidationError(
+            f"CLOSE-OUT REFUSED (out of order): activation {activation_uid} has a live "
+            "pipeline-run that has NOT reached workflow_complete. close-out stamps "
+            "final_commit, which would bind a second tested tree onto evidence that "
+            "already names one; the run would then read as theatre to the release "
+            "fan-in and could only be superseded, never repaired. "
+            "Cure: run complete-workflow first, then close-out.")
+
     activation = read_vault_entry(activation_uid)
     if activation is None:
         print(f"close-out: activation {activation_uid!r} not found — nothing to close",
@@ -5464,7 +5591,6 @@ def action_resume_from_log(activation_uid: str) -> dict:
     eligible = compute_eligible_steps(state, decls, events=events, activation_uid=activation_uid)
     return {
         "pipeline_run_uid": pr["frontmatter"].get("uid"),
-        "current_stage": state.get("current_stage"),
         "current_step": state.get("current_step"),
         "eligible_steps": eligible,
         "run_status": state.get("run_status"),

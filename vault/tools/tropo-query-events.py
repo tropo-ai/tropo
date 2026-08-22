@@ -231,6 +231,11 @@ def main() -> int:
                         "uses cursor in vault/events/.cursor-<uid>.json for --since-id default")
     p.add_argument("--update-cursor", action="store_true", dest="update_cursor",
                    help="V7: persist last-seen event ID to cursor file after query")
+    p.add_argument("--include-telemetry", action="store_true",
+                   dest="include_telemetry",
+                   help="3f38521a AC4: also read sealed LOCAL telemetry shards "
+                        "(viewer-filtered, durability-marked; canonical-only "
+                        "without the flag)")
     p.add_argument("--severity", default=None,
                    help="Filter events by data.severity field (e.g. 'flash'); "
                         "documents the Tier 2 cf8c3be9 FLASH-alert read pattern")
@@ -303,6 +308,30 @@ def main() -> int:
         newest_id = max(int(r.get("display_seq", 0)) for r in results)
         save_cursor(args.party, str(newest_id))
 
+    if args.include_telemetry:
+        # 3f38521a AC4: compose viewer-legal telemetry under the same API,
+        # OPT-IN — the default output shape (a bare list) is a contract other
+        # agents parse and does not change. The projection carries no global
+        # sequence and the segment filter applies before any count.
+        import importlib.util as _ilu
+        _spec = _ilu.spec_from_file_location(
+            "tropo_drain_tool_telemetry",
+            Path(__file__).resolve().parent / "tropo-drain-tool-telemetry.py",
+        )
+        _drain_mod = sys.modules.get("tropo_drain_tool_telemetry")
+        if _drain_mod is None:
+            _drain_mod = _ilu.module_from_spec(_spec)
+            sys.modules["tropo_drain_tool_telemetry"] = _drain_mod
+            _spec.loader.exec_module(_drain_mod)
+        payload = {
+            "events": results,
+            "telemetry": _drain_mod.read_records(
+                VAULT_ROOT,
+                viewer_segments=["public", "argo-reference", "argo-private"],
+            ),
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0
     print(json.dumps(results, indent=2, ensure_ascii=False))
     return 0
 

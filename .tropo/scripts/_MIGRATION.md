@@ -3,9 +3,6 @@
 All governed tool scripts have moved to `vault/tools/<uid>.py` per tool.capsule v1.6 §2.5
 single-file-truth pattern. This folder now contains:
 
-- **Compatibility forwarders** (`tropo-validate.py`, `rebuild-vault.py`, etc.) — thin shims
-  that forward to `vault/tools/<uid>.py`. These keep old invocation paths working during
-  the v1.56 → v1.57 transition.
 - **Library modules** (`_yaml_dup_lib.py`, `docx_styles_bundle.py`, `publish_types.py`) — shared
   modules imported by vault/tools/ scripts. These stay here.
 - **Publish targets** (`publish_targets/`) — target-specific implementation modules. Stays here.

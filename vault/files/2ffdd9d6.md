@@ -3,8 +3,10 @@ uid: 2ffdd9d6
 type: dev-spec
 title: Pipeline Activation Key — Dev-Spec (fingerprint-as-key release authorization gate)
 description: Build spec for the release-authorization key (brief f8cda3dd). The runtime mints an unforgeable fingerprint of a legitimate pipeline-run; build + ship refuse without it. Fail-closed, no break-glass, release-pipeline scope. Realizes 'lovingly reverse engineering our future' — the plain fingerprint today is the seed of signed provenance later.
-status: locked
+status: done
 state: active
+closed_by: sweep-dd570ea4/metis-g108
+closed_at: '2026-08-18T19:11:50Z'
 version: '1.0'
 locked_by: mike-maziarz
 locked_at: 2026-06-16
@@ -17,9 +19,9 @@ retarget_note: 'Argus A115 2026-06-16 (Mike-A115 ''proceed''): folded from v1.72
 gauntlet_rounds_required: 1
 author: argus-a115
 created: 2026-06-16
-modified: '2026-06-17'
+modified: '2026-08-18'
 created_by: argus-a115
-modified_by: pipeline-runtime.py
+modified_by: sweep-dd570ea4/metis-g108
 schema_version: 2
 extraction_scope: ship
 governed_by: 8dd772a0

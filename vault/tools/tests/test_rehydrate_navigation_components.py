@@ -474,11 +474,11 @@ class TestAbsolutePathValidatorNavGuards(unittest.TestCase):
             nav = root / "00-tropo-nav" / "00-tropo-active"
             nav.mkdir(parents=True)
             dirty = nav / "leak.md"
-            dirty.write_text("/Users/maz/secret.md\n", encoding="utf-8")
+            dirty.write_text("/Users/maz/secret.md\n", encoding="utf-8")  # portability:exempt — fixture content the walker must refuse to scan
             outside = root / "vault" / "ok.md"
             outside.write_text("no absolute paths here\n", encoding="utf-8")
             link = root / "vault" / "link.md"
-            link.symlink_to("/Users/maz/elsewhere.md")
+            link.symlink_to("/Users/maz/elsewhere.md")  # portability:exempt — fixture symlink target the walker must skip
 
             walked = list(mod.walk_files(root))
             self.assertNotIn(dirty, walked)

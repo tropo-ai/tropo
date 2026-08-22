@@ -7,8 +7,9 @@ version: 2.1
 tier: os
 author: argus
 created: 2026-04-23
-modified: 2026-07-03
-modified_by: argus-a124
+modified: 2026-08-18
+modified_by: talos-t46
+v2_2_amendment_note: 'Talos T46 2026-08-18 — RETIREMENT BODY CONTRACT (v1.89 dev-spec 5fffbbe9, Mike-locked; semantic amendment to a locked capsule signed via the spec lock, which lists this capsule in committed_substrate). Adds the §Retirement body section: every executive entry points at the one canonical procedure (e2c7d185) instead of carrying a locally maintained ceremony copy, and states the layered truth — ungated close, required practice. Also records that lifecycle frontmatter fields (status/generation/predecessor/last_session/timestamps) are best-effort synced by tropo-lineage.py after the append; body and voice are never touched by the tool.'
 v2_1_amendment_note: 'Argus A124 2026-07-03 — ALIASES FIELD (additive, optional; Mike verbatim "proceed" 2026-07-03 on the described amendment; proposed by Vela V63 at event 00005418, leg 2 of the Phe-phantom fix 5427bee9). v2.0→v2.1: adds optional `aliases:` frontmatter field — known nicknames an agent answers to, so identity survives roster/boot-cost trims. Root incident: the Orpheus/Phe nickname lived only in a roster archived 2026-05-20; two Argus generations reconstructed "Phe" as a phantom separate agent. Aliases now live in the identity record itself — the one file that never gets trimmed out of boot. Zero migration cost: agents without aliases declare nothing.'
 status: locked
 locked_by: argus-a32
@@ -68,6 +69,7 @@ The canonical identity substrate for a registered agent (executive, director, wo
 | `§Soul` | The soul letter (absorbs the soul file). | **Mike-paired edits only.** |
 | `§Boot-Extension` | Tier-3 narrative: hard rules, group additions, startup-signal format. Activation playbook Step 0.3 resolves HERE. | Agent-owned. |
 | `§Status-Notes` | Working state, **bounded to current + predecessor generation** — the structural cap on the status-card regrowth class (10→45 KB in ten generations). Older narratives live in activation entries, NOT here. | Updated at boot/retire. |
+| `§Retirement` | One short normative block: the single close command, the pointer to the canonical [Agent Retirement playbook (`e2c7d185`)](../playbooks/e2c7d185.md), and the layered truth it teaches — the close is ungated; the ceremony (fold, letter, reflection, Captain's Log, memory capture, drain) is required practice before it or honest recovery after it. **No locally maintained ceremony copy** — that is the drift that produced three competing procedures. Lifecycle frontmatter fields sync best-effort via `tropo-lineage.py`; this body section is agent-owned. | Agent-owned, canonical-aligned. |
 
 ## State Machine
 
@@ -101,6 +103,7 @@ Per [v1.69 dev-spec (0c61a52b)](../../vault/files/0c61a52b.md) §S1.2: per-agent
 
 | Version | Date | Change | Author |
 |---|---|---|---|
+| 2.2 | 2026-08-18 | `§Retirement` body contract + inherited canonical pointer e2c7d185; lifecycle-frontmatter sync noted (v1.89 spec 5fffbbe9). | talos-t46 |
 | 2.1 | 2026-07-03 | Additive `aliases:` optional field (Phe-phantom fix, leg 2; Vela-proposed 00005418, Mike-signed "proceed"). | argus-a124 |
 | 2.0 | 2026-06-10 | Unification amendment (see frontmatter note). | argus-a109 |
 | 1.0 | 2026-04-23 | Initial draft; entity-subtype model; never instantiated. | argus-a32 |

@@ -21,15 +21,15 @@ governed_by_convention: .tropo/scripts/ is one of three scripts/ locations in th
 
 Python scripts that **are part of Tropo-OS itself** and ship with every release. When a release is cut, this folder is copied into `releases/<version>/builds/.../.tropo/scripts/` and ends up in every user's vault.
 
-These are domain-general capabilities that any Tropo-OS vault needs, not Argo-specific utilities.
+These are domain-general capabilities that any Tropo Studio needs, not Argo-specific utilities.
 
-**v1.5 user-shipped toolchain (the scripts users run by hand):**
+**User-shipped toolchain (the scripts users run by hand).** These moved to `vault/tools/` at v1.56 per tool.capsule §2.5 single-file-truth; they are no longer in this folder:
 
-- [`rebuild-vault.py`](rebuild-vault.py) — regenerates `vault/00-index.jsonl` + `00-project-tree.jsonl` from `vault/files/<uid>.md` frontmatter. Cleans stale `00-cascade-<uid>.jsonl` files. Run after hand-editing a ledger entry.
-- [`tropo-validate.py`](tropo-validate.py) — structural validator: AGENTS.md coverage, cross-reference resolution, UID consistency, integrity parity. Read-only.
-- [`validate-no-absolute-paths.py`](validate-no-absolute-paths.py) — vault portability validator. Both regular-mode (allowlist) and `--strict` (release-gate).
-- [`rehydrate.py`](rehydrate.py) — regenerates `00-tropo-nav/` symlink tree from the Vault. Relocated 2026-04-20 from `argo-os/scripts/` per Argus A28's architectural call.
-- [`rebuild-project-index.py`](rebuild-project-index.py) — rebuilds a single project's `00-index.md` from folder contents.
+- [`vault/tools/tropo-rebuild-vault.py`](../../vault/tools/tropo-rebuild-vault.py) — regenerates `vault/00-index.jsonl` + `00-project-tree.jsonl` from `vault/files/<uid>.md` frontmatter. Cleans stale `00-cascade-<uid>.jsonl` files. Run after hand-editing a vault entry.
+- [`vault/tools/tropo-validate.py`](../../vault/tools/tropo-validate.py) — structural validator: AGENTS.md coverage, cross-reference resolution, UID consistency, integrity parity. Read-only.
+- [`vault/tools/tropo-validate-no-absolute-paths.py`](../../vault/tools/tropo-validate-no-absolute-paths.py) — portability validator. Both regular-mode (allowlist) and `--strict` (release-gate).
+- [`vault/tools/tropo-rehydrate.py`](../../vault/tools/tropo-rehydrate.py) — regenerates `00-tropo-nav/` symlink tree from the Vault.
+- [`vault/tools/tropo-rebuild-project-index.py`](../../vault/tools/tropo-rebuild-project-index.py) — rebuilds a single project's `00-index.md` from folder contents.
 
 See [vault/files/a24c5b66.md](../kb/how-to-maintain-your-vault.md) for when to run each.
 
@@ -39,13 +39,13 @@ See [vault/files/a24c5b66.md](../kb/how-to-maintain-your-vault.md) for when to r
 - `register-kernel.py` — kernel-file registration migration utility (Argo-internal).
 
 These appear in the Argo source vault's `.tropo/scripts/` for Argo's own release workflow but are filtered out at build time per `KERNEL_EXCLUDE_PATTERNS` in `build-release.py` itself. If you're a user reading this in a downloaded vault and don't see these scripts in your `.tropo/scripts/` directory — that's correct.
-- **General Tropo-OS utilities** — anything any Tropo-OS vault (not just Argo) would need.
+- **General Tropo-OS utilities** — anything any Tropo Studio (not just Argo) would need.
 
 ## What does NOT belong here
 
 - **Vault-admin-tier helpers** — those live at `argo-os/.tropo-studio/scripts/` (board renderers, ad-hoc vault utilities). If a script is only useful for this vault's internal workflow and never a general Tropo-OS capability, it's not kernel-tier.
 - **Engineering repo tooling** — those live at repo-root `/scripts/` (TypeScript, called via `npm run <name>`). The repo toolchain for the Next.js app is separate from the OS kernel.
-- **Scripts that hardcode absolute paths** — kernel scripts must be portable. Any vault on any machine should be able to run them. See [rehydrate.py](rehydrate.py) for the vault-root resolution pattern (explicit arg → walk up → cwd fallback, never hardcoded).
+- **Scripts that hardcode absolute paths** — kernel scripts must be portable. Any vault on any machine should be able to run them. See [`vault/tools/tropo-rehydrate.py`](../../vault/tools/tropo-rehydrate.py) for the vault-root resolution pattern (explicit arg → walk up → cwd fallback, never hardcoded).
 
 ## Write access
 
@@ -62,7 +62,7 @@ Changes here require architectural review because they ship in every release.
 3. **Ship-ready.** Every script here ends up in user vaults on the next release cut. Write for a stranger, not for Argo.
 4. **Fail loud on declared-but-unreachable.** Per the v2.2 boot playbook Tier Reachability rule and [ADR-032](../../vault/files/e6c3f410.md) 2026-04-20 amendment: if a script declares a dependency exists, it should throw on missing — not silently skip. See [`vault/tools/tropo-rebuild-vault.py`:608](../../../`vault/tools/tropo-rebuild-vault.py`) for the pattern.
 5. **Documented.** Every script's docstring declares: what it does, inputs, outputs, where it's called from, what it depends on.
-6. **Verify against canonical L0 registry before mutating `member_of:`.** Per [Operating Principle 11](../../.tropo-studio/operating-principles.md#11-verify-against-canonical-reference-before-architectural-calls), any kernel script that mutates a project's `member_of:` array MUST consult [`.tropo-studio/registries/canonical-l0-projects.yaml`](../../.tropo-studio/registries/canonical-l0-projects.yaml) first. If the target project's UID appears in `canonical_l0_projects` or `non_l0_with_hub_only_risk`, the mutation requires explicit Mike approval before the script runs. The pre-flight gate ([`validate-canonical-l0.py`](validate-canonical-l0.py)) catches drift after the fact; this rule is the discipline that prevents drift in the first place. Mirrors Rule 6 in [`.tropo-studio/scripts/CAPSULE.md`](../../.tropo-studio/scripts/CAPSULE.md). **Why:** v1.12 substrate-membership backfill replaced empty `member_of: []` with hub-UIDs without distinguishing "missing parent" from "true L0 root" — collapsed the rendered nav. v1.13.5 closed the symptom; this rule closes the cause.
+6. **Verify against canonical L0 registry before mutating `member_of:`.** Per [Operating Principle 11](../../.tropo-studio/operating-principles.md#11-verify-against-canonical-reference-before-architectural-calls), any kernel script that mutates a project's `member_of:` array MUST consult [`.tropo-studio/registries/canonical-l0-projects.yaml`](../../.tropo-studio/registries/canonical-l0-projects.yaml) first. If the target project's UID appears in `canonical_l0_projects` or `non_l0_with_hub_only_risk`, the mutation requires explicit Mike approval before the script runs. The pre-flight gate ([`vault/tools/tropo-validate-canonical-l0.py`](../../vault/tools/tropo-validate-canonical-l0.py)) catches drift after the fact; this rule is the discipline that prevents drift in the first place. Mirrors Rule 6 in [`.tropo-studio/scripts/CAPSULE.md`](../../.tropo-studio/scripts/CAPSULE.md). **Why:** v1.12 substrate-membership backfill replaced empty `member_of: []` with hub-UIDs without distinguishing "missing parent" from "true L0 root" — collapsed the rendered nav. v1.13.5 closed the symptom; this rule closes the cause.
 
 ## Validator Check Pattern (v1.38.0)
 

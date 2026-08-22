@@ -76,7 +76,7 @@ A vault entry is a **concept** when:
 2. **Stage:** `stage: ideate` (concepts live at the Ideate pipeline stage).
 3. **Body shape:** four REQUIRED body sections present (see §Required Body Sections).
 
-**Filename + location convention:** concepts live as ledger entries at `vault/files/<uid>.md` — same location as every other typed artifact. The filename is the UID + `.md`, not a slug. Discovery is via `type: concept` query against the ledger index, not by filename navigation. Concepts are NOT filed into `work-pipeline/1-ideate/` subfolders; they live in the flat ledger, with their `member_of:` array carrying the pipeline-bucket pointer.
+**Filename + location convention:** concepts live as vault entries at `vault/files/<uid>.md` — same location as every other typed artifact. The filename is the UID + `.md`, not a slug. Discovery is via `type: concept` query against the vault index, not by filename navigation. Concepts are NOT filed into `work-pipeline/1-ideate/` subfolders; they live in the flat ledger, with their `member_of:` array carrying the pipeline-bucket pointer.
 
 Ideas in looser forms — raw notes, channel posts, half-sentences in other documents — are **not concepts**. They are pre-concept captures. When a pre-concept capture is shaped into a structural artifact (the four required sections filled), it becomes a concept.
 
@@ -239,7 +239,7 @@ Extends `core`. Inherits UID immutability, type immutability, owner/created/modi
 - `vault/00-index.jsonl` — grep before authoring to surface near-duplicates (honors Rule 4, "one concept per idea")
 - Cascade indexes at `vault/00-cascade-*.jsonl` — locate adjacent concepts in the same domain
 - UID generator — 8-hex; inherit the vault convention (`python -c "import secrets; print(secrets.token_hex(4))"`)
-- `vault/files/<uid>.md` writer — the authored concept lives as a flat ledger entry; UID is the filename, not a slug
+- `vault/files/<uid>.md` writer — the authored concept lives as a flat vault entry; UID is the filename, not a slug
 - [ideate-archive (a1c2e3d4)](../../vault/files/a1c2e3d4.md) — universal `member_of:` fallback when no originating project exists
 
 **Skills:**

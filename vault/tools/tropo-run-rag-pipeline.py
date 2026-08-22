@@ -172,7 +172,7 @@ def main(argv=None):
         app_root = Path(args.app_root).resolve()
     else:
         # Auto-detect: try studio-sibling first, then one level up (tropo-app lives at
-        # /Users/mike/dev/tropo-app, not inside tropo-studios/).
+        # <tropo-app-repo>, not inside tropo-studios/).
         studio_root = Path(__file__).parent.parent.parent  # vault/tools -> vault -> studio
         candidates = [
             studio_root.parent / "tropo-app",         # sibling of studio root

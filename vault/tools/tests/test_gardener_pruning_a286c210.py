@@ -115,24 +115,60 @@ class GardenerPruningSyntheticACGauntlet(unittest.TestCase):
         self.assertEqual(evaluated.findings[0].code, "PRUNING_SHAPE")
 
     def test_ac5_nav_maintenance_is_t2_neutral_and_prose_is_not(self) -> None:
+        """A rendered nav block is T2-neutral; sentinels in prose are not.
+
+        The nav block below is written the way the renderer actually writes it
+        — each sentinel a complete line of its own. That shape is what the
+        canonical strip in `governed_body` removes, and removing it returns the
+        original body, so T2 does not move.
+
+        The second half is the other side of the same rule, and it is not a
+        technicality: an UNANCHORED pattern once false-matched a walk-brief
+        whose prose quoted both sentinel strings inline and corrupted the
+        author's text (`vault/files/69ea3f38.md`, cured at 6ec30708). Sentinels
+        appearing mid-line are therefore prose, they survive the strip, and T2
+        moves — which is exactly what an author would want.
+
+        Before the v1.89 AC6 convergence this case synthesised the inline shape
+        and asserted neutrality, which passed only because the pre-convergence
+        strip was unanchored. The assertion is unchanged in intent; the fixture
+        now matches what the renderer emits.
+        """
         source = self._case("live-01-published-active")
         with tempfile.TemporaryDirectory(prefix="gardener_ac5_") as temporary:
             path = Path(temporary) / source.path.name
             shutil.copy2(source.path, path)
             baseline = normalized_body_sha256(path)
             snapshot = pruning_contract.read_markdown_snapshot(path)
-            nav = (
-                b"<!-- nav-block:start -->generated fixture nav"
-                b"<!-- nav-block:end -->"
+            prefix = snapshot.raw[: -len(snapshot.body)]
+
+            rendered_nav = (
+                b"<!-- nav-block:start -->\n"
+                b"**Vault Path:** generated fixture nav\n"
+                b"<!-- nav-block:end -->\n"
             )
-            path.write_bytes(
-                snapshot.raw[: -len(snapshot.body)]
-                + snapshot.body[:-1]
-                + nav
-                + b"\n"
+            path.write_bytes(prefix + snapshot.body + rendered_nav)
+            self.assertEqual(
+                normalized_body_sha256(path),
+                baseline,
+                "a rendered nav block moved T2; nav maintenance is supposed to "
+                "be invisible to the covenant content hash",
             )
-            self.assertEqual(normalized_body_sha256(path), baseline)
-            path.write_bytes(path.read_bytes() + b"Real synthetic prose edit.\n")
+
+            inline_sentinels = (
+                b"The brief quotes <!-- nav-block:start --> and "
+                b"<!-- nav-block:end --> inline.\n"
+            )
+            path.write_bytes(prefix + snapshot.body + inline_sentinels)
+            self.assertNotEqual(
+                normalized_body_sha256(path),
+                baseline,
+                "sentinels quoted inside a sentence were stripped as chrome — "
+                "that is the 69ea3f38 defect, where the strip deleted an "
+                "author's prose",
+            )
+
+            path.write_bytes(prefix + snapshot.body + b"Real synthetic prose edit.\n")
             self.assertNotEqual(normalized_body_sha256(path), baseline)
 
     def test_ac7_viewer_free_body_local_mock_boundaries(self) -> None:

@@ -83,7 +83,11 @@ def _receipt(rr, package_sha256: str) -> dict:
 class CloserCompanionsRuntimeTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self._tmp.name) / "studio"
+        # v1.89 macOS cure (talos-t46): resolve the OS tmpdir — /var is
+        # symlinked to /private/var and release_receipt's strict no-alias
+        # contract correctly refuses unresolved paths. Fixture resolves;
+        # the lib stays strict.
+        self.root = (Path(self._tmp.name) / "studio").resolve()
         self.root.mkdir()
         sandbox.build_studio(self.root)
         # A149's correction: build_studio omits tropo-rebuild-events-sqlite.py, so

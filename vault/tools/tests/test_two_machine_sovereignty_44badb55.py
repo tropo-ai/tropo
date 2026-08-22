@@ -15,7 +15,7 @@ plant constructs its own fixture two-machine topology to exercise the real
 publish -> push -> pull -> mount -> compose path.
 
 Never points any write-path invocation at the real studio repo
-(/Users/mike/git/tropo-studios/argo-os). All writes happen inside
+(<studio-root>). All writes happen inside
 tempfile.mkdtemp() fixture roots, cleaned up in tearDown().
 """
 from __future__ import annotations

@@ -28,7 +28,7 @@ governed_by: 9b7f5e34
 
 This action takes a natural-language description of how a human wants to organize a body of work, and generates a navigable folder hierarchy of collections under `collections/<view-name>/`. Each folder in the hierarchy contains one or more collection files; each collection file references vault entries by UID.
 
-**A view is the user-facing term for a folder hierarchy of collections arranged for a specific human's purpose.** Mike can have a keystone-view. Vela can have a release-view. Each view contains many collections. Different users can create different views of the same underlying ledger.
+**A view is the user-facing term for a folder hierarchy of collections arranged for a specific human's purpose.** Mike can have a keystone-view. Vela can have a release-view. Each view contains many collections. Different users can create different views of the same underlying Vault.
 
 **When to invoke this action:**
 
@@ -191,7 +191,7 @@ A view is a pure, portable artifact under L1. To share a view:
 - The view's collection files reference vault entries by UID — if the target vault has matching UIDs, the view works immediately
 - If the target vault has different UIDs, the view's wikilinks will not resolve until the target vault is synchronized
 
-This makes views trivially shareable within a crew that shares a ledger. Cross-vault sharing requires UID reconciliation — a Phase 2+ concern handled by the hosted service tier.
+This makes views trivially shareable within a crew that shares a vault. Cross-vault sharing requires UID reconciliation — a Phase 2+ concern handled by the hosted service tier.
 
 ---
 

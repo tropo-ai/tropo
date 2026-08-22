@@ -9,7 +9,6 @@ description: 'The substrate-internal Python walker for the import primitive. Sub
 version: 1.0.3
 status: active
 state: active
-stage: build
 schema_version: 2
 extraction_scope: ship
 author: argus
@@ -715,7 +714,6 @@ status: active
 title: {_yaml_str(folder_name)}
 description: {_yaml_str("Imported folder governed by Tropo.")}
 owner: {TOOL_NAME}-v{TOOL_VERSION}
-stage: build
 state: active
 lifecycle: standing
 source_folder_name: {_yaml_str(folder_name)}
@@ -840,7 +838,6 @@ status: active
 title: {_yaml_str(folder_name)}
 description: {_yaml_str("Imported folder governed by Tropo (vault-resident mirror of the on-disk .tropo-folder.md).")}
 owner: {owner or f'{TOOL_NAME}-v{TOOL_VERSION}'}
-stage: build
 state: active
 lifecycle: standing
 source_folder_name: {_yaml_str(folder_name)}

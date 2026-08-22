@@ -37,7 +37,7 @@ from lib import index_surfaces, template_leg  # noqa: E402
 class GovernedAutonomyS2Tests(unittest.TestCase):
     def test_note_companion_binding_and_one_home_route(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve()
             (root / ".tropo").mkdir()
             (root / "vault" / "files").mkdir(parents=True)
             capsules = root / "vault" / "capsules"
@@ -60,6 +60,9 @@ class GovernedAutonomyS2Tests(unittest.TestCase):
                 "tropo-rebuild-index.py",
                 "tropo-generate-relations-header.py",
                 "tropo-navblock-strip.py",
+                # rebuild-index --apply shells out to this sibling by a path
+                # derived from its own location; copying the script alone exits 8.
+                "tropo-generate-mint-registry.py",
             ):
                 shutil.copy2(TOOLS / name, tools / name)
             shutil.copytree(TOOLS / "lib", tools / "lib")
@@ -102,7 +105,7 @@ class GovernedAutonomyS2Tests(unittest.TestCase):
 
     def test_new_tool_freshen_matches_full_rebuild_exactly(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve()
             (root / ".tropo").mkdir()
             (root / "vault" / "files").mkdir(parents=True)
             tools = root / "vault" / "tools"
@@ -167,7 +170,7 @@ class GovernedAutonomyS2Tests(unittest.TestCase):
     def test_parallel_birth_archive_recycle_are_lossless(self) -> None:
         """Metis G89 P0 plant: every successful concurrent gesture survives."""
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve()
             (root / ".tropo").mkdir()
             (root / "vault" / "files").mkdir(parents=True)
             (root / "vault" / "capsules").mkdir()
@@ -180,6 +183,9 @@ class GovernedAutonomyS2Tests(unittest.TestCase):
                 "tropo-recycle.py",
                 "tropo-generate-relations-header.py",
                 "tropo-navblock-strip.py",
+                # rebuild-index --apply shells out to this sibling by a path
+                # derived from its own location; copying the script alone exits 8.
+                "tropo-generate-mint-registry.py",
             ):
                 shutil.copy2(TOOLS / name, tools / name)
             shutil.copytree(TOOLS / "lib", tools / "lib")

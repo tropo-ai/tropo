@@ -729,13 +729,18 @@ class Stage9ReleaseGraphActivation(unittest.TestCase):
         "471dd767", "8a4f802b", "8e03f8d6",
         "f9365ede", "8654900a", "0cf86ea5", "4f64ec3c", "37996741", "2e9b1db7",
         "4262d5fa", "a0f2bea8", "bc6b17ec", "c6b61fb9",
+        # The freeze between the fourth instrument and Publish, added
+        # 2026-08-16 under locked dev-spec 2fae6312 step 4. Its companion test
+        # below is why it is status:active rather than draft — this graph may
+        # not be partly lit, so a node the stage claims must be active.
+        "7de2c49f",
         "3dd817cb",
     }
 
     def test_stage9_activates_exactly_the_complete_release_graph(self) -> None:
         graph = _graph(RELEASE_ROOT)
         self.assertEqual(set(graph), self.EXPECTED)
-        self.assertEqual(len(graph), 15)
+        self.assertEqual(len(graph), 16)
 
     def test_stage9_leaves_no_draft_node_in_the_release_graph(self) -> None:
         graph = _graph(RELEASE_ROOT)

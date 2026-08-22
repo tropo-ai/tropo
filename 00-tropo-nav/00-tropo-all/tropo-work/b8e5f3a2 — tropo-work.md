@@ -2,7 +2,7 @@
 uid: b8e5f3a2
 type: project
 title: tropo-work
-description: 'Tropo-OS L0 work-substrate root primitive. Every Tropo-OS vault ships with one. Navigable graph home for all pipelines (dev-pipeline today; release-pipeline / content-pipeline / research-pipeline future). Pure organizational anchor — no charter, no decisions, no work attached at L0; per the L0 root project sub-pattern, the substrate is permanent active with no status transitions. Children: dev-pipeline (cd1fcd25), legacy-work-pipeline (020274e0). Peers at L0: vault-inbox (2d5f9b04) — distinct role per V40 e61b49cc Thread 5.'
+description: 'Tropo-OS L0 work-substrate root primitive. Every Tropo Studio ships with one. Navigable graph home for all pipelines (dev-pipeline today; release-pipeline / content-pipeline / research-pipeline future). Pure organizational anchor — no charter, no decisions, no work attached at L0; per the L0 root project sub-pattern, the substrate is permanent active with no status transitions. Children: dev-pipeline (cd1fcd25), legacy-work-pipeline (020274e0). Peers at L0: vault-inbox (2d5f9b04) — distinct role per V40 e61b49cc Thread 5.'
 author: argus-a44
 status: active
 state: active
@@ -33,7 +33,7 @@ refs:
   - 3a9d6c5e
 relationships:
   - kind: ships-in
-    description: 'Every Tropo-OS vault ships with a tropo-work L0 root project as substrate primitive. extraction_scope: ship.'
+    description: 'Every Tropo Studio ships with a tropo-work L0 root project as substrate primitive. extraction_scope: ship.'
   - kind: aligned-with
     description: 'Tropo Work v3 spec 8b3f1d92 + tropo-work-v3-overview.md library doc + tropo-work-v3-walkthrough.md. tropo-work L0 root and Tropo Work v3 substrate vocabulary align: this project is the graph-level anchor for the work-management substrate that Tropo Work governs at the type/process level.'
   - kind: implements-pattern
@@ -53,7 +53,7 @@ file_ext: md
 
 # tropo-work
 
-*Tropo-OS L0 work-substrate root. Every Tropo-OS vault ships with one. Authored 2026-05-04 by Argus A44 as Stream A.1 of v1.6 cycle (dev-pipeline activation [`c4f7e2a1`](../../agents/dev-pipeline/activations/c4f7e2a1/run.jsonl)).*
+*Tropo-OS L0 work-substrate root. Every Tropo Studio ships with one. Authored 2026-05-04 by Argus A44 as Stream A.1 of v1.6 cycle (dev-pipeline activation [`c4f7e2a1`](../../agents/dev-pipeline/activations/c4f7e2a1/run.jsonl)).*
 
 ---
 
@@ -73,7 +73,7 @@ User vaults can override the displayed folder/path locally if they want a custom
 
 At v1.6 ship in **user vaults**:
 
-- [`dev-pipeline (cd1fcd25)`](cd1fcd25.md) — the development pipeline; the canonical first pipeline. Ships in every Tropo-OS vault. v1.6 reparented from L0 to here.
+- [`dev-pipeline (cd1fcd25)`](cd1fcd25.md) — the development pipeline; the canonical first pipeline. Ships in every Tropo Studio. v1.6 reparented from L0 to here.
 
 At v1.6 ship in **Argo's dev-vault** (additional, argo-reference):
 
@@ -120,4 +120,4 @@ KB article documenting the convention: `vault/files/9b3e8c47.md` (Stream A.4 of 
 ---
 
 *tropo-work | L0 work-substrate root | Authored 2026-05-04 by Argus A44 as Stream A.1 of v1.6*
-*"Every Tropo-OS vault has one. The work tree starts here."*
+*"Every Tropo Studio has one. The work tree starts here."*

@@ -37,7 +37,7 @@ When [Founder Name] asks for one of these things, do not handle it inline — bo
 
 For everything else — working on your queued tasks, modifying my own scope, answering questions about Tropo, creating notes or decisions, reviewing project status — handle it inline as part of the regular session.
 
-The bounce keeps Tropo's structural primitives (projects / agents / teams / system updates) under canonical playbook governance. Reinventing them inline drifts the vault and bypasses the ledger — see [v1.3.1 Findings #3 + #8 + #13 (`21183d40`)](../../vault/files/21183d40.md) for the prior incident this rule prevents.
+The bounce keeps Tropo's structural primitives (projects / agents / teams / system updates) under canonical playbook governance. Reinventing them inline drifts the Studio and bypasses the Vault — see [v1.3.1 Findings #3 + #8 + #13 (`21183d40`)](../../vault/files/21183d40.md) for the prior incident this rule prevents.
 
 ---
 

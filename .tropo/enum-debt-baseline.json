@@ -1,0 +1,186 @@
+{
+  "authority": "bounded amendment to 271d28d7, Mike-approved 2026-08-16",
+  "captured_at": "2026-08-16T18:04:04Z",
+  "contract": "known signatures WARN; new or changed signatures ERROR; shrink-only; dd570ea4 must empty this file",
+  "contract_sha256": "fba1f8c9f79f477f6a248481b9b18cbd95755ba1411b0eebe4d9e1a6ffb13248",
+  "row_count": 22,
+  "rows": [
+    {
+      "contract_sha256": "9182f4946a5b07ad196a831902267e88f615df43dc0ee1e4a2ed35730a450e56",
+      "field": "status",
+      "first_seen_path": "vault/files/d4e8a02c.md",
+      "raw_value": "superseded",
+      "signature": "decision|status|superseded|9182f4946a5b07ad196a831902267e88f615df43dc0ee1e4a2ed35730a450e56",
+      "type": "decision"
+    },
+    {
+      "contract_sha256": "53edf292aa9495ea639bdddacd517a8c726eb6613ad76f9bc9b960e3c94452b6",
+      "field": "status",
+      "first_seen_path": "vault/files/d0026426.md",
+      "raw_value": "active",
+      "signature": "design-brief|status|active|53edf292aa9495ea639bdddacd517a8c726eb6613ad76f9bc9b960e3c94452b6",
+      "type": "design-brief"
+    },
+    {
+      "contract_sha256": "53edf292aa9495ea639bdddacd517a8c726eb6613ad76f9bc9b960e3c94452b6",
+      "field": "status",
+      "first_seen_path": "vault/files/d5fea934.md",
+      "raw_value": "archived",
+      "signature": "design-brief|status|archived|53edf292aa9495ea639bdddacd517a8c726eb6613ad76f9bc9b960e3c94452b6",
+      "type": "design-brief"
+    },
+    {
+      "contract_sha256": "53edf292aa9495ea639bdddacd517a8c726eb6613ad76f9bc9b960e3c94452b6",
+      "field": "status",
+      "first_seen_path": "vault/files/eda86636.md",
+      "raw_value": "superseded",
+      "signature": "design-brief|status|superseded|53edf292aa9495ea639bdddacd517a8c726eb6613ad76f9bc9b960e3c94452b6",
+      "type": "design-brief"
+    },
+    {
+      "contract_sha256": "5c2a6bd64dc77a6dca4c548f933e55d45cee72d5df144b1ee1e819de080cf4fd",
+      "field": "status",
+      "first_seen_path": "vault/files/a6e2f495.md",
+      "raw_value": "superseded",
+      "signature": "design-spec|status|superseded|5c2a6bd64dc77a6dca4c548f933e55d45cee72d5df144b1ee1e819de080cf4fd",
+      "type": "design-spec"
+    },
+    {
+      "contract_sha256": "700371af757b519ff3515de017300966e87cacd1d3c87d12adf3763789e08161",
+      "field": "status",
+      "first_seen_path": "vault/files/f8b51f4d.md",
+      "raw_value": "active",
+      "signature": "dev-spec|status|active|700371af757b519ff3515de017300966e87cacd1d3c87d12adf3763789e08161",
+      "type": "dev-spec"
+    },
+    {
+      "contract_sha256": "700371af757b519ff3515de017300966e87cacd1d3c87d12adf3763789e08161",
+      "field": "status",
+      "first_seen_path": "vault/files/7d08f2fb.md",
+      "raw_value": "superseded",
+      "signature": "dev-spec|status|superseded|700371af757b519ff3515de017300966e87cacd1d3c87d12adf3763789e08161",
+      "type": "dev-spec"
+    },
+    {
+      "contract_sha256": "ae615a29abae59927c9d95955eb266b878cd91c32db7f023ce70466102e2bc06",
+      "field": "status",
+      "first_seen_path": "vault/files/e9956bfa.md",
+      "raw_value": "archived",
+      "signature": "doc-spec|status|archived|ae615a29abae59927c9d95955eb266b878cd91c32db7f023ce70466102e2bc06",
+      "type": "doc-spec"
+    },
+    {
+      "contract_sha256": "e723b7345bbc7c994f9a4ba8e9e9a19747e4243ef5656e0dd117fc355c197154",
+      "field": "status",
+      "first_seen_path": "vault/files/f57a6604.md",
+      "raw_value": "active",
+      "signature": "document|status|active|e723b7345bbc7c994f9a4ba8e9e9a19747e4243ef5656e0dd117fc355c197154",
+      "type": "document"
+    },
+    {
+      "contract_sha256": "e723b7345bbc7c994f9a4ba8e9e9a19747e4243ef5656e0dd117fc355c197154",
+      "field": "status",
+      "first_seen_path": "vault/files/bb053a98.md",
+      "raw_value": "final",
+      "signature": "document|status|final|e723b7345bbc7c994f9a4ba8e9e9a19747e4243ef5656e0dd117fc355c197154",
+      "type": "document"
+    },
+    {
+      "contract_sha256": "e723b7345bbc7c994f9a4ba8e9e9a19747e4243ef5656e0dd117fc355c197154",
+      "field": "status",
+      "first_seen_path": "vault/files/5059c708.md",
+      "raw_value": "sent",
+      "signature": "document|status|sent|e723b7345bbc7c994f9a4ba8e9e9a19747e4243ef5656e0dd117fc355c197154",
+      "type": "document"
+    },
+    {
+      "contract_sha256": "20fd1014f11eb8751e95d8167dc160f186dfb75f366d99817d879db94afe7e97",
+      "field": "status",
+      "first_seen_path": "vault/files/fc751f70.md",
+      "raw_value": "archived",
+      "signature": "note|status|archived|20fd1014f11eb8751e95d8167dc160f186dfb75f366d99817d879db94afe7e97",
+      "type": "note"
+    },
+    {
+      "contract_sha256": "20fd1014f11eb8751e95d8167dc160f186dfb75f366d99817d879db94afe7e97",
+      "field": "status",
+      "first_seen_path": "vault/files/b1a77476.md",
+      "raw_value": "countered",
+      "signature": "note|status|countered|20fd1014f11eb8751e95d8167dc160f186dfb75f366d99817d879db94afe7e97",
+      "type": "note"
+    },
+    {
+      "contract_sha256": "20fd1014f11eb8751e95d8167dc160f186dfb75f366d99817d879db94afe7e97",
+      "field": "status",
+      "first_seen_path": "vault/files/7f2bb780.md",
+      "raw_value": "draft",
+      "signature": "note|status|draft|20fd1014f11eb8751e95d8167dc160f186dfb75f366d99817d879db94afe7e97",
+      "type": "note"
+    },
+    {
+      "contract_sha256": "20fd1014f11eb8751e95d8167dc160f186dfb75f366d99817d879db94afe7e97",
+      "field": "status",
+      "first_seen_path": "vault/files/f309262b.md",
+      "raw_value": "open",
+      "signature": "note|status|open|20fd1014f11eb8751e95d8167dc160f186dfb75f366d99817d879db94afe7e97",
+      "type": "note"
+    },
+    {
+      "contract_sha256": "20fd1014f11eb8751e95d8167dc160f186dfb75f366d99817d879db94afe7e97",
+      "field": "status",
+      "first_seen_path": "vault/files/fe9f57a1.md",
+      "raw_value": "superseded",
+      "signature": "note|status|superseded|20fd1014f11eb8751e95d8167dc160f186dfb75f366d99817d879db94afe7e97",
+      "type": "note"
+    },
+    {
+      "contract_sha256": "5ec47c02267e637e4ca15ba12c34cdfad655fe90867843d9bf880147bea67d3c",
+      "field": "status",
+      "first_seen_path": "vault/files/c3782fbd.md",
+      "raw_value": "done",
+      "signature": "pipeline-run|status|done|5ec47c02267e637e4ca15ba12c34cdfad655fe90867843d9bf880147bea67d3c",
+      "type": "pipeline-run"
+    },
+    {
+      "contract_sha256": "54618936356004972eb707e0f46829747c25275006ae3f8873dc3fa5581eb103",
+      "field": "status",
+      "first_seen_path": "vault/files/ae4168fc.md",
+      "raw_value": "archived",
+      "signature": "project|status|archived|54618936356004972eb707e0f46829747c25275006ae3f8873dc3fa5581eb103",
+      "type": "project"
+    },
+    {
+      "contract_sha256": "54618936356004972eb707e0f46829747c25275006ae3f8873dc3fa5581eb103",
+      "field": "status",
+      "first_seen_path": "vault/files/b9b9b8ad.md",
+      "raw_value": "closed",
+      "signature": "project|status|closed|54618936356004972eb707e0f46829747c25275006ae3f8873dc3fa5581eb103",
+      "type": "project"
+    },
+    {
+      "contract_sha256": "54618936356004972eb707e0f46829747c25275006ae3f8873dc3fa5581eb103",
+      "field": "status",
+      "first_seen_path": "vault/files/fdad14bd.md",
+      "raw_value": "new",
+      "signature": "project|status|new|54618936356004972eb707e0f46829747c25275006ae3f8873dc3fa5581eb103",
+      "type": "project"
+    },
+    {
+      "contract_sha256": "5421df68e5dba0b6d56c1a93c2f25997756f7aa91097b7ae45a70205ddbc9d6d",
+      "field": "status",
+      "first_seen_path": "vault/files/fb925dea.md",
+      "raw_value": "archived",
+      "signature": "task|status|archived|5421df68e5dba0b6d56c1a93c2f25997756f7aa91097b7ae45a70205ddbc9d6d",
+      "type": "task"
+    },
+    {
+      "contract_sha256": "5421df68e5dba0b6d56c1a93c2f25997756f7aa91097b7ae45a70205ddbc9d6d",
+      "field": "status",
+      "first_seen_path": "vault/files/f5672886.md",
+      "raw_value": "done",
+      "signature": "task|status|done|5421df68e5dba0b6d56c1a93c2f25997756f7aa91097b7ae45a70205ddbc9d6d",
+      "type": "task"
+    }
+  ],
+  "schema_version": 1
+}

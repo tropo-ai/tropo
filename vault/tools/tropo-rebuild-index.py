@@ -2095,7 +2095,7 @@ TOP_LEVEL_KEY_RE = re.compile(r"^([a-zA-Z_][a-zA-Z0-9_-]*):", re.MULTILINE)
 
 # Fields handled by the structured "core" pass — don't re-extract via reflection.
 CORE_FIELDS = {
-    'uid', 'type', 'title', 'name', 'description', 'stage', 'state', 'status',
+    'uid', 'type', 'title', 'name', 'description', 'state', 'status',
     'owner', 'member_of', 'created', 'modified', 'last_modified', 'tags',
     'file_ext', 'schema_version', 'role', 'extraction_scope', 'subsystem_name',
     'acceptance_criteria',
@@ -2181,42 +2181,20 @@ def reflect_frontmatter(
 # Stage/state normalization (mirrors prior rebuild-vault.py)
 # ---------------------------------------------------------------------------
 
-V3_STATUS_TO_STAGE_STATE: dict[str, tuple[str, str]] = {
-    'requested':  ('ideate',  'active'),
-    'accepted':   ('ideate',  'active'),
-    'active':     ('build',   'active'),
-    'verify':     ('verify',  'active'),
-    'done':       ('done',    'active'),
-    'blocked':    ('build',   'active'),
-    'rejected':   ('done',    'archived'),
-    'cancelled':  ('done',    'archived'),
-}
-V3_STATUS_VOCAB = set(V3_STATUS_TO_STAGE_STATE.keys())
-
-V4_STATUS_TO_STAGE_STATE: dict[str, tuple[str, str]] = {
-    'new':       ('ideate', 'active'),
-    'accepted':  ('ideate', 'active'),
-    'active':    ('build',  'active'),
-    'closed':    ('done',   'active'),
-}
-V4_STATUS_VOCAB = set(V4_STATUS_TO_STAGE_STATE.keys())
-
-PRESERVE_STAGE_STATUSES = {'archived', 'superseded'}
+# v1.89 stage eradication (dev-spec 63aaea28): the retired stage axis is gone
+# from projection. Visibility is `state`, declared on the source or derived
+# from the archival statuses; nothing is ever costumed as ideate - an unknown
+# status surfaces as a validator finding, not a fabricated stage.
 
 
-def normalize_stage_state(fm: str) -> tuple[str, str]:
-    stage_in = get_scalar(fm, 'stage')
+def _derive_state(fm: str) -> str:
     state_in = get_scalar(fm, 'state')
+    if state_in:
+        return state_in
     status_in = get_scalar(fm, 'status')
-    if stage_in and state_in:
-        return stage_in, state_in
-    if state_in in PRESERVE_STAGE_STATUSES:
-        return stage_in or 'done', state_in
-    if status_in in V4_STATUS_VOCAB:
-        return V4_STATUS_TO_STAGE_STATE[status_in]
-    if status_in in V3_STATUS_VOCAB:
-        return V3_STATUS_TO_STAGE_STATE[status_in]
-    return stage_in or 'ideate', state_in or 'active'
+    if status_in in {'archived', 'superseded'}:
+        return 'archived'
+    return 'active'
 
 
 # ---------------------------------------------------------------------------
@@ -2309,7 +2287,7 @@ def process_file(filepath: Path, uid_override: Optional[str] = None) -> Optional
     if uid_override is not None and fm_uid != uid:
         return None
 
-    stage, state = normalize_stage_state(fm)
+    state = _derive_state(fm)
     member_of = [u for u in get_list(fm, 'member_of') if UID_RE.match(u)]
     created = get_scalar(fm, 'created') or '2026-01-01'
     source_title = _derived_row_title(fm, filepath)
@@ -2319,7 +2297,6 @@ def process_file(filepath: Path, uid_override: Optional[str] = None) -> Optional
         'type':           get_scalar(fm, 'type') or 'document',
         'title':          source_title,
         'description':    (get_scalar(fm, 'description') or ''),  # 5d1ec9a9: removed 120-char cap
-        'stage':          stage,
         'state':          state,
         'owner':          (get_scalar(fm, 'owner') or 'unknown')[:30],
         'member_of':      member_of,
@@ -2464,7 +2441,6 @@ def build_project_tree(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         result.append({
             'uid':      p['uid'],
             'title':    p.get('title', ''),
-            'stage':    p.get('stage', 'ideate'),
             'state':    p.get('state', 'active'),
             'parent':   parent_uid,
             'children': children,
@@ -2573,7 +2549,7 @@ def process_tool_file(filepath: Path) -> Optional[dict[str, Any]]:
 
     # Reuse process_file logic: temporarily synthesise a .md-style text so
     # we can call it without duplication. Instead, call the core parsing inline.
-    stage, state = normalize_stage_state(fm)
+    state = _derive_state(fm)
     member_of = [u for u in get_list(fm, 'member_of') if UID_RE.match(u)]
     created = get_scalar(fm, 'created') or '2026-01-01'
 
@@ -2587,7 +2563,6 @@ def process_tool_file(filepath: Path) -> Optional[dict[str, Any]]:
         'type':           get_scalar(fm, 'type') or 'tool',
         'title':          source_title,
         'description':    (get_scalar(fm, 'description') or ''),  # 5d1ec9a9: removed 120-char cap
-        'stage':          stage,
         'state':          state,
         'owner':          (get_scalar(fm, 'owner') or 'unknown')[:30],
         'member_of':      member_of,
@@ -3122,7 +3097,7 @@ def iter_record_edges(record: dict) -> Iterable[tuple[str, str]]:
 # Core frontmatter columns stored as first-class columns in `entries`.
 # Everything else is in fm_json for json_extract access.
 _CORE_COLS = {
-    'uid', 'type', 'title', 'status', 'state', 'stage',
+    'uid', 'type', 'title', 'status', 'state',
     'created', 'modified', 'author', 'extraction_scope',
 }
 
@@ -3988,10 +3963,13 @@ def _fts_body_with_mounted_source(
     source = catalog.source(rec)
     return source['text'] if source.get('status') == 'available-text' else ''
 
-_NAV_BLOCK_RE = __import__('re').compile(
-    r'<!--\s*nav-block:start\s*-->.*?<!--\s*nav-block:end\s*-->',
-    __import__('re').DOTALL,
-)
+# v1.89 271d28d7 AC6: FTS body stripping shares the canonical span, so search
+# text and hashed content agree about what is chrome. Imported hard, with no
+# local fallback: a fallback that compiles its own pattern is the drift this AC
+# removes, and it would reappear silently the first time the import broke. This
+# module already hard-imports from `lib` above, so an unreachable lib is a
+# broken tree, not a supported mode.
+from lib.governed_body import _NAV_BLOCK_RE  # noqa: E402
 
 
 def _strip_nav_block(text: str) -> str:
@@ -4156,7 +4134,6 @@ def _record_to_index_rows(
         raw_title    = _raw_scalar(raw_fm, 'title')
         raw_status   = _raw_scalar(raw_fm, 'status')
         raw_state    = _raw_scalar(raw_fm, 'state')
-        raw_stage    = _raw_scalar(raw_fm, 'stage')
         raw_created  = _raw_scalar(raw_fm, 'created')
         raw_modified = _raw_scalar(raw_fm, 'modified')
         raw_author   = _raw_scalar(raw_fm, 'author')
@@ -4167,7 +4144,6 @@ def _record_to_index_rows(
         raw_title    = rec.get('title')
         raw_status   = rec.get('status')
         raw_state    = rec.get('state')
-        raw_stage    = rec.get('stage')
         raw_created  = rec.get('created')
         raw_modified = rec.get('modified')
         raw_author   = rec.get('author')
@@ -4187,7 +4163,7 @@ def _record_to_index_rows(
         mo_primary = None
 
     entry_row = (
-        uid, raw_type, projected_title, raw_status, raw_state, raw_stage,
+        uid, raw_type, projected_title, raw_status, raw_state,
         raw_created, raw_modified, raw_author, raw_scope, mo_primary,
         raw_ac, json.dumps(rec, separators=(',', ':')),
     )
@@ -5147,7 +5123,7 @@ def _freshen_many_locked(
                 observation_rows,
             ) in row_sets:
                 conn.execute(
-                    'INSERT OR REPLACE INTO entries VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                    'INSERT OR REPLACE INTO entries VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
                     entry_row,
                 )
                 conn.execute('DELETE FROM edges WHERE src_uid = ?', (uid,))
@@ -5592,7 +5568,7 @@ def _freshen_one_locked(uid: str, vault_root: Path) -> int:
                 )
             """)
             conn.execute(
-                'INSERT OR REPLACE INTO entries VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                'INSERT OR REPLACE INTO entries VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
                 entry_row,
             )
             conn.execute('DELETE FROM edges WHERE src_uid = ?', (uid,))
@@ -5942,7 +5918,7 @@ def _remove_many_locked(
                 ) in dependent_row_sets:
                     conn.execute(
                         'INSERT OR REPLACE INTO entries '
-                        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
                         entry_row,
                     )
                     conn.execute(
@@ -6395,7 +6371,6 @@ def build_sqlite_index(
                 title               TEXT,
                 status              TEXT,
                 state               TEXT,
-                stage               TEXT,
                 created             TEXT,
                 modified            TEXT,
                 author              TEXT,
@@ -6586,7 +6561,7 @@ def build_sqlite_index(
             print(f'  ghost-prune: removed {len(ghost_uids)} fileless entries from SQLite.')
 
         conn.executemany(
-            'INSERT OR REPLACE INTO entries VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            'INSERT OR REPLACE INTO entries VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
             entry_rows,
         )
         conn.executemany('INSERT INTO edges VALUES (?,?,?)', edge_rows)
@@ -6650,7 +6625,7 @@ def build_sqlite_index(
         # No CASE literals (no raw leak); no state branch (DISAMBIGUATE stream owns state, 4bd03620).
         # v1.68 S1 — lifecycle JOIN now generic (A108 lean per M2 residual analysis):
         # standing/evergreen fire as 'standing' regardless of type — no per-capsule map rows
-        # needed. COALESCE: generic-lifecycle-case → typed-status-map → typed-stage-map → N/A.
+        # needed. COALESCE: generic-lifecycle-case → typed-status-map → N/A (stage leg removed at v1.89 stage eradication).
         # DROP+CREATE (not IF NOT EXISTS) so the fix applies on every rebuild.
         conn.execute("DROP VIEW IF EXISTS meta_status")
         conn.execute("""
@@ -6665,14 +6640,11 @@ def build_sqlite_index(
                      st.bucket,
                      'lifecycle-N/A'
                    ) AS meta_status,
-                   e.status, e.state, e.stage, e.created, e.modified
+                   e.status, e.state, e.created, e.modified
             FROM entries e
             LEFT JOIN meta_status_map ms
                    ON ms.type = e.type
                   AND lower(ms.value) = lower(e.status)
-            LEFT JOIN meta_status_map st
-                   ON st.type = e.type
-                  AND lower(st.value) = lower(e.stage)
         """)
 
         # (B5 2026-06-09: transitional meta_stage compat view DROPPED — Metis's L2
@@ -6681,6 +6653,16 @@ def build_sqlite_index(
 
         conn.commit()
         conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+        # Ship a self-contained artifact. WAL mode is persistent in the file
+        # header, and os.replace() below renames only the main file: the
+        # -wal/-shm sidecars keep their .tmp names and are orphaned, so the
+        # swapped-in index is a WAL-mode database with no shm beside its own
+        # name. A read-only consumer (tropo-vault-search opens mode=ro) cannot
+        # create the missing shm and fails with CANTOPEN -- which read as "no
+        # search results" until some read-write open happened to heal the
+        # file. Rollback journal mode leaves the artifact readable alone, on
+        # any machine, cold.
+        conn.execute('PRAGMA journal_mode=DELETE')
         n_entries = len(entry_rows)
         n_edges   = len(edge_rows)
         verb = 'Prepared' if defer_replace else 'Wrote'
@@ -6693,6 +6675,7 @@ def build_sqlite_index(
                 tmp_path.unlink()
             except OSError:
                 pass
+        _remove_sqlite_sidecars(tmp_path)
         raise exc
 
     conn.close()
@@ -6701,9 +6684,25 @@ def build_sqlite_index(
             raw = tmp_path.read_bytes()
         finally:
             tmp_path.unlink(missing_ok=True)
+            _remove_sqlite_sidecars(tmp_path)
         return raw
     os.replace(tmp_path, sqlite_path)
+    # Sidecar cleanup, both names: the .tmp-prefixed pair is orphaned by the
+    # rename above (WAL-era builds left them accumulating -- the studio root
+    # carried a pair for a day before this fix), and the final-name pair is
+    # stale state of the image just replaced. Builds are single-writer (the
+    # index ratchet serializes them), so no live connection owns these.
+    _remove_sqlite_sidecars(tmp_path)
+    _remove_sqlite_sidecars(sqlite_path)
     return None
+
+
+def _remove_sqlite_sidecars(db_path: Path) -> None:
+    for suffix in ('-journal', '-wal', '-shm'):
+        try:
+            db_path.with_name(db_path.name + suffix).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------------------

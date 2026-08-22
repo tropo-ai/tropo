@@ -21,7 +21,7 @@ are actually called, and real git commits are actually made and read via
 `git rev-parse HEAD` — not a self-consistent mock.
 
 Never points any write-path invocation at the real studio repo
-(/Users/mike/git/tropo-studios/argo-os). All writes happen inside
+(<studio-root>). All writes happen inside
 tempfile.mkdtemp() fixture roots, cleaned up in tearDown().
 """
 from __future__ import annotations

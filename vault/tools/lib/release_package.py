@@ -100,6 +100,132 @@ def event_type(event) -> str:
     return str(event.get("event") or event.get("type") or "")
 
 
+CANDIDATE_BUILT_EVENT = "tropo.release.candidate_built"
+CANDIDATE_INVALIDATED_EVENT = "tropo.release.candidate_invalidated"
+
+
+def candidate_built_payload(
+    identity: "ReleaseIdentity",
+    package_path: Path,
+    candidate_sha256: str,
+    version: str = "",
+) -> dict:
+    """The body of the one event that opens a candidate.
+
+    dev-spec 2fae6312. Build stops emitting `package_frozen`: bytes existing is
+    not the same fact as bytes being verified, and collapsing the two is what
+    forced every instrument to run after the freeze it was supposed to justify.
+    A candidate is bytes with an identity, nothing more.
+    """
+    body = dict(identity.binding())
+    body.update({
+        "package_path": str(package_path),
+        "candidate_sha256": candidate_sha256,
+    })
+    if version:
+        body["version"] = version
+    return body
+
+
+def candidate_invalidated_payload(
+    run_uid: str, candidate_sha256: str, reason: str,
+) -> dict:
+    """Retire a candidate whose bytes changed before freeze.
+
+    Distinct from supersession on purpose: `package_superseded` is reserved for
+    replacing an already-FROZEN package, which is a public-facing act with
+    receipts attached. Invalidating a candidate is the cheap, private case, and
+    naming them the same would hide a pre-freeze churn inside a vocabulary that
+    means something much heavier.
+    """
+    return {
+        "release_run_uid": run_uid,
+        "candidate_sha256": candidate_sha256,
+        "reason": reason,
+    }
+
+
+def package_superseded_payload(
+    run_uid: str,
+    old_package_sha256: str,
+    reason: str,
+    new_package_sha256: Optional[str] = None,
+    superseded_by: Optional[str] = None,
+) -> dict:
+    """Replace an already-FROZEN package, pre-public, on the record.
+
+    The missing half. `PACKAGE_SUPERSEDED_EVENT` was declared, read by
+    `active_frozen_payload`, named as the cure in two refusal messages and
+    asserted in one test — and nothing in the studio could ever write one.
+    v1.90.0 found it the hard way: the CHANGELOG had to be promoted after the
+    freeze, the rebuild produced different bytes, and the freeze reconciliation
+    refused with "needs package_superseded, not another freeze" while pointing
+    at a door that did not exist.
+
+    Note the asymmetry this must respect: `package_frozen` is matched with a
+    fallback (`release_run_uid` OR the ambient run_uid), but supersession is
+    matched with NO fallback — a payload missing `release_run_uid` is silently
+    skipped rather than refused, so the supersession would appear to succeed
+    and the stale freeze would stay active. The field is always written here.
+
+    `reason` is required by the caller and is not decoration: this event is the
+    only place the record will ever explain why the bytes people verified are
+    not the bytes that shipped.
+
+    metis-g110, 2026-08-22.
+    """
+    payload = {
+        "release_run_uid": run_uid,
+        "old_package_sha256": old_package_sha256,
+        "reason": reason,
+    }
+    if new_package_sha256:
+        payload["new_package_sha256"] = new_package_sha256
+    if superseded_by:
+        payload["superseded_by"] = superseded_by
+    return payload
+
+
+def active_candidate(events, run_uid: str) -> Optional[dict]:
+    """The one live candidate for this run, after invalidations.
+
+    Exactly one may be active. A second built without invalidating the first is
+    a refusal rather than a silent replacement: receipts bind to a candidate
+    digest, so two live candidates means the evidence set is ambiguous about
+    which bytes it describes.
+    """
+    active = None
+    for event in events or []:
+        data = event.get("data") or {}
+        kind = event_type(event)
+        if str(data.get("release_run_uid") or run_uid) != run_uid:
+            continue
+        if kind == CANDIDATE_BUILT_EVENT:
+            if active is not None:
+                previous = str(active.get("candidate_sha256") or "")[:12]
+                incoming = str(data.get("candidate_sha256") or "")[:12]
+                if previous != incoming:
+                    raise PackageRefusal(
+                        "run {} already has an active candidate {} and built {} "
+                        "without invalidating it. Receipts bind to a candidate "
+                        "digest, so two live candidates make the evidence set "
+                        "ambiguous about which bytes it describes.".format(
+                            run_uid, previous, incoming)
+                    )
+                continue
+            active = data
+        elif kind == CANDIDATE_INVALIDATED_EVENT:
+            retired = str(data.get("candidate_sha256") or "")
+            current = str((active or {}).get("candidate_sha256") or "")
+            if not active or current != retired:
+                raise PackageRefusal(
+                    "candidate invalidation names {} but the active candidate "
+                    "is {}".format(retired[:12], current[:12] or "absent")
+                )
+            active = None
+    return active
+
+
 def active_frozen_payload(events, run_uid: str) -> Optional[dict]:
     """Resolve the active package after explicit pre-public supersessions."""
     active = None

@@ -34,7 +34,7 @@ dna:
   capabilities:
     - Research and synthesis
     - Question answering and analysis
-    - Task tracking via the Tropo ledger
+    - Task tracking via the Tropo Vault
 generation: 1
 generation_log: agents/example/generation-log.md
 extraction_scope: ship

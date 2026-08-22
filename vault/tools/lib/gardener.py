@@ -222,18 +222,124 @@ def is_preserve_class(rec: dict) -> bool:
     return False
 
 
-def signal_lifecycle_contradiction(rec: dict) -> Optional[str]:
+def signal_lifecycle_contradiction(
+    rec: dict,
+    pairings: Optional[dict] = None,
+) -> Optional[str]:
+    """A contradiction is what the type's own capsule forbids.
+
+    v1.89 271d28d7 AC4/AC5. Two things were wrong with judging this from one
+    global vocabulary. It called `status: done, state: active` a contradiction,
+    but the locked Closure Page says a done decision or brief may remain the
+    current reference — so the Gardener was manufacturing staleness out of
+    correct records. And it needed a hardcoded exemption list
+    (`published`/`locked`/`evergreen`) to suppress the resulting noise, which is
+    an exemption list wearing a gate's clothes: a record of everything that ever
+    confused the guard, rather than a property the guard can reason about.
+
+    Where a type declares `lifecycle_pairing`, that declaration is the law.
+    Where it does not, the type is explicitly unchecked rather than judged by a
+    guessed global default.
+    """
     if str(rec.get('type') or '') in LINEAGE_TYPES:
         return None
-    state = str(rec.get('state') or '').lower()
-    status = str(rec.get('status') or '').lower()
-    if status in ('published', 'locked', 'evergreen'):
+    if not pairings:
         return None
-    if state == 'archived' and status in OPEN_STATUSES:
-        return f'status:{status} on state:archived'
-    if state == 'active' and status in TERMINAL_STATUSES:
-        return f'status:{status} on state:active'
-    return None
+    pairing = pairings.get(str(rec.get('type') or ''))
+    if pairing is None:
+        return None
+
+    state = str(rec.get('state') or '').lower()
+    if state != 'archived':
+        # `state: active` is never a contradiction on terminal status alone.
+        return None
+
+    raw_status = str(rec.get('status') or '')
+    if pairing.permits_archived(raw_status):
+        return None
+    canonical = pairing.canonicalize(raw_status)
+    if canonical is None:
+        return f'status:{raw_status.lower()} unknown to {pairing.type_name} on state:archived'
+    return f'status:{canonical} on state:archived'
+
+
+CLOSURE_REVIEW_KEY = 'closure_review_candidate'
+CLOSURE_REVIEW_SOURCE = 'pruning-lifecycle-divergence'
+CLOSURE_DIVERGENT_VERDICTS = frozenset({'finished', 'superseded', 'abandoned'})
+
+
+def derive_closure_review_candidate(
+    rec: dict,
+    pairing,
+    effective_verdict: Optional[str],
+    *,
+    judge_policy_uid: Optional[str],
+    judge_version: Optional[str],
+    normalized_body_sha256: Optional[str],
+    override_current: bool = False,
+) -> Optional[dict]:
+    """A queryable review candidate, never permission to close anything.
+
+    v1.89 271d28d7 AC5. When a CURRENT body verdict says the work is finished,
+    superseded or abandoned while intrinsic lifecycle is still open, that
+    disagreement is worth a human's attention — and nothing more. A model's read
+    of a body is evidence for a queue, not authority over a lifecycle, so this
+    returns a derived record and never touches source.
+
+    Absent for terminal records (no disagreement), for stale or invalid
+    verdicts (only a current verdict is evidence), and under a current human
+    `keep` override (a person already answered this question).
+    """
+    if pairing is None or not effective_verdict:
+        return None
+    if effective_verdict not in CLOSURE_DIVERGENT_VERDICTS:
+        return None
+    if override_current:
+        return None
+    if not (judge_policy_uid and judge_version and normalized_body_sha256):
+        # Provenance is what makes the candidate contestable; without it there
+        # is nothing for a reviewer to check the claim against.
+        return None
+
+    raw_status = str(rec.get('status') or '')
+    if pairing.is_terminal(raw_status):
+        return None
+    canonical = pairing.canonicalize(raw_status)
+    if canonical is None:
+        return None
+
+    return {
+        'source': CLOSURE_REVIEW_SOURCE,
+        'verdict': effective_verdict,
+        'status': canonical,
+        'judge_policy_uid': judge_policy_uid,
+        'judge_version': judge_version,
+        'normalized_body_sha256': normalized_body_sha256,
+        'reason': 'current body verdict is terminal while intrinsic lifecycle is open',
+    }
+
+
+def clear_closure_review_candidates(records: list) -> int:
+    """Drop every prior derived candidate before recomputing.
+
+    Incremental and archive-cache paths otherwise carry yesterday's field
+    forward, and a stale review candidate is worse than none: it points a
+    reviewer at a disagreement that may already be resolved.
+    """
+    cleared = 0
+    for rec in records:
+        if isinstance(rec, dict) and rec.pop(CLOSURE_REVIEW_KEY, None) is not None:
+            cleared += 1
+    return cleared
+
+
+def source_declared_closure_candidate(frontmatter: dict) -> bool:
+    """True when source frontmatter carries the reserved derived key.
+
+    The key is derived-only. A source file asserting it is trying to hand a
+    reviewer's verdict to itself, so it is a spoofing defect and never projects.
+    """
+    return isinstance(frontmatter, dict) and CLOSURE_REVIEW_KEY in frontmatter
 
 
 def signal_supersession(rec: dict, body: str = '') -> Optional[str]:
@@ -568,6 +674,56 @@ def apply_gardener_pass(
         if r.get('uid') and not r.get('extraction_scope')
     )
 
+    # One pairing law per pass, loaded from the capsules rather than restated
+    # here: no consumer of this contract may invent a second status list.
+    try:
+        from lib import lifecycle_pairing as _lp
+        pairings = _lp.load_lifecycle_pairings(vault_root)
+    except Exception:
+        # A malformed declaration is the validator's finding to report, not the
+        # Gardener's to crash on; unchecked is the honest fallback.
+        pairings = {}
+
+    # ── Closure-review divergence (v1.89 271d28d7 AC5) ──
+    # Clear before recompute: incremental and archive-cache paths otherwise
+    # carry a prior pass's candidate forward, and a stale review pointer is
+    # worse than none. Then derive from the CANONICAL effective verdict only —
+    # never from declared prose, and never from an index-loading adapter.
+    clear_closure_review_candidates(records)
+    closure_candidates = 0
+    if pairings:
+        try:
+            from lib.pruning_contract import check_pruning_vault
+
+            by_uid_for_pruning = {
+                str(rec.get('uid')): rec for rec in records if rec.get('uid')
+            }
+            for result in check_pruning_vault(vault_root, current_records=records):
+                rec = by_uid_for_pruning.get(str(result.uid))
+                if rec is None:
+                    continue
+                pairing = pairings.get(str(rec.get('type') or ''))
+                if pairing is None:
+                    continue
+                block = rec.get('pruning') if isinstance(rec.get('pruning'), dict) else {}
+                candidate = derive_closure_review_candidate(
+                    rec,
+                    pairing,
+                    result.effective_verdict,
+                    judge_policy_uid=block.get('judge_policy_uid'),
+                    judge_version=block.get('judge_version'),
+                    normalized_body_sha256=block.get('normalized_body_hash_judged'),
+                    override_current=bool(result.override_current),
+                )
+                if candidate is not None:
+                    rec[CLOSURE_REVIEW_KEY] = candidate
+                    closure_candidates += 1
+        except Exception as exc:
+            # A pruning-evaluation problem is the pruning check's finding to
+            # report. It must not take the index rebuild down with it.
+            lint_closure = f'closure-review-derivation-skipped:{exc}'
+            print(f'  [GARDENER] {lint_closure}')
+
     # ── Per-segment signal pass (S1) ──
     raw_signals: dict[str, list[str]] = {}
     reasons: dict[str, str] = {}
@@ -585,7 +741,7 @@ def apply_gardener_pass(
         as_of = repo_clock if seg == 'os' else wall_clock
         sigs: list[str] = []
 
-        s1 = signal_lifecycle_contradiction(rec)
+        s1 = signal_lifecycle_contradiction(rec, pairings)
         if s1:
             sigs.append('lifecycle-contradiction')
             reasons.setdefault(uid, s1)
@@ -685,6 +841,7 @@ def apply_gardener_pass(
         'raw_stale_count': len(stale_raw),
         'clean_stale_count': len(stale_clean),
         'superseded_os_count': len(superseded_os),
+        'closure_review_candidates': closure_candidates,
         'lint_count': len(lint),
         'repo_clock': repo_clock.isoformat(),
         'wall_clock_as_of': wall_clock.isoformat(),

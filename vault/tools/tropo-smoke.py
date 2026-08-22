@@ -398,7 +398,7 @@ _RETIREMENT_EVIDENCE_FIELDS: tuple[str, ...] = (
     "retired_at", "closure_reason", "closed_at", "retirement_reason",
 )
 
-ACTIVATION_TOOL_REL = "vault/tools/40b2f455.py"
+ACTIVATION_TOOL_REL = "vault/tools/tropo-lineage.py"
 
 # Derived runtime state a real index gesture legitimately advances. None of it
 # is a governed change this instrument is entitled to leave behind (AC2).
@@ -1490,8 +1490,11 @@ def probe_boot(studio: Path) -> ProbeResult:
                         "field the gate reads"
                     )
                     cures.append(
-                        f"python3 {ACTIVATION_TOOL_REL} close "
-                        f"--activation-uid {uid} --target-status retired"
+                        f"activation {uid} finished the retirement everywhere "
+                        "except the activation record — complete the close "
+                        f"through the single-source lifecycle ({ACTIVATION_TOOL_REL} "
+                        "retire; dev-spec 5fffbbe9). The pre-cutover 40b2f455 "
+                        "close command is superseded and must not be run."
                     )
 
         # B2 — a terminal lineage with a stray active entry blocks the birth.

@@ -43,7 +43,7 @@ A `board-snapshot` is a frozen render — what a board looked like at `taken_at`
 
 Snapshots are the "what did it look like on date X?" side of the board system. Regenerations are the "what does it look like right now?" side. Both are valid; they serve different questions.
 
-This capsule supersedes the rendered-view half of [board.capsule (00ac0959)](board.capsule.md). The ~60 existing `type: board` ledger entries migrate to `type: board-snapshot` per [v0.3 §9.1 (74fd9b61)](../../vault/files/74fd9b61.md) migration table (current ledger count: ~65 — figure has drifted slightly post-migration as new snapshots have been taken).
+This capsule supersedes the rendered-view half of [board.capsule (00ac0959)](board.capsule.md). The ~60 existing `type: board` vault entries migrate to `type: board-snapshot` per [v0.3 §9.1 (74fd9b61)](../../vault/files/74fd9b61.md) migration table (current ledger count: ~65 — figure has drifted slightly post-migration as new snapshots have been taken).
 
 ---
 
@@ -52,7 +52,7 @@ This capsule supersedes the rendered-view half of [board.capsule (00ac0959)](boa
 | Field | Type | Constraint |
 |-------|------|-----------|
 | `type` | literal | Must be `board-snapshot` |
-| `snapshot_of` | UID | The project / team / collection / other scope target this snapshot captures. Required per [ADR-035 Surface 2](../../vault/files/a7c4e5b2.md) — must resolve in the ledger. |
+| `snapshot_of` | UID | The project / team / collection / other scope target this snapshot captures. Required per [ADR-035 Surface 2](../../vault/files/a7c4e5b2.md) — must resolve in the Vault. |
 | `board_definition` | UID | The `board-definition` that produced this snapshot. Required per [ADR-035 Surface 2](../../vault/files/a7c4e5b2.md) — must resolve. |
 | `taken_at` | ISO 8601 | Minute-precision (`YYYY-MM-DDTHH:MM`). Vault-local time. No timezone suffix on writes; readers parse leniently. |
 | `taken_by` | string | Agent or human who triggered the snapshot. |
@@ -105,7 +105,7 @@ Snapshots are created by [`create-snapshot.skill.md` (d847e2b3)](../skills/creat
 
 1. **Snapshots are generated, never authored.** A human or agent triggers creation; the rendering engine produces the body. Manual body edits are prohibited.
 2. **Snapshots are historical truths, not current state.** See [v0.3 §8 cold-boot reader rule (74fd9b61)](../../vault/files/74fd9b61.md). A current-status query regenerates from the definition against live sources; a historical-date query reads the closest-before snapshot.
-3. **Snapshots are never deleted.** Deletion semantics are deferred to [eda09d06 Schemaless Document Store](../../vault/files/eda09d06.md). Until that lock, snapshots move to `state: archived` at most, never removed from the ledger.
+3. **Snapshots are never deleted.** Deletion semantics are deferred to [eda09d06 Schemaless Document Store](../../vault/files/eda09d06.md). Until that lock, snapshots move to `state: archived` at most, never removed from the Vault.
 4. **`snapshot_of` and `board_definition` MUST resolve.** Per ADR-035 Surface 2. Write-time validation; the snapshot cannot be written if either target is unreachable.
 
 ---
@@ -148,7 +148,7 @@ Snapshots are created by [`create-snapshot.skill.md` (d847e2b3)](../skills/creat
 - **Taking a snapshot.** Invoke [create-snapshot.skill](../skills/create-snapshot.skill.md) with `snapshot_of: <project|team|collection uid>`, `board_definition: <uid>`, `taken_by:`, `reason:`. The skill calls the UID primitive, renders the body from the definition's `sections:` array against live sources, and writes the entry at `vault/files/<uid>.md` with `state: active`.
 - **Reading "what was the world on date X?"** Read the closest-before-X snapshot. The snapshot's `taken_at` anchors it; its body is the rendered template at that moment. Do NOT regenerate from the definition — regenerations show current state, not historical truth.
 - **Reading "what is the world right now?"** Regenerate from the source [board-definition](board-definition.capsule.md). Snapshots are not for current-status queries; regenerations are.
-- **Archiving an old snapshot.** Flip `state: active → archived`. The snapshot remains in the ledger (never deleted) and remains queryable; it just falls out of default-active queries. Convention: archive after ~180 days per [design-spec §11 Open Question 1 (74fd9b61)](../../vault/files/74fd9b61.md).
+- **Archiving an old snapshot.** Flip `state: active → archived`. The snapshot remains in the Vault (never deleted) and remains queryable; it just falls out of default-active queries. Convention: archive after ~180 days per [design-spec §11 Open Question 1 (74fd9b61)](../../vault/files/74fd9b61.md).
 - **Correcting a defective snapshot (rare).** Author a new snapshot with corrected `reason:` noting the prior was defective. Set the old one's `state: archived` and `superseded_by: <new-uid>`. Never edit the defective snapshot's body — immutability holds.
 
 ### Rules at a glance
@@ -172,7 +172,7 @@ Snapshots are created by [`create-snapshot.skill.md` (d847e2b3)](../skills/creat
 
 ### Worked examples
 
-- **The ~60 v0.3-migration snapshots.** When [Board System Reconciliation v0.3 (74fd9b61)](../../vault/files/74fd9b61.md) locked, the existing `type: board` ledger entries migrated to `type: board-snapshot` per §9.1 of the design spec. They are the canonical historical examples — query the index for `type: board-snapshot` and read any one to see the produced shape (current ledger count: ~65 entries; the original "60" figure was the migration-time snapshot of the cohort).
+- **The ~60 v0.3-migration snapshots.** When [Board System Reconciliation v0.3 (74fd9b61)](../../vault/files/74fd9b61.md) locked, the existing `type: board` vault entries migrated to `type: board-snapshot` per §9.1 of the design spec. They are the canonical historical examples — query the index for `type: board-snapshot` and read any one to see the produced shape (current ledger count: ~65 entries; the original "60" figure was the migration-time snapshot of the cohort).
 
 ### Go next
 

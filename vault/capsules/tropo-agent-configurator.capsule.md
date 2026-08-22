@@ -172,7 +172,7 @@ agents/<name>/<name>-activation.md
 ```
 
 They do NOT live in:
-- `vault/files/` — agent-configurators are not ledger entries
+- `vault/files/` — agent-configurators are not vault entries
 - `.tropo/playbooks/` — agent-configurators are not OS playbooks
 - Any shared location — each configurator is agent-specific
 

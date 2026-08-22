@@ -5,7 +5,8 @@ ship_scope_lock_break: 'extraction_scope: ship ADDED 2026-07-02 per Mike verbati
 name: dev-spec
 type: capsule-definition
 extends: core
-version: 1.8
+version: 1.9
+lifecycle_pairing_amendment_2026_08_16: "v1.8 -> v1.9 amendment 2026-08-16 by talos-t44 under Mike-locked v1.89 dev-spec 271d28d7 (activation 7a47c089), whose committed_substrate assigns this amendment to the pairing package. Purely additive: adds the OPTIONAL lifecycle_pairing declaration (core.capsule v2.1) so this type's archived-state law is machine-readable. No enum, alias, state-machine, transition, rollup, template, or validation-rule change; every existing instance stays valid. Version bumped 2026-08-16 on Argus A150's ruling (evt_dd132e700471fc5e_00000014, verbatim: 'semantic capsule changes bump all six'), after T44 measured the effect and asked rather than deciding. For dev-spec specifically A150 held template_enforced_from_version at 1.8 in the same ruling, so v1.8+ stable-AC-ID behaviour is unchanged by the bump. Mint registry regenerated in the same commit."
 mint_mode: human
 mint_template: vault/capsules/templates/dev-spec.template.md
 mint_template_version: '1.1'
@@ -28,10 +29,13 @@ v1_1_amendment_note: 'v1.0 → v1.1 amendment 2026-05-28 by Argus A87 captain-mo
 tier: os
 author: argus-a80
 created: 2026-05-23
-modified: 2026-08-03
+modified: '2026-08-16'
 created_by: argus-a80
-modified_by: argus-a144
+modified_by: talos-t44
 status: locked
+lifecycle_pairing:
+  terminal_statuses: [done]
+  archived_state_allowed_statuses: any
 enforced_enums:
   status:
     - draft
@@ -217,7 +221,7 @@ Extends `core`. Inherits all core rules + frontmatter floor (uid / type / status
 - `vault/tools/tropo-lock-dev-spec.py` — **next action after authoring**; validates the draft, flips `status: draft → locked`, and atomically opens or reuses the correlated dev-pipeline activation
 - `vault/00-index.jsonl` — grep `type: dev-spec` for live cycle activations; check parent cycle brief before authoring
 - `vault/00-index.jsonl` — grep `type: design-brief` AND `member_of: <dev-pipeline-inbox-uid>` for upstream cycle briefs the dev-spec composes with
-- `.tropo-studio/registries/registry.jsonl` — verify cross-references resolve (`refs:`, `composes_with:`, `references_cycle_brief:` UIDs)
+- `vault/00-index.jsonl` — verify cross-references resolve (`refs:`, `composes_with:`, `references_cycle_brief:` UIDs)
 - Companion capsules: [doc-spec capsule](tropo-doc-spec.capsule.md) and [test-spec capsule](tropo-test-spec.capsule.md); together they form the *-spec family
 - Sibling for retrospective architectural records: [design-spec capsule (de5160c0)](tropo-design-spec.capsule.md) — lexically distinct; different concept (post-hoc record vs forward-looking commitment)
 - Sibling for heavier formal contracts: [arch-spec capsule (a7f2e9c4)](tropo-arch-spec.capsule.md)

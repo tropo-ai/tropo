@@ -260,7 +260,7 @@ Mirrors session-agent.capsule and how-to.capsule.
 4. **`writes_scope:` declarations are governance-validated.** Cross-checked against AGENTS.md write-scope of target folders at check-in. A tool that writes outside its declared scope is a violation.
 5. **MCP tools require a registered `mcp_server`.** Server must appear in `.mcp.json` (or platform's MCP registry) for the tool to be `status: active`.
 6. **Action tools point at, but do not replace, action files.** `.tropo/actions/<id>.action.md` remains authoritative body; tool entry is the registry face.
-7. **Registry writes are generated, not hand-edited.** `registry.jsonl` entries are produced by the registry builder.
+7. **Index entries are generated, not hand-edited.** A tool's row in `vault/00-index.jsonl` and its entry in the generated `.tropo/tool-catalog.md` are produced by `vault/tools/tropo-rebuild-vault.py` from the tool's own frontmatter.
 
 ### Validation Checks (17, ERROR-severity at check-in)
 
@@ -286,7 +286,7 @@ Mirrors session-agent.capsule and how-to.capsule.
 7. `input` is valid JSON Schema (inline or resolvable `$ref`)
 8. If `output` present: valid JSON Schema; `verdict`/`status` enum recommended
 9. `spawnable_by` is YAML array or bare string; values resolve
-10. `uid` registered in `registry.jsonl`; reverse lookup matches `name`
+10. `uid` indexed in `vault/00-index.jsonl`; reverse lookup matches `name`
 11. Provenance pair present
 12. For `status: active`: body contains all 6 required sections (Intent / Invocation Protocol / Input-Output / Governance / Verification / Failure Modes) or synonyms
 13. If `writes_scope` present: paths exist or are well-formed globs; no conflict with target folder AGENTS.md write-scope
@@ -347,7 +347,7 @@ governed_by: d5e1b4a3
 - **Existing `.tropo/actions/*.action.md`** — not governed by this capsule. Action files stay kernel-tier (Phase 1). Tool entries with `transport: action` point at them but don't replace them.
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — governs this capsule.
 - **`.mcp.json` + Tropo platform's MCP registry** — runtime sources for `transport: mcp` tools. Server must be registered for the tool to be `status: active` (Rule 5).
-- **`.tropo-studio/registries/registry.jsonl`** — runtime callable catalog. Tools project here per [e2f7d195](../../vault/files/e2f7d195.md). Registry writes generated, not hand-edited (Rule 7).
+- **`vault/00-index.jsonl`** — the index every runtime callable projects into. Tool rows are generated, not hand-edited (Rule 7).
 - **[`.tropo/tool-catalog.md`](../tool-catalog.md)** — v1.15 ship surface. Catalog generator emits `trigger_description:` (v1.3 field) verbatim alongside structural fields.
 
 ### History

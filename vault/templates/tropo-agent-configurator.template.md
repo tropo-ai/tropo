@@ -268,7 +268,7 @@ Append: `{"event": "milestone_fired", "milestone": "[Agent Name] Active", "group
 
 **Owns:** `agents/[agent-name]/`, [any other owned paths]
 
-**Writes:** [list channels and ledger paths]
+**Writes:** [list channels and vault paths]
 
 ---
 
@@ -326,7 +326,7 @@ Search for every `[` character in the file. The complete placeholder list:
 - `[gen-prefix]` / `[Gen]` → **same letter, two casings.** Lowercase for file paths and run.jsonl generation tokens (e.g., `s`, `o`, `t`). Uppercase for the startup signal and status card display (e.g., `S`, `O`, `T`). Fill both consistently with the agent's single-letter prefix.
 - `[N]` → the current generation number as an integer (1 for first generation)
 - `[any other owned paths]` → agent's write-owned folders beyond `agents/[agent-name]/`
-- `[list channels and ledger paths]` → explicit channel paths this agent writes
+- `[list channels and vault paths]` → explicit channel paths this agent writes
 - `[Insert the one question...]` → the self-diagnostic question unique to this role (Group 4)
 
 **Optional-section headings** (if you chose to KEEP these sections in Step 2):

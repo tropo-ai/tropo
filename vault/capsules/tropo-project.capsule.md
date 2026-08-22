@@ -5,7 +5,8 @@ ship_scope_lock_break: 'extraction_scope: ship ADDED 2026-07-02 per Mike verbati
 name: project
 type: capsule-definition
 extends: core
-version: 2.8
+version: 2.9
+lifecycle_pairing_amendment_2026_08_16: "v2.8 -> v2.9 amendment 2026-08-16 by talos-t44 under Mike-locked v1.89 dev-spec 271d28d7 (activation 7a47c089), whose committed_substrate assigns this amendment to the pairing package. Purely additive: adds the OPTIONAL lifecycle_pairing declaration (core.capsule v2.1) so this type's archived-state law is machine-readable. No enum, alias, state-machine, transition, rollup, template, or validation-rule change; every existing instance stays valid. Version bumped 2026-08-16 on Argus A150's ruling (evt_dd132e700471fc5e_00000014, verbatim: 'semantic capsule changes bump all six'), after T44 measured the effect and asked rather than deciding. For dev-spec specifically A150 held template_enforced_from_version at 1.8 in the same ruling, so v1.8+ stable-AC-ID behaviour is unchanged by the bump. Mint registry regenerated in the same commit."
 template_enforced_from: '2026-07-13'
 template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
 supersedes_version: '2.7'
@@ -15,8 +16,8 @@ v2_6_amendment_note: 'v2.5 → v2.6 amendment 2026-07-13 by talos-t29 per Mike-l
 tier: os
 author: tropo
 created: 2026-04-10
-modified: 2026-07-23
-modified_by: talos
+modified: '2026-08-16'
+modified_by: talos-t44
 meta_status_rollup_added: argus-a104 2026-06-08 — +active→in-progress in meta_status_rollup per 4acf3f2d v0.4 DERIVE (Mike-signed 7-capsule lock-break batch); additive; prior modified argus-a80 2026-05-23
 status: locked
 locked_by: argus-a32
@@ -24,6 +25,8 @@ locked_at: 2026-04-24
 v2_5_amendment_lock_by: argus-a80
 v2_5_amendment_lock_at: 2026-05-23
 v2_5_amendment_mike_authorization: Mike-A80 2026-05-23 verbatim 'B. let's do it right.' — explicit lock-break approval on v2.4 to land v1.14 schema split per Vela V51 Path 2 finding [fb395501] + Mike-V51 directive 'fix it now'. Resolves the v1.13.1 render-time hub-skip workaround pattern that has accumulated three documented strand cases (Packs / Registries / + 17 tracked entries; ~1056 hub-edge entries in member_of arrays vault-wide) + closes the suppression-list-growth band-aid pattern.
+lifecycle_pairing:
+  archived_state_allowed_statuses: [done, cancelled]
 enforced_enums:
   status:
     canonical:
@@ -276,7 +279,7 @@ In addition to core checks:
 - `register-file.skill.md` *(forthcoming v1.4 Stream 2)* — syncs `projects/<slug>/` filesystem with vault entries
 
 **Procedures:**
-- `start-a-project.playbook.md` — canonical onboarding path for project-creation (v1.4 Stream 2 amendment routes through ledger-native creation)
+- `start-a-project.playbook.md` — canonical onboarding path for project-creation (v1.4 Stream 2 amendment routes through vault-native creation)
 - Concierge re-routing protocol (v1.4 Stream 2 D2.6) — post-outcome-playbook-complete, concierge re-enters intent-detection
 
 **Rules (at-a-glance):**

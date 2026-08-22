@@ -97,12 +97,22 @@ Failure mode prevented: releases shipping without verification gauntlet passes, 
 | `status` | enum (v3.9+) | `pre-ship` (authored captain-mode at cycle activation per A.X discipline) OR `shipped` (flipped at ship by ship-firing agent; renamed from `done` at v3.12 per Mike Call-① e68503aa). v3.0-v3.11 used `done` as the terminal; v3.9 formally adds `pre-ship` to close A85-stub-schema-drift defect class — see Required-at-Activation + Required-at-Ship field-class declarations below + Rule 15 + Rule 16. |
 | `owner` | string | Agent who filed the release entry (typically Vela or Deploy-stage owner) |
 | `release_version` | string | Semver `^\d+\.\d+\.\d+(-[a-z0-9.-]+)?$`. MUST match `build_version:` of the build in `derived_from:`. (Renamed from v1.0's `version:` for clarity.) |
-| `release_date` | ISO date | When the release shipped |
-| `derived_from` | UID array | Single-entry array with the UID of the `build` this release shipped. Bidirectional with `build.composes_into:`. |
+| `release_date` | ISO date | When the release shipped. **(v1.89, 2fae6312)** Candidate/ship field: absent at `status: pre-ship`, because a release entry born at plan lock has not shipped and a date invented there is a lie with a schema's authority. |
+| `derived_from` | UID array | Single-entry array with the UID of the `build` this release shipped. Bidirectional with `build.composes_into:`. **(v1.89, 2fae6312)** Candidate/ship field: becomes the real build UID when one exists. At pre-ship there is no build to point at, and a placeholder would satisfy the check while naming nothing. |
 | `shipped_release_plan` | UID | The release-plan this release satisfies. Bidirectional with `release-plan.shipped_release:`. |
-| `manifest_path` | string | Path from vault root to the release's manifest file |
-| `zip_path` | string | Path from vault root to the distribution zip |
+| `manifest_path` | string | Path from vault root to the release's manifest file. **(v1.89, 2fae6312)** Candidate/ship field: arrives with candidate/freeze evidence. |
+| `zip_path` | string | Path from vault root to the distribution zip. **(v1.89, 2fae6312)** Candidate/ship field: arrives with candidate/freeze evidence. |
 | `member_of` | UID array | At least: the release-planning project + the pipeline stage bucket |
+
+**(v1.89, dev-spec 2fae6312.)** The four fields marked *candidate/ship* above are
+not required at `status: pre-ship`. The lock transaction now authors the release
+entry at plan-lock time, before any build, candidate or package exists — so
+demanding a release date, a build UID, a manifest path and a zip path at that
+moment forces exactly the fabrication this capsule exists to prevent. A field
+that can only be filled with a placeholder is not a required field; it is a
+required lie. They become mandatory at their real boundaries: `derived_from`
+when a build exists, manifest and zip paths with candidate/freeze evidence, and
+`release_date` at ship.
 
 ### Required-at-Activation Field-Class (v3.9+; status:pre-ship)
 

@@ -67,7 +67,7 @@ When you bring existing files into your vault, three things happen:
 
 When a folder of files is brought into the vault, two things happen:
 
-1. **Domain-matched discovery primitives** — every governed markdown file carries a UID, indexed in the appropriate primitive for its domain: vault entries project into `vault/00-index.jsonl` via the rebuilder; agent identity records live in `.tropo-studio/registries/agent-registry.yaml`; runtime callables (sa.\*/skills/tools) project into `.tropo-studio/registries/registry.jsonl`; capsules / kernel playbooks / kernel skills are discoverable via folder listing. Non-markdown files (Word, PDF, images) are NOT given UIDs at this layer — they're described in folder indexes only.
+1. **Domain-matched discovery primitives** — every governed markdown file carries a UID, indexed in the appropriate primitive for its domain: vault entries and runtime callables (sa.\*/skills/tools) project into `vault/00-index.jsonl` via the rebuilder; agent identity records live in `.tropo-studio/registries/agent-registry.yaml`; capsules / kernel playbooks / kernel skills are discoverable via folder listing. Non-markdown files (Word, PDF, images) are NOT given UIDs at this layer — they're described in folder indexes only.
 
 2. **Folder-level governance** — the folder itself gets an `AGENTS.md` (who can write here, what belongs) and a `00-index.md` (what's inside). This is local context. Every file in the folder is listed in the index, including non-markdown files.
 

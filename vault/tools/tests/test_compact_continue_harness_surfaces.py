@@ -169,13 +169,24 @@ class RetirementBoundaryTests(unittest.TestCase):
 
     def test_escalation_row_prefers_continue_over_racing_the_compactor(self):
         text = RETIREMENT_CANONICAL.read_text(encoding="utf-8")
+        # UPDATED 2026-08-21 (talos-t47): the retirement canonical's v3.0
+        # single-source rewrite (5fffbbe9, A152-verified) renamed this row
+        # from "Context approaching auto-compact" to "Context pressure with
+        # practice incomplete" and moved the tool pointer into §When to
+        # Start Retirement (3). The contract this row carries is unchanged:
+        # human-directed close or Compact-Continue — never race the compactor.
         row = next(
             line
             for line in text.splitlines()
-            if line.startswith("| Context approaching auto-compact")
+            if line.startswith("| Context pressure")
         )
-        self.assertIn("tropo-compact-continue.py", row)
-        self.assertIn("human has already signalled", row)
+        self.assertIn("Compact-Continue", row)
+        self.assertIn("human has already directed", row)
+        self.assertIn(
+            "tropo-compact-continue.py",
+            text.split("## When to Start Retirement", 1)[1].split("---", 1)[0],
+            "the continue pointer must stay in the retirement-triggers section",
+        )
 
     def test_degraded_retirement_floor_names_continue_and_human_authority(self):
         text = RETIREMENT_POINTER.read_text(encoding="utf-8")

@@ -692,5 +692,150 @@ class TestNoKeyMaterialIsTouched(RetirementFixture):
             self.assertNotIn(fn, src)
 
 
+class TestLifecycleSyncAndWarnings(unittest.TestCase):
+    """v1.89 (dev-spec 5fffbbe9) — the sync and warning contract, black-box.
+
+    The permanent control above (TestRetirementIsNeverBlocked) guards the tool
+    this module was born for. This class guards the tool that REPLACED it:
+    `tropo-lineage.py` (born/retire) and the WARN-only completeness observation
+    in `tropo-validate.py`. Every assertion is a subprocess or a function call
+    against an isolated temp studio — same discipline as the rest of this file:
+    run the thing, never grep the source.
+
+    Contract under test, in one sentence each:
+      * after born/retire appends the lineage line, the unified entry's
+        lifecycle frontmatter converges to lineage truth, best-effort —
+        a card that cannot be written costs a warning, never the close;
+      * ceremony gaps are observed by validation as WARN findings that name
+        the missing artifact and clear when honest artifacts land — never
+        as errors, never as refusals.
+    """
+
+    REPO = pathlib.Path(__file__).resolve().parents[3]
+    LINEAGE = REPO / "vault" / "tools" / "tropo-lineage.py"
+    VALIDATE = REPO / "vault" / "tools" / "tropo-validate.py"
+
+    def setUp(self):
+        self.studio = pathlib.Path(tempfile.mkdtemp(prefix="contract189-"))
+
+    def tearDown(self):
+        shutil.rmtree(self.studio, ignore_errors=True)
+
+    def _plant_entry(self, slug="probe", uid="aaaa1111", generation="T0",
+                     status="retired"):
+        (self.studio / "agents" / slug).mkdir(parents=True, exist_ok=True)
+        (self.studio / "agents" / slug / f"{slug}-activation.md").write_text(
+            f"---\nuid: ffff0000\ntype: agent-configurator\nagent: {slug}\n"
+            f"agent_uid: {uid}\n---\n\n# {slug} activation\n", encoding="utf-8")
+        (self.studio / "vault" / "agents").mkdir(parents=True, exist_ok=True)
+        (self.studio / "vault" / "agents" / f"{uid}.md").write_text(
+            f"---\nuid: {uid}\ntype: agent\nagent: {slug}\n"
+            f"generation: {generation}\nstatus: {status}\n"
+            f"last_session: '2026-01-01'\n---\n\n## §Soul\n\nvoice\n",
+            encoding="utf-8")
+        return uid
+
+    def _lineage(self, *args):
+        p = subprocess.run(
+            [sys.executable, str(self.LINEAGE), "--root", str(self.studio), *args],
+            capture_output=True, text=True, timeout=90)
+        return p.returncode, p.stdout, p.stderr
+
+    def _field(self, uid, name):
+        text = (self.studio / "vault" / "agents" / f"{uid}.md").read_text()
+        m = re.search(rf"^{name}:\s*(.+)$", text, re.MULTILINE)
+        return m.group(1).strip().strip("'\"") if m else None
+
+    def _check_completeness(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("tv_contract", self.VALIDATE)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.check_retirement_ceremony_completeness(self.studio)
+
+    def test_born_converges_the_card_to_lineage_truth(self):
+        uid = self._plant_entry()
+        code, out, _ = self._lineage("born", "--agent", "probe", "--by", "mike")
+        self.assertEqual(code, 0)
+        gen = json.loads(out)["generation"]
+        self.assertEqual(self._field(uid, "generation"), gen)
+        self.assertEqual(self._field(uid, "status"), "active")
+
+    def test_retire_converges_the_card_and_never_touches_voice(self):
+        uid = self._plant_entry(status="active", generation="T0")
+        self._lineage("born", "--agent", "probe", "--by", "mike")
+        letter = self.studio / "letter.md"
+        letter.write_text("the letter\n", encoding="utf-8")
+        code, _, _ = self._lineage("retire", "--agent", "probe",
+                                   "--letter", str(letter))
+        self.assertEqual(code, 0)
+        self.assertEqual(self._field(uid, "status"), "retired")
+        text = (self.studio / "vault" / "agents" / f"{uid}.md").read_text()
+        self.assertIn("## §Soul", text)
+        self.assertIn("voice", text, "sync must never touch body or voice")
+
+    def test_an_unwritable_card_warns_but_the_close_lands(self):
+        uid = self._plant_entry(status="active", generation="T0")
+        self._lineage("born", "--agent", "probe", "--by", "mike")
+        target = self.studio / "vault" / "agents" / f"{uid}.md"
+        os.chmod(target, 0o444)
+        letter = self.studio / "letter.md"
+        letter.write_text("the letter\n", encoding="utf-8")
+        try:
+            code, _, err = self._lineage("retire", "--agent", "probe",
+                                         "--letter", str(letter))
+        finally:
+            os.chmod(target, 0o644)
+        self.assertEqual(code, 0, "a read-only card never unwinds a retirement")
+        self.assertIn("sync", err.lower(), "and the skipped sync says why")
+        lin = (self.studio / "agents" / "probe" / "lineage.jsonl").read_text()
+        self.assertIn('"retired"', lin, "the record is the lineage line")
+
+    def test_an_empty_letter_is_refused_and_consumes_nothing(self):
+        """F1 (A152) regression on the CANONICAL tool: the create-only slot is
+        irreplaceable, so a zero-byte source must be refused BEFORE placement —
+        the existing empty-transfer test guards the retired tropo-retire.py
+        (metis-g108 moderate item 1)."""
+        uid = self._plant_entry(status="active", generation="T0")
+        self._lineage("born", "--agent", "probe", "--by", "mike")
+        letter = self.studio / "letter.md"
+        letter.write_text("   \n", encoding="utf-8")  # whitespace-only
+        code, _, err = self._lineage("retire", "--agent", "probe",
+                                     "--letter", str(letter))
+        self.assertNotEqual(code, 0, "an empty letter must refuse the close")
+        self.assertIn("empty", err.lower())
+        self.assertFalse((self.studio / "agents" / "probe" / "transfers").is_dir(),
+                         "nothing may be placed into the irreplaceable slot")
+
+    def test_ceremony_gaps_warn_and_never_error(self):
+        uid = self._plant_entry(status="active", generation="T0")
+        self._lineage("born", "--agent", "probe", "--by", "mike")
+        letter = self.studio / "letter.md"
+        letter.write_text("the letter\n", encoding="utf-8")
+        self._lineage("retire", "--agent", "probe", "--letter", str(letter))
+        findings, checked, defects = self._check_completeness()
+        self.assertGreater(checked, 0)
+        self.assertEqual(defects, 0, "completeness may WARN, never fail")
+        self.assertTrue(any("[WARN]" in f and "probe" in f for f in findings))
+        self.assertFalse(any("[ERROR]" in f or "[FAIL]" in f for f in findings))
+
+    def test_an_honest_artifact_shrinks_the_warning_set(self):
+        uid = self._plant_entry(status="active", generation="T0")
+        self._lineage("born", "--agent", "probe", "--by", "mike")
+        letter = self.studio / "letter.md"
+        letter.write_text("the letter\n", encoding="utf-8")
+        self._lineage("retire", "--agent", "probe", "--letter", str(letter))
+        before, _, _ = self._check_completeness()
+        gen = json.loads((self.studio / "agents" / "probe" / "lineage.jsonl")
+                         .read_text().splitlines()[0])["gen"]
+        refl = self.studio / "agents" / "probe" / "reflections"
+        refl.mkdir(parents=True)
+        (refl / f"{gen.lower()}-reflection.md").write_text(
+            "# recovered after the fact\n", encoding="utf-8")
+        after, _, _ = self._check_completeness()
+        self.assertLess(len(after), len(before),
+                        "recovery must be worth doing or nobody does it")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -65,12 +65,84 @@ DISPATCHER: dict[str, tuple[str, str]] = {
 }
 
 
-def resolve_type(uid: str, vault: Path) -> str | None:
-    """Derive type across current + archive projections.
+def pairing_findings(uid: str, entry_type: str, source: Path, vault: Path) -> list:
+    """The SAME pairing verdict the full validator reaches, for one entry.
 
-    ADR-047 removes history from the default retrieval surface, but targeted
-    validation must still resolve an explicitly requested archived UID.
+    v1.89 271d28d7 AC7. Both doors call one engine, so a targeted check can
+    never disagree with the fleet pass about whether a record is legal — and
+    the verdict is computed from the source file, not from the row derived
+    from it.
     """
+    try:
+        from lib import lifecycle_pairing as _lp
+    except Exception:
+        return []
+    try:
+        pairings = _lp.load_lifecycle_pairings(vault)
+    except Exception as exc:
+        return [f"[FAIL] {uid} ({entry_type}): pairing declarations are malformed: {exc}"]
+    pairing = pairings.get(entry_type)
+    if pairing is None:
+        return []
+    try:
+        frontmatter = _lp._entry_frontmatter(source)
+    except Exception as exc:
+        return [f"[FAIL] {uid} ({entry_type}): source is unreadable: {exc}"]
+    if not frontmatter:
+        return []
+    if _lp.CLOSURE_REVIEW_KEY_PRESENT(frontmatter):
+        return [
+            f"[FAIL] {uid} ({entry_type}): SPOOFED-DERIVED-KEY — source declares "
+            f"closure_review_candidate, which is derived-only and never authored"
+        ]
+    violation = _lp.evaluate_record(
+        pairing,
+        uid=uid,
+        path=str(source.relative_to(vault)),
+        raw_status=frontmatter.get("status"),
+        state=frontmatter.get("state"),
+    )
+    if violation is None:
+        return []
+    try:
+        baseline = _lp.load_pairing_baseline(vault)
+    except Exception:
+        baseline = {"signatures": {}}
+    known = _lp.pairing_row_signature(violation) in (baseline.get("signatures") or {})
+    severity = "WARN" if known else "FAIL"
+    suffix = " (known debt; dd570ea4 must clear it)" if known else ""
+    return [
+        f"[{severity}] {uid} ({entry_type}): {violation.rule_id} — status "
+        f"{violation.raw_status!r} with state:{violation.state}{suffix}"
+    ]
+
+
+def resolve_type(uid: str, vault: Path) -> str | None:
+    """Derive type from SOURCE first, then the index projections.
+
+    v1.89 271d28d7 AC7. Reading the index first made this tool useless in the
+    one situation it exists for. A governed file whose row is stale or absent
+    resolved to no type at all, so check-one answered "not found in vault
+    index" for files sitting on disk in front of it — including, measured on
+    2026-08-16, the locked dev-spec being built at the time. The source is what
+    validation is about; the row is a projection of it, and a projection that
+    has not caught up must not decide whether the source gets checked.
+
+    ADR-047 removes history from the default retrieval surface, so the index
+    fallback still spans current + archive for a UID whose file has moved.
+    """
+    source = resolve_instance_path(uid, vault)
+    if source is not None:
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        match = re.match(r"\A---\n(.*?)\n---", text, re.DOTALL)
+        if match:
+            declared = re.search(r"^type:\s*(.+)$", match.group(1), re.MULTILINE)
+            if declared:
+                return declared.group(1).strip().strip("'\"") or None
+
     for rec in index_surfaces.load_index_records(vault, include_archive=True):
         if rec.get("uid") == uid:
             return rec.get("type")
@@ -217,6 +289,9 @@ def run_generic_mint_checks(uid: str, entry_type: str, vault: Path) -> list[str]
         return [f"[ERROR] {uid} ({entry_type}): BODY-UNREADABLE — {exc}"]
 
     findings: list[str] = []
+    # v1.89 271d28d7 AC7: the pairing verdict comes from the shared engine, so
+    # this door and the full validator cannot disagree about one record.
+    findings.extend(pairing_findings(uid, entry_type, instance_path, vault))
 
     try:
         instance_fm = template_leg._frontmatter_mapping(
@@ -453,7 +528,7 @@ def _run(args, vault: Path) -> int:
                 f"{defects} defect(s) → {verdict}"
             )
             return 0 if defects == 0 else 1
-        print(f"check-one: uid {args.uid!r} not found in vault index", file=sys.stderr)
+        print(f"check-one: uid {args.uid!r} not found in source or vault index", file=sys.stderr)
         return 2
 
     defects, summary = run_checks(

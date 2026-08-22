@@ -1,6 +1,7 @@
 ---
 subsystem_hub:
   - 2d083137
+v1_89_amendment_note: 'talos-t46 2026-08-18 per Mike-locked dev-spec 63aaea28 (file named in committed_substrate — the lock authorization): current_step is the sole pipeline-position field; current_stage is removed from schema, checks, and prose. Historical changelog vocabulary is untouched.'
 uid: 5a8f3b2c
 name: pipeline-run
 type: capsule-definition
@@ -88,8 +89,7 @@ Failure mode prevented: pipeline definitions and pipeline executions conflated i
 | `pipeline_version` | string | Semver, **pinned at run-start**. Executor MUST use this version — not the current pipeline version. Editing the pipeline after run-start does NOT affect this run. |
 | `status` | enum | `active` / `paused` / `complete` / `cancelled`. Workflow lifecycle. |
 | `state` | enum | `active` / `archived`. Lifecycle-visibility flag. Independent of `status`. |
-| `current_stage` | UID | Current stage WorkflowNode. Resolves to node in pinned pipeline version. |
-| `current_step` | UID | Current step WorkflowNode. For simple pipelines where stage IS leaf step, `current_step` = `current_stage`. |
+| `current_step` | UID | Current step WorkflowNode. Resolves to node in the pinned pipeline version. **Sole position field (v1.89 stage eradication, dev-spec 63aaea28):** the retired `current_stage` key is gone from schema, runtime writes, and run.state; legacy sources migrate via `tropo-migrate-stage-eradication.py`. |
 | `members` | UID array | Polymorphic — each UID resolves to either a work-item (task/design-brief/arch-spec/build/release/note/etc.) OR a project. Cannot be empty. |
 | `owner` | UID | The entity that invoked the run. Resolves to entity. |
 | `principal` | UID | The entity signing (usually same as `owner`; may differ when an agent invokes on behalf of a human). |
@@ -341,7 +341,7 @@ active ⇌ paused → complete → (grace period) → archived
 3. **`run.jsonl`, `thread.md`, `run.state.json` are append-only or overwrite-at-boundary.** Do not edit prior run.jsonl entries. thread.md is conventionally append-only. run.state.json overwrites at each stage boundary (coarser than step boundary).
 4. **Only the current executor OR owner OR principal may transition status.** Status transitions are logged to run.jsonl with `event: status_changed`.
 5. **Archived runs are read-only.** Post-archival, all files in the run folder are immutable.
-6. **Multiple concurrent pipeline-runs on same members are permitted.** Each run holds its own current_stage/current_step; members' intrinsic status is shared state. **(NEW v2.0)** `concurrency_model: single-active-per-pipeline-lock` overrides this default at the pipeline level.
+6. **Multiple concurrent pipeline-runs on same members are permitted.** Each run holds its own current_step; members' intrinsic status is shared state. **(NEW v2.0)** `concurrency_model: single-active-per-pipeline-lock` overrides this default at the pipeline level.
 7. **Pipeline-runs do NOT force member status transitions.** Member status transitions happen via the member's own request-lifecycle. Processor-agents operating within a pipeline-run may trigger a member's status transition AS PART OF executing their step — the transition runs through the member's request-lifecycle machinery, not via a mutation the run itself performs. When multiple concurrent runs have shared members, the first processor-agent to complete a status-transitioning action wins; subsequent processors observe the transition. **The run is a coordination + audit-trail container; it observes, it doesn't mutate.**
 
    **(NEW v2.0 — Rule 7 clarification.)** The new `verification_receipt` event mechanism (and all other new v2.0 event types) preserves Rule 7. **`verification_receipt` is an append-only event in run.jsonl; truly-done state is DERIVED from the event sequence** (a step is truly-done when the pattern `step_completed` → `verification_receipt: verdict: pass` exists in the log for that step_uid). **No frontmatter mutation on the pipeline-run entry happens via verification_receipt.** Readers compute step state by walking the event log. Rule 7 holds: the run observes (records the verdict in the log); it doesn't mutate.
@@ -356,7 +356,7 @@ active ⇌ paused → complete → (grace period) → archived
 5. `pipeline_version:` is valid semver
 6. `members:` non-empty; each UID resolves to a work-item or project
 7. `owner:` and `principal:` resolve to entities
-8. `current_stage:` and `current_step:` resolve to WorkflowNodes in the pinned pipeline version
+8. `current_step:` resolves to a WorkflowNode in the pinned pipeline version
 9. `started_at` is valid ISO 8601; `completed_at` valid or null
 10. If `status: complete`, `completed_at` is set
 11. *(honor-system)* `run.jsonl` exists in run folder; append-only discipline
@@ -408,7 +408,7 @@ Resolution failure during verification = `verification_receipt.verdict: error` w
 Rendered file at `00-tropo-nav/pipelines/active-pipelines.md` auto-lists every `status: active` pipeline-run with:
 
 - pipeline name + activation_uid
-- current_stage + current_step
+- current_step (sole position field)
 - last event timestamp
 - owner + principal UIDs
 - count of step_declared / step_completed / step_failed / step_skipped events
@@ -448,7 +448,7 @@ Auto-rendered by `render-active-pipelines.py`. **Deferred to v1.47.0** — engin
 
 ## Member Processing — How Runs Execute Over Members
 
-The core model: a pipeline-run is a coordination container + audit trail. It holds `members:`, pinned `pipeline_version:`, and a `current_stage:` + `current_step:` pointer. Execution happens via **processor-agents** operating within the run.
+The core model: a pipeline-run is a coordination container + audit trail. It holds `members:`, pinned `pipeline_version:`, and a `current_step:` pointer. Execution happens via **processor-agents** operating within the run.
 
 ### Step 1 — Processor discovers the run
 

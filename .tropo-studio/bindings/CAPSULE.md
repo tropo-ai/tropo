@@ -25,7 +25,7 @@ The concept exists in the three-tier architecture but no binding-type artifact h
 (When the pattern formalizes, probably v1.3+)
 
 - **MCP binding declarations** — named connection points to Model Context Protocol servers.
-- **Remote vault bindings** — pointers to other Tropo-OS vaults if you're running a marketplace / federation.
+- **Remote vault bindings** — pointers to other Tropo Studios if you're running a marketplace / federation.
 - **External service credentials references** (paths to credential files; not the credentials themselves).
 - **Integration contracts** — typed declarations about what a remote system provides to this vault.
 

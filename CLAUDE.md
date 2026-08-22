@@ -42,7 +42,8 @@ Read **`.tropo/concierge/activate.md`** — your full activation file. Follow it
 | User asks "what is Tropo?" / wants a technical overview | [the L1 canonical entry (`vault/files/eca73d77.md`)](vault/files/eca73d77.md) — what Tropo is, the typing system, the seven subsystems, the boot path |
 | Doing governance-class work (creating files, modifying capsule rules, applying an update) | `.tropo/TROPO-CONTROL.md` for OS invariants + `STUDIO.md` for org defaults |
 | Writing to a folder | That folder's `CAPSULE.md` if present |
-| Creating governed files | Add a `uid:` to YAML frontmatter + update `.tropo-studio/registries/registry.yaml` per the conventions in TROPO-CONTROL.md |
-| User wants the work-management surface | [`vault/files/d61ce0a7.md`](vault/files/d61ce0a7.md) — how Tropo Work composes (project + task + decision + pipeline) |
+| Creating governed files | Add a `uid:` to YAML frontmatter; the index picks it up on the next `vault/tools/tropo-rebuild-vault.py`. There is **no** single universal UID registry to hand-edit — see TROPO-CONTROL.md §Registry tracking |
+| User wants the work-management surface | [`vault/files/2d4f8c91.md`](vault/files/2d4f8c91.md) — How Tropo Work Works (project + task + decision + pipeline) |
+| User wants the vault primitive itself | [`vault/files/d61ce0a7.md`](vault/files/d61ce0a7.md) — How the Tropo Vault Works |
 
 **Why two-stage:** the first message a user sees should be the Tropo concierge offering to help — not 2,500 words of L1 orientation loaded silently before the greeting fires. The concierge knows enough to greet + route; deeper substrate loads on need. The "no deep reading required" promise the README makes lands true at the first-session level when boot is staged.

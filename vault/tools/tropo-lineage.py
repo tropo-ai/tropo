@@ -14,7 +14,8 @@ cli_command: "python3 vault/tools/tropo-lineage.py"
 script_path: vault/tools/tropo-lineage.py
 created: '2026-08-06'
 created_by: metis-g102
-version: "0.1"
+version: "0.2"
+version_note: '0.2 (talos-t46, 5fffbbe9 AC6): best-effort lifecycle-field sync onto the unified entry after the append — status/generation/predecessor/last_session/last_updated/born_at/retired_at, frontmatter only, body and voice untouched, every failure a swallowed warning. The lineage line remains the only record; the card is a convenience surface.'
 schema_version: 2
 extraction_scope: ship
 ---
@@ -207,6 +208,69 @@ def current(lines):
     return live
 
 
+def resolve_entry(root, agent):
+    """The unified entry at vault/agents/<uid>.md, via the activation pointer's
+    agent_uid:. None when the pointer or the entry is absent — an agent without
+    a card still has a complete lifecycle in the lineage file."""
+    pointer = root / "agents" / agent / f"{agent}-activation.md"
+    if not pointer.is_file():
+        return None
+    m = re.search(r"^agent_uid:\s*([0-9a-fA-F]{8})\s*$",
+                  pointer.read_text(encoding="utf-8"), re.MULTILINE)
+    if not m:
+        return None
+    entry = root / "vault" / "agents" / f"{m.group(1)}.md"
+    return entry if entry.is_file() else None
+
+
+def sync_entry(root, agent, fields):
+    """Best-effort lifecycle-field sync onto the unified entry (5fffbbe9 AC6).
+
+    Runs AFTER the lineage line is durably appended, so a card that is missing,
+    malformed, or read-only can only cost a warning on stderr — never the
+    lineage, never the exit code, and never a rollback. Touches the frontmatter
+    lifecycle fields only; body and voice are preserved byte-for-byte, because
+    the card is a convenience surface and the lineage file is the record.
+    """
+    entry = resolve_entry(root, agent)
+    if entry is None:
+        print(f"note: no unified entry resolved for {agent}; lifecycle fields "
+              f"not synced — lineage is the record and is unaffected",
+              file=sys.stderr)
+        return False
+    try:
+        if not os.access(entry, os.W_OK):
+            raise ValueError("entry is not writable")
+        text = entry.read_text(encoding="utf-8")
+        fm = re.match(r"\A---\n(.*?)\n---\n", text, re.DOTALL)
+        if not fm:
+            raise ValueError("entry has no frontmatter block")
+        out, seen = [], set()
+        for line in fm.group(1).split("\n"):
+            key = line.split(":", 1)[0].strip() if ":" in line else None
+            if key in fields:
+                out.append(f"{key}: {fields[key]}")
+                seen.add(key)
+            else:
+                out.append(line)
+        for key, val in fields.items():
+            if key not in seen:
+                out.append(f"{key}: {val}")
+        new_text = "---\n" + "\n".join(out) + "\n---\n" + text[fm.end():]
+        tmp = entry.with_suffix(".md.tmp")
+        tmp.write_text(new_text, encoding="utf-8")
+        os.replace(tmp, entry)
+        return True
+    except (OSError, ValueError) as e:
+        print(f"note: lifecycle field sync skipped for {agent} ({e}); "
+              f"lineage is the record and is unaffected", file=sys.stderr)
+        return False
+
+
+def today():
+    return now()[:10]
+
+
 def cmd_born(args):
     root = Path(args.root).resolve()
     path = lineage_path(root, args.agent)
@@ -218,12 +282,24 @@ def cmd_born(args):
     if open_gen and not open_gen["retired"]:
         notes.append(f"{open_gen['gen']} never retired; recorded, not blocked")
 
+    prev = None
+    for l in lines:
+        if l.get("t") == "born":
+            prev = l.get("gen")
+
     record = {"t": "born", "gen": gen, "at": now(), "by": args.by}
     if args.model:
         record["model"] = args.model
     if notes:
         record["notes"] = notes
     append(path, record)
+    born_fields = {"status": "active", "generation": gen,
+                   "last_session": f"'{today()}'",
+                   "last_updated": f"'{today()}'",
+                   "born_at": f"'{record['at']}'"}
+    if prev:
+        born_fields["predecessor"] = prev
+    sync_entry(root, args.agent, born_fields)
     told = announce(root, args.agent, record)
     if told:
         notes.append(told)
@@ -251,6 +327,16 @@ def cmd_retire(args):
         src = Path(args.letter)
         if not src.is_file():
             raise SystemExit(f"letter not found: {src}")
+        # An empty source is a bad source, and it must be refused BEFORE the
+        # placement: the destination slot is create-only because a letter
+        # cannot be reconstructed, so placing a truncated letter permanently
+        # consumes the irreplaceable slot — the exact harm refusal exists for
+        # (A152 review pass 1, F1; sanctioned by AC2's "bad letter source").
+        if not src.read_text(encoding="utf-8", errors="replace").strip():
+            raise SystemExit(
+                f"letter source is empty: {src}. Nothing was placed — an empty "
+                f"letter would permanently consume the create-only slot at "
+                f"transfers/{gen}.md. Write the real letter and re-run.")
         dest = root / "agents" / args.agent / "transfers" / f"{gen}.md"
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp = dest.with_suffix(".md.tmp")
@@ -276,6 +362,11 @@ def cmd_retire(args):
     if args.note:
         record["note"] = args.note
     append(path, record)
+    sync_entry(root, args.agent,
+               {"status": "retired",
+                "last_session": f"'{today()}'",
+                "last_updated": f"'{today()}'",
+                "retired_at": f"'{record['at']}'"})
     notes = []
     told = announce(root, args.agent, record)
     if told:

@@ -90,7 +90,7 @@ member_of:
 
 ### In scope
 
-- **`library/` folder content storage.** Narrative content shipped with every Tropo-OS vault. Active entries: [Studio Manifesto (efeb1ea5)](efeb1ea5.md) v1.0.3 (v1.46 authored; supersedes legacy Workshop Manifesto fbb13cca preserved at `library/the-workshop.manifesto.md`); [The Tropo Handbook (c92ae197)](c92ae197.md) (~5500 words; 11 sections; v1.4 rev 3; status:published v1.7); `library/docs/` long-form how-tos.
+- **`library/` folder content storage.** Narrative content shipped with every Tropo Studio. Active entries: [Studio Manifesto (efeb1ea5)](efeb1ea5.md) v1.0.3 (v1.46 authored; supersedes legacy Workshop Manifesto fbb13cca preserved at `library/the-workshop.manifesto.md`); [The Tropo Handbook (c92ae197)](c92ae197.md) (~5500 words; 11 sections; v1.4 rev 3; status:published v1.7); `library/docs/` long-form how-tos.
 - **Packs (`library/packs/*`).** Extraction packs that ship with the OS: Agent Identity (Canon), Verification (Helm), Governed Work (Lantern). Plus the Green City multi-agent pilot. Container at [Packs (d9b8a9bb)](d9b8a9bb.md) (renamed from "Starter Packs" at A36/V35 deprecation 2026-04-28).
 - **Crew-narrative content storage.** Captain's Log at `library/captains-log.md` (registered as governed document at v1.X by O10 task 42aca2a4); crew-status-reports; other crew-narrative substrate.
 - **KB articles (typed `kb-article` at `vault/files/`).** 22+ canonical knowledge entries spanning foundational concepts (how-the-tropo-vault-works, how-projects-replace-folders, how-pipelines-work, how-playbooks-work), operational toolchain, capsule-vs-instance-naming kernel rule. *Migrated from `.tropo/kb/` at v1.19.0 per Lock A Universal Storage Convergence; navigable via subsystem hub member lists.*
@@ -208,7 +208,7 @@ The Library subsystem owns these **content surfaces** (v1.7 Stream D1 reframe):
 
 ## 5. Conscious Trade-offs
 
-- **Schemaless document store + typed capsules.** Ledger is schemaless at the filesystem level; types are enforced by capsule definitions at check-in. Flexibility + governance without a database. Trade-off: capsule drift is possible without a mechanical validator (v1.4 target); honor-system discipline in v1.3.
+- **Schemaless document store + typed capsules.** The Vault is schemaless at the filesystem level; types are enforced by capsule definitions at check-in. Flexibility + governance without a database. Trade-off: capsule drift is possible without a mechanical validator (v1.4 target); honor-system discipline in v1.3.
 - **UID addressing over path addressing.** UIDs survive renames and moves; paths don't. Trade-off: UIDs are less human-readable than paths; mitigated by the index + human-readable titles.
 - **Flat `vault/files/` layout.** No subfolders; filenames are UIDs. Trade-off: filesystem isn't navigable by humans; navigation happens through collections + cascade indexes. Humans use the index + cascade; agents use the registry.
 

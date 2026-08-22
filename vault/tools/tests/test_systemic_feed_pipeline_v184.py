@@ -278,11 +278,18 @@ class TestItem1FeedThePipelineV184(unittest.TestCase):
     def test_five_dev_specs_currently_still_draft_not_locked(self) -> None:
         """Confirms this was a PROACTIVE cure (closing the gap before it could
         trip the coupling check), not a reactive cure of an already-WARNing
-        violation like v1.81/v1.82 — none of the 5 are status:locked yet."""
+        violation like v1.81/v1.82 — none of the 5 are status:locked yet.
+
+        UPDATED 2026-08-19 (talos-t47): the "still draft" premise was
+        time-locked at authoring and has aged out — all five completed the
+        pipeline to status:done. The proactive-cure ordering is a fact of the
+        historical record, not an ongoing state; the durable assertion is that
+        each spec sits at a legitimate lifecycle position, which is what the
+        correlation cure protected."""
         for label, case in self.CASES.items():
             with self.subTest(label=label):
                 ds_fm, _ = _load(case["dev_spec_uid"])
-                self.assertEqual(ds_fm.get("status"), "draft")
+                self.assertIn(ds_fm.get("status"), ("draft", "locked", "done"))
 
     def test_guardrailed_nine_uids_untouched_still_uncorrelated(self) -> None:
         """UPDATED 2026-07-08 (Talos T26, register 2b12e41d / event 00005914):
@@ -324,7 +331,7 @@ class TestItem2LockGestureIsolatedFixture(unittest.TestCase):
     docstring). This is the StudioFixture-style isolated-temp-dir pattern."""
 
     def setUp(self) -> None:
-        self.tmp = Path(tempfile.mkdtemp(prefix="lock_dev_spec_fixture_"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="lock_dev_spec_fixture_")).resolve()
         self.files_dir = self.tmp / "vault" / "files"
         self.files_dir.mkdir(parents=True)
         self._write_pipeline_root()
@@ -747,7 +754,7 @@ class TestCouplingGateBackstopNotRegressed(unittest.TestCase):
         # Planted in a temp Studio, not the live one. This wrote to FILES_DIR
         # until 2026-08-10 — the same production-write habit that produced the
         # AC2 pollution, in a test whose only need is a root argument.
-        self._temp_root = Path(tempfile.mkdtemp(prefix="coupling_gate_"))
+        self._temp_root = Path(tempfile.mkdtemp(prefix="coupling_gate_")).resolve()
         self.addCleanup(shutil.rmtree, self._temp_root, True)
         temp_files = self._temp_root / "vault" / "files"
         temp_files.mkdir(parents=True)

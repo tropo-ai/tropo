@@ -184,7 +184,7 @@ informs: []
 |---------|--------|
 | UID collision | Regenerate |
 | Missing author | Stop and ask |
-| Ledger not present | Escalate |
+| Vault not present | Escalate |
 | Partial write | Clean up orphan, report |
 
 ---

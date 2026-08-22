@@ -79,6 +79,17 @@ class DryRunNeverWritesTestCase(unittest.TestCase):
         dest_runs.mkdir(parents=True, exist_ok=True)
         for run_name in (_RUN_1, _RUN_2):
             shutil.copytree(_REAL_RUNS / run_name, dest_runs / run_name)
+        # FROZEN SUBSTRATE: the historical run's own declaration snapshot keys
+        # one criterion on `stage == done`, and 63aaea28's stage eradication
+        # removed that field from the live tree BY LOCKED DESIGN (stage-only
+        # items drift visibly, never silently pass). This suite copies the
+        # live tree, so the pre-eradication versions of exactly the entries
+        # the run's criteria read are overlaid from git history (parent of
+        # the live-apply, a93f0a4da) — the fixture then owns its world and
+        # the d7db77d8 revalidation premise holds again.
+        frozen = Path(__file__).resolve().parent / "fixtures" / "dry-run-frozen-2026-07"
+        for frozen_entry in frozen.glob("*.md"):
+            shutil.copy2(frozen_entry, dest_files / frozen_entry.name)
 
         cls._orig = {
             "VAULT_ROOT": eng.VAULT_ROOT,

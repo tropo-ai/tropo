@@ -188,7 +188,7 @@ Every record under `vaults.<vault_uid>` is a JSON object with the following fiel
       "name_prefix": "7c3a8e91",
       "mounted_at": "2026-07-08T14:02:11Z",
       "mounted_by": "mike",
-      "mount_path": "/Users/mike/git/tropo-studios/other-studio",
+      "mount_path": "/Users/mike/git/tropo-studios/other-studio", <!-- portability:exempt — illustrative mount_path value in a schema example -->
       "manifest_kind": "knowledgebase"
     }
   }

@@ -59,3 +59,36 @@ def auto_emit(
            subject=subject, data=data, correlationid=correlationid)
     except Exception as e:
         print(f"WARN: auto_emit({event_type!r}) failed (non-blocking): {e}", file=sys.stderr)
+
+
+def record_tool_telemetry_refused(**payload) -> None:
+    """3f38521a: enqueue a refused outcome through the local telemetry lane.
+
+    Deliberately NOT auto_emit: the canonical emitter is synchronous and
+    this is the exact call it must never carry. Failures are swallowed —
+    the observed tool's behavior is unchanged either way.
+    """
+    try:
+        import importlib.util as _ilu
+        _spec = _ilu.spec_from_file_location(
+            "tool_telemetry", str(_TOOLS_DIR / "lib" / "tool_telemetry.py"))
+        _mod = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        _mod.record_refused(**payload)
+    except Exception as e:  # noqa: BLE001 — never affect the observed tool
+        print(f"WARN: telemetry enqueue failed (non-blocking): {e}",
+              file=sys.stderr)
+
+
+def record_tool_telemetry_failed(**payload) -> None:
+    """3f38521a: enqueue a failed outcome; same contract as the refused twin."""
+    try:
+        import importlib.util as _ilu
+        _spec = _ilu.spec_from_file_location(
+            "tool_telemetry", str(_TOOLS_DIR / "lib" / "tool_telemetry.py"))
+        _mod = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        _mod.record_failed(**payload)
+    except Exception as e:  # noqa: BLE001
+        print(f"WARN: telemetry enqueue failed (non-blocking): {e}",
+              file=sys.stderr)

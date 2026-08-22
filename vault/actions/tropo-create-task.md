@@ -27,7 +27,7 @@ governed_by: 9b7f5e34
 
 ## 1. Intent
 
-This action creates one new task entry in the vault's ledger. A task is a discrete unit of work with a clear owner, at least one parent project, a pipeline stage, and a verifier (for done tasks — owner ≠ verifier).
+This action creates one new task entry in the Vault. A task is a discrete unit of work with a clear owner, at least one parent project, a pipeline stage, and a verifier (for done tasks — owner ≠ verifier).
 
 **When to invoke this action:**
 
@@ -220,7 +220,7 @@ If any verification fails, report the failure to the user and recommend the appr
 | Invalid input (length, enum, etc.) | Stop and ask user for correction |
 | `member_of:` empty or references non-project UID | Stop and ask for a valid project UID. Do not proceed — orphan tasks are non-compliant. |
 | `stage: done` with no verifier or verifier = owner | Stop and ask user for a different verifier. Self-verification is never valid (capsule Rule 1). |
-| Ledger directory missing | Stop and escalate — the vault is not Phase 1 ledger compliant |
+| Vault directory missing | Stop and escalate — the Vault is not Phase 1 compliant |
 | Index file locked or unwritable | Stop and escalate — report to ops.md |
 | Partial write (file written but index update failed) | Remove the orphaned file and report the failure; never leave the Vault half-committed |
 

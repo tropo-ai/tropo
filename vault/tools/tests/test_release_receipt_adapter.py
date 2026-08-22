@@ -162,7 +162,7 @@ def _snapshot(events: list[dict], receipts: dict[str, dict]):
 class ReleaseReceiptPrimitiveTests(unittest.TestCase):
     def test_canonical_content_address_and_idempotent_atomic_write(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             receipt = _receipt()
             digest = release_receipt.write_release_receipt(root, receipt)
             target = (
@@ -270,14 +270,14 @@ class ReleaseReceiptPrimitiveTests(unittest.TestCase):
         ]
         for index, (payload, filename) in enumerate(plants):
             with self.subTest(index=index), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
+                root = Path(temporary).resolve()
                 _write_raw_receipt(root, payload, filename=filename)
                 with self.assertRaises(release_receipt.ReleaseReceiptError):
                     release_receipt.load_release_receipts(root)
 
     def test_conflicting_receipt_for_same_version_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             first = _receipt()
             release_receipt.write_release_receipt(root, first)
             conflict = _receipt(
@@ -291,7 +291,7 @@ class ReleaseReceiptPrimitiveTests(unittest.TestCase):
             self.assertEqual(len(release_receipt.load_release_receipts(root)), 1)
 
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             for candidate in (
                 _receipt(),
                 _receipt(
@@ -310,7 +310,7 @@ class ReleaseReceiptPrimitiveTests(unittest.TestCase):
 
     def test_symlink_hardlink_fifo_and_directory_aliases_refuse(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             digest = release_receipt.write_release_receipt(root, _receipt())
             target = (
                 root / release_receipt.RECEIPTS_RELATIVE_DIR / f"{digest}.json"
@@ -322,7 +322,7 @@ class ReleaseReceiptPrimitiveTests(unittest.TestCase):
                 release_receipt.load_release_receipts(root)
 
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             payload = release_receipt.canonical_json_bytes(_receipt())
             external = root / "external.json"
             external.write_bytes(payload)
@@ -334,7 +334,7 @@ class ReleaseReceiptPrimitiveTests(unittest.TestCase):
                 release_receipt.load_release_receipts(root)
 
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             directory = root / release_receipt.RECEIPTS_RELATIVE_DIR
             directory.mkdir(parents=True)
             os.mkfifo(directory / f"{'0' * 64}.json")
@@ -342,7 +342,7 @@ class ReleaseReceiptPrimitiveTests(unittest.TestCase):
                 release_receipt.load_release_receipts(root)
 
         with tempfile.TemporaryDirectory() as temporary:
-            parent = Path(temporary)
+            parent = Path(temporary).resolve()
             root = parent / "root"
             root.mkdir()
             external = parent / "external-receipts"
@@ -358,7 +358,7 @@ class ReleaseReceiptPrimitiveTests(unittest.TestCase):
                 release_receipt.load_release_receipts(root)
 
         with tempfile.TemporaryDirectory() as temporary:
-            parent = Path(temporary)
+            parent = Path(temporary).resolve()
             real_root = parent / "real-root"
             real_root.mkdir()
             alias = parent / "root-alias"
@@ -372,7 +372,7 @@ class ReleaseReceiptPrimitiveTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             receipt = _receipt()
             payload = release_receipt.canonical_json_bytes(receipt)
             digest = release_receipt.receipt_sha256(receipt)
@@ -604,7 +604,7 @@ class PublisherReceiptTests(unittest.TestCase):
             (self._proof(), False),
         ]
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             patches = self._patches(root)
             with (
                 patches[0],
@@ -636,7 +636,7 @@ class PublisherReceiptTests(unittest.TestCase):
 
     def test_full_green_emits_public_only_data_and_refire_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             state = self._state()
             patches = self._patches(root)
             with (
@@ -702,7 +702,7 @@ class PublisherReceiptTests(unittest.TestCase):
 
     def test_rerun_days_later_reuses_github_timestamp_and_receipt_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             state = self._state()
             patches = self._patches(root)
             with (
@@ -745,7 +745,7 @@ class PublisherReceiptTests(unittest.TestCase):
 
     def test_append_then_emitter_error_is_recovered_without_duplicate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             state = self._state()
             patches = self._patches(root)
 
@@ -786,7 +786,7 @@ class PublisherReceiptTests(unittest.TestCase):
 
     def test_state_write_failure_recovers_existing_event_without_reemit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             first_state = self._state()
             patches = self._patches(root)
             with (
@@ -837,7 +837,7 @@ class PublisherReceiptTests(unittest.TestCase):
 
     def test_conflicting_or_duplicate_receipt_events_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             state = self._state()
             patches = self._patches(root)
             with (
@@ -873,7 +873,7 @@ class PublisherReceiptTests(unittest.TestCase):
                     )
 
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             receipt = _receipt()
             digest = release_receipt.write_release_receipt(root, receipt)
             _append_mock_event(
@@ -900,7 +900,7 @@ class PublisherReceiptTests(unittest.TestCase):
 
     def test_concurrent_threads_serialize_to_one_receipt_event(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             patches = self._patches(root)
             with (
                 patches[0],
@@ -936,7 +936,7 @@ class PublisherReceiptTests(unittest.TestCase):
 
     def test_receipt_failure_prevents_event_and_event_failure_recovers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             state = self._state()
             patches = self._patches(root)
             with (
@@ -962,7 +962,7 @@ class PublisherReceiptTests(unittest.TestCase):
             self.assertNotIn("published_event_receipt_sha256", state)
 
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             state = self._state()
             patches = self._patches(root)
             with (
@@ -1010,7 +1010,7 @@ class PublisherReceiptTests(unittest.TestCase):
 
     def test_canonical_emitter_writes_only_to_temporary_event_ledger(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             tools = root / "vault" / "tools"
             lib = tools / "lib"
             lib.mkdir(parents=True)
@@ -1037,8 +1037,29 @@ class PublisherReceiptTests(unittest.TestCase):
             self.assertEqual(event["data"], data)
 
     def test_cmd_fire_receipt_failure_returns_nonzero_before_live_stamps(self) -> None:
+        # cmd_fire's upload section grew sealed-notes/badge/flip steps between
+        # the two uploads; none is this test's subject (the RECEIPT WRITE
+        # failure at the end), each has its own coverage, and the with-block
+        # below sits at the interpreter's static nesting limit — started here,
+        # at the method's shallow top, with cleanup-registered stops.
+        for _step in ("_verify_sealed_briefing_notes",
+                      "_stamp_os_release_badge",
+                      "_flip_release_entry_to_shipped"):
+            patch.object(publisher, _step).start()
+        # v1.90: cmd_fire observes the badge endpoint on the real path, and
+        # the observed hash flows into the saga journal — so this one needs
+        # a real return value, not a MagicMock the journal cannot serialize.
+        patch.object(publisher, "_observe_public_asset",
+                     return_value="0" * 64).start()
+        self.addCleanup(patch.stopall)
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
+            # v1.90 (2cb346d6): cmd_fire opens the saga journal and gates on
+            # a site_prepare observation before any outward act, so the
+            # fixture's staged clone must exist as a directory (its git
+            # answers stay mocked below); and the badge endpoint observer is
+            # patched to keep this suite hermetic — no live network here.
+            (root / "staged-clone").mkdir()
             state = {
                 **self._state(),
                 "activation_uid": "deadbeef",
@@ -1050,6 +1071,10 @@ class PublisherReceiptTests(unittest.TestCase):
                 if arguments == ["rev-parse", "HEAD"]:
                     stdout = f"{REMOTE_SHA}\n"
                 elif arguments == ["remote", "get-url", "origin"]:
+                    stdout = f"{publisher.DEFAULT_REMOTE}\n"
+                elif arguments[:2] == ["config", "--get"]:
+                    # _require_clone_origin asks via `config --get
+                    # remote.origin.url`; same URL, different query shape.
                     stdout = f"{publisher.DEFAULT_REMOTE}\n"
                 else:
                     stdout = ""
@@ -1285,7 +1310,7 @@ class ReceiptBackedSnapshotTests(unittest.TestCase):
             )
 
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             events = root / "vault" / "events"
             events.mkdir(parents=True)
             (events / "00-events.jsonl").write_text("", encoding="utf-8")
@@ -1305,7 +1330,7 @@ class ReceiptBackedSnapshotTests(unittest.TestCase):
 
     def test_raw_candidate_event_duplicate_keys_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             digest = release_receipt.write_release_receipt(root, self.receipt)
             events = root / "vault" / "events"
             events.mkdir(parents=True, exist_ok=True)
@@ -1330,7 +1355,7 @@ class ReceiptBackedSnapshotTests(unittest.TestCase):
 
     def test_same_pointer_event_repeated_across_event_sources_refuses(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             digest = release_receipt.write_release_receipt(root, self.receipt)
             event = _event(self.receipt, digest)
             raw = json.dumps(event, separators=(",", ":")) + "\n"

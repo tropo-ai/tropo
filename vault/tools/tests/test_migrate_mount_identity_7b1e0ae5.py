@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -173,6 +174,12 @@ class ProductionApplyWeldTests(unittest.TestCase):
         (root / ".tropo").mkdir(parents=True)
         (root / "STUDIO.md").write_text("# TempStudio\n", encoding="utf-8")
         (root / ".tropo" / "boot-config.md").write_text("# boot\n", encoding="utf-8")
+        # These cases drive the LIVE rebuild-index against this studio, and its
+        # apply path now regenerates the mint registry from vault/capsules.
+        # Without them rebuild exits 8 before the migration under test runs at
+        # all, so the suite failed for a missing directory rather than for
+        # anything it asserts.
+        shutil.copytree(TOOLS.parent / "capsules", root / "vault" / "capsules")
 
         files = root / "vault" / "files"
         _write(

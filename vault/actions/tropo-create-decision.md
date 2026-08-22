@@ -255,7 +255,7 @@ Acceptance is not yet covered by its own action file. For now, acceptance is don
 | Decision number collision (unlikely but possible) | Recompute from current state |
 | Missing alternatives section in provided content | Add placeholder; warn user alternatives are required |
 | Supersedes target not accepted | Stop — cannot supersede a proposed decision |
-| Ledger not present | Escalate |
+| Vault not present | Escalate |
 | Partial write | Clean up, report |
 
 ---

@@ -12,14 +12,14 @@ You need a folder-aware AI tool — one that can read and write files on your co
 2. Open your AI tool and point it at this folder
 3. Say: **"read START-TROPO.md"**
 
-Your vault concierge will greet you and walk you through setting up your first agent.
+Your Studio concierge will greet you and walk you through setting up your first agent.
 
 ## What You'll Get
 
 - **Agents as files.** A markdown file with structured metadata. Create the file and the agent exists.
 - **Governance built in.** Every agent has a scope, a governor, and rules. Authority flows from your operating agreement.
 - **Memory that survives.** When a session ends, the work persists. When an agent is replaced, knowledge transfers. Memory lives in your studio's files, not in any one AI tool — switch tools and lose nothing.
-- **Work management built in.** Tropo Work — tasks, boards, and projects — ships with every vault. See `vault/files/d61ce0a7.md`.
+- **Work management built in.** Tropo Work — tasks, boards, and projects — ships with every vault. See `vault/files/2d4f8c91.md`.
 - **Your rules, your way.** You define how your agents work, what they can access, and what "good" looks like.
 
 ## Your work is safe when Tropo updates
@@ -66,4 +66,4 @@ Apache License 2.0 — see [LICENSE](LICENSE) for the full text. See [ADR 4a4a12
 
 ---
 
-*Tropo-OS v1.88.0 | The file is the agent. The folder is the workspace. The vault is the OS.*
+*Tropo-OS v1.90.0 | The file is the agent. The folder is the workspace. The vault is the OS.*

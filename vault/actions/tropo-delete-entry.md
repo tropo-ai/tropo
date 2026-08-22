@@ -4,7 +4,7 @@ subsystem_hub:
 name: delete-entry
 uid: a7655fdf
 type: action
-title: Delete a Ledger Entry
+title: Delete a Vault Entry
 action_id: act-delete-entry
 version: 1.0
 status: draft
@@ -17,7 +17,7 @@ last_updated: 2026-04-10
 governed_by: 9b7f5e34
 ---
 
-# Delete a Ledger Entry
+# Delete a Vault Entry
 
 *Atomic action: retire or destroy a registered vault entry cleanly.*
 *The missing twin to the six `create-*` actions. Closes the Phase 1 create/delete asymmetry.*
@@ -26,7 +26,7 @@ governed_by: 9b7f5e34
 
 ## 1. Intent
 
-This action removes or archives a registered entry from the Tropo Vault. It exists because the Phase 1 action set shipped with six creators and zero destructors, which is architecturally incomplete — agents could create governed entries atomically but had no protocol for retiring them cleanly. Without this action, deletion happens by direct filesystem operation, which is error-prone because a registered entry has multiple touch points (ledger file, index row, collection memberships, incoming wikilinks, steward convention checks). The delete-entry action turns that multi-touchpoint cleanup into a single governed operation.
+This action removes or archives a registered entry from the Tropo Vault. It exists because the Phase 1 action set shipped with six creators and zero destructors, which is architecturally incomplete — agents could create governed entries atomically but had no protocol for retiring them cleanly. Without this action, deletion happens by direct filesystem operation, which is error-prone because a registered entry has multiple touch points (vault file, index row, collection memberships, incoming wikilinks, steward convention checks). The delete-entry action turns that multi-touchpoint cleanup into a single governed operation.
 
 **When to invoke this action:**
 
@@ -214,7 +214,7 @@ Report, in structured form:
 
 **Example success report:**
 
-> Deleted entry `8c2a4f1b` — "Migrate existing vault content into the ledger (Phase 1.A)" — mode: soft. Reason: "superseded by Phase 1.A v2 (`<new-uid>`), original kept for audit." Incoming references: 3 (all preserved, status-aware queries will skip). Files: `vault/files/8c2a4f1b.md` → archived; `vault/00-index.jsonl` row → status: archived. Steward notified at `system/vault-steward/inbox/delete-8c2a4f1b-2026-04-10T17-45Z.md`.
+> Deleted entry `8c2a4f1b` — "Migrate existing content into the Vault (Phase 1.A)" — mode: soft. Reason: "superseded by Phase 1.A v2 (`<new-uid>`), original kept for audit." Incoming references: 3 (all preserved, status-aware queries will skip). Files: `vault/files/8c2a4f1b.md` → archived; `vault/00-index.jsonl` row → status: archived. Steward notified at `system/vault-steward/inbox/delete-8c2a4f1b-2026-04-10T17-45Z.md`.
 
 ---
 

@@ -101,25 +101,35 @@ def search_content(query: str, limit: int = 10) -> list[dict]:
     terms = query.strip()
     if not terms:
         return []
+    # Absence above is the supported degraded state; PRESENT-but-unopenable
+    # is not. Degrade to [] but say so on stderr -- an unreadable index must
+    # not read as "nothing matches" (it did, for a day, while a WAL header
+    # with no shm beside the swapped-in file made every cold read-only open
+    # fail silently). Connect and query are one block on purpose: SQLite
+    # defers header validation to the first statement, so an unopenable
+    # database can fail at either site.
     try:
         conn = sqlite3.connect(f"file:{SQLITE_PATH}?mode=ro", uri=True)
-    except sqlite3.Error:
+        try:
+            # FTS5 MATCH treats bare punctuation as syntax; quote each term so a
+            # user searching for "greg-cole" or "C++" gets a search, not a crash.
+            quoted = " ".join('"' + t.replace('"', '""') + '"' for t in terms.split())
+            rows = conn.execute(
+                "SELECT f.uid, f.title, e.type, e.status, e.state, "
+                "snippet(entries_fts, 2, '[', ']', ' ... ', 12) "
+                "FROM entries_fts f LEFT JOIN entries e ON e.uid = f.uid "
+                "WHERE entries_fts MATCH ? ORDER BY rank LIMIT ?",
+                (quoted, limit),
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error as exc:
+        print(
+            f"[SEARCH] index present but unopenable read-only ({exc}): "
+            f"{SQLITE_PATH}",
+            file=sys.stderr,
+        )
         return []
-    try:
-        # FTS5 MATCH treats bare punctuation as syntax; quote each term so a
-        # user searching for "greg-cole" or "C++" gets a search, not a crash.
-        quoted = " ".join('"' + t.replace('"', '""') + '"' for t in terms.split())
-        rows = conn.execute(
-            "SELECT f.uid, f.title, e.type, e.status, e.state, "
-            "snippet(entries_fts, 2, '[', ']', ' ... ', 12) "
-            "FROM entries_fts f LEFT JOIN entries e ON e.uid = f.uid "
-            "WHERE entries_fts MATCH ? ORDER BY rank LIMIT ?",
-            (quoted, limit),
-        ).fetchall()
-    except sqlite3.Error:
-        return []
-    finally:
-        conn.close()
 
     out = []
     for uid, title, etype, status, state, snip in rows:

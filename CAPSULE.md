@@ -24,7 +24,7 @@ If you are an **agent booting into this vault for the first time**, read this fi
 
 ## What a vault-root CAPSULE is for
 
-Every governed folder in a Tropo-OS vault has a `CAPSULE.md` that declares three things: what belongs in the folder, who can write to it, and how changes happen. This file does the same job — but for the **vault as a whole**, not just one folder.
+Every governed folder in a Tropo Studio has a `CAPSULE.md` that declares three things: what belongs in the folder, who can write to it, and how changes happen. This file does the same job — but for the **vault as a whole**, not just one folder.
 
 In plain terms: this file is the charter for your vault's top level. It keeps the root tidy, keeps governance honest, and gives every agent a single place to check before creating a file at this level.
 
@@ -138,4 +138,4 @@ This is your vault. The file is the agent. The folder is the workspace. The vaul
 
 ---
 
-*Vault-root CAPSULE.md | Governs the top level of your Tropo-OS vault.*
+*Vault-root CAPSULE.md | Governs the top level of your Tropo Studio.*

@@ -112,7 +112,7 @@ Write to `<path>/<filename>.collection.md` using the template in §5. Fill in me
 
 ### Step 5 — Write the collection-ref entry in the Vault
 
-Write to `vault/files/<uid>.md`. This is the pointer entry that registers the collection's existence in the ledger. It references the collection file's path.
+Write to `vault/files/<uid>.md`. This is the pointer entry that registers the collection's existence in the Vault. It references the collection file's path.
 
 ### Step 6 — Append the index record
 
@@ -267,10 +267,10 @@ If visual verification fails in Obsidian (wikilinks don't resolve), document the
 | Failure | Action |
 |---------|--------|
 | UID collision | Regenerate |
-| Member UID not found in ledger | Stop and report which one; ask user to fix or remove |
+| Member UID not found in the Vault | Stop and report which one; ask user to fix or remove |
 | Path contains invalid characters | Stop and ask for valid path |
 | Write to collection file succeeded but vault entry failed | Remove the orphaned collection file, report |
-| Write to ledger succeeded but collection file failed | Remove the orphaned vault entry, report |
+| Write to the Vault succeeded but collection file failed | Remove the orphaned vault entry, report |
 | Collections folder doesn't exist | Create it (permitted for this action since collections/ is where the primitive lives) |
 
 ---

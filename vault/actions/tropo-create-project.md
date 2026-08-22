@@ -16,7 +16,7 @@ created: 2026-04-10
 last_updated: 2026-04-20
 updated_by: argus-a29
 aligned_with: 74fd9b61
-collection_note: 'Each collection requires TWO writes: (1) a physical manifest file at collections/projects/<slug>/ with type: collection, and (2) a ledger pointer entry at vault/files/<uid>.md with type: collection-ref. These are different types with different homes. The manifest holds the members. The ledger entry makes the collection discoverable. Both are required.'
+collection_note: 'Each collection requires TWO writes: (1) a physical manifest file at collections/projects/<slug>/ with type: collection, and (2) a vault pointer entry at vault/files/<uid>.md with type: collection-ref. These are different types with different homes. The manifest holds the members. The vault entry makes the collection discoverable. Both are required.'
 reads: -vault/capsules/tropo-project.capsule.md -vault/capsules/tropo-board-definition.capsule.md - vault/AGENTS.md - vault/00-index.jsonl
 writes:
   - vault/files/<project_uid>.md
@@ -40,7 +40,7 @@ governed_by: 9b7f5e34
 
 ## 1. Intent
 
-This action creates one new project entry in the ledger, together with the two companion artifacts the project capsule requires: a primary collection (full membership roster) and a tasks collection (work queue). All three are created in sequence before any is considered complete. The project's status board is NOT a separate artifact — under [Board Reconciliation v0.3 (74fd9b61)](../../vault/files/74fd9b61.md), every project inherits the kernel `project-board` definition ([c72f1a85](../seed/ledger/project-board.board-definition.md)) by default, and custom status boards are authored as separate `board-definition` entries referenced via a `status_board:` UID on the project frontmatter (optional).
+This action creates one new project entry in the Vault, together with the two companion artifacts the project capsule requires: a primary collection (full membership roster) and a tasks collection (work queue). All three are created in sequence before any is considered complete. The project's status board is NOT a separate artifact — under [Board Reconciliation v0.3 (74fd9b61)](../../vault/files/74fd9b61.md), every project inherits the kernel `project-board` definition ([c72f1a85](../seed/ledger/project-board.board-definition.md)) by default, and custom status boards are authored as separate `board-definition` entries referenced via a `status_board:` UID on the project frontmatter (optional).
 
 **When to invoke this action:**
 
@@ -107,7 +107,7 @@ This action creates three artifacts in sequence (v0.3+: no board stub — projec
 
 **CRITICAL — each collection requires TWO writes:**
 - A **manifest file** at `collections/projects/<slug>/` — type `collection` — holds the member list
-- A **ledger pointer entry** at `vault/files/<uid>.md` — type `collection-ref` — makes it discoverable
+- A **vault pointer entry** at `vault/files/<uid>.md` — type `collection-ref` — makes it discoverable
 
 These are different capsule types stored in different locations. Both are required. A vault entry with no manifest is a broken pointer. A manifest with no vault entry is invisible to queries. Do not skip either write.
 
@@ -138,8 +138,8 @@ If `team` is provided: verify the UID exists with `type: team-def`.
 - Write `collections/projects/<slug>/all.collection.md` using the primary collection manifest template in §5
 - This file holds the actual member list. It is what agents read to see what's in the collection.
 
-**Write 2 — the ledger pointer** (type: `collection-ref`, lives in `vault/files/`):
-- Write `vault/files/<primary_collection_uid>.md` using the primary collection ledger entry template in §5
+**Write 2 — the vault pointer** (type: `collection-ref`, lives in `vault/files/`):
+- Write `vault/files/<primary_collection_uid>.md` using the primary collection vault entry template in §5
 - The `collection_path:` field in this entry must point at the manifest: `collections/projects/<slug>/all.collection.md`
 - This entry makes the collection discoverable from `vault/00-index.jsonl`
 
@@ -151,8 +151,8 @@ If `team` is provided: verify the UID exists with `type: team-def`.
 **Write 1 — the manifest** (type: `collection`, lives in `collections/`):
 - Write `collections/projects/<slug>/tasks.collection.md` using the tasks collection manifest template in §5
 
-**Write 2 — the ledger pointer** (type: `collection-ref`, lives in `vault/files/`):
-- Write `vault/files/<tasks_collection_uid>.md` using the tasks collection ledger entry template in §5
+**Write 2 — the vault pointer** (type: `collection-ref`, lives in `vault/files/`):
+- Write `vault/files/<tasks_collection_uid>.md` using the tasks collection vault entry template in §5
 - The `collection_path:` field must point at: `collections/projects/<slug>/tasks.collection.md`
 
 **Write 3 — the index record:**
@@ -242,7 +242,7 @@ Navigation folder for the [<title>](../../vault/files/<project_uid>.md) project.
 
 The files in this folder are generated — do not hand-edit `default.collection.md`. Status boards for this project are rendered on demand by [regenerate-board.skill.md](../../.tropo/skills/regenerate-board.skill.md) from the project's declared `status_board:` definition, falling back to the kernel `project-board` default — no static board file is stored in this folder.
 
-**Ledger entry:** `vault/files/<project_uid>.md`
+**Vault entry:** `vault/files/<project_uid>.md`
 **Status board:** inherits kernel `project-board` default ([c72f1a85](../../vault/files/c72f1a85.md)) unless the project declares a `status_board:` UID.
 ```
 
@@ -277,7 +277,7 @@ The files in this folder are generated — do not hand-edit `default.collection.
 ### Step 12 — Confirm to the user
 
 Report:
-- Project UID and ledger location
+- Project UID and vault location
 - Status board: inherits kernel `project-board` default ([c72f1a85](../../vault/files/c72f1a85.md)) unless the caller explicitly declared a custom `status_board:`
 - Snapshot UID (ONLY if Step 10 created a creation-time snapshot; otherwise omit this line)
 - Primary collection UID and path
@@ -356,7 +356,7 @@ created_by: <your-agent-id>
 
 ### Board stub — RETIRED in v0.3
 
-The board stub template is retired. Projects inherit the kernel [`project-board` definition (c72f1a85)](../seed/ledger/project-board.board-definition.md); no per-project board stub is created at project creation time.
+The board stub template is retired. Projects inherit the kernel [`project-board` definition (c72f1a85)](../seed/vault/project-board.board-definition.md); no per-project board stub is created at project creation time.
 
 For explicit creation-time snapshots (optional), the caller dispatches [`create-snapshot.skill.md` (d847e2b3)](../skills/create-snapshot.skill.md) with the project UID and the kernel default's UID (or a custom `board-definition` UID). See Step 10.
 
@@ -390,7 +390,7 @@ schema_version: 1
 *<title> — All | Collection | Owner: <owner> | Created <today>*
 ```
 
-### Primary collection ledger entry (`vault/files/<primary_collection_uid>.md`)
+### Primary collection vault entry (`vault/files/<primary_collection_uid>.md`)
 
 ```markdown
 ---
@@ -413,7 +413,7 @@ created_by: <your-agent-id>
 
 # <title> — All — Collection Reference
 
-Ledger registration for [`collections/projects/<slug>/all.collection.md`](../../collections/projects/<slug>/all.collection.md).
+Vault registration for [`collections/projects/<slug>/all.collection.md`](../../collections/projects/<slug>/all.collection.md).
 
 **Purpose:** Full membership roster for the <title> project.
 **Owner:** <owner>
@@ -450,7 +450,7 @@ schema_version: 1
 *<title> — Tasks | Collection | Owner: <owner> | Created <today>*
 ```
 
-### Tasks collection ledger entry (`vault/files/<tasks_collection_uid>.md`)
+### Tasks collection vault entry (`vault/files/<tasks_collection_uid>.md`)
 
 ```markdown
 ---
@@ -473,7 +473,7 @@ created_by: <your-agent-id>
 
 # <title> — Tasks — Collection Reference
 
-Ledger registration for [`collections/projects/<slug>/tasks.collection.md`](../../collections/projects/<slug>/tasks.collection.md).
+Vault registration for [`collections/projects/<slug>/tasks.collection.md`](../../collections/projects/<slug>/tasks.collection.md).
 
 **Purpose:** Work queue for the <title> project — tasks only.
 **Owner:** <owner>
@@ -514,7 +514,7 @@ If any check fails, repair before reporting success.
 | Team UID not found or wrong type | Stop and ask user to correct |
 | Collection creation fails | Stop — do not create a partial project. Report which step failed. |
 | Default board-definition unreachable | Halt — the kernel `project-board` seed (c72f1a85) is missing. Ask the concierge to run the [apply-update playbook (`.tropo/playbooks/apply-update.playbook.md`)](../playbooks/apply-update.playbook.md) to land the seed, then retry. Per [ADR-035 Surface 2 (a7c4e5b2)](../../vault/files/a7c4e5b2.md) — no silent fallback. |
-| Ledger not present | Escalate — vault not Phase 1 compliant |
+| Vault not present | Escalate — vault not Phase 1 compliant |
 | Partial write | Roll back in reverse order: project index → project file → tasks collection-ref index → tasks collection-ref file → tasks collection manifest → primary collection-ref index → primary collection-ref file → primary collection manifest. |
 
 ---

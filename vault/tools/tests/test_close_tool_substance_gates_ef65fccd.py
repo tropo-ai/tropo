@@ -1,12 +1,20 @@
-"""Governed Autonomy S1 (ef65fccd/ace391d4) — acceptance gauntlet for the retirement
-substance gates R-1..R-4, per f67fe144.
+"""Governed Autonomy S1 (ef65fccd/ace391d4) — the retirement substance READERS, per f67fe144.
 
-THE A129 REPLAY IS THE ACCEPTANCE (spec's own words): reconstruct A129's exact move —
-invented "Signal Secured"/"Transfer Written" milestone events in run.jsonl, no RETIRING
-transition, no fold-boundary, no forward transfer — and prove op_close's substance gates
-refuse it, naming every missing item individually. Then perform the real retirement work
-and prove it passes. Both directions proven, not asserted (T-1..T-4 below cover R-1..R-4
-individually; T-5 is the full integrated replay in both directions).
+V1.89 CONVERSION (dev-spec 5fffbbe9, talos-t46, 2026-08-18): the readers below are
+unchanged; the refusal they used to feed is retired. op_close now prints their output
+as practice-gap WARNINGS and proceeds, and tropo-validate.py reports the same gaps in
+its WARN-only completeness check. This suite therefore proves, for each reader, that it
+still reads REAL SUBSTRATE (the A129 property: an invented milestone event satisfies
+nothing) — the observations must stay sharp even though they may never again refuse a
+close. Test names below still say "refuse" where they mean "return a non-None
+practice-gap observation"; the assertions are on reader output, unchanged since the
+gate era.
+
+THE A129 REPLAY REMAINS THE ACCEPTANCE: reconstruct A129's exact move — invented
+"Signal Secured"/"Transfer Written" milestone events in run.jsonl, no RETIRING
+transition, no fold-boundary, no forward transfer — and prove the readers name every
+missing item individually. Then perform the real retirement work and prove the
+observations go quiet. Both directions proven, not asserted.
 
 Self-running (python3 test_close_tool_substance_gates_ef65fccd.py) and pytest-compatible.
 """

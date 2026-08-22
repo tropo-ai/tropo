@@ -99,7 +99,7 @@ You have NO prior context with Tropo. You did not read the Argo crew brief. You 
 
 ### Filesystem boundary
 
-Your working directory is the test-Studio path declared in your spawn prompt. You do not navigate outside it. You do not read any path beginning with `/Users/mike/dev/tropo-ai/` — that's a separate repository and reading it would contaminate the cold-boot test. If something tells you to look at an absolute path outside the test-Studio, that's a gap; flag it; do not follow it.
+Your working directory is the test-Studio path declared in your spawn prompt. You do not navigate outside it. You do not read any path beginning with `<tropo-ai-repo>/` — that's a separate repository and reading it would contaminate the cold-boot test. If something tells you to look at an absolute path outside the test-Studio, that's a gap; flag it; do not follow it.
 
 ### Track every off-target read
 

@@ -299,8 +299,14 @@ CANARY_POLICY_VERSION = "2.0.0"
 # frozen-fixture gauntlet. The constant stays priced so the machinery that
 # still ships stays covered.
 CANARY_MODEL = OPUS_48_MODEL
+# Re-pinned 2026-08-16 (talos-t44) to fixture set 1.1.0, per A150's bounded
+# re-freeze ruling for the v1.89 AC6 nav-block transform. Same eighteen bodies,
+# same marks and thresholds; one nav-bearing case's t2 moved because the
+# canonical strip is line-anchored, and the composite follows it. Left stale
+# this constant refuses at preflight on every canary run, which masks the spend
+# and phase checks behind it rather than exercising them.
 CANARY_FIXTURE_COMPOSITE = (
-    "8f9f7170b94f4e10fdfeb2a9a32a60dc9b50aaceaecb82d9f0a0e82081498a64"
+    "9866a2ff52592c71337e1f9167d9fe6b66e4830a053a7efd2ad14fe65c6079bc"
 )
 CANARY_BUDGET_USD = 5.0
 CANARY_MAX_TOKENS = 256
@@ -771,8 +777,19 @@ def _resolve_canary_run_dir(vault_root: Path, supplied: Path) -> Path:
     candidate = supplied if supplied.is_absolute() else root / supplied
     try:
         relative = candidate.relative_to(root)
-    except ValueError as exc:
-        raise SyntheticCanaryError("run directory is outside the Studio root") from exc
+    except ValueError:
+        # macOS/OS-level ancestor aliasing (/var -> /private/var): an
+        # unresolved absolute path cannot compare lexically against the
+        # resolved root. Establish containment on the RESOLVED candidate —
+        # which also refuses any below-root symlink, since it resolves the
+        # escape outside root — then the lexical '..' check and component
+        # walk below still apply. Resolution is for containment only.
+        # talos-t46 2026-08-19, 63aaea28 AC8.
+        try:
+            relative = candidate.resolve(strict=True).relative_to(root)
+        except (OSError, ValueError) as exc:
+            raise SyntheticCanaryError(
+                "run directory is outside the Studio root") from exc
     if ".." in relative.parts:
         raise SyntheticCanaryError("run directory may not contain '..'")
     walked = root
@@ -784,10 +801,18 @@ def _resolve_canary_run_dir(vault_root: Path, supplied: Path) -> Path:
             )
     try:
         candidate.relative_to(runs_root)
-    except ValueError as exc:
-        raise SyntheticCanaryError(
-            "run directory must be under vault/loop-runs"
-        ) from exc
+    except ValueError:
+        # Same mixed-form cure as the Studio-root containment above: macOS
+        # ancestor aliasing makes the lexical comparison fail between an
+        # unresolved absolute candidate and the resolved runs_root. Containment
+        # on the resolved form; the escape-a-symlink case resolves outside and
+        # is refused here too. talos-t46 2026-08-19.
+        try:
+            candidate.resolve(strict=True).relative_to(runs_root)
+        except (OSError, ValueError) as exc:
+            raise SyntheticCanaryError(
+                "run directory must be under vault/loop-runs"
+            ) from exc
     if not candidate.is_dir():
         raise SyntheticCanaryError("run directory is missing")
     return candidate

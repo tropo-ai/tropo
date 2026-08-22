@@ -26,7 +26,7 @@ governed_by: 9b7f5e34
 
 ## 1. Intent
 
-This action creates one new note entry in the vault's ledger. A note is the lightest governed primitive — a quick capture of an insight, observation, question, or idea with just enough structure to find it later.
+This action creates one new note entry in the Vault. A note is the lightest governed primitive — a quick capture of an insight, observation, question, or idea with just enough structure to find it later.
 
 **When to invoke this action:**
 
@@ -166,7 +166,7 @@ project: <if present>
 |---------|--------|
 | UID collision | Regenerate and retry |
 | Invalid input | Stop and ask for correction |
-| Ledger missing | Stop and escalate |
+| Vault missing | Stop and escalate |
 | Index unwritable | Stop and escalate |
 
 ---

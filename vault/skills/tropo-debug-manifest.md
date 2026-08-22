@@ -85,7 +85,7 @@ After fixing, read the manifest back and check:
 
 ## Step 5: Report
 
-If you are the vault concierge and the user gave you a broken package:
+If you are the Studio concierge and the user gave you a broken package:
 1. Write a diagnostic file to `system/updates/pending/<update_id>/validation-failure.md` with the exact errors and what was fixed (or needs fixing by the package author).
 2. Tell the user: "This is a problem with the update package, not your vault. Nothing was changed." Then either fix it if you can, or tell them to share the diagnostic with whoever provided the update.
 

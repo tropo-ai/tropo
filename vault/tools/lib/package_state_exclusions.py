@@ -77,6 +77,14 @@ STATE_FILES: frozenset[str] = frozenset(
         ".tropo/studio-identity.md",
         # Build/publish handoff state, meaningless and misleading elsewhere.
         ".tropo/publish-pending.json",
+        # NEVER-TOUCH (ea09fc6e AC5): harness configs are enumerated, never
+        # predicate-derived. A silently reverting harness config is an
+        # invisible failure that surfaces days later as unexplained agent
+        # behavior — and a predicate ("harness config") would reintroduce
+        # exactly the naming-predicate defect this enumeration exists to kill.
+        ".claude/settings.json",
+        ".gemini/settings.json",
+        ".cursorrules",
     }
 )
 
@@ -136,6 +144,14 @@ def why_excluded(relative_path: str) -> str:
         )
     if normalised == ".tropo/studio-identity.md":
         return "genesis identity — shipping ours makes customer genesis a silent no-op"
+    if normalised in {".claude/settings.json", ".gemini/settings.json", ".cursorrules"}:
+        return (
+            "harness configuration owned by the operator, never by the OS: it is "
+            "never shipped, never replaced and never deleted, because a silently "
+            "reverting harness config is an invisible failure that surfaces days "
+            "later as unexplained agent behavior with no event to trace it to "
+            "(ea09fc6e never-touch class, Mike-ruled 2026-08-21)"
+        )
     if normalised == ".tropo/publish-pending.json":
         return "build/publish handoff state, meaningless outside the studio that wrote it"
     if ARTIFACT_SEGMENTS.intersection(normalised.split("/")) or normalised.endswith(".pyc"):

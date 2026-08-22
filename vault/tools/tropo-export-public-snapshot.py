@@ -14,8 +14,8 @@ spawnable_by:
 - user
 transport: cli
 implementation_kind: python-script
-cli_command: python3 vault/tools/1a8be354.py --out PATH [--dry-run] [--force] [--validate]
-script_path: vault/tools/1a8be354.py
+cli_command: python3 vault/tools/tropo-export-public-snapshot.py --out PATH [--dry-run] [--force] [--validate]
+script_path: vault/tools/tropo-export-public-snapshot.py
 input:
   type: object
   required:
@@ -63,7 +63,7 @@ reads_scope:
 - vault/agents/*.md
 - vault/files/20495aaf.md
 - vault/files/eb8e65c8.md
-- vault/tools/1a8be354.py
+- vault/tools/tropo-export-public-snapshot.py
 - vault/tools/lib/public_snapshot.py
 - vault/tools/lib/release_receipt.py
 - vault/tools/lib/event_identity.py
@@ -112,7 +112,7 @@ raw event export.
 ## Invocation Protocol
 
 Run from the repository root:
-``python3 vault/tools/1a8be354.py --out 02-outbox/web-v4/<bundle>``.
+``python3 vault/tools/tropo-export-public-snapshot.py --out 02-outbox/web-v4/<bundle>``.
 Add ``--dry-run`` for a zero-write preview, ``--force`` only for a safe
 three-file replacement, or ``--validate`` to re-derive an existing bundle.
 ``--source-commit`` is fixture-only and requires the hidden fixture seam:
@@ -178,7 +178,7 @@ SOURCE_BINDING_PATHS = (
     Path("vault/agents"),
     Path("vault/files/20495aaf.md"),
     Path("vault/files/eb8e65c8.md"),
-    Path("vault/tools/1a8be354.py"),
+    Path("vault/tools/tropo-export-public-snapshot.py"),
     Path("vault/tools/lib/public_snapshot.py"),
     Path("vault/tools/lib/release_receipt.py"),
     Path("vault/tools/lib/event_identity.py"),

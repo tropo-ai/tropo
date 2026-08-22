@@ -772,10 +772,32 @@ def main() -> int:
     fid = _sanitize_id(args.filter_id) if args.filter_id else None
     puid = args.party_override if args.party_override else party_uid
 
-    return run_once(args.as_name, puid, agent_root_uid,
+    code = run_once(args.as_name, puid, agent_root_uid,
                     include_telemetry, args.json_output,
                     triage=args.triage, triage_model=args.triage_model,
                     filter_type=args.filter_type, filter_id=fid)
+    # 3f38521a AC4: the LOCAL telemetry lane is drain-invisible by default;
+    # --all/--raw also surfaces sealed shards through the viewer-safe reader.
+    if include_telemetry and not args.json_output:
+        import importlib.util as _ilu
+        _root = Path(__file__).resolve().parents[2]
+        _spec = _ilu.spec_from_file_location(
+            "tropo_drain_tool_telemetry",
+            Path(__file__).resolve().parent / "tropo-drain-tool-telemetry.py",
+        )
+        _mod = sys.modules.get("tropo_drain_tool_telemetry")
+        if _mod is None:
+            _mod = _ilu.module_from_spec(_spec)
+            sys.modules["tropo_drain_tool_telemetry"] = _mod
+            _spec.loader.exec_module(_mod)
+        out = _mod.read_records(
+            _root,
+            viewer_segments=["public", "argo-reference", "argo-private"],
+        )
+        print(f"\nLOCAL TELEMETRY SHARDS: {out['coverage']['shards_read']} sealed "
+              f"shard(s) readable (durability: telemetry-local; the canonical "
+              f"drain above is unchanged by this lane)")
+    return code
 
 
 if __name__ == "__main__":

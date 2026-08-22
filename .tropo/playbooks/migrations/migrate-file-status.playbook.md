@@ -3,7 +3,13 @@ uid: 3ca544f2
 title: 'Migrate: Backfill status field on content files'
 migration_id: migrate-file-status
 version: '1.0'
-status: published
+status: retired
+retired_at: '2026-08-21'
+retired_by: ea09fc6e
+# Retires rather than being wired (ea09fc6e AC10, Mike-locked
+# 2026-08-21): wiring a user-content rewriter under pre-ship time
+# pressure is the v1.86 failure shape. The v1.90 build does not
+# ship it; an unwired passenger riding in the box is its own defect.
 state: active
 reactivated_at: '2026-07-02'
 reactivated_by: talos-t23

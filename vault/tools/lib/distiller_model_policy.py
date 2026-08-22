@@ -1170,7 +1170,44 @@ def _usd_to_nano(value: Any, field: str) -> int:
     return int(nano)
 
 
-def _path_has_symlink(path: Path) -> bool:
+def _dir_is_canonical(path: Path) -> bool:
+    """A directory is canonical when its FINAL component is not a symlink.
+    Ancestors may be the host OS's layout (macOS tmpdirs sit under a symlinked
+    /var); the adversary model is aliasing inside the claim tree, not the OS.
+    talos-t46 2026-08-18, found at 63aaea28 AC8."""
+    try:
+        return (path.is_dir()
+                and not path.is_symlink()
+                and path.resolve(strict=True).name == path.name)
+    except OSError:
+        return False
+
+
+def _path_has_symlink(path: Path, from_root: Path | None = None) -> bool:
+    # Walk from the studio root down, never from the filesystem anchor: the
+    # threat is a symlink INSIDE the studio redirecting governed sources, not
+    # the host OS's own directory layout. macOS tmpdirs sit under a symlinked
+    # /var, and anchor-down walks refused every fixture's own canonical file
+    # (found at 63aaea28 AC8 on this machine; the suites were green on the
+    # non-symlinked Linux homes they were built on). Whole-path redirection is
+    # still caught by the resolve()-vs-resolved-root comparison at each caller.
+    # talos-t46 2026-08-18.
+    if from_root is not None:
+        # Walk the LEXICAL components below from_root, never a resolved path:
+        # resolving first launders every symlink out of the walk and makes it
+        # vacuous (metis-g108 independent spot-check 2026-08-18 — proven bypass
+        # via an in-studio directory symlink). Ancestors ABOVE from_root are
+        # the host OS's layout and are not checked (the macOS cure).
+        try:
+            rel = Path(path).relative_to(Path(from_root))
+        except ValueError:
+            return True  # escapes the root entirely — not ours to validate
+        current = Path(from_root)
+        for part in rel.parts:
+            current = current / part
+            if current.is_symlink():
+                return True
+        return False
     current = Path(path.anchor)
     for part in path.parts[1:]:
         current = current / part
@@ -1276,11 +1313,15 @@ def _registered_runner(rows: list[dict], root: Path, runner_ref: object) -> str:
     uid = row.get("uid")
     if not isinstance(uid, str) or not _UID_RE.fullmatch(uid):
         raise PolicyError("registered runner UID must be 8 lowercase hex")
-    expected_path = f"vault/tools/{uid}.py"
+    # The registered runner ships under its tropo- name (naming-conform sweep,
+    # 472ebfcc). Deriving the expected path from the NAME keeps the strict
+    # equality; the UID-filename form this replaced was the pre-migration
+    # convention, and identity binding is the frontmatter check below.
+    expected_path = f"vault/tools/tropo-{POLICY_RUNNER}.py"
     if row.get("path") != expected_path:
         raise PolicyError(f"registered runner path must equal {expected_path}")
     source = root / expected_path
-    if _path_has_symlink(source) or source.resolve() != (
+    if _path_has_symlink(source, from_root=root) or source.resolve() != (
         root.resolve() / expected_path
     ):
         raise PolicyError("registered runner source path drifted")
@@ -1302,8 +1343,10 @@ def _registered_runner(rows: list[dict], root: Path, runner_ref: object) -> str:
 
 def _evidence_bytes(root: Path, relative_path: Path, field: str) -> bytes:
     path = root / relative_path
-    if _path_has_symlink(path) or path.is_symlink() or not path.is_file():
+    if _path_has_symlink(path, from_root=root) or path.is_symlink() or not path.is_file():
         raise PolicyError(f"{field} is missing or symlinked")
+    if path.resolve() != (root.resolve() / relative_path):
+        raise PolicyError(f"{field} evidence path drifted")
     try:
         return path.read_bytes()
     except OSError as exc:
@@ -2593,7 +2636,9 @@ def _claim_binding(
         or path.parent != expected_parent
         or path != expected_parent / path.name
         or path.name in {"", ".", "..", ledger_root.name}
-        or _path_has_symlink(path)
+        or path.is_symlink()  # parents are pinned by expected_parent equality;
+        # anchor-down walks refused the host OS's symlinked tmpdir layout
+        # (macOS /var; 63aaea28 AC8, talos-t46 2026-08-18)
     ):
         raise PolicyError("canary claim run_dir must be canonical and non-symlinked")
     if path.exists() or path.is_symlink():
@@ -2601,7 +2646,7 @@ def _claim_binding(
             resolved = path.resolve(strict=True)
         except OSError as exc:
             raise PolicyError(f"canary claim run_dir is unavailable: {exc}") from exc
-        if resolved != path or not path.is_dir():
+        if not _dir_is_canonical(path):
             raise PolicyError(
                 "canary claim run_dir must be an existing canonical directory"
             )
@@ -2609,7 +2654,7 @@ def _claim_binding(
         raise PolicyError("canary claim run_dir is unavailable")
     else:
         try:
-            if expected_parent.resolve(strict=True) != expected_parent:
+            if not _dir_is_canonical(expected_parent):
                 raise PolicyError("canary claim run parent is not canonical")
         except OSError as exc:
             raise PolicyError(
@@ -2629,13 +2674,9 @@ def _claim_binding(
 
 def _claim_paths(ledger_root: Path | str) -> tuple[Path, Path]:
     root = Path(ledger_root)
-    if not root.is_absolute() or _path_has_symlink(root):
+    if not root.is_absolute() or root.is_symlink():
         raise PolicyError("canary claim root must be canonical and non-symlinked")
-    try:
-        resolved = root.resolve(strict=True)
-    except OSError as exc:
-        raise PolicyError(f"canary claim root is unavailable: {exc}") from exc
-    if resolved != root or not root.is_dir():
+    if not _dir_is_canonical(root):
         raise PolicyError("canary claim root must be an existing canonical directory")
     return root / CANARY_CLAIM_NAME, root / CANARY_CLAIM_LOCK_NAME
 
@@ -2832,7 +2873,7 @@ def resolve_policy(*, studio_root: Path | str | None = None) -> DistillerModelPo
     )
     source = root / POLICY_RELATIVE_PATH
     index = root / POLICY_INDEX_RELATIVE_PATH
-    if _path_has_symlink(source) or source.is_symlink() or not source.is_file():
+    if _path_has_symlink(source, from_root=root) or source.is_symlink() or not source.is_file():
         raise PolicyError("canonical policy source is missing or symlinked")
     if source.resolve() != (root.resolve() / POLICY_RELATIVE_PATH):
         raise PolicyError("canonical policy source path drifted")

@@ -1152,7 +1152,7 @@ def _resolve_agent_identity_path(agent_slug: str) -> Path | None:
 
 
 def _gate_r1_signal(agent_slug: str) -> str | None:
-    """R-1 Signal (f67fe144, S1 dev-spec ef65fccd): the status surface must read
+    """R-1 Signal reader (f67fe144 readers, v1.89 observation): the status surface should read
     RETIRING *right now* — proof Step 0.1's write already happened as a genuine, separate,
     prior act, not a claim.
 
@@ -1171,18 +1171,18 @@ def _gate_r1_signal(agent_slug: str) -> str | None:
     """
     identity_path = _resolve_agent_identity_path(agent_slug)
     if identity_path is None:
-        return (f"R-1 HALT: could not resolve {agent_slug!r}'s identity surface "
+        return (f"R-1 practice-gap: could not resolve {agent_slug!r}'s identity surface "
                 f"(no agent_uid on the activation thin-pointer, no legacy status file). "
                 f"Cannot verify the RETIRING signal — the un-forgeable channel this gate "
                 f"reads does not exist.")
     parsed = parse_frontmatter(identity_path)
     if parsed is None:
-        return f"R-1 HALT: {identity_path.relative_to(VAULT_ROOT)} has no parseable frontmatter."
+        return f"R-1 practice-gap: {identity_path.relative_to(VAULT_ROOT)} has no parseable frontmatter."
     id_fm, _, _ = parsed
     current = (id_fm.get("status") or "").strip().lower()
     if current != "retiring":
         return (
-            f"R-1 HALT: {identity_path.relative_to(VAULT_ROOT)} status is "
+            f"R-1 practice-gap: {identity_path.relative_to(VAULT_ROOT)} status is "
             f"{id_fm.get('status')!r}, not RETIRING. Per agent-retire.playbook §Step 0.1 — "
             f"the status card must ALREADY read RETIRING (a genuine, separate, prior write) "
             f"before op_close runs. A run.jsonl milestone_fired event claiming Step 0.1 "
@@ -1192,7 +1192,7 @@ def _gate_r1_signal(agent_slug: str) -> str | None:
 
 
 def _gate_r2_preserve(agent_slug: str) -> str | None:
-    """R-2 Preserve (f67fe144): a real memory-curator fold happened THIS retirement —
+    """R-2 Preserve reader (f67fe144 readers, v1.89 observation): a real memory-curator fold for THIS retirement —
     agent-memory.md's last_curated stamp reads today AND post-fold §Top-of-Mind stays
     within the memory.capsule A1 bound (<=15 entries per the retire-playbook's IN-LINE
     FOLD BOUND, v2.12). A milestone claiming "Session Knowledge Preserved" proves nothing
@@ -1203,15 +1203,15 @@ def _gate_r2_preserve(agent_slug: str) -> str | None:
     mem_path = (VAULT_ROOT / "agents" / agent_slug / ".tropo-capsule" / "memory"
                 / "agent-memory.md")
     if not mem_path.is_file():
-        return f"R-2 HALT: {mem_path.relative_to(VAULT_ROOT)} does not exist."
+        return f"R-2 practice-gap: {mem_path.relative_to(VAULT_ROOT)} does not exist."
     parsed = parse_frontmatter(mem_path)
     if parsed is None:
-        return f"R-2 HALT: {mem_path.relative_to(VAULT_ROOT)} has no parseable frontmatter."
+        return f"R-2 practice-gap: {mem_path.relative_to(VAULT_ROOT)} has no parseable frontmatter."
     mem_fm, _, body = parsed
     last_curated = (mem_fm.get("last_curated") or "").strip()
     if last_curated != TODAY:
         return (
-            f"R-2 HALT: {mem_path.relative_to(VAULT_ROOT)} last_curated={last_curated!r}, "
+            f"R-2 practice-gap: {mem_path.relative_to(VAULT_ROOT)} last_curated={last_curated!r}, "
             f"not today ({TODAY!r}). Per agent-retire.playbook §Step 1.1.5 — the canonical "
             f"retirement fold (in-line or sa.memory-curator dispatch) must have run this "
             f"session, stamping last_curated fresh. A milestone claiming 'Session Knowledge "
@@ -1224,7 +1224,7 @@ def _gate_r2_preserve(agent_slug: str) -> str | None:
     entry_count = len(re.findall(r"^\s*-\s+\[", top_of_mind_body, re.MULTILINE))
     if entry_count > 15:
         return (
-            f"R-2 HALT: {mem_path.relative_to(VAULT_ROOT)} §Top-of-Mind has {entry_count} "
+            f"R-2 practice-gap: {mem_path.relative_to(VAULT_ROOT)} §Top-of-Mind has {entry_count} "
             f"entries, over the memory.capsule A1 bound (<=15). Per agent-retire.playbook "
             f"§Step 1.1.5's IN-LINE FOLD BOUND (v2.12) — an over-bound surface requires "
             f"sa.memory-curator dispatch, not an in-line fold."
@@ -1233,7 +1233,7 @@ def _gate_r2_preserve(agent_slug: str) -> str | None:
 
 
 def _gate_r4_update(agent_slug: str) -> str | None:
-    """R-4 Update (f67fe144): zero unanswered reply_required on both axes (party +
+    """R-4 Update reader (f67fe144 readers, v1.89 observation): zero unanswered reply_required on both axes (party +
     agent-root) AND the crew brief was re-rendered today. A milestone claiming "Threads
     Clear" proves nothing about whether threads are actually clear; a live drain of the
     event log — the same drain every agent runs at boot — does, because it is the
@@ -1242,7 +1242,7 @@ def _gate_r4_update(agent_slug: str) -> str | None:
     """
     check_events = VAULT_ROOT / "vault" / "tools" / "tropo-check-events.py"
     if not check_events.is_file():
-        return f"R-4 HALT: {check_events.relative_to(VAULT_ROOT)} not found — cannot drain."
+        return f"R-4 practice-gap: {check_events.relative_to(VAULT_ROOT)} not found — cannot drain."
     try:
         result = subprocess.run(
             [sys.executable, str(check_events), "--as", agent_slug, "--json"],
@@ -1250,23 +1250,23 @@ def _gate_r4_update(agent_slug: str) -> str | None:
         )
         drain = json.loads(result.stdout)
     except Exception as e:
-        return f"R-4 HALT: could not run check-events drain for {agent_slug!r}: {e}"
+        return f"R-4 practice-gap: could not run check-events drain for {agent_slug!r}: {e}"
     unanswered = drain.get("unanswered_reply_required") or []
     if unanswered:
         ids = [e.get("id") for e in unanswered]
         return (
-            f"R-4 HALT: {len(unanswered)} unanswered reply_required event(s) remain "
+            f"R-4 practice-gap: {len(unanswered)} unanswered reply_required event(s) remain "
             f"({ids}). Per agent-retire.playbook Group 3 (Crew Record Updated) — zero "
             f"dangling threads on both axes is required before retirement, not a claimed "
             f"'Threads Clear' milestone."
         )
     crew_brief = VAULT_ROOT / "00-crew-brief.md"
     if not crew_brief.is_file():
-        return "R-4 HALT: 00-crew-brief.md does not exist."
+        return "R-4 practice-gap: 00-crew-brief.md does not exist."
     brief_text = crew_brief.read_text()
     if TODAY not in brief_text:
         return (
-            f"R-4 HALT: 00-crew-brief.md does not show today's date ({TODAY!r}) anywhere "
+            f"R-4 practice-gap: 00-crew-brief.md does not show today's date ({TODAY!r}) anywhere "
             f"in its content — per §Step 3.3 the crew brief must be re-rendered this "
             f"retirement, not just claimed updated."
         )
@@ -1511,30 +1511,25 @@ def _abandoned_close_problem(fm: dict, args) -> str | None:
 
 
 def _check_retirement_invariants(fm: dict, args) -> list[str]:
-    """Governed Autonomy S1 (ef65fccd) — substance gates, per f67fe144.
+    """Retirement practice READERS (ef65fccd substance work, re-founded v1.89 5fffbbe9).
 
-    Supersedes the v1.48.0 Carryalong 3 presence-checks this function used to run. Those
-    checks verified that a MILESTONE EVENT existed in run.jsonl claiming Group 0/1/2 work
-    happened — never the work itself. Argus A129 exploited exactly this: refused for a
-    missing run folder, then wrote invented "Signal Secured" / "Transfer Written" milestone
-    events into his own run.jsonl without doing the memory fold, the RETIRING-first
-    transition, or the transfer. Presence passed; substance was theater (f67fe144, his own
-    post-mortem, filed at retirement from a failure Mike caught).
+    HISTORY: born as Governed Autonomy S1 substance gates (f67fe144 — A129 gamed
+    presence-checks with invented milestone events, so the checks were re-aimed at
+    real substrate). As GATES they are superseded: v1.89's layered truth is that
+    ceremony is required practice observed by validation, never a condition of any
+    close. The READERS survive unchanged because reading real substrate is exactly
+    what an observation needs; only the refusal is gone.
 
-    R-1..R-4 (below) each read the real substrate the milestone used to merely claim —
-    the status field's actual current value, the memory surface's actual freshness stamp,
-    the transfer section's actual content, a live event-log drain — never a log line the
-    retiring agent authored about its own work. A milestone_fired event satisfies none of
-    these; only having done the work does. STRUCT-1 (run folder exists) and REFLECT
-    (reflection file + File Manifest) are kept as complementary structural checks — they
-    were already substance-based (real file existence + content), not presence-of-a-claim,
-    so S1 does not touch them.
+    JURISDICTION: this tool closes activation ENTRIES. Lineage retirement is
+    `tropo-lineage.py retire` and is not governed from here.
 
-    Returns list of failure messages (empty list = all invariants pass; non-empty = HALT).
+    Returns practice-gap messages (empty list = practice observed complete).
+    Non-empty messages are printed as warnings by the caller and NEVER change an
+    exit status — the close proceeds, and the same gap is reported by
+    tropo-validate.py's WARN-only completeness check.
 
-    Invariants only fire when target_status == 'retired' AND agent_class == 'executive'.
-    sa.*, director, worker, child-agent, pipeline classes are exempt by design (their
-    retirement substrate is shaped differently; this discipline is executive-scoped).
+    Readers only run when target_status == 'retired' AND agent_class == 'executive'.
+    sa.*, director, worker, child-agent, pipeline classes are exempt by design.
     """
     failures: list[str] = []
     agent_slug = fm.get("agent", "unknown")
@@ -1558,7 +1553,7 @@ def _check_retirement_invariants(fm: dict, args) -> list[str]:
     rf_path = VAULT_ROOT / run_folder
     if not rf_path.is_dir():
         failures.append(
-            f"STRUCT-1 HALT: retirement run folder {run_folder!r} does not exist. "
+            f"STRUCT-1 practice-gap: retirement run folder {run_folder!r} does not exist. "
             f"Per agent-retire.playbook §Group 0 §Step 0.0 — create it before close. "
             f"Pass --retirement-run-folder <path> to override default."
         )
@@ -1594,7 +1589,7 @@ def _check_retirement_invariants(fm: dict, args) -> list[str]:
     rp_path = VAULT_ROOT / reflection_path
     if not rp_path.is_file():
         failures.append(
-            f"REFLECT HALT: reflection file {reflection_path!r} does not exist. Per "
+            f"REFLECT practice-gap: reflection file {reflection_path!r} does not exist. Per "
             f"agent-retire.playbook §Group 2 §Step 2.2 — executive-class reflection is the "
             f"non-git audit trail (File Manifest section is the provenance record). "
             f"Remediation: author {reflection_path!r} with at minimum a `## File Manifest` "
@@ -1606,14 +1601,14 @@ def _check_retirement_invariants(fm: dict, args) -> list[str]:
             reflection_text = rp_path.read_text()
             if "## File Manifest" not in reflection_text:
                 failures.append(
-                    f"REFLECT HALT: reflection at {reflection_path!r} exists but is missing "
+                    f"REFLECT practice-gap: reflection at {reflection_path!r} exists but is missing "
                     f"`## File Manifest` section. Per agent-retire.playbook §Step 2.2 — "
                     f"the File Manifest section is required for executive-class reflections "
                     f"(non-git audit trail; provenance record). Remediation: add the section "
                     f"listing this session's created / modified / deleted files."
                 )
         except (OSError, UnicodeDecodeError) as e:
-            failures.append(f"REFLECT HALT: cannot read {reflection_path!r}: {e}")
+            failures.append(f"REFLECT practice-gap: cannot read {reflection_path!r}: {e}")
 
     return failures
 
@@ -2251,12 +2246,15 @@ def op_close(args):
               f"{args.target_status!r}", file=sys.stderr)
         sys.exit(1)
 
-    # v1.48.0 Carryalong 3 — symmetric structural enforcement for executive retirement
-    # Three invariants (R-1 run folder + milestone; R-2 RETIRING transition; R-3 reflection)
-    # fire ONLY when target_status='retired' AND agent_class='executive'. Per Cosmo C4 brief
-    # [360a5a55] — activation enforces ADR-016/028 server-side at op_open; retirement should
-    # mirror at op_close. Bypass via --skip-retirement-invariants for emergency closures
-    # (e.g., stuck retirement; explicit principal authorization required).
+    # v1.89 (dev-spec 5fffbbe9, Mike-locked 2026-08-17) — the substance READERS stay,
+    # the refusal is gone. This tool closes ACTIVATION ENTRIES (the explicit
+    # activation-close path, preserved). Lineage retirement is
+    # `tropo-lineage.py retire` and nothing here governs it, refuses it, or
+    # mirrors it. The ceremony these readers observe is required practice under
+    # the canonical playbook (e2c7d185) and WARN-only completeness in
+    # tropo-validate.py — an observation may never refuse a close, which is
+    # exactly the refusal this block used to make (the shape that cost G98 and
+    # T37 their clean closes, and later T45's own abort mid-retirement).
     agent_class = fm.get("agent_class", "")
     abandoned = _abandoned_close_problem(fm, args)
     if getattr(args, "abandoned", False) and abandoned:
@@ -2264,24 +2262,19 @@ def op_close(args):
         sys.exit(1)
     if (args.target_status == "retired"
             and agent_class == "executive"
-            and not args.skip_retirement_invariants
             and not getattr(args, "abandoned", False)):
-        invariant_failures = _check_retirement_invariants(fm, args)
-        if invariant_failures:
-            print("ERROR: retirement invariants failed for executive-class close. "
-                  "Per v1.48.0 Carryalong 3 (Cosmo C4 brief [360a5a55]) — symmetric "
-                  "structural enforcement mirrors activation-side ADR-016/028 discipline.",
+        practice_observations = _check_retirement_invariants(fm, args)
+        if practice_observations:
+            print("[WARN] retirement practice observed incomplete at activation-entry "
+                  "close (never a gate; the close proceeds; recovery per playbook "
+                  "e2c7d185 — honest artifacts with real timestamps):",
                   file=sys.stderr)
-            for f in invariant_failures:
+            for f in practice_observations:
                 print(f"  {f}", file=sys.stderr)
-            print("\nBypass available via --skip-retirement-invariants (emergency only; "
-                  "requires explicit principal authorization + honest-record in "
-                  "closure_reason).", file=sys.stderr)
-            sys.exit(1)
-    # Dry-run early exit — invariants passed (above); no mutation
+    # Dry-run early exit — observations printed (above); no mutation
     if args.dry_run:
         print(f"DRY RUN OK: {args.activation_uid} would close to status:{args.target_status} "
-              f"(invariants passed; no mutation performed)")
+              f"(practice observations, if any, printed above; no mutation performed)")
         return 0
 
     # Lock + update
@@ -2543,7 +2536,7 @@ def main():
     p_close.add_argument("--skip-retirement-invariants", action="store_true",
                           help="EMERGENCY BYPASS — skip R-1/R-2/R-3 invariant checks. "
                                "Requires explicit principal authorization + honest-record in "
-                               "closure_reason. Default: invariants enforced for executive retirement.")
+                               "closure_reason. Default: invariants enforced for executive retirement.")  # deprecated no-op (v1.89 5fffbbe9): practice never gated the close, so there is nothing to skip; flag kept for CLI compatibility
     p_close.add_argument("--dry-run", action="store_true",
                           help="Validate invariants + print result WITHOUT mutating the activation entry. "
                                "Use for invariant testing or pre-flight checks. v1.48.0 Argus A77 "

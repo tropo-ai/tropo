@@ -305,7 +305,7 @@ Extends `core`. Inherits all core rules. Not currently extended by subtypes, tho
 
 **Tools available:**
 - `vault/00-index.jsonl` — grep by tag or title before capturing (avoid silent duplication of an existing capture)
-- `vault/files/<uid>.md` writer — notes live as flat ledger entries; filename is the UID
+- `vault/files/<uid>.md` writer — notes live as flat vault entries; filename is the UID
 - [vault-inbox (2d5f9b04)](../../vault/files/2d5f9b04.md) — L0 fallback project (ship-scoped); default `member_of:` when no project is named at capture time
 - Tag-cascade queries — once tagged, notes are findable across the project graph via tag joins
 - `.tropo/actions/create-note.action.md` — action-registry entry for capture (verb mapping per Decision 13)

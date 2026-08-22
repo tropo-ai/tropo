@@ -172,7 +172,7 @@ def describe_entry(name: str, path: Path) -> tuple[str, str, str, str]:
         fm = parse_frontmatter(path)
         # Type: explicit frontmatter > filename inference > "file"
         type_ = fm.get("type", "").lower() or infer_type_from_filename(name)
-        status = fm.get("status", fm.get("stage", "—"))
+        status = fm.get("status", "—")  # v1.89: canonical status only; the stage fallback is retired
         # Description: title > description > body H1 > "—"
         desc = fm.get("title") or fm.get("description") or _extract_first_heading(path)
         if len(desc) > 80:

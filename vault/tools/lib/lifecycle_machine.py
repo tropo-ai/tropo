@@ -150,6 +150,22 @@ def _fail(path: Path, message: str) -> LifecycleMachineError:
     return LifecycleMachineError(f"{path.name}: {message}")
 
 
+def capsule_type_from_filename(path: Path) -> str:
+    """The governed type a capsule file declares, from its filename alone.
+
+    One resolver, because the alternative already cost us a silent hole: the
+    enforced-enum loader keyed ``tropo-project`` while source entries carry
+    ``type: project``, so a direct production invocation checked zero entries
+    and skipped the fleet without saying so.  Machine, enum, and pairing
+    loaders all resolve through here.
+    """
+    type_name = path.name.removesuffix(".capsule.md")
+    type_name = type_name.removeprefix("tropo-")
+    if not type_name or type_name == path.name:
+        raise _fail(path, "cannot derive governed type from capsule filename")
+    return type_name
+
+
 def _frontmatter(path: Path) -> str:
     try:
         text = path.read_text(encoding="utf-8")
@@ -342,6 +358,19 @@ def _canonical_enum(
                 f"enforced_enums.{field} alias {alias!r} dangles to {target!r}",
             )
     return canonical, aliases
+
+
+def canonical_enum_for_field(
+    path: Path,
+    field: str = "status",
+) -> tuple[tuple[str, ...], dict[str, str]]:
+    """One capsule's canonical values and aliases for ``field``.
+
+    Public because the pairing loader must resolve its declared statuses
+    against the *same* vocabulary the machine and enum checks use.  A second
+    status list maintained anywhere else is the defect this prevents.
+    """
+    return _canonical_enum(_frontmatter(path), field, path)
 
 
 def _validate_rollup_totality(
@@ -607,11 +636,7 @@ def parse_capsule_lifecycle_machine(path: Path) -> LifecycleMachine | None:
                 "have legacy_default false",
             )
 
-    type_name = path.name.removesuffix(".capsule.md")
-    if type_name.startswith("tropo-"):
-        type_name = type_name[len("tropo-") :]
-    if not type_name:
-        raise _fail(path, "cannot derive governed type from capsule filename")
+    type_name = capsule_type_from_filename(path)
 
     return LifecycleMachine(
         type_name=type_name,
@@ -675,6 +700,8 @@ __all__ = [
     "LifecycleMachineError",
     "LifecycleMove",
     "LifecycleState",
+    "canonical_enum_for_field",
+    "capsule_type_from_filename",
     "load_lifecycle_machines",
     "normalized_rows",
     "parse_capsule_lifecycle_machine",

@@ -140,7 +140,7 @@ Extends `core`. Inherits all core rules. May be extended by domain-specific subt
 **Tools available:**
 - `vault/00-index.jsonl` — grep for existing docs on the topic before authoring (avoid silent duplication)
 - Cascade indexes at `vault/00-cascade-*.jsonl` — find related docs in the same domain
-- `vault/files/<uid>.md` writer — documents live as flat ledger entries; filename is UID
+- `vault/files/<uid>.md` writer — documents live as flat vault entries; filename is UID
 - Type-discrimination check (before creating): is this really a decision, design-brief, arch-spec, task, playbook, or capsule-definition? If yes, use that type instead (Rule 6)
 
 **Skills:**

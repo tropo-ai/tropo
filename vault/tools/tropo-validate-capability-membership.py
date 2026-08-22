@@ -698,7 +698,12 @@ def validate_release_plan(uid: str, fm: dict, mo_map: dict[str, list[str]], stri
         ))
         return findings
 
-    stage = fm.get("stage")
+    status = str(fm.get("status", "")).lower()  # v1.89: release-plan status, never stage
+    # v1.89's stage->status rename left Checks 19/21/22 reading `stage`; the
+    # old tuple maps onto status as below (specify/build collapse to active —
+    # a release-plan is being worked — and done/closed are done). Found as a
+    # NameError crash at line 731 by the v1.90 build's STRICT gate.
+    stage = "done" if status in ("done", "closed") else status
     capabilities_touched = fm.get("capabilities_touched") or []
     if isinstance(capabilities_touched, str):
         capabilities_touched = [capabilities_touched]
@@ -706,7 +711,7 @@ def validate_release_plan(uid: str, fm: dict, mo_map: dict[str, list[str]], stri
     severity_19_20 = "ERROR" if strict else "WARNING"
 
     # Check 19: non-empty at specify onward
-    if stage in ("specify", "build", "done") and not capabilities_touched:
+    if status in ("active", "closed") and not capabilities_touched:
         findings.append(Finding(
             severity_19_20, "C19-empty-capabilities-touched", uid,
             f"release-plan v{capsule_version} at stage:{stage} has empty capabilities_touched; "
