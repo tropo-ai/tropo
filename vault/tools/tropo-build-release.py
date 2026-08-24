@@ -122,7 +122,7 @@ import sys
 import tempfile
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml  # vendor-ref manifest generation (S1, v1.80 re-build) — AST-walk frontmatter
@@ -161,7 +161,7 @@ from lib.ship_extract import (
 )
 # Pipeline Activation Key gate (dev-spec 2ffdd9d6, brief f8cda3dd) — build + ship
 # refuse without a runtime-minted, unforgeable fingerprint of a legitimate pipeline-run.
-from lib.release_authorization import require_release_authorization, ReleaseAuthorizationError, attested_build_authorization
+from lib.release_authorization import require_release_authorization, ReleaseAuthorizationError, attested_build_authorization, check_changelog
 
 # Per-studio state exclusion (velocity item 8). Loaded by path from
 # vault/tools/lib/ rather than the .tropo/scripts/lib namespace imported above,
@@ -2828,14 +2828,25 @@ def stage6_freeze_package(identity, zip_file, new_version, actor='tropo-build-re
     run_folder = str((run_entry.get("frontmatter") or {}).get("run_folder") or "")
     events = runtime.read_events(Path(tropo_roots.STUDIO_ROOT) / run_folder)
 
-    existing = release_package.active_frozen_payload(events, identity.run_uid)
-    if not release_package.reconcile_existing_freeze(
-        existing, package_sha256, identity.run_uid
-    ):
-        print(f'  ✓ package already frozen at {package_sha256[:12]}… (idempotent retry)')
+    # v1.91 S2 AC1 (3fb41c99): the build writes BYTES-PRODUCED, not evidence.
+    # The old package_frozen emit here carried "these are the bytes I produced"
+    # while the freeze tool's same-named event carried "these bytes have four
+    # passing receipts" -- one name, two assertions, and a precondition the
+    # build guaranteed true (the freeze step could never run). The split:
+    # candidate_built is the build's event; package_frozen belongs to the
+    # freeze tool alone. Idempotency keys the candidate axis.
+    existing = release_package.active_candidate(events, identity.run_uid)
+    if existing and existing.get("candidate_sha256") == package_sha256:
+        print(f'  ✓ candidate already built at {package_sha256[:12]}… (idempotent retry)')
         return package_sha256
+    if release_package.active_frozen_payload(events, identity.run_uid):
+        raise release_package.PackageRefusal(
+            f'cannot record a new candidate for run {identity.run_uid} while an '
+            f'active package_frozen exists -- supersede first with '
+            f'tropo-supersede-release-package.py (the v1.90 recovery, now '
+            f'structural: bytes change, evidence does not transfer)')
 
-    payload = release_package.package_frozen_payload(
+    payload = release_package.candidate_built_payload(
         identity, Path(zip_file), package_sha256, version=new_version
     )
     # A148 addendum item 1: package_frozen is a RUN-LOCAL event and belongs on
@@ -2853,7 +2864,7 @@ def stage6_freeze_package(identity, zip_file, new_version, actor='tropo-build-re
     # is the same whoever is at the keyboard.
     try:
         event = runtime.make_event(
-            release_package.PACKAGE_FROZEN_EVENT,
+            release_package.CANDIDATE_BUILT_EVENT,
             BUILD_TOOL_UID,
             actor_label=BUILD_TOOL_SOURCE,
             data=payload,
@@ -2862,13 +2873,13 @@ def stage6_freeze_package(identity, zip_file, new_version, actor='tropo-build-re
         runtime.append_event(Path(tropo_roots.STUDIO_ROOT) / run_folder, event)
     except Exception as exc:  # noqa: BLE001 -- a package with no identity cannot ship
         raise release_package.PackageRefusal(
-            f"package_frozen could not be recorded for run {identity.run_uid}: "
+            f"candidate_built could not be recorded for run {identity.run_uid}: "
             f"{exc}. A package whose identity was never recorded cannot be "
             f"verified or published, so this refuses rather than leaving a zip "
             f"nobody can bind a receipt to."
         ) from exc
-    print(f'  ✓ package_frozen recorded: {package_sha256[:12]}… '
-          f'(run {identity.run_uid}, {len(states_summary(payload))} bindings)')
+    print(f'  ✓ candidate_built recorded: {package_sha256[:12]}… '
+          f'(run {identity.run_uid})')
     return package_sha256
 
 
@@ -2894,6 +2905,44 @@ def step_11_zip_and_upload(build_dir, new_version, dist_dir, dry_run=False):
     print(f'  ✓ Zipped to {zip_file}')
     print('  PUBLISH: not-staged — nothing left this machine. '
           'Run tropo-publish-release.py to stage, then --fire to publish.')
+    # S3 AC6 (176a8995): the zip is the moment a build becomes a completed
+    # build, so this is where the built-but-unpublished marker is written.
+    marker = _write_publish_pending_marker(new_version)
+    print(f'  ✓ publish-pending marker written: {marker} (publish_state=not-staged; '
+          f'boot 5.1.8 nags until fire or defer; verify-live green clears it)')
+
+
+#: S3 AC6 (176a8995): the built-but-unpublished marker boot step 5.1.8 reads
+#: (fbe50871 owns the contract). Written HERE by the zip step — the step that
+#: turns a build into a completed build — and flipped to publish_state "live"
+#: by tropo-verify-release-live.py on COMPLETE. Before v1.91 nothing wrote it
+#: (Argus F-07), so the boot line had never once spoken.
+PUBLISH_PENDING_REL = os.path.join('.tropo', 'publish-pending.json')
+
+
+def _write_publish_pending_marker(new_version):
+    """S3 AC6 (176a8995): write STUDIO_ROOT/.tropo/publish-pending.json.
+
+    publish_state "not-staged" is the same word this step already prints on the
+    PUBLISH line; it is outside fbe50871's {live, deferred-by-mike} silent set,
+    so the boot line fires on it. The write is atomic (tmp + replace) so a
+    death mid-write cannot leave a half-marker the boot reader trips on.
+    """
+    path = Path(tropo_roots.STUDIO_ROOT) / PUBLISH_PENDING_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = {
+        "version": str(new_version),
+        "publish_state": "not-staged",
+        "written_at": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        "written_by": "tropo-build-release.py step_11_zip_and_upload",
+        "cure": "python3 vault/tools/tropo-publish-release.py stage --version "
+                f"{new_version}; then preflight + fire, or defer",
+    }
+    staged = path.with_name(f'.{path.name}.tmp')
+    staged.write_text(json.dumps(body, indent=2, sort_keys=True) + '\n',
+                      encoding='utf-8')
+    os.replace(staged, path)
+    return path
 
 
 #: Wall-clock ceiling for the studio validator-debt ratchet subprocess. Named
@@ -2949,6 +2998,37 @@ def _validator_tree_snapshot(root):
         digest.update(hashlib.sha256(raw).digest())
         count += 1
     return digest.hexdigest(), count
+
+
+def _write_build_provenance(new_version, enforcement_bypassed=False, _publish_state_provenance=None):
+    """v1.91 S1 AC5: the build's permanent record carries its enforcement
+    state. A bypassed build says so (v1.90 shipped bypassed with provenance
+    identical to a clean build — the gap this closes); a clean build records
+    skipped:false so a MISSING field is detectable drift, never ambiguous
+    silence."""
+    if DRY_RUN:
+        return
+    _prov_dir = os.path.join(tropo_roots.RELEASES_DIR, f'v{new_version}')
+    os.makedirs(_prov_dir, exist_ok=True)
+    _prov_path = os.path.join(_prov_dir, 'build-provenance.json')
+    payload = {
+        "version": new_version,
+        "built_at": datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        "enforcement_bypass": {
+            "skipped": bool(enforcement_bypassed),
+            "env": 'TROPO_SKIP_ENFORCEMENT_GATE=1' if enforcement_bypassed else None,
+            "note": ('TRUE-EMERGENCY use only (post-v1.50.0 ruling); a routine '
+                     'ship invoking the bypass is a substrate-discipline '
+                     'violation') if enforcement_bypassed else 'enforcement gate ran',
+        },
+    }
+    if _publish_state_provenance:
+        payload.update(_publish_state_provenance)
+    with open(_prov_path, 'w') as f:
+        json.dump(payload, f, indent=2)
+    _ps = (_publish_state_provenance or {}).get('publish_state')
+    print(f'  Build provenance: {_prov_path} (publish_state={_ps}, '
+          f'enforcement_bypass={bool(enforcement_bypassed)})')
 
 
 def _write_validation_receipt(receipt):
@@ -3124,6 +3204,36 @@ def main():
 
     print(f'=== Tropo-OS Build {"[DRY RUN]" if DRY_RUN else ""} ===\n')
 
+    # ── S3 AC3 (176a8995): CHANGELOG [version] is a BUILD-time gate ──────────
+    # First refusal of the build, dry-run included, BEFORE the activation key,
+    # the publish-state pre-flight and Step 0's 4-25 minute vault rebuild. It
+    # is a static file check, and S3's principle is that everything that can
+    # refuse refuses before the cost. Until v1.91 the only [version] check on
+    # the release path was tropo-publish-release.py's stage-time equality
+    # assert — AFTER the freeze — so promoting [Unreleased] late forced a
+    # rebuild that voided every instrument receipt (v1.90 lost a full cycle and
+    # its box shipped a CHANGELOG with no 1.90.0 section; Argus F-06). The
+    # check itself is lib/release_authorization.check_changelog — the G83 gate
+    # stage still runs — consumed here too rather than redefined.
+    _changelog_target = target_version or bump_version(
+        read_current_version(VERSION_PATH), bump_type)
+    _changelog_path = Path(tropo_roots.STUDIO_ROOT) / 'CHANGELOG.md'
+    try:
+        check_changelog(_changelog_target, _changelog_path)
+        print(f'  ✓ CHANGELOG.md carries [{_changelog_target}] (+ [Unreleased] above it) — '
+              f'{_changelog_path}\n')
+    except ReleaseAuthorizationError as exc:
+        print(f'REFUSED at build: CHANGELOG gate for v{_changelog_target} — {exc}',
+              file=sys.stderr)
+        print(f'    File: {_changelog_path}', file=sys.stderr)
+        print(f'    Promote [Unreleased] -> [{_changelog_target}] NOW, before the build: '
+              f'the build freezes the package and every instrument receipt binds to its '
+              f'bytes, so a later promotion forces a rebuild that voids them all '
+              f'(S3 AC3, 176a8995). Nothing was built; no step ran.', file=sys.stderr)
+        if not DRY_RUN:
+            _record_build_refusal('gate-refused', 'policy-gate', 'retryable')
+        sys.exit(1)
+
     # ── Pipeline Activation Key gate (dev-spec 2ffdd9d6) ──────────────────────
     # A real build refuses without a runtime-minted key proving this release went
     # through the pipeline (activation + doc/test cascade + gates). Fail-closed.
@@ -3236,6 +3346,15 @@ def main():
     if rebuild_result.returncode != 0:
         tail = '\n'.join(rebuild_result.stdout.splitlines()[-30:])
         print(tail)
+        # S1 AC3-family (0a0e94d1, metis-g111 2026-08-23): the reason for a
+        # non-zero rebuild arrives on STDERR (argparse refusals, tracebacks,
+        # sqlite lock errors). Printing only stdout produced a refusal that
+        # named nothing on the first v1.91 dry-run; print the stderr tail too.
+        err_tail = '\n'.join(rebuild_result.stderr.splitlines()[-30:])
+        if err_tail.strip():
+            print('  --- rebuild-vault.py stderr (last 30 lines) ---')
+            print('  ' + err_tail.replace('\n', '\n  '))
+        print(f'  (rebuild-vault.py exit code {rebuild_result.returncode})')
         print('\n  ✗ Build REFUSED — rebuild-vault.py returned non-zero.')
         print('    Vault rebuild is always-run; this failure is NOT bypassable via')
         print('    TROPO_SKIP_ENFORCEMENT_GATE=1 (substrate quality is separate from')
@@ -3273,7 +3392,8 @@ def main():
     # mid-ship. Routine ship invoking the bypass is a substrate-discipline
     # violation; should be surfaced to Mike as substrate-coherence finding.
     # See v1.50.0 priority elevation brief [08e4a7c2] for full pattern history.
-    if os.environ.get('TROPO_SKIP_ENFORCEMENT_GATE') != '1':
+    _enforcement_bypassed = os.environ.get('TROPO_SKIP_ENFORCEMENT_GATE') == '1'
+    if not _enforcement_bypassed:
         print('Step 1 — v1.10 Pure Enforcement gate (validate-capability-membership.py STRICT mode):')
         # v1.56 Lane S captain-mode fix-on-see (Vela V54 2026-05-27):
         # validate-capability-membership.py migrated to vault/tools/tropo-validate-capability-membership.py;
@@ -3571,17 +3691,7 @@ def main():
     # Step 8.1 — Record Step 0.5's publish-state pre-flight result into build provenance
     # (Release Coupling, fbe50871: "unreachable... recorded in build provenance as
     # publish_state UNKNOWN"). tropo-publish-release.py's STAGE step reads this.
-    if not DRY_RUN:
-        _prov_dir = os.path.join(tropo_roots.RELEASES_DIR, f'v{new_version}')
-        os.makedirs(_prov_dir, exist_ok=True)
-        _prov_path = os.path.join(_prov_dir, 'build-provenance.json')
-        with open(_prov_path, 'w') as f:
-            json.dump({
-                "version": new_version,
-                "built_at": datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ'),
-                **_publish_state_provenance,
-            }, f, indent=2)
-        print(f'  Build provenance: {_prov_path} (publish_state={_publish_state_provenance.get("publish_state")})')
+    _write_build_provenance(new_version, _enforcement_bypassed, _publish_state_provenance)
 
     # Step 8b: Version stamping across stranger-facing files (v1.3.1 D1.1)
     step_8b_stamp_versions(build_dir, new_version)
@@ -3589,9 +3699,13 @@ def main():
     # Step 9: Manifest
     file_count = step_9_generate_manifest(build_dir, new_version)
 
-    # Step 9d (ea09fc6e): the shipped IMAGE MANIFEST — the machine-parseable
-    # complete file list the lift-and-replace delete-set derives from.
-    step_9d_emit_image_manifest(build_dir, new_version)
+    # Step 9d MOVED (F1, 33d5bca1): the shipped IMAGE MANIFEST is now emitted
+    # immediately before the zip, not here. Emitting it at this position hashed
+    # files that step_9b, step_9c, step_10_sanitize_argo_identity, step_10.8 and
+    # step_10.9 then rewrote, so 33 of 1,054 entries shipped with stale digests —
+    # including START-TROPO.md, CLAUDE.md, GEMINI.md, AGENT-ORIENTATION.md and
+    # MANIFEST.md, the first files a stranger opens. See the final-freeze block
+    # below, which already did exactly this for MANIFEST.md.
 
     # Step 9b: Regenerate 00-tropo-nav/ from the SHIPPED ledger (v1.5 S2)
     # Ensures shipped 00-tropo-nav reflects the SHIPPED ledger, not the source-vault state.
@@ -3838,6 +3952,17 @@ def main():
     if not DRY_RUN:
         if step_10_2_purge_run_local_artifacts(build_dir):
             step_9_generate_manifest(build_dir, new_version)
+
+    # Step 9d (ea09fc6e), MOVED HERE by F1 (33d5bca1, argus-a155 2026-08-24).
+    # The IMAGE MANIFEST must be the LAST thing written before the zip, because
+    # it is the only record a recipient can integrity-check the box against. It
+    # is emitted unconditionally rather than inside the purge branch above: the
+    # staleness it suffered had nothing to do with the purge — the sanitize step
+    # rewrote entry points 70-113 seconds after the manifest was stamped — so
+    # gating it on a purge that may legitimately be a no-op would leave exactly
+    # the same hole on the quiet path. The manifest excludes itself by design,
+    # so emitting it last is self-consistent.
+    step_9d_emit_image_manifest(build_dir, new_version)
 
     step_11_zip_and_upload(build_dir, new_version, dist_dir, DRY_RUN)
 

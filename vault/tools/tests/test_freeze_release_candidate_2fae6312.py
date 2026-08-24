@@ -28,6 +28,13 @@ freeze = importlib.util.module_from_spec(_spec)
 sys.modules[_spec.name] = freeze
 _spec.loader.exec_module(freeze)
 
+_rv_spec = importlib.util.spec_from_file_location(
+    "release_verify_for_freeze_test", TOOLS / "lib" / "release_verify.py"
+)
+release_verify = importlib.util.module_from_spec(_rv_spec)
+sys.modules[_rv_spec.name] = release_verify
+_rv_spec.loader.exec_module(release_verify)
+
 RUN = "934436ca"
 SAGA = "release:934436ca"
 
@@ -49,15 +56,24 @@ class FreezeDecisionTests(unittest.TestCase):
              "data": {"pipeline_run_uid": RUN, "candidate_sha256": sha,
                       "candidate_path": str(candidate)}},
         ]
+        # v1.91 S2 (3fb41c99): the REAL shape release-verification-receipt
+        # writes (9e7003b1.py's emit_release_verification_receipt), not the
+        # generic dev-pipeline verification_receipt name -- that collision
+        # is exactly what Argus A155's ruling exists to remove.
         for step in (receipts if receipts is not None else list(freeze.INSTRUMENTS)):
             rows.append({
-                "event": "verification_receipt", "step": step,
+                "event": release_verify.RECEIPT_KIND, "step": step,
                 "data": {
-                    "pipeline_run_uid": "somebody-else" if wrong_run else RUN,
+                    "receipt_kind": release_verify.RECEIPT_KIND,
+                    "instrument": freeze.INSTRUMENTS[step],
+                    "release_run_uid": "somebody-else" if wrong_run else RUN,
                     "candidate_sha256": sha,
-                    "instrument_step_uid": step,
                     "verdict": "pass",
-                    "receipt_uid": "r-" + step,
+                    "executor_or_attester": "test",
+                    "execution_mode": "machine",
+                    "evidence_ref": step,
+                    "started_at": "2026-08-23T00:00:00Z",
+                    "completed_at": "2026-08-23T00:00:00Z",
                 },
             })
         if invalidate:
@@ -98,7 +114,10 @@ class FreezeDecisionTests(unittest.TestCase):
                 present = [u for u in freeze.INSTRUMENTS if u != absent]
                 payload, refusal = self.decide(self.build(receipts=present))
                 self.assertIsNotNone(refusal)
-                self.assertIn(absent, refusal)
+                # v1.91 S2 (3fb41c99): the shared resolver names the
+                # INSTRUMENT, not the step uid -- ONE vocabulary, per Argus
+                # A155's ruling part 5.
+                self.assertIn(freeze.INSTRUMENTS[absent], refusal)
                 self.assertEqual(payload["verdict"], "fail")
 
     def test_a_live_invalidation_blocks_the_freeze(self):
@@ -114,7 +133,7 @@ class FreezeDecisionTests(unittest.TestCase):
     def test_receipts_from_another_run_do_not_count(self):
         _, refusal = self.decide(self.build(wrong_run=True))
         self.assertIsNotNone(refusal)
-        self.assertIn("absent", refusal)
+        self.assertIn("no receipt for", refusal)
 
     def test_a_missing_candidate_refuses(self):
         run_dir = self.build()

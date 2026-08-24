@@ -1081,6 +1081,21 @@ class PublisherReceiptTests(unittest.TestCase):
                 return types.SimpleNamespace(stdout=stdout, returncode=0)
 
             completed = types.SimpleNamespace(returncode=0, stdout="", stderr="")
+            # S3 AC1 (176a8995): cmd_fire runs the pre-outward-fire preflight
+            # before its confirm; this case is about the receipt write failing
+            # much later, so the preflight is stubbed green here (proved in
+            # test_publish_preflight_v191 / test_transport_preflight_v191).
+            # Started by hand: the `with (...)` below is already at py3.9's
+            # statically-nested-block ceiling.
+            preflight_seam = patch.object(publisher, "run_fire_preflight", return_value=0)
+            preflight_seam.start()
+            self.addCleanup(preflight_seam.stop)
+            # S3 AC4 (176a8995): the badge act is now an adapter that clones and
+            # pushes the deploy repository — an outward edge this harness mocks
+            # like the Supabase upload (test_badge_adapter_v191 proves it).
+            badge_seam = patch.object(publisher, "_stamp_os_release_badge")
+            badge_seam.start()
+            self.addCleanup(badge_seam.stop)
             with (
                 patch.multiple(
                     publisher.tropo_roots,

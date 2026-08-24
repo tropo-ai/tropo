@@ -152,7 +152,17 @@ def announce(root, agent, record):
     # drain (metis-g102, seen in my own inbox from talos's retirement, 2026-08-06).
     # The crew reads this in a list; give them the sentence, not just the fields.
     headline = f"{agent} {record['gen']} {verb}"
-    payload = {"category": "crew-state", "agent": agent, "gen": record["gen"],
+    # S4 AC4(b) (29506520), argus-a154 2026-08-23. This payload is shared by BIRTH and
+    # RETIREMENT, and it hard-coded `crew-state` for both. Playbook e2c7d185 §Required
+    # Practice step 8 requires the retirement notice carry `category: retirement`, so the
+    # tool satisfied the events capsule and broke the playbook — and every agent who
+    # followed its output inherited the wrong value. Measured 2026-08-23 across both agent
+    # lines: not ONE retirement notice carried the required value, including the tool's.
+    # `retirement` became a declared value at events.capsule v1.12 (same spec's lock as
+    # authority); this is the writer half landing behind that reconciliation, never ahead
+    # of it. Birth keeps crew-state: the playbook mandates nothing for a birth.
+    category = "retirement" if record["t"] == "retired" else "crew-state"
+    payload = {"category": category, "agent": agent, "gen": record["gen"],
                "t": record["t"], "headline": headline,
                "body": f"{headline}. Lineage: agents/{agent}/lineage.jsonl",
                "lineage": f"agents/{agent}/lineage.jsonl"}
@@ -299,6 +309,10 @@ def cmd_born(args):
                    "born_at": f"'{record['at']}'"}
     if prev:
         born_fields["predecessor"] = prev
+    if args.model:
+        # metis-g111 2026-08-23: the sleeve is a lifecycle fact the lineage line already
+        # carries; without this the entry's model: goes stale on every sleeve change.
+        born_fields["model"] = args.model
     sync_entry(root, args.agent, born_fields)
     told = announce(root, args.agent, record)
     if told:

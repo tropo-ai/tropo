@@ -354,11 +354,29 @@ def main() -> int:
                          '--skip-rehydrate']
     if args.apply:
         rebuild_index_cmd.append('--apply')
-    result = subprocess.run(rebuild_index_cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
-    if result.stdout: print(result.stdout, end="")
-    if result.returncode != 0:
+    # S1 AC2 (0a0e94d1, metis-g111 2026-08-23): rebuild-index refuses, correctly, when the
+    # source bytes move between its before/after snapshots of one collection pass
+    # ("exact derivation bytes/modes changed during the collection pass"). In a live
+    # shared checkout with several agents writing, that transient fired on the first two
+    # v1.91 no-bypass build attempts and refused the whole build at Step 0. A bounded retry
+    # of THAT ONE PASS is the proportionate cure: every retry re-proves from scratch, so an
+    # accepted pass is still one whose inputs did not move; only the transient is absorbed.
+    # Any other non-zero reason aborts on the first attempt as before.
+    _MOVED = 'changed during the collection pass'
+    _MAX_PASSES = 3
+    for _attempt in range(1, _MAX_PASSES + 1):
+        result = subprocess.run(rebuild_index_cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
+        if result.stdout: print(result.stdout, end="")
+        if result.returncode == 0:
+            break
+        if _MOVED in (result.stderr or '') and _attempt < _MAX_PASSES:
+            print(f'\n[SOURCE COMPLETENESS] sources moved during collection pass {_attempt}/{_MAX_PASSES} '
+                  '(live writers in the tree); re-running the pass from scratch...', file=sys.stderr)
+            continue
         print(f'\nERROR: rebuild-index.py exited non-zero ({result.returncode}); aborting.', file=sys.stderr)
         if result.stderr: print(result.stderr, file=sys.stderr)
+        if _MOVED in (result.stderr or ''):
+            print(f'  (sources kept moving across {_MAX_PASSES} passes; build from a quiescent tree or a pinned worktree)', file=sys.stderr)
         return result.returncode
 
     # ---- Step 2: rehydrate.py ----

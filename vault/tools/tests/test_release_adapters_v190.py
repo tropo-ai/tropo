@@ -312,6 +312,13 @@ class FireIntegrationTests(unittest.TestCase):
         patches = [
             mock.patch.object(publisher, "_read_state", return_value=state),
             mock.patch.object(publisher, "_confirm_tty", return_value=True),
+            # S3 AC1 (176a8995): cmd_fire now runs the whole pre-outward-fire
+            # preflight (transport probe, gh/Supabase credentials, zip + sealed
+            # notes, release entry, badge target) BEFORE its confirm. This
+            # harness mocks the fire's edges and drives its act sites; the
+            # preflight is one more edge here — its own suites prove it
+            # (test_publish_preflight_v191, test_transport_preflight_v191).
+            mock.patch.object(publisher, "run_fire_preflight", return_value=0),
             mock.patch.object(publisher, "require_release_authorization"),
             mock.patch.object(publisher, "_release_entry_uid_for",
                               return_value="00000001"),

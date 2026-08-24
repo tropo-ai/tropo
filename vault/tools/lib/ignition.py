@@ -332,8 +332,17 @@ def render_activation(
     activation_uid: str, root_uid: str, run_uid: str, pipeline_uid: str,
     subject_uid: str, subject_kind: str, actor: str, today: str,
     cycle_context: str = "",
+    release_entry_uid: str = "",
 ) -> str:
     """The activation entry, authored INSIDE the lock transaction.
+
+    S3 AC7 (176a8995): `release_entry_uid` is the release identity the lock
+    mints in the same transaction. A release-plan lock passes it so the
+    activation binds the same entry as the plan, the run and run.jsonl —
+    `_release_entry_uid_for` in tropo-publish-release.py reads it from HERE
+    and refuses the fire when it is empty. v1.90's a6ebf96e had to be patched
+    by hand because nothing handed the uid to this renderer. Dev-spec locks
+    leave it empty and the field is simply not written.
 
     WHY NOT SHELL OUT TO pipeline-activate.py (argus-a147, stage-4 blocker 1).
     The dev lock used to invoke it as a subprocess before taking the lock. Two
@@ -361,6 +370,11 @@ def render_activation(
     cycle_line = (
         f"cycle_context: {_yaml_scalar(cycle_context)}\n" if cycle_context else ""
     )
+    # S3 AC7 (176a8995): the activation names the release entry it opens for.
+    release_line = (
+        f"release_entry_uid: {_yaml_scalar(release_entry_uid)}\n"
+        if release_entry_uid else ""
+    )
     subject_field = subject_kind.replace("-", "_") + "_uid"
     return f"""---
 uid: {_yaml_scalar(activation_uid)}
@@ -380,7 +394,7 @@ pipeline_uid: {_yaml_scalar(pipeline_uid)}
 pipeline_run_uid: '{run_uid}'
 activation_root_project: '{root_uid}'
 {subject_field}: '{subject_uid}'
-activated_by: {_yaml_scalar(actor)}
+{release_line}activated_by: {_yaml_scalar(actor)}
 activated_at: '{today}'
 member_of:
   - {_yaml_scalar(root_uid)}

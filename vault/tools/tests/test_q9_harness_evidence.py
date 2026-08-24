@@ -39,7 +39,7 @@ def receipt(**over):
         "receipt_kind": rv.RECEIPT_KIND,
         "instrument": "release-harness",
         "release_run_uid": RUN,
-        "package_sha256": DIGEST,
+        "candidate_sha256": DIGEST,
         "verdict": "pass",
         "executor_or_attester": q9.HARNESS_AGENT_NAME,
         "execution_mode": "agent",
@@ -98,7 +98,7 @@ class TheGateFindsExactlyOnePassingAgentReceipt(unittest.TestCase):
             q9.find_harness_receipt([event(receipt(release_run_uid="f0f0f0f0"))],
                                     RUN, DIGEST)
         with self.assertRaises(q9.HarnessEvidenceRefusal):
-            q9.find_harness_receipt([event(receipt(package_sha256="c" * 64))],
+            q9.find_harness_receipt([event(receipt(candidate_sha256="c" * 64))],
                                     RUN, DIGEST)
 
     def test_another_instrument_does_not_satisfy_the_harness_gate(self):

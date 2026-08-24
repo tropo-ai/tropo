@@ -2,10 +2,10 @@
 uid: f6a967fd
 type: release
 agent: tropo
-title: Tropo Release Notes — v1.90.0
-description: Current Tropo release notes for delivery via Tropo's release-liaison role. Refreshed each release by the update pipeline. v1.90.0 makes the update itself trustworthy: every outward act of a release is journalled and resumable, the site push is a compare-and-swap that refuses instead of overwriting, the update feed resolves every URL it names before a release is called live, and updating a studio is lift-and-replace — planned against a manifest, applied over a backup, with the old machinery retired rather than layered.
-release_version: v1.90.0
-release_date: '2026-08-22'
+title: Tropo Release Notes — v1.91.0
+description: Current Tropo release notes for delivery via Tropo's release-liaison role. Refreshed each release by the update pipeline. v1.91.0 makes the release build itself trustworthy: every declared release event has a writer, every gate refuses before the human says yes instead of after, and every acceptance criterion shipped here was verified by someone other than its author running the locked command.
+release_version: v1.91.0
+release_date: '2026-08-23'
 last_delivered_version: null
 audience: Studio user (whoever opened this Studio)
 read_first_at: Group 2 boot (release-state awareness check)
@@ -22,7 +22,7 @@ member_of:
   - 03ccd072
 tags:
   - tropo-release-notes
-  - v1.90.0
+  - v1.91.0
   - kernel-managed
   - release-liaison-content
   - refreshed-each-release
@@ -34,16 +34,28 @@ retyped_at: '2026-07-12'
 retyped_by: argus-a130 (walked disposition 5dcbadbd, Mike-verdicted, S2 activation 0d9f89bc)
 ---
 
-# Tropo v1.90.0 — Release Notes
+# Tropo v1.91.0 — Release Notes
 
 *The current Tropo release. Delivered by Tropo's release-liaison role at Pattern 1 returning user startup OR Pattern 3 scheduled summary.*
 
-**Headline: updates that cannot lie, and a release you can pause mid-stride.**
+**Headline: the build that does not need a human hand.**
 
-- **Every outward act of a release is now a journalled step.** A fire that dies halfway is describable and resumable by checkpoint — the journal says what happened, and the release refuses to claim success for any act it cannot show.
-- **The one push is a compare-and-swap.** If the remote moved, the release refuses and says so — it never overwrites a counterpart's commit, including under deadline pressure.
-- **The update feed tells the truth.** A release is not called live until every URL its manifest names actually resolves — the failure that shipped two releases with no update package is now structurally impossible.
-- **Updating a studio is lift-and-replace.** A plan computed against the image's manifest, an apply over an automatic backup with a receipt, and a migration contract that refuses undeclared passengers. A legacy studio self-heals to full mode after its first lift. Measured end to end, the lift runs in seconds.
-- **The old machinery is retired, not layered:** the fragile delta tool, the hand-walked apply playbook, and the migrate step that could rewrite user content are gone.
+- **The build runs start to finish with no bypass flag.** The record defects that forced an
+  enforcement override on every v1.90 build are cured at the record, and any bypass that ever
+  survives is written into build provenance — a skipped gate can no longer be silent.
+- **Every declared release event has exactly one writer.** Four events that had readers, refusal
+  messages and tests but no emitter (including the release's own human-authorization records) now
+  reach the bus from the point where their fact is recorded; a declared event with no writer fails
+  at validate, not at your first recovery.
+- **Everything that can refuse refuses before you say yes.** One preflight runs every fire
+  precondition — credentials probed read-only, CHANGELOG checked at build, the website badge written
+  by an adapter to the repository the site actually deploys from — so a confirmed fire cannot stall
+  on a precondition afterward.
+- **The instruments were verified as a stranger would use them.** Every acceptance criterion behind
+  this release was run on its locked command, byte for byte, by someone other than its author; five
+  verification commands that were blind or absent were found that way and fixed inside the cycle.
+- **Validator answers arrived enumerable and fast.** The failure count now equals the printed
+  findings (no invisible debt), one debt predicate answers the debt question everywhere, and the
+  strict membership check dropped from twelve minutes to half a minute.
 
-*Refreshed 2026-08-21 for v1.90.0 by talos-t48 at ignition (G109 driving, A153 verify on record).*
+*Refreshed 2026-08-23 for v1.91.0 by metis-g111 at build (G111 driving; verification ledger at boards/_data/v191-verification.jsonl).*

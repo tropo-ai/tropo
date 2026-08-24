@@ -55,6 +55,15 @@ if str(_TROPO_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_TROPO_SCRIPTS))
 from lib._identity import _resolve_principal_uid, _load_fm  # noqa: E402
 
+# v1.91 S2 AC5 (3fb41c99): vault/tools also has a lib/ namespace-package
+# portion (release_events.py's RELEASE_EVENTS, the declared release-event
+# vocabulary). Same merge as _identity.py above -- two directories, one
+# namespace package, because neither lib/ has an __init__.py.
+_VAULT_TOOLS = Path(__file__).resolve().parents[3] / "vault" / "tools"
+if str(_VAULT_TOOLS) not in sys.path:
+    sys.path.insert(0, str(_VAULT_TOOLS))
+from lib.release_events import RELEASE_EVENTS  # noqa: E402
+
 VAULT_ROOT = Path(__file__).resolve().parents[3]
 PIPELINE_RUNS = VAULT_ROOT / "vault" / "pipeline-runs"
 VAULT_FILES = VAULT_ROOT / "vault" / "files"
@@ -408,24 +417,35 @@ def _post_mint_event_allowed(ev: dict) -> bool:
     this as legitimately arriving after mint, checked separately and more strictly by
     _has_human_signoff — independent registered principal, not self-signed; this allowlist
     only recognizes the SHAPE, not the identity).
-    Shape 3 (NEW) — any OTHER engine-vocabulary event type (_ENGINE_EVENT_TYPES above)
-    whose `step` reference, if any, resolves to a real vault entry of type `pipeline` —
-    i.e. a genuine run-declared downstream step, not an attacker-fabricated UID. Events
-    carrying no step reference at all (pause_started with no step, workflow_complete,
-    activation_superseded, status_changed) are run-level by nature and pass on event-type
-    alone. This is a proportionate widening, not a cryptographic one — consistent with
-    this module's own disclosed threat-model ceiling (module docstring): it defeats
-    fabricating a step reference to a non-existent UID, not a fully malicious insider with
-    arbitrary file-write access walking the run's OWN real pipeline tree. Anything whose
-    event type isn't in the engine's real vocabulary at all, or whose step reference
-    doesn't resolve to a real pipeline entry, still refuses.
+    Shape 3 — any OTHER engine-vocabulary event type (_ENGINE_EVENT_TYPES above, OR —
+    v1.91 S2 AC5, 3fb41c99 — any type DECLARED in release_events.RELEASE_EVENTS, the
+    same finite table AC1/AC2 hold every release writer to) whose `step` reference, if
+    any, resolves to a real vault entry of type `pipeline` — i.e. a genuine run-declared
+    downstream step, not an attacker-fabricated UID. Events carrying no step reference at
+    all (pause_started with no step, workflow_complete, activation_superseded,
+    status_changed, and every tropo.release.* principal-input event — scope_locked,
+    fire_authorized, orchestrator_invoked all declare step:None by construction) are
+    run-level by nature and pass on event-type alone. This is a proportionate widening,
+    not a cryptographic one — consistent with this module's own disclosed threat-model
+    ceiling (module docstring): it defeats fabricating a step reference to a non-existent
+    UID, not a fully malicious insider with arbitrary file-write access walking the run's
+    OWN real pipeline tree. Anything whose event type isn't in the engine's real
+    vocabulary OR the declared release vocabulary, or whose step reference doesn't
+    resolve to a real pipeline entry, still refuses.
+
+    WHY DERIVED, NOT HAND-KEPT (AC5's own claim): a hand-kept list requires editing this
+    function every time the release vocabulary grows, and v1.90 hit that exact gap three
+    times before the vocabulary even finished stabilizing -- package_superseded read as
+    tampering, and a successful build's own package_frozen blocked the following build's
+    key. RELEASE_EVENTS is authoritative for "does this event exist" (AC1/AC2 refuse
+    anything absent from it); this reads that same table rather than re-asserting it.
     """
     et = ev.get("event")
     if et == "step_completed" and _step(ev) == PRODUCE_STEP_UID:
         return (ev.get("data") or {}).get("natural_verdict") == "pass"
     if et == "human_signoff":
         return True
-    if et not in _ENGINE_EVENT_TYPES:
+    if et not in _ENGINE_EVENT_TYPES and et not in RELEASE_EVENTS:
         return False
     step_uid = _step(ev)
     if not step_uid:

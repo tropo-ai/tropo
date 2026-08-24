@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.91.0] - 2026-08-23
+
+The build that does not need the founder's hand. Four locked specs, every acceptance
+criterion independently verified on its own locked command (ship page: boards/metis/v1-91-plan-2026-08-23.html §6;
+live dashboard: boards/v1.91-release-dashboard.html).
+
+### Fixed
+- S1 (0a0e94d1) — the build's own path cleared: the four capability-membership ERRORs cured at the
+  record (no bypass flag needed); the validator's summary is derived from its printed findings
+  (159 counted = 159 printed); ONE debt predicate (lib/debt_rule) answers the debt question for both
+  the build ratchet and the release gate; any surviving enforcement bypass is written into
+  build-provenance.json; the membership validator reads the vault once (12m30s → 33s); severity is
+  assigned by blast radius, not record age.
+- S2 (3fb41c99) — one name, one meaning, one writer: all 14 declared release events have exactly one
+  writer (completion_verified, fire_authorized, orchestrator_invoked, scope_locked gained theirs);
+  a declared event with no writer now FAILS AT VALIDATE; one reader per journal question; ONE receipt
+  shape for the four instruments, proven by a test that drives the real writer through the real
+  freeze gate via production entry points; the authorization allowlist derives from the declared set.
+- S3 (176a8995) — the outward act preflit-ed: `tropo-publish-release.py preflight` runs every fire
+  precondition (including a read-only git transport probe) BEFORE any confirm; the CHANGELOG
+  [version] gate fires at BUILD, before any work (this entry exists because it refused this build's
+  own first dry-run); the website badge is written by an adapter to the repo the site deploys from;
+  the build writes .tropo/publish-pending.json and verify-live clears it; the lock propagates
+  release_entry_uid onto the activation; fires never prompt for credentials.
+- S4 (29506520, partial per ratchet) — the retirement-practice observer checks 6 of 8 steps (2
+  declared unverifiable); identity files may not recite procedures (validator-enforced) and the
+  retirement notice emitter writes `category: retirement`; the lock gesture refuses when its own
+  snapshot records acceptance criteria absent. The retirement DRIVER rides to v1.92 by ruling.
+
+### Changed
+- tropo-events.capsule v1.13: `tropo.release.scope_locked` registered (Mike's word, 2026-08-23).
+- Builds run from a pinned detached worktree at origin/main; `tropo-navblock-strip.py --install`
+  registers an absolute filter driver so plain `git worktree add` works on any studio.
+- The public-snapshot exporter accepts a detached HEAD pinned to origin/main.
+
+### Known and named
+- site_endpoint observation is advisory (both public URLs 404 today); `--require-site-endpoint`
+  makes it binding. Decision (ship the endpoint / retire the observation) is Mike's, recorded open.
+
 ## [1.90.0] - 2026-08-21
 ### Added
 - **Updating a studio is one command with an honest progress bar.** `plan` computes the full extent of the work before a single byte is written, then `apply` renders progress over that computed list. A bar that can move means the reasoning already finished, so the bar is the acceptance test rather than decoration. The measured run replaces a minutes-long manual procedure and completes in seconds.

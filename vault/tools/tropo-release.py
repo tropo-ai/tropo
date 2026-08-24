@@ -161,6 +161,61 @@ def _identity(run_dir: Path) -> Dict[str, str]:
     )
 
 
+def _record_orchestrator_invoked(run_dir: Path, identity: Dict[str, str]) -> None:
+    """v1.91 S2 AC1/AC5 (3fb41c99): the moment Mike runs the bare orchestrator.
+
+    Argus A154 could not locate this event's honest emit point before he
+    retired and told his successor to stop and ask rather than invent one.
+    Found: this file's own docstring names it -- "Mike locks scope, runs
+    this ONCE, and authorizes the fire when asked" -- and main()'s no-
+    subcommand branch is exactly that "runs this once." Not
+    tropo-release.py:275's rehearsal path (cmd_rehearse constructs
+    SYNTHETIC principal_inputs; Argus already ruled that one out).
+
+    Never dedup'd: cardinality is "every registered-principal input
+    retained," unlike fire_authorized's "once per active package" -- each
+    invocation is its own fact, retried or not.
+
+    Written straight to run_dir/run.jsonl (this file's own convention, see
+    _identity/_rows above) rather than through the pipeline runtime's
+    vault-resolved run_folder -- tropo-release.py already has run_dir in
+    hand and never goes through 9e7003b1.py for anything. Confirmed safe
+    against the bootstrap-adoption gate (9e7003b1.py's
+    _pending_lock_run_created, hard len(events)!=1 on the FRESH lock seed):
+    this file never calls action_bootstrap at all, and by the time an
+    operator runs the bare orchestrator the run has already progressed well
+    past that one-time seed state.
+    """
+    import hashlib
+    import secrets
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    span_id = hashlib.sha256(
+        f"{identity['pipeline_run_uid']}:orchestrator_invoked:"
+        f"{_uuid.uuid4().hex}".encode("utf-8")
+    ).hexdigest()[:16]
+    event = {
+        "event": "tropo.release.orchestrator_invoked",
+        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "actor": "mike",
+        "actor_label_resolved": None,
+        "step": None,
+        "stage": None,
+        "data": {
+            "saga_id": identity["saga_id"],
+            "pipeline_run_uid": identity["pipeline_run_uid"],
+            "invocation_uid": secrets.token_hex(4),
+        },
+        "schema_version": 2,
+        "trace_id": identity["pipeline_run_uid"],
+        "span_id": span_id,
+        "parent_span_id": None,
+    }
+    with (run_dir / "run.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+
 def _missing_fire_requirements(environ) -> List[str]:
     return [name for name in FIRE_REQUIREMENTS if not environ.get(name)]
 
@@ -489,6 +544,7 @@ def main(argv=None) -> int:
         # No subcommand: the orchestrator run. It reports state, then stops at
         # the outward edge for the one authorization the machine may not give
         # itself.
+        _record_orchestrator_invoked(Path(args.run_dir), _identity(Path(args.run_dir)))
         code = cmd_status(args)
         args.authorize = False
         fire = cmd_fire(args)

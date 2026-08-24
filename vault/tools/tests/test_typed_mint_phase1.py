@@ -1379,5 +1379,108 @@ class TemplateBearingScanScopeTests(unittest.TestCase):
         self.assertEqual(scannable.count("\n"), self.CAPSULE.count("\n"))
 
 
+class InlineCodeSpanCitationIsVocabularyInEveryTypeTests(unittest.TestCase):
+    """A token or placeholder cited inside single backticks is documentation,
+    not an unfilled instance, regardless of entry type.
+
+    v1.91 blocker (Argus A155 diagnosis, 2026-08-23): three files false-refused
+    the build because they *documented* the mint-token/REQUIRED-placeholder
+    syntax inside inline code spans in ordinary prose — a token-vocabulary
+    table (`document`), a prose citation of `<!-- REQUIRED: ... -->` (`note`),
+    and a split citation of `<<MINT:` + `role>>` (`dev-spec`). None is
+    `capsule-definition`, so the existing template-bearing exclusion (fences +
+    §Template leg) never reached them. Fixed by blanking inline code spans in
+    `scannable_instance_text()` unconditionally, ahead of the type gate.
+
+    Unlike the fence/§Template-leg exclusion this widening is NOT scoped to
+    `_TEMPLATE_BEARING_TYPES` — deliberately: every known false positive sits
+    in an inline span, in a type that doesn't carry a template contract at
+    all, so the exclusion has to reach every type to fix them.
+    """
+
+    def test_the_token_vocabulary_table_no_longer_false_refuses(self):
+        """b933eafb's shape: a markdown table citing tokens in table cells."""
+        text = (
+            "---\nuid: 'aa00aa00'\ntype: document\n---\n\n"
+            "# Token Vocabulary\n\n"
+            "| Token | Mint fills with |\n"
+            "|---|---|\n"
+            "| `<<MINT:uid>>` | the collision-checked UID |\n"
+            "| `<<MINT:date>>` | today, `YYYY-MM-DD` |\n"
+        )
+        self.assertEqual(template_leg.find_stray_mint_tokens(text, "document"), [])
+
+    def test_the_required_placeholder_prose_citation_no_longer_false_refuses(self):
+        """e97154c5's shape: prose naming the REQUIRED marker syntax."""
+        text = (
+            "---\nuid: 'aa00aa01'\ntype: note\n---\n\n"
+            "The scaffold arrives with `<!-- REQUIRED: ... -->` markers in place.\n"
+        )
+        self.assertEqual(template_leg.find_required_placeholders(text, "note"), [])
+
+    def test_the_split_token_citation_no_longer_false_refuses(self):
+        """30e22148's shape: a spec citing the token split across two spans."""
+        text = (
+            "---\nuid: 'aa00aa02'\ntype: dev-spec\n---\n\n"
+            "the exact source-byte concatenation `<<MINT:` + `role>>`.\n"
+        )
+        self.assertEqual(template_leg.find_stray_mint_tokens(text, "dev-spec"), [])
+
+    def test_a_real_stray_token_in_ordinary_prose_still_reds_in_any_type(self):
+        """The teeth: the SAME token, not inside a span, must still be found.
+
+        Mirrors `test_a_real_stray_token_in_capsule_prose_still_reds` for the
+        non-template-bearing axis this fix adds.
+        """
+        text = (
+            "---\nuid: 'aa00aa03'\ntype: note\n---\n\n"
+            "Someone forgot to fill in <<MINT:uid>> before committing this.\n"
+        )
+        self.assertEqual(
+            template_leg.find_stray_mint_tokens(text, "note"), ["<<MINT:uid>>"]
+        )
+
+    def test_a_real_unfilled_placeholder_in_ordinary_prose_still_reds_in_any_type(self):
+        text = (
+            "---\nuid: 'aa00aa04'\ntype: document\n---\n\n"
+            "<!-- REQUIRED: someone never filled this in -->\n"
+        )
+        self.assertEqual(
+            template_leg.find_required_placeholders(text, "document"),
+            ["someone never filled this in"],
+        )
+
+    def test_the_same_token_cited_inline_is_blanked_but_bare_is_not(self):
+        """Direct A/B on one file: span vs. no span is the only variable."""
+        cited = (
+            "---\nuid: 'aa00aa05'\ntype: note\n---\n\n"
+            "The token looks like `<<MINT:uid>>` when unfilled.\n"
+        )
+        bare = cited.replace("`<<MINT:uid>>`", "<<MINT:uid>>")
+        self.assertEqual(template_leg.find_stray_mint_tokens(cited, "note"), [])
+        self.assertEqual(
+            template_leg.find_stray_mint_tokens(bare, "note"), ["<<MINT:uid>>"]
+        )
+
+    def test_the_fence_exemption_does_not_leak_to_non_template_types(self):
+        """The scoping decision this fix deliberately did NOT make.
+
+        `test_no_other_type_gains_the_exemption` already pins this for the
+        original fixture; this is the same guarantee stated as its own
+        mutation so the two widenings (inline spans vs. fences) can never be
+        conflated by a future edit that touches one and assumes the other
+        moved with it. A `note`'s FENCED token is still an unfilled instance
+        — only the SINGLE-backtick inline-span axis widened to every type.
+        """
+        text = (
+            "---\nuid: 'aa00aa06'\ntype: note\n---\n\n"
+            "~~~markdown\n"
+            "uid: <<MINT:uid>>\n"
+            "~~~\n"
+        )
+        self.assertEqual(
+            template_leg.find_stray_mint_tokens(text, "note"), ["<<MINT:uid>>"]
+        )
+
 if __name__ == "__main__":
     unittest.main()

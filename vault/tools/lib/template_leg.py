@@ -914,6 +914,16 @@ ANY_FENCE_RE = re.compile(
     re.MULTILINE | re.DOTALL,
 )
 
+#: A single-backtick inline code span. Deliberately single-line (`[^`\n]*`
+#: excludes newlines) -- CommonMark permits a span to break across lines, but
+#: every known false positive this pattern exists for (b933eafb's table cells,
+#: e97154c5's and 30e22148's prose citations) is one line, and a multi-line
+#: span is indistinguishable from two unpaired backticks bracketing an
+#: unrelated stretch of prose without a real markdown parser. Narrower than
+#: correct, on purpose, same restraint as ANY_FENCE_RE's unclosed-fence rule
+#: below.
+INLINE_CODE_RE = re.compile(r"`[^`\n]+`")
+
 #: Types whose own body carries template tokens BY DESIGN. A capsule-definition
 #: MUST show the scaffold it governs, tokens intact, or it cannot declare a
 #: contract at all.
@@ -937,35 +947,62 @@ def scannable_instance_text(
 ) -> str:
     """The regions of an instance where a surviving token is a real defect.
 
-    For every type but the template-bearing ones this is the whole text, so
-    behaviour is unchanged and the default argument keeps it that way for
-    callers that have no type in hand.
+    Inline code spans are blanked in EVERY type, template-bearing or not: a
+    token cited inside single backticks is documentation of the syntax, not an
+    unfilled slot, regardless of what kind of entry it lives in (Argus A155,
+    v1.91 blocker diagnosis, 2026-08-23 -- b933eafb's token-vocabulary table,
+    e97154c5's and 30e22148's prose citations, all `document`/`note`/`dev-spec`,
+    none `capsule-definition`, all false-refused the build). This is the sixth
+    instance of this cycle's family: an instrument answering confidently about
+    a subject -- markdown code spans -- it cannot see.
 
-    For a `capsule-definition` it excludes the entry's own §Template leg and its
-    fenced blocks. Those tokens are the CONTRACT, not an unfilled instance:
-    scanning them reported every capsule as incompletely minted, which was 228
-    of the shipped box's 235 health-check failures and 238 identical findings
-    studio-side across the same 14 UIDs (metis-g105 diagnosis, punch-list
-    51dc85ef item 1, 2026-08-08).
+    Fenced blocks and the §Template leg remain scoped to the template-bearing
+    types only. Widening those two as well was considered and deliberately
+    NOT done: every known false positive this fix exists for sits in an inline
+    span, none in a fence, so fence-widening isn't needed to clear them, and
+    `test_no_other_type_gains_the_exemption` is a deliberate, named regression
+    guard asserting a `note`'s FENCED tokens still red -- unlike inline spans, a
+    fenced block is often the entire payload of a non-template file (an example
+    config, a worked scaffold in a how-to), so exempting fences everywhere would
+    plausibly hide real unfilled instances, not just documentation. Narrowest
+    cut on the axis that's actually proven: inline spans, universally; fences,
+    unchanged. Flagged to Argus for confirmation rather than assumed.
+
+    For a `capsule-definition` this also excludes the entry's own §Template leg
+    and its fenced blocks. Those tokens are the CONTRACT, not an unfilled
+    instance: scanning them reported every capsule as incompletely minted,
+    which was 228 of the shipped box's 235 health-check failures and 238
+    identical findings studio-side across the same 14 UIDs (metis-g105
+    diagnosis, punch-list 51dc85ef item 1, 2026-08-08).
 
     What still reds, and must: a token or REQUIRED placeholder in ordinary prose
-    of a capsule-definition, outside both the template leg and any fence. The
-    exclusion is by REGION, never by type alone — a type-wide skip would have
-    been two lines shorter and would have made the check unable to fail for the
-    exact files it exists to check.
+    outside an inline span (any type), or in a capsule-definition's own prose
+    outside both the template leg and any fence. The exclusion is by REGION,
+    never by type alone — a type-wide skip would have been shorter and would
+    have made the check unable to fail for the exact files it exists to check.
     """
-    if entry_type not in _TEMPLATE_BEARING_TYPES:
-        return instance_text
-
     text = instance_text
 
-    # Fences FIRST, and the order is load-bearing. A scaffold is markdown inside
-    # a fence, so it contains its own headings -- `# <!-- REQUIRED: title -->` is
-    # the first line of most of them. Looking for the end of the §Template
-    # section before blanking fences finds one of THOSE headings and ends the
-    # section on its opening line, leaving the whole scaffold in scope. Measured
-    # while building this: fences-second dropped 169 of 238 studio findings and
-    # left 69 across 13 capsules; fences-first drops all 238.
+    # Inline code spans, in every type, unconditionally. Order relative to the
+    # template-bearing branch below doesn't matter for correctness -- a span
+    # blanked here can't also be a fence character the branch below matches --
+    # but doing it first means a token cited inline INSIDE a capsule's ordinary
+    # prose (not a fence, not the template leg) also correctly blanks, which is
+    # the same "citation, not an instance" logic applied consistently.
+    for span in list(INLINE_CODE_RE.finditer(text)):
+        text = _blank(text, span.start(), span.end())
+
+    if entry_type not in _TEMPLATE_BEARING_TYPES:
+        return text
+
+    # Fences next, and the order relative to the §Template heading search below
+    # is load-bearing. A scaffold is markdown inside a fence, so it contains its
+    # own headings -- `# <!-- REQUIRED: title -->` is the first line of most of
+    # them. Looking for the end of the §Template section before blanking fences
+    # finds one of THOSE headings and ends the section on its opening line,
+    # leaving the whole scaffold in scope. Measured while building this:
+    # fences-second dropped 169 of 238 studio findings and left 69 across 13
+    # capsules; fences-first drops all 238.
     for fence in list(ANY_FENCE_RE.finditer(text)):
         text = _blank(text, fence.start(), fence.end())
 

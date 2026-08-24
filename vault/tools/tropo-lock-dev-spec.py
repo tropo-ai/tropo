@@ -348,6 +348,39 @@ def open_activation(pipeline_uid: str, locked_by: str, cycle_context: str,
     return result.returncode, result.stdout, result.stderr
 
 
+
+def refuse_on_own_findings(dev_spec_uid: str, inputs: dict) -> None:
+    """S4 AC8 (29506520) — refuse on a precondition this gesture itself recorded.
+
+    Extracted from inline so the contract is RUNNABLE. AC8's locked verify command
+    names test_lock_refuses_on_own_findings_v191.py, and an inline guard inside a
+    transaction that mints UIDs and opens activations cannot be exercised by a test
+    without standing up that whole world. A refusal nobody can run is the exact
+    defect this spec is about (argus-a154, 2026-08-23).
+
+    Raises SystemExit when acceptance_criteria_present is False. Warns and returns
+    when committed_substrate_present is False. The asymmetry is named to its harm
+    per deb77758: a lock with no criteria the machine can find is a close nobody can
+    judge; a spec is locked BEFORE it is built, so an empty substrate at lock time is
+    usually the honest state and refusing it would be a gate wider than its harm.
+    """
+    if inputs.get("acceptance_criteria_present") is False:
+        raise SystemExit(
+            f"REFUSED: {dev_spec_uid} declares no `acceptance_criteria:` in its "
+            f"frontmatter, and this gesture was about to record that fact and lock "
+            f"anyway.\n"
+            f"  A lock with no criteria the machine can find is a close nobody can "
+            f"judge.\n"
+            f"  If the criteria are written in the BODY, move them to frontmatter — "
+            f"that is where every reader looks.\n"
+            f"  (S4 AC8, 29506520. This refusal names one harm and covers only it; "
+            f"an absent committed_substrate warns and proceeds.)")
+    if inputs.get("committed_substrate_present") is False:
+        print(f"[WARN] {dev_spec_uid} declares no `committed_substrate:` at lock time. "
+              f"Locking proceeds — a spec is locked before it is built, so this is often "
+              f"the honest state. The snapshot records it either way.", file=sys.stderr)
+
+
 def plan_dev_snapshot_transaction(
     dev_spec_uid: str, locked_by: str, activation_uid: Optional[str] = None,
     files_dir: Path = VAULT_FILES, runs_dir: Optional[Path] = None,
@@ -396,6 +429,26 @@ def plan_dev_snapshot_transaction(
     # hash proves the spec moved and cannot say whether it was a typo or the
     # acceptance criteria being rewritten under the run.
     inputs.update(_ig.spec_component_digests(spec_path.read_text(encoding="utf-8")))
+
+    # S4 AC8 (29506520), argus-a154 2026-08-23 — A GESTURE THAT RECORDS A MISSING
+    # PRECONDITION MUST REFUSE ON IT.
+    #
+    # This gesture pinned acceptance_criteria_present=false into the declaration
+    # snapshot of all three v1.91 specs and locked them anyway. It was never blind:
+    # it looked, wrote down that the criteria were absent, and proceeded. Root cause
+    # measured the same day — the four specs carried 6-7 acceptance criteria in the
+    # BODY and zero in frontmatter, while this gesture reads frontmatter. The
+    # convention moved and the gesture did not.
+    #
+    # THE ASYMMETRY IS DELIBERATE, per deb77758 (a refusal earns its existence by
+    # naming its irreversible harm, or it is a warning that proceeds and records):
+    #   acceptance_criteria absent -> REFUSE. A lock with no criteria the machine can
+    #       find is a close nobody can judge; the run's own verdict becomes unfalsifiable.
+    #   committed_substrate absent -> WARN. A dev-spec is locked BEFORE it is built, so
+    #       an empty substrate at lock time is often the honest state, not a defect.
+    #       Refusing it would be a gate wider than its harm — the exact class this
+    #       whole cycle exists to remove.
+    refuse_on_own_findings(dev_spec_uid, inputs)
 
     minter = mint or (lambda exclude=frozenset(): _mint_uid(files_dir, exclude))
 

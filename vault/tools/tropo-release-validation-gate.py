@@ -105,6 +105,10 @@ import hashlib
 import json
 import os
 import re
+import sys as _sys
+from pathlib import Path as _P
+_sys.path.insert(0, str(_P(__file__).resolve().parent))
+from lib.debt_rule import debt_verdict  # v1.91 S1 AC4: the ONE debt predicate
 import shlex
 import subprocess
 import sys
@@ -125,9 +129,19 @@ ANSI_RE = re.compile(
 )
 SECTION_RE = re.compile(r"^\s*---\s+(.+?)\s+---\s*$")
 SEVERITY_RE = re.compile(r"^\s*\[(FAIL|ERROR)\]\s*(.*)$")
+# v1.91 S1 AC3 (talos-t48, 7dc57f848, 2026-08-23) changed the validator's terminal
+# summary: the counts became DERIVED from printed finding lines and the trailing
+# `N normalizable` term was replaced by a parenthetical. This parser was authored
+# 2026-08-14 and never updated, so from 09:35 on 2026-08-23 the release pipeline's
+# FIRST step could not pass -- found by argus-a155 at 00:2x on 2026-08-24 while
+# driving that step for v1.91 itself. Both forms are accepted: the historical logs
+# in prior release runs still parse, and `normalizable` is optional rather than
+# removed. A summary line that is malformed in any OTHER way still fails to match,
+# which is the property this regex exists for.
 SUMMARY_RE = re.compile(
     r"^Summary:\s*(\d+)\s+passed,\s*(\d+)\s+failed,\s*"
-    r"(\d+)\s+warnings,\s*(\d+)\s+normalizable\s*$"
+    r"(\d+)\s+warnings(?:,\s*(\d+)\s+normalizable)?"
+    r"(?:\s*\([^)]*\))?\s*$"
 )
 
 AC5_COMMAND = (
@@ -172,6 +186,20 @@ _AGGREGATE_HAS_RE = re.compile(
     rf"(?:[A-Za-z0-9_.:/<>-]+\s+){{0,6}}(?:{_COUNT_NOUNS})\b",
     re.IGNORECASE,
 )
+#: `N <corpus> checked; M <defect description>` — the validator's most common tally
+#: shape. The number AFTER "checked" is the DEFECT count; the leading number is the
+#: CORPUS SIZE. Nothing distinguished them before, with two consequences found while
+#: driving v1.91's own release (argus-a155, 2026-08-24):
+#:   1. `5110 files checked; 87 with duplicate top-level YAML keys` was not recognised
+#:      as a tally at all (its noun is "keys", in no noun list), so the WHOLE LINE became
+#:      a finding signature — and adding three governed files moved 5110 to 5113, which
+#:      the comparator read as a brand-new failure. The defect count never moved: 87 both times.
+#:   2. `651 owned work-item(s) checked; 71 undispositioned-stale` WAS recognised, but the
+#:      count fell through to the leading-number fallback, so the comparator tracked 651->654
+#:      instead of 71->71 and reported a count increase. Again the defect count never moved.
+#: Both made the gate measure CORPUS GROWTH as REGRESSION — and since a release writes its
+#: own governed records between baseline and compare, the corpus always grows.
+_AGGREGATE_CHECKED_RE = re.compile(r"\bchecked\s*[;,]\s*(\d+)\b", re.IGNORECASE)
 _IDENTITY_RE = re.compile(
     r"(?:^|\s)(?:\.{0,2}/|[A-Za-z0-9_.-]+/)\S+|"
     r"\b[0-9a-f]{8}\b"
@@ -456,10 +484,18 @@ def _is_aggregate_finding(payload: str) -> bool:
         _AGGREGATE_COUNT_RE.search(payload)
         or _AGGREGATE_STATE_RE.search(payload)
         or _AGGREGATE_HAS_RE.search(payload)
+        # a `... checked; N ...` line is a tally by construction, whatever noun follows
+        or _AGGREGATE_CHECKED_RE.search(payload)
     )
 
 
 def _aggregate_failure_count(payload: str) -> int:
+    # AUTHORITATIVE when present: in `N checked; M ...` the defect count is M. Taking
+    # max() over all candidates would let the corpus size win, which is the bug this
+    # branch exists to prevent.
+    checked = _AGGREGATE_CHECKED_RE.search(payload)
+    if checked:
+        return int(checked.group(1))
     candidates: list[int] = []
     candidates.extend(int(value) for value in _AGGREGATE_COUNT_RE.findall(payload))
     candidates.extend(int(value) for value in _AGGREGATE_STATE_RE.findall(payload))
@@ -490,7 +526,8 @@ def parse_validator_output(output: str) -> dict:
                 "passed": int(summary_match.group(1)),
                 "failed": int(summary_match.group(2)),
                 "warnings": int(summary_match.group(3)),
-                "normalizable": int(summary_match.group(4)),
+                # optional since the v1.91 S1 AC3 format change; absent reads 0.
+                "normalizable": int(summary_match.group(4) or 0),
             }
             continue
         severity_match = SEVERITY_RE.match(line)
@@ -838,7 +875,17 @@ def compare_current(
             "evidence": current_evidence,
         },
         "regressions": regressions,
-        "verdict": "pass" if not regressions else "fail",
+        # v1.91 S1 AC4: the ONE predicate — same function the build ratchet
+        # (Step 0a) resolves through. Two readers, one journal, one answer.
+        "verdict": (
+            "pass"
+            if debt_verdict(
+                current_failed=current_evidence["summary"]["failed"],
+                ceiling=baseline_evidence["summary"]["failed"],
+                gating_growth=len(regressions),
+            ).ok
+            else "fail"
+        ),
     }
     _write_json(binding["run_folder"] / COMPARISON_REPORT, report)
     return report

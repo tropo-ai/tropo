@@ -268,7 +268,11 @@ def find_activation_run(root: Path, slug: str, generation: str) -> dict:
     if not GEN_RE.match(generation):
         raise ContinueRefusal(f"unusable generation {generation!r} from lineage")
     runs_dir = root / "playbook-runs"
-    pattern = f"agent-activation-{slug.lower()}-{generation}-*"
+    # metis-g111 2026-08-23 (self-heal after a machine reboot): run folders are named with the
+    # lowercase generation (agent-activation-metis-g111-...), lineage returns "G111", and
+    # pathlib.glob is case-sensitive here — so Continue refused a completed run it was
+    # looking straight at. Match both casings.
+    pattern = f"agent-activation-{slug.lower()}-{generation.lower()}-*"
     complete: list[dict] = []
     partial: list[str] = []
     for candidate in sorted(runs_dir.glob(pattern)) if runs_dir.is_dir() else []:

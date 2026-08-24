@@ -26,9 +26,16 @@ directly. It stops honest emitters from writing dishonest rows.
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Sequence, Tuple
+
+_TOOLS_DIR = Path(__file__).resolve().parent.parent
+if str(_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TOOLS_DIR))
+
+from lib import release_package as _pkg  # noqa: E402
 
 __all__ = [
     "RELEASE_EVENTS",
@@ -95,10 +102,26 @@ class EventContract:
     bus_type: Optional[str] = None
     #: A terminal fact may occur at most once per run.
     terminal: bool = False
+    #: HOW MANY WRITERS THIS EVENT IS ALLOWED (S2 AC1, 3fb41c99).
+    #: "one"          — exactly one emit site. The default, and the point of the AC:
+    #:                  package_frozen had TWO writers asserting two different facts
+    #:                  under one name, and that is what made the freeze step
+    #:                  unreachable for six hours on release night.
+    #: "engine-many"  — a library primitive emitted from many call sites.
+    #:
+    #: THE BOUND, ruled by argus-a154 2026-08-23 when accepting talos-t48's proposal:
+    #: `engine-many` is legitimate ONLY when every writer emits through ONE SHARED
+    #: PAYLOAD CONSTRUCTOR — many CALL SITES, one AUTHORSHIP. If two sites build the
+    #: payload independently, that is not engine-many; that is package_frozen wearing
+    #: a different label, and the declaration would re-open the exact defect this spec
+    #: exists to close. A cardinality field without that bound is an escape hatch.
+    writers_expected: str = "one"
 
 
-def _c(event, required, dedup=(), stepped=False, bus=None, terminal=False):
-    return EventContract(event, tuple(required), tuple(dedup), stepped, bus, terminal)
+def _c(event, required, dedup=(), stepped=False, bus=None, terminal=False,
+       writers="one"):
+    return EventContract(event, tuple(required), tuple(dedup), stepped, bus, terminal,
+                         writers)
 
 
 #: The finite table. An event outside it is refused, which is what makes the
@@ -139,6 +162,31 @@ RELEASE_EVENTS: Dict[str, EventContract] = {
              "instrument_step_uid", "verdict", "evidence_sha256"),
             dedup=("pipeline_run_uid", "candidate_sha256", "instrument"),
             stepped=True,
+            # engine-many: 9 sites across 4 files, ALL through eng.make_event —
+            # one authorship, many callers. Bound verified argus-a154 2026-08-23.
+            writers="engine-many",
+        ),
+        _c(
+            # v1.91 S2 (3fb41c99), Argus A155's ruling part 1: a name of its
+            # own, split from the generic "verification_receipt" above —
+            # that name is ALSO the dev-pipeline's per-step criterion
+            # receipt (389 production rows carrying rubric_scores/
+            # per_criterion/verifier_role_resolved, an unrelated shape), so
+            # a reader keying on the name alone could not tell the two
+            # apart. lib/release_verify.py's Receipt is the single writer
+            # (9e7003b1.py's emit_release_verification_receipt, one call
+            # site) and reader (the freeze gate, the publisher, the
+            # release-harness-gate). release_run_uid not pipeline_run_uid,
+            # and candidate_sha256 not package_sha256, matching the actual
+            # dataclass field names rather than the vocabulary's usual
+            # convention — the receipt is written before a freeze (and its
+            # package identity) can exist.
+            "release-verification-receipt",
+            ("receipt_kind", "instrument", "release_run_uid", "candidate_sha256",
+             "verdict", "executor_or_attester", "execution_mode", "evidence_ref",
+             "started_at", "completed_at"),
+            dedup=("release_run_uid", "candidate_sha256", "instrument"),
+            stepped=True,
         ),
         _c(
             "tropo.release.package_frozen",
@@ -157,12 +205,19 @@ RELEASE_EVENTS: Dict[str, EventContract] = {
             ("saga_id", "pipeline_run_uid", "checkpoint_id", "idempotency_key",
              "input_fingerprint"),
             dedup=("checkpoint_id", "idempotency_key"),
+            # engine-many: 2 sites, and the caller in tropo-publish-release.py:1831
+            # emits via the library's OWN journal.append + INTENT_EVENT rather than
+            # constructing a payload of its own. Bound verified argus-a154 2026-08-23.
+            writers="engine-many",
         ),
         _c(
             "tropo.release.saga_observed",
             ("saga_id", "pipeline_run_uid", "checkpoint_id", "idempotency_key",
              "outcome", "observation_sha256"),
             dedup=("checkpoint_id", "idempotency_key"),
+            # engine-many: 4 sites, same shared journal.append authorship as
+            # saga_intent. Bound verified argus-a154 2026-08-23.
+            writers="engine-many",
         ),
         _c(
             "tropo.release.published",
@@ -254,28 +309,41 @@ class AuthorizationContext:
             step_uids = _snapshot_step_uids(snapshot)
 
         identity: Dict[str, str] = {}
-        candidate: Optional[str] = None
-        frozen: Optional[str] = None
         receipt: Optional[str] = None
-        invalidated = set()
 
-        for row in _read_journal(journal_path):
+        rows = _read_journal(journal_path)
+        for row in rows:
             data = row.get("data") or {}
             for key in _IDENTITY_KEYS:
                 if key in data and key not in identity and data[key]:
                     identity[key] = str(data[key])
-            event = row.get("event")
-            if event == "tropo.release.candidate_built":
-                candidate = data.get("candidate_sha256")
-            elif event == "tropo.release.candidate_invalidated":
-                invalidated.add(data.get("candidate_sha256"))
-            elif event == "tropo.release.package_frozen":
-                frozen = data.get("package_sha256")
-            elif event == "tropo.release.published":
+            if row.get("event") == "tropo.release.published":
                 receipt = data.get("publication_receipt_sha256")
 
-        if candidate in invalidated:
-            candidate = None
+        # v1.91 S2 AC3 (3fb41c99): "which candidate is live" and "is this run
+        # frozen" are answered by lib/release_package's shared resolvers, not
+        # by a second loop here. The prior version tracked both itself and
+        # never handled `package_superseded` at all -- a package_superseded
+        # run read as still frozen, silently, in a reader nothing calls yet.
+        # Ruled in scope by argus-a154 2026-08-23: an unwired reader that
+        # DISAGREES with the shared resolver is a landmine, not a dead file --
+        # the day something wires it, it inherits a wrong answer with no
+        # warning, same shape as `package_frozen` acquiring two meanings.
+        run_uid = identity.get("pipeline_run_uid", "")
+        try:
+            active = _pkg.active_candidate(rows, run_uid)
+            frozen_payload = _pkg.active_frozen_payload(rows, run_uid)
+        except _pkg.PackageRefusal as exc:
+            # A genuinely ambiguous journal (two live candidates, a
+            # supersession that names bytes that are not the active freeze)
+            # is a substrate integrity problem, not an authorization verdict
+            # this context can quietly resolve around -- "context comes from
+            # the run, or it does not come at all" (module docstring).
+            raise ReleaseEventError(
+                f"cannot observe candidate/frozen state for run {run_uid!r}: {exc}"
+            ) from exc
+        candidate = active.get("candidate_sha256") if active else None
+        frozen = frozen_payload.get("package_sha256") if frozen_payload else None
 
         return cls(
             activation_uid=identity.get("activation_uid", ""),

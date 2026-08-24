@@ -41,7 +41,19 @@ STATE MACHINE (binding, per the dev-spec body):
     - state file {staged_sha, tag, version, staged_at}
     - EDGE SUMMARY -> STAGED, stop. Nothing public happened.
 
+  preflight --version <v> (S3 AC1/AC2, 176a8995 -- no TTY, asks nothing):
+    - runs the pre-outward-fire phase of the ONE gate roster
+      (tropo-release-preflight.py PRE_OUTWARD_FIRE_ROSTER): staged state,
+      pinned remote, read-only `git ls-remote` + https credential probe,
+      AC7 receipt set + release_entry_uid, authorization + CHANGELOG, zip +
+      sealed notes, release entry, gh auth, Supabase credentials, badge target
+    - every gate is reported; any refusal -> exit 2 (operational -> 3), with
+      the cure named. Green means the fire cannot refuse on a precondition.
+    - --fire runs this same phase BEFORE its confirm (v1.90 refused four
+      times AFTER Mike's yes; a refusal after the yes is an apology)
+
   --fire (gesture 2 -- TTY-only, default NO):
+    - PREFLIGHT (above) — red stops here, before anyone is asked
     - re-run the SAME outward gate (composition law 1: one gate, consulted twice)
     - HEAD == staged_sha, else STALE-STAGE refuse (restage cure named)
     - restore push URL -> push main + tags -> re-disable push URL
@@ -162,6 +174,10 @@ release_package = _load_vault_lib("tropo_publish_release_package", "release_pack
 # AC5 (cb194126): the finalizer mirrors its published event into the run journal,
 # so it needs the same assertion closure uses to read that journal back.
 release_closure = _load_vault_lib("tropo_publish_release_closure", "release_closure.py")
+# S3 AC4 (176a8995): the site's pinned identity (deploy repo, branch, badge
+# path, served endpoint) lives in release_site; the badge adapter reads it
+# from there rather than carrying a second copy.
+release_site = _load_vault_lib("tropo_publish_release_site", "release_site.py")
 
 _TROPO_SCRIPTS = tropo_roots.STUDIO_ROOT / ".tropo" / "scripts"
 if str(_TROPO_SCRIPTS) not in sys.path:
@@ -191,16 +207,19 @@ class PublishError(Exception):
 
 # ── small shared helpers ──────────────────────────────────────────────────────
 
-def _run(cmd, cwd=None, check=True, timeout=120):
-    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+def _run(cmd, cwd=None, check=True, timeout=120, env=None):
+    # S3 AC4 (176a8995): env is optional so the badge adapter can run git
+    # non-interactively (GIT_TERMINAL_PROMPT=0) without touching os.environ.
+    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout,
+                            env=env)
     if check and result.returncode != 0:
         raise PublishError(f"{' '.join(str(c) for c in cmd)} failed (exit {result.returncode}): "
                             f"{result.stderr.strip()[:500]}")
     return result
 
 
-def _git(args, cwd, check=True, timeout=120):
-    return _run(["git"] + args, cwd=cwd, check=check, timeout=timeout)
+def _git(args, cwd, check=True, timeout=120, env=None):
+    return _run(["git"] + args, cwd=cwd, check=check, timeout=timeout, env=env)
 
 
 def _state_path(version: str) -> Path:
@@ -337,56 +356,176 @@ def _human_size(size_bytes: int) -> str:
     return f"{size_bytes / (1024 * 1024):.1f} MB"
 
 
-def _stamp_os_release_badge(version: str, dist_dir: Path, released_at: str) -> None:
-    """AC3 (cb194126): the website badge, stamped from the artifact that shipped.
+#: S3 AC4 (176a8995): the badge file at the ROOT of the deploy repository —
+#: tropo-ai/tropo-app's /api/os-release route reads `os-release.json` from
+#: process.cwd(), i.e. the repo root. Distinct from OS_RELEASE_REL, which is
+#: the studio's own mirror of the site source inside argo-os.
+SITE_BADGE_FILE = release_site.BADGE_TARGET      # os-release.json
+SITE_BADGE_BRANCH = release_site.SITE_BRANCH     # main
+#: The adapter's working clone of the deploy repo, a sibling of the staged
+#: clone under the tropo_roots tree (never inside the studio).
+SITE_BADGE_CLONE_DIRNAME = "tropo-site-badge-clone"
 
-    Unlike the briefing notes this is genuinely fire-time — os-release.json lives
-    outside the box and feeds the website, so nothing about it is sealed. It was
-    SIX releases stale on the night v1.87 shipped (badge said v1.80), because it
-    was a hand-maintained surface with no gate.
+
+def _site_badge_clone_dir() -> Path:
+    return Path(tropo_roots.DEV_HOME) / SITE_BADGE_CLONE_DIRNAME
+
+
+def _sync_site_badge_clone(remote: str, clone_dir: Path) -> str:
+    """Clone or refresh the deploy repo's working clone; return origin/<branch>'s
+    tip — the lease the compare-and-swap push is taken against. Non-interactive
+    git throughout: a clone that would prompt fails here, named, not hangs."""
+    env = _git_noninteractive_env()
+    branch = SITE_BADGE_BRANCH
+    if not (clone_dir / ".git").exists():
+        clone_dir.parent.mkdir(parents=True, exist_ok=True)
+        _git(["clone", "--quiet", "--branch", branch, "--single-branch", remote,
+              str(clone_dir)], cwd=str(clone_dir.parent), env=env, timeout=600)
+    else:
+        origin = _git(["config", "--get", "remote.origin.url"], cwd=str(clone_dir),
+                      check=False, env=env).stdout.strip()
+        if origin != remote:
+            _git(["remote", "set-url", "origin", remote], cwd=str(clone_dir), env=env)
+        _git(["fetch", "--quiet", "origin", branch], cwd=str(clone_dir), env=env, timeout=600)
+        # A failed earlier attempt may have left a commit or a dirty file; the
+        # lease must be the REMOTE's tip, so the clone is reset to it exactly.
+        _git(["reset", "--quiet", "--hard"], cwd=str(clone_dir), env=env)
+        _git(["checkout", "--quiet", "-B", branch, f"origin/{branch}"], cwd=str(clone_dir), env=env)
+        _git(["reset", "--quiet", "--hard", f"origin/{branch}"], cwd=str(clone_dir), env=env)
+    return _git(["rev-parse", "--verify", f"origin/{branch}"], cwd=str(clone_dir),
+                env=env).stdout.strip()
+
+
+def _git_identity_args(clone_dir: Path, env: dict) -> list:
+    """`-c user.*` only when the clone resolves no identity (a fresh host, or a
+    test tree with no global config); otherwise the operator's own identity signs."""
+    email = _git(["config", "--get", "user.email"], cwd=str(clone_dir), check=False,
+                 env=env).stdout.strip()
+    if email:
+        return []
+    return ["-c", "user.name=tropo-publish-release", "-c", "user.email=release@tropo-ai.com"]
+
+
+def _stamp_os_release_badge(version: str, dist_dir: Path, released_at: str,
+                            state: dict | None = None) -> None:
+    """AC3 (cb194126) + S3 AC4 (176a8995): the website badge, stamped from the
+    artifact that shipped and WRITTEN TO THE REPOSITORY THE SITE DEPLOYS FROM.
+
+    It was SIX releases stale on the night v1.87 shipped because it was a
+    hand-maintained surface; v1.88-v1.90 stamped argo-os's own copy and printed
+    'commit + push', while the site builds from tropo-ai/tropo-app — a separate
+    private repo, badge at its root — so G107/G108 mirrored by hand and G110 found
+    the target on a Vercel screenshot (62deeec1). An instruction is knowledge
+    living in heads. This is an adapter: it resolves the deploy remote from
+    configuration (_site_badge_remote: publish-state `site_badge_remote`, env
+    TROPO_SITE_BADGE_REMOTE, committed default), clones/refreshes a working copy
+    under the tropo_roots tree, rewrites root os-release.json preserving every
+    field it does not own, commits, and pushes main with a compare-and-swap on
+    the tip it fetched — never --force. The studio's own mirror of the file
+    (tropo-app/os-release.json inside argo-os) is then kept in step when present,
+    so the two copies cannot drift apart silently; it is not the act.
 
     sizeBytes is measured off the real zip rather than copied from a receipt
-    field: the badge's job is to describe the download a visitor is about to
-    start, so it should be derived from the bytes that download serves.
+    field: the badge describes the download a visitor is about to start.
     """
     zip_path = dist_dir / f"tropo-os-v{version}.zip"
     if not zip_path.is_file():
         raise PublishError(
-            f"cannot stamp {OS_RELEASE_REL}: no package at {zip_path} to measure. "
+            f"cannot stamp {SITE_BADGE_FILE}: no package at {zip_path} to measure. "
             f"The badge reports the size of a real download."
         )
-    badge_path = Path(tropo_roots.STUDIO_ROOT) / OS_RELEASE_REL
-    if not badge_path.is_file():
-        raise PublishError(
-            f"cannot stamp {OS_RELEASE_REL}: file not found at {badge_path}. The "
-            f"website badge is a shipped-state surface and must exist to be stamped."
-        )
-    try:
-        badge = json.loads(badge_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise PublishError(f"{OS_RELEASE_REL} is not readable/parseable: {exc}") from exc
-
     size_bytes = zip_path.stat().st_size
-    badge.update({
+    stamp = {
         "version": f"v{version}",
         "fileSize": _human_size(size_bytes),
         "sizeBytes": size_bytes,
         "releasedAt": released_at,
-    })
+    }
+
+    resolved_state = state if state is not None else (_read_state(version) or {})
+    remote = _site_badge_remote(resolved_state)
+    clone_dir = _site_badge_clone_dir()
+    env = _git_noninteractive_env()
+    try:
+        lease = _sync_site_badge_clone(remote, clone_dir)
+    except PublishError as exc:
+        raise PublishError(
+            f"badge deploy remote {remote} could not be cloned/fetched into {clone_dir}: "
+            f"{exc}. Cure: set publish-state `site_badge_remote` or env "
+            f"TROPO_SITE_BADGE_REMOTE to a form of the tropo-ai/tropo-app remote this "
+            f"machine can push to (preflight's fire-badge-target gate probes it)."
+        ) from exc
+
+    badge_path = clone_dir / SITE_BADGE_FILE
+    if not badge_path.is_file():
+        raise PublishError(
+            f"cannot stamp {SITE_BADGE_FILE}: not found at the root of {remote} "
+            f"({SITE_BADGE_BRANCH} @ {lease[:12]}, clone {clone_dir}). The site serves the "
+            f"badge from its repo root, so this is not the repository tropo-ai.com deploys "
+            f"from, or the file moved. Cure: point site_badge_remote / "
+            f"TROPO_SITE_BADGE_REMOTE at the deploy repo."
+        )
+    try:
+        badge = json.loads(badge_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise PublishError(f"{SITE_BADGE_FILE} in {remote} is not readable/parseable: {exc}") from exc
+    if not isinstance(badge, dict):
+        raise PublishError(f"{SITE_BADGE_FILE} in {remote} is not a JSON object")
+
+    if all(badge.get(key) == value for key, value in stamp.items()):
+        print(f"  ✓ Website badge already v{version} in {remote} ({SITE_BADGE_BRANCH} @ "
+              f"{lease[:12]}) — nothing to push (re-fire is idempotent)")
+        _mirror_studio_badge(badge)
+        return
+
+    badge.update(stamp)
     try:
         badge_path.write_text(json.dumps(badge, indent=2) + "\n", encoding="utf-8")
     except OSError as exc:
-        raise PublishError(f"{OS_RELEASE_REL} could not be written: {exc}") from exc
-    print(f"  ✓ Website badge stamped v{version} ({_human_size(size_bytes)}, "
-          f"{size_bytes} bytes)")
-    # The site split is a separate deploy this tool does not own. Naming the exact
-    # command keeps the manual step explicit instead of leaving the badge stamped
-    # in the studio and stale on the website — which is the same
-    # correct-here-wrong-there shape the briefing notes had.
-    print(f"  → NEXT (manual): commit + push the stamped badge so the site deploy picks it up "
-          f"(Vercel deploys this repo on push):\n      git add {OS_RELEASE_REL} && "
-          f"git commit -m 'website badge v{version}' && git push   # v1.88 fire found the prior "
-          f"printed command (npm run deploy) did not exist — this is the path v1.87 and v1.88 actually used")
+        raise PublishError(f"{badge_path} could not be written: {exc}") from exc
+    identity = _git_identity_args(clone_dir, env)
+    _git(["add", SITE_BADGE_FILE], cwd=str(clone_dir), env=env)
+    _git(identity + ["commit", "--quiet", "-m", f"website badge v{version}"],
+         cwd=str(clone_dir), env=env)
+    commit = _git(["rev-parse", "HEAD"], cwd=str(clone_dir), env=env).stdout.strip()
+    # Compare-and-swap on the tip we fetched: a moved remote refuses, never
+    # overwritten (the same lease discipline as the release push, v1.90 AC2).
+    push = _git(["push", "--quiet",
+                 f"--force-with-lease=refs/heads/{SITE_BADGE_BRANCH}:{lease}",
+                 "origin", f"{commit}:refs/heads/{SITE_BADGE_BRANCH}"],
+                cwd=str(clone_dir), check=False, env=env, timeout=300)
+    if push.returncode != 0:
+        raise PublishError(
+            f"website badge push to {remote} refused (remote {SITE_BADGE_BRANCH} moved past "
+            f"{lease[:12]}, or transport failed): {_first_line(push.stderr)}. The release "
+            f"itself is live; re-fire to retry the badge (the adapter re-fetches and "
+            f"re-stamps), or set site_badge_remote / TROPO_SITE_BADGE_REMOTE if the "
+            f"target is wrong."
+        )
+    print(f"  ✓ Website badge stamped v{version} ({stamp['fileSize']}, {size_bytes} bytes) "
+          f"and pushed to {remote} {SITE_BADGE_BRANCH} {commit[:12]} (was {lease[:12]}); "
+          f"the site deploys from there — no manual step.")
+    _mirror_studio_badge(badge)
+
+
+def _mirror_studio_badge(badge: dict) -> None:
+    """Keep argo-os's own copy of the site source's badge in step with what was
+    deployed, when the studio carries one. Best effort by design: the deploy
+    repo is the act; a missing studio mirror is not a refusal."""
+    mirror = Path(tropo_roots.STUDIO_ROOT) / OS_RELEASE_REL
+    if not mirror.is_file():
+        return
+    try:
+        current = json.loads(mirror.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        current = {}
+    if current == badge:
+        return
+    try:
+        mirror.write_text(json.dumps(badge, indent=2) + "\n", encoding="utf-8")
+        print(f"  ✓ studio mirror {OS_RELEASE_REL} kept in step with the deployed badge")
+    except OSError as exc:
+        print(f"  ! studio mirror {mirror} not updated: {exc}", file=sys.stderr)
 
 
 def _verify_sealed_briefing_notes(version: str, dist_dir: Path) -> None:
@@ -1122,6 +1261,56 @@ def _run_journal_folder(ac7_context: dict | None) -> Path | None:
     return Path(tropo_roots.STUDIO_ROOT) / run_folder
 
 
+def _record_fire_authorized(ac7_context: dict) -> None:
+    """v1.91 S2 AC1/AC5 (3fb41c99): the moment the TTY confirm returns yes.
+
+    Argus A154's honest-emit-point ruling: `fire_authorized` is the
+    AUTHORIZATION half of the saga, declared with no writer (same shape as
+    `package_superseded`). This is the one place the fact becomes true --
+    not the rehearsal scorecard builder, which constructs SYNTHETIC
+    principal_inputs and would put a rehearsal on the permanent record.
+
+    `actor` resolves to "mike": `_confirm_tty` refuses outright when stdin
+    is not a real TTY (no silent auto-confirm), which is this tool's only
+    signal a human is present, and every other human-gated act in this
+    studio (tropo-lineage.py `--by mike`, et al.) uses the same convention.
+    `approval_uid` is minted fresh -- it identifies THIS yes, not a lookup
+    against something recorded earlier.
+
+    Best-effort: a failure here must never block the fire itself (the
+    public act this event merely records), matching
+    `_mirror_published_event_to_journal`'s own recoverable-by-rerun stance.
+    Idempotent per the declared cardinality ("once per active package"):
+    skips if this package_sha256 already has one on the record.
+    """
+    run_folder = _run_journal_folder(ac7_context)
+    if run_folder is None:
+        return
+    package_sha256 = ac7_context.get("package_sha256", "")
+    try:
+        runtime = _load_pipeline_runtime()
+        for row in runtime.read_events(run_folder):
+            if row.get("event") != "tropo.release.fire_authorized":
+                continue
+            if (row.get("data") or {}).get("package_sha256") == package_sha256:
+                return
+        identity = ac7_context.get("identity")
+        run_uid = getattr(identity, "run_uid", "")
+        runtime.append_event(run_folder, runtime.make_event(
+            "tropo.release.fire_authorized", "mike",
+            data={
+                "saga_id": _saga().saga_id_for(run_uid),
+                "pipeline_run_uid": run_uid,
+                "package_sha256": package_sha256,
+                "approval_uid": secrets.token_hex(4),
+            },
+            trace_id=run_uid,
+        ))
+    except Exception as exc:
+        print(f"  ! fire_authorized not recorded ({exc}) -- the fire itself "
+              f"is unaffected", file=sys.stderr)
+
+
 def _mirror_published_event_to_journal(
     ac7_context: dict | None,
     event_data: dict,
@@ -1367,7 +1556,13 @@ def _changelog_equality_assert(build_dir: Path, version: str):
     """CHANGELOG equality (AC-10): the [version] section must match between the
     build's own CHANGELOG.md and argo-os's own root CHANGELOG.md — divergence
     means one was edited without the other; rebuild is the cure, not a
-    hand-merge here."""
+    hand-merge here.
+
+    S3 AC3 (176a8995): this is no longer the FIRST place a missing [version]
+    section refuses. tropo-build-release.py runs lib/release_authorization.
+    check_changelog before Step 0 (dry-run included), so a box with no
+    [version] section is never built; this stage-time assert remains as the
+    equality check between the frozen box and the studio root."""
     box_cl = build_dir / "CHANGELOG.md"
     studio_cl = tropo_roots.STUDIO_ROOT / "CHANGELOG.md"
     if not box_cl.is_file() or not studio_cl.is_file():
@@ -1459,9 +1654,16 @@ def require_ac7_receipt_set(state: dict, version: str) -> dict:
             f"was produced outside the Stage-6 path, or not at all."
         )
     package_sha256 = str(frozen["package_sha256"])
+    # v1.91 S2 (3fb41c99), Argus A155's ruling parts 2/3: receipts bind
+    # candidate_sha256, not package_sha256 -- a receipt is written at verify
+    # time, before a freeze (and its package identity) exists. The frozen
+    # package's digest and the candidate's digest are the same bytes by
+    # construction (freezing does not rehash), so filtering against
+    # package_sha256 here is still correct -- only the receipt FIELD name
+    # changed.
     receipts = [
         receipt for receipt in receipts
-        if str(receipt.get("package_sha256") or "") == package_sha256
+        if str(receipt.get("candidate_sha256") or "") == package_sha256
     ]
 
     try:
@@ -1716,7 +1918,8 @@ def site_ref_cas_push(clone_dir, ref, site_commit, expected_remote_tip=None):
         lease = tracking.stdout.strip() if tracking.returncode == 0 else ""
     push_args = ["push", "--force-with-lease" + (f"={ref}:{lease}" if lease else ""),
                  "origin", f"{site_commit}:{ref}"]
-    push = _git(push_args, str(clone_dir), check=False)
+    push = _git(push_args, str(clone_dir), check=False,
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})  # S3 AC2: never prompt after confirm
     if push.returncode != 0:
         return _saga().StepResult(
             checkpoint_id="site_ref", outcome=_saga().OUTCOME_REFUSED,
@@ -2053,6 +2256,346 @@ def _verify_published_update_manifest(version: str) -> dict:
     return manifest
 
 
+# ── S3 AC1 / AC2 (176a8995): preflight — every fire precondition, BEFORE the confirm ──
+#
+# v1.90's fire was authorised at the TTY and then refused four separate times
+# after the yes (62deeec1). Every one of those was knowable first. This block
+# runs the `pre-outward-fire` phase of the ONE gate roster (tropo-release-
+# preflight.py PRE_OUTWARD_FIRE_ROSTER, lib/release_gates.py) with verifiers
+# that are the fire's own checks run early, and it never prompts.
+
+#: Wall-clock ceiling for each read-only transport probe. v1.90 hung 120s on a
+#: credential prompt; a probe that cannot answer inside this bound is reported
+#: as an operational error naming the remote, never waited on.
+TRANSPORT_PROBE_TIMEOUT_S = 45
+
+#: S3 AC4 (176a8995): the repository the website deploys from. The site builds
+#: from tropo-ai/tropo-app (a separate private repo, badge at its root), never
+#: from argo-os — G107/G108 mirrored by hand, G110 found it on a Vercel
+#: screenshot. Overridable per stage (publish-state `site_badge_remote`) or per
+#: host (env TROPO_SITE_BADGE_REMOTE), e.g. for an ssh alias.
+DEFAULT_SITE_BADGE_REMOTE = release_site.SITE_REPO  # https://github.com/tropo-ai/tropo-app.git
+
+
+def _site_badge_remote(state: dict | None) -> str:
+    """S3 AC4 (176a8995): the badge deploy remote, resolved like _site_endpoint_url —
+    staged state, then environment, then the committed default."""
+    return str(
+        (state or {}).get("site_badge_remote")
+        or os.environ.get("TROPO_SITE_BADGE_REMOTE")
+        or DEFAULT_SITE_BADGE_REMOTE
+    )
+
+
+def _git_noninteractive_env() -> dict:
+    """git that can refuse but never ask (S3 AC2). Terminal prompts off, ssh in
+    batch mode, Git Credential Manager non-interactive; a configured askpass /
+    credential helper still answers, which is exactly what the probe measures."""
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env.setdefault("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
+    env.setdefault("GCM_INTERACTIVE", "Never")
+    return env
+
+
+def _classify_git_failure(stderr: str) -> str:
+    """A short named reason for a failed non-interactive git probe."""
+    text = stderr or ""
+    if "could not read Username" in text or "terminal prompts disabled" in text \
+            or "Authentication failed" in text:
+        return "no non-interactive http(s) credential"
+    if "Could not resolve host" in text or "unable to access" in text:
+        return "host not reachable (DNS / network)"
+    if "Permission denied (publickey)" in text or "Host key verification failed" in text:
+        return "ssh refused (key / agent / host key)"
+    if "Repository not found" in text or "not found" in text:
+        return "repository not found (or no read access)"
+    return "git refused"
+
+
+def _first_line(text: str) -> str:
+    """The most telling line of a git stderr: the rejection/error line when there
+    is one (a push prints 'To <remote>' first), else the first non-blank line."""
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    for line in lines:
+        if "rejected" in line or "error:" in line or "fatal:" in line:
+            return line[:200]
+    return lines[0][:200] if lines else ""
+
+
+def probe_git_transport(remote: str, *, timeout: int = TRANSPORT_PROBE_TIMEOUT_S) -> str:
+    """S3 AC2 (176a8995): prove the pinned remote will talk to us, read-only, no prompt.
+
+    Two probes. `git ls-remote --heads <remote>` is the spec's: it proves the
+    host answers and any read auth holds. For an http(s) remote it is not
+    enough on its own — a PUBLIC repo answers ls-remote anonymously and the push
+    still prompts 'Username for https://github.com' (v1.90's exact shape: gh was
+    set up for ssh git operations while the release pins an https remote). So
+    the second probe asks git's credential machinery, non-interactively, whether
+    it holds a credential for that host: `git credential fill`. The answer is
+    discarded unread beyond its exit status — nothing is printed, stored or
+    rejected. Returns a one-line account on success; raises PublishError naming
+    the probe, the remote and the cure on refusal; TimeoutExpired propagates as
+    the operational class.
+    """
+    env = _git_noninteractive_env()
+    probe = ["git", "ls-remote", "--heads", remote]
+    result = subprocess.run(probe, capture_output=True, text=True, timeout=timeout,
+                            env=env, stdin=subprocess.DEVNULL)
+    if result.returncode != 0:
+        reason = _classify_git_failure(result.stderr)
+        raise PublishError(
+            f"git ls-remote {remote} failed (exit {result.returncode}: {reason}; "
+            f"{_first_line(result.stderr)}). The push after the confirm would "
+            f"hang or fail the same way. Cure: for https, give git a non-interactive "
+            f"credential for this host (`gh auth setup-git` after `gh auth login`, "
+            f"or a credential helper / GIT_ASKPASS); for ssh, load the key into the "
+            f"agent (BatchMode); or pin a remote this machine can reach."
+        )
+    heads = len([line for line in result.stdout.splitlines() if line.strip()])
+    account = f"git ls-remote {remote}: {heads} head(s) advertised"
+    scheme = remote.split("://", 1)[0].lower() if "://" in remote else ""
+    if scheme in ("http", "https"):
+        host = remote.split("://", 1)[1].split("/", 1)[0]
+        fill = subprocess.run(
+            ["git", "credential", "fill"],
+            input=f"protocol={scheme}\nhost={host}\n\n",
+            capture_output=True, text=True, timeout=timeout, env=env,
+        )
+        # Never log fill's stdout: on success it is the credential itself.
+        if fill.returncode != 0 or "password=" not in fill.stdout:
+            raise PublishError(
+                f"git ls-remote {remote} answered, but git holds no non-interactive "
+                f"credential for {scheme}://{host} (git credential fill exit "
+                f"{fill.returncode}) — the push after the confirm would prompt "
+                f"'Username for {scheme}://{host}' and hang (v1.90: 120s). Cure: "
+                f"`gh auth setup-git` (gh as the https credential helper), or store "
+                f"a credential in a helper / GIT_ASKPASS, or pin an ssh remote."
+            )
+        account += f"; https credential for {host} present"
+    return account
+
+
+def probe_badge_target(remote: str, *, timeout: int = TRANSPORT_PROBE_TIMEOUT_S) -> str:
+    """S3 AC4 (176a8995): the badge deploy remote answers a read-only probe without
+    a prompt, so the adapter's push cannot hang after the confirm. Reports a
+    classified reason rather than git's stderr: this is a second remote and its
+    failure must not read as the pinned release remote being blamed."""
+    result = subprocess.run(["git", "ls-remote", "--heads", remote], capture_output=True,
+                            text=True, timeout=timeout, env=_git_noninteractive_env(),
+                            stdin=subprocess.DEVNULL)
+    if result.returncode != 0:
+        raise PublishError(
+            f"badge deploy remote {remote} did not answer a read-only probe "
+            f"({_classify_git_failure(result.stderr)}, git exit {result.returncode}). "
+            f"Cure: set publish-state `site_badge_remote` or env TROPO_SITE_BADGE_REMOTE "
+            f"to a form of the tropo-ai/tropo-app remote this machine can push to "
+            f"(an ssh alias, or https after `gh auth setup-git`)."
+        )
+    return f"badge deploy remote {remote} answers (read-only probe)"
+
+
+def _load_release_preflight():
+    """tropo-release-preflight.py — the one gate roster (lib/release_gates.py)."""
+    path = Path(__file__).resolve().with_name("tropo-release-preflight.py")
+    if not path.is_file():
+        raise PublishError(
+            f"{path} not found — the pre-outward-fire roster lives there; "
+            f"without it no preflight can run and no fire may be confirmed")
+    return _load_vault_lib_by_path("tropo_publish_release_preflight", path)
+
+
+def _gate_verifier(gates, gate_id: str, check):
+    """Wrap one fire check as a gate verifier: a PublishError / authorization
+    refusal is a determinate REFUSED; a timeout or any other exception is the
+    retryable OPERATIONAL class; the check's returned string is the PASS detail."""
+    def verifier(context):
+        try:
+            detail = check(context)
+        except (PublishError, ReleaseAuthorizationError) as exc:
+            return gates.GateOutcome(gate_id, gates.VERDICT_REFUSED, str(exc))
+        except subprocess.TimeoutExpired as exc:
+            return gates.GateOutcome(
+                gate_id, gates.VERDICT_ERROR,
+                f"timed out after {exc.timeout}s: {' '.join(map(str, exc.cmd))}")
+        except Exception as exc:  # noqa: BLE001 — the classification point
+            return gates.GateOutcome(
+                gate_id, gates.VERDICT_ERROR, f"{type(exc).__name__}: {exc}")
+        return gates.GateOutcome(gate_id, gates.VERDICT_PASS, detail or "ok")
+    return verifier
+
+
+def _pre_outward_fire_verifiers(gates) -> dict:
+    """S3 AC1 (176a8995): one verifier per PRE_OUTWARD_FIRE_ROSTER row — each is
+    the fire's own check, run before anyone is asked. Module globals are looked
+    up at call time so the test seams that patch them apply."""
+
+    def staged_state(ctx):
+        state = ctx["publish_state"]
+        clone_dir = Path(str(state.get("clone_dir") or ""))
+        if not clone_dir.is_dir() or not (clone_dir / ".git").exists():
+            raise PublishError(
+                f"staged clone {clone_dir} is not a git checkout — re-run stage")
+        head = _git(["rev-parse", "HEAD"], cwd=str(clone_dir)).stdout.strip()
+        if head != state.get("staged_sha"):
+            raise PublishError(
+                f"STALE-STAGE: clone HEAD ({head[:12]}) != staged_sha "
+                f"({str(state.get('staged_sha'))[:12]}). Re-run stage, then fire.")
+        return f"clone HEAD == staged_sha {head[:12]} (tag {state.get('tag')})"
+
+    def remote_identity(ctx):
+        remote = _require_pinned_remote(ctx["remote_identity"])
+        _require_clone_origin(Path(str(ctx["publish_state"].get("clone_dir"))), remote)
+        return f"pinned remote {remote}; staged clone origin matches"
+
+    def transport(ctx):
+        return probe_git_transport(str(ctx["provider_reachability"]))
+
+    def receipt_set(ctx):
+        ac7 = require_ac7_receipt_set(ctx["publish_state"], ctx["version_string"])
+        entry_uid = _release_entry_uid_for(ac7["identity"])
+        return (f"receipt set bound to package {str(ac7.get('package_sha256'))[:12]}; "
+                f"activation {ac7['identity'].activation_uid} names "
+                f"release_entry_uid {entry_uid}")
+
+    def authorization(ctx):
+        require_release_authorization(
+            ctx["fire_authorization"], "produce-release-folder",
+            require_human_signoff=True, version=ctx["version_string"])
+        return "release-authorization key verifies with human signoff; CHANGELOG names the version"
+
+    def package_asset(ctx):
+        zip_path = Path(ctx["frozen_package"])
+        if not zip_path.is_file():
+            raise PublishError(
+                f"zip asset not found at {zip_path} — zip-less publishes refuse; "
+                f"was the build's Step 11 run, or the hand-back received?")
+        _verify_sealed_briefing_notes(ctx["version_string"], zip_path.parent)
+        return (f"{zip_path.name} present ({zip_path.stat().st_size} bytes); "
+                f"sealed briefing notes name v{ctx['version_string']}")
+
+    def release_entry(ctx):
+        path, fm = _find_release_entry(ctx["version_string"])
+        if path is None:
+            raise PublishError(
+                f"no type:release entry for {ctx['version_string']} — the fire's "
+                f"shipped flip and the update manifest need one")
+        return f"release entry {path.stem} (status={str((fm or {}).get('status'))})"
+
+    def gh_auth(ctx):
+        host = CANONICAL_GH_REPOSITORY.split("/", 1)[0]
+        try:
+            result = subprocess.run(
+                ["gh", "auth", "status", "--hostname", host], capture_output=True,
+                text=True, timeout=30, stdin=subprocess.DEVNULL,
+                env=dict(os.environ, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1"))
+        except FileNotFoundError:
+            raise PublishError(
+                "gh CLI not installed — `gh release create` cannot run. Cure: "
+                "install gh, then `gh auth login --hostname %s`." % host)
+        if result.returncode != 0:
+            raise PublishError(
+                f"gh auth status --hostname {host} failed (exit {result.returncode}: "
+                f"{_first_line(result.stderr or result.stdout)}) — `gh release create` "
+                f"would refuse after the confirm. Cure: gh auth login --hostname {host}")
+        return f"gh auth status green for {host}"
+
+    def supabase_credentials(ctx):
+        url, _key = _load_supabase_credentials()
+        host = url.split("://", 1)[-1].split("/", 1)[0]
+        return f"Supabase credentials resolved for {host} (secret not shown)"
+
+    def badge_target(ctx):
+        return probe_badge_target(_site_badge_remote(ctx["publish_state"]))
+
+    checks = {
+        "fire-staged-state": staged_state,
+        "fire-remote-identity": remote_identity,
+        "fire-transport": transport,
+        "fire-receipt-set": receipt_set,
+        "fire-authorization": authorization,
+        "fire-package-asset": package_asset,
+        "fire-release-entry": release_entry,
+        "fire-gh-auth": gh_auth,
+        "fire-supabase-credentials": supabase_credentials,
+        "fire-badge-target": badge_target,
+    }
+    return {gate_id: _gate_verifier(gates, gate_id, check) for gate_id, check in checks.items()}
+
+
+def _pre_outward_fire_context(version: str, state: dict) -> dict:
+    """The facts the phase reads, keyed by lib/release_gates INPUT names (so the
+    registry can tell an absent input from a failed check) plus the staged
+    state itself for the verifiers."""
+    remote = str(state.get("remote") or DEFAULT_REMOTE)
+    zip_path = tropo_roots.RELEASES_DIR / f"v{version}" / "dist" / f"tropo-os-v{version}.zip"
+    return {
+        "version_string": version,
+        "publish_state": state,
+        "staged_release_commit": state.get("staged_sha"),
+        "staged_site_commit": state.get("clone_dir"),
+        "remote_identity": state.get("remote"),
+        "provider_reachability": remote,
+        "provider_credentials": "git-https, gh, supabase",
+        "frozen_package": str(zip_path),
+        "fire_authorization": state.get("activation_uid"),
+    }
+
+
+def run_fire_preflight(version: str, state: dict) -> int:
+    """S3 AC1 (176a8995): run every pre-outward-fire gate and report ALL of them.
+
+    Returns 0 when every gate passed (the fire cannot then refuse on a
+    precondition), 2 when any gate REFUSED (determinate: the world says no),
+    3 when a gate could not reach an answer (operational: retry when the world
+    changes). Asks nothing. Evidence is appended to <release folder>/preflight.jsonl
+    next to the publish-state, in the registry's own row shape.
+    """
+    preflight = _load_release_preflight()
+    registry = preflight.build_registry(fire_verifiers=_pre_outward_fire_verifiers(preflight))
+    context = _pre_outward_fire_context(version, state)
+    outcomes = registry.run_phase("pre-outward-fire", context)
+
+    print(f"--- preflight v{version}: pre-outward-fire ({len(outcomes)} gate(s)) ---")
+    for outcome in outcomes:
+        print(f"  [{outcome.verdict.upper():<17}] {outcome.gate_id:<26} {outcome.detail}")
+    try:
+        evidence = preflight.write_evidence(
+            _state_path(version).parent, "pre-outward-fire", outcomes, registry)
+        print(f"  evidence: {evidence}")
+    except OSError as exc:
+        print(f"  ! evidence not written: {exc}", file=sys.stderr)
+
+    refused = [o.gate_id for o in outcomes if o.verdict == preflight.VERDICT_REFUSED]
+    errored = [o.gate_id for o in outcomes if o.verdict == preflight.VERDICT_ERROR]
+    if refused or errored:
+        print(f"PREFLIGHT RED — {len(refused)} refusal(s) {refused}, "
+              f"{len(errored)} operational error(s) {errored}.", file=sys.stderr)
+        print(f"  Nothing was asked and nothing was published. Cure the named gates, then: "
+              f"python3 vault/tools/tropo-publish-release.py preflight --version {version}",
+              file=sys.stderr)
+        return 2 if refused else 3
+    print(f"PREFLIGHT GREEN — {len(outcomes)} gate(s) passed; the fire cannot refuse "
+          f"on a precondition.")
+    return 0
+
+
+def cmd_preflight(args) -> int:
+    """`preflight --version <v>` — S3 AC1's command. Same resolution as fire, no TTY."""
+    version = getattr(args, "version", None) or _latest_staged_version()
+    if not version:
+        print("✗ No staged version found (and none given via --version). "
+              "Not staged — run stage first.", file=sys.stderr)
+        return 3
+    state = _read_state(version)
+    if not state:
+        print(f"✗ No publish-state for v{version} — not staged. Run stage first.",
+              file=sys.stderr)
+        return 3
+    print(f"=== PREFLIGHT v{version} (every fire precondition, before anyone is asked) ===\n")
+    return run_fire_preflight(version, state)
+
+
 def cmd_fire(args) -> int:
     version = args.version or _latest_staged_version()
     if not version:
@@ -2062,6 +2605,14 @@ def cmd_fire(args) -> int:
     if not state:
         print(f"✗ No publish-state for v{version} — not staged. Run stage first.", file=sys.stderr)
         return 3
+    # S3 AC1 (176a8995): the whole pre-outward-fire phase runs BEFORE the
+    # confirm. Green here means nothing below may refuse on a precondition;
+    # red here is a refusal, not an apology after the yes.
+    preflight_rc = run_fire_preflight(version, state)
+    if preflight_rc:
+        print("✗ REFUSED by preflight — nothing was asked, nothing was published.",
+              file=sys.stderr)
+        return preflight_rc
     try:
         _ac7 = require_ac7_receipt_set(state, version)
         _ac7["transaction_id"] = f"fire-{version}-{_ac7['package_sha256'][:12]}"
@@ -2082,6 +2633,8 @@ def cmd_fire(args) -> int:
     if not _confirm_tty(f"Fire v{version} to GitHub + Supabase? This is the one public act."):
         print("  ✗ Refused (default NO / not confirmed).", file=sys.stderr)
         return 6
+
+    _record_fire_authorized(_ac7)
 
     print("\nRe-running the outward gate —")
     try:
@@ -2146,7 +2699,10 @@ def cmd_fire(args) -> int:
                   file=sys.stderr)
             push_ok = False
         else:
-            _git(["push", "origin", state["tag"], "--force"], cwd=str(clone_dir))
+            # S3 AC2 (176a8995): with preflight green this cannot prompt; make any
+            # residual credential loss fail immediately instead of hanging 120s.
+            _git(["push", "origin", state["tag"], "--force"], cwd=str(clone_dir),
+                 env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
             push_ok = True
     except PublishError as e:
         print(f"  ✗ push failed: {e}", file=sys.stderr)
@@ -2202,8 +2758,10 @@ def cmd_fire(args) -> int:
         # AC2: the build stamped it; confirm the SEALED bytes agree before we go on.
         _verify_sealed_briefing_notes(version, dist_dir)
         # AC3: badge is outside the box, so the fire owns it end to end.
+        # S3 AC4 (176a8995): an adapter to the deploy repo, not a printed step.
         _stamp_os_release_badge(
-            version, dist_dir, datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            version, dist_dir, datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            state=state,
         )
         # AC4: flip BEFORE generation — the generator reads shipped entries from
         # the index, so a later flip yields a manifest naming the prior version.
@@ -2426,13 +2984,13 @@ def _frozen_package_sha256(version: str, activation_uid: str) -> str:
     return str(frozen.get("package_sha256") or "")
 
 
-def _git(args, cwd, check=True, timeout=120):
+def _git(args, cwd, check=True, timeout=120, env=None):
     # This later definition SHADOWS the module's original _git (line ~202) for every caller
     # in the module — Python module-level redefinition. It arrived with the AC6 hand-back
     # work signature-narrowed, which crashed _require_clone_origin(check=False) at the v1.88
     # stage gesture (TypeError). Restored to delegate to the module's own _run exactly like
-    # the original, so both definitions are behaviorally one.
-    return _run(["git"] + list(args), cwd=cwd, check=check, timeout=timeout)
+    # the original, so both definitions are behaviorally one (env added by S3 AC4, both).
+    return _run(["git"] + list(args), cwd=cwd, check=check, timeout=timeout, env=env)
 
 
 def cmd_handback(args) -> int:
@@ -2545,6 +3103,13 @@ def main() -> int:
     s.add_argument("--allow-delete", action="store_true",
                    help="acknowledge + proceed despite non-allowlisted deletions")
     s.set_defaults(func=cmd_stage)
+
+    # S3 AC1 (176a8995): every fire precondition, before anyone is asked.
+    pf = sub.add_parser("preflight", help="run every fire precondition (transport, receipts, "
+                                          "authorization, credentials, badge target) with no "
+                                          "prompt; green means the fire cannot refuse on one")
+    pf.add_argument("--version", default=None, help="default: the most recently staged version")
+    pf.set_defaults(func=cmd_preflight)
 
     f = sub.add_parser("fire", help="--fire: the one public act (TTY-only, default NO)")
     f.add_argument("--version", default=None, help="default: the most recently staged version")

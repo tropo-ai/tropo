@@ -734,9 +734,14 @@ def plan_release_lock(
                     root_uid, activation_uid, release_plan_uid, "release-plan",
                     locked_by, time.strftime("%Y-%m-%d"), RELEASE_PIPELINE_UID),
                 governed=True)
+    # S3 AC7 (176a8995): the activation carries the minted release_entry_uid
+    # in the SAME transaction as the plan, run, entry and run_created row —
+    # fire's _release_entry_uid_for reads it off the activation and v1.90's
+    # lock never wrote it (a6ebf96e was patched by hand after the confirm).
     activation_text = ignition.render_activation(
         activation_uid, root_uid, run_uid, RELEASE_PIPELINE_UID,
         release_plan_uid, "release-plan", locked_by, time.strftime("%Y-%m-%d"),
+        release_entry_uid=release_uid,
     )
     plan.create(files_dir / f"{activation_uid}.md", activation_text, governed=True)
     plan.create(files_dir / f"{run_uid}.md",
@@ -764,6 +769,11 @@ def plan_release_lock(
                 ))
     plan.notes["release_entry_uid"] = release_uid
     plan.notes["saga_id"] = saga_id
+    # v1.91 S2 AC1/AC5 (3fb41c99): carried for scope_locked's bus emission in
+    # lock_release_plan(), after apply_plan() durably commits this transaction.
+    plan.notes["activation_uid"] = activation_uid
+    plan.notes["activation_root_uid"] = root_uid
+    plan.notes["release_pipeline_run_uid"] = run_uid
 
     plan.patch(
         entry["path"], entry["raw"],
@@ -1037,6 +1047,63 @@ reports definition drift and never heals it (0a0a6777 §1).
 """
 
 
+#: This tool's own registered uid (its frontmatter `uid:`), so scope_locked's
+#: emitter names itself the way every non-agent emitter in this studio does.
+TOOL_UID = "6a41f0c9"
+
+
+def _emit_scope_locked(release_plan_uid: str, notes: dict, files_dir: Path) -> None:
+    """v1.91 S2 AC1/AC5 (3fb41c99). Argus A155's ruling: scope_locked is the
+    fact that AUTHORIZED the run to exist, not an event OF the run -- Mike
+    locking a release's scope is principal authority, and principal
+    authority goes on the studio event bus (2fae6312's design intent), not
+    into the run's own pre-bootstrap journal seed. Appending it there is
+    exactly what collided with 9e7003b1.py's bootstrap-adoption gate; that
+    gate's invariant (a fresh lock-seeded run carries exactly one adoptable
+    event) is untouched.
+
+    Called only after apply_plan() durably commits -- never announce a lock
+    that did not land. Best-effort: a broken emitter costs the crew a
+    notification, never the lock itself (same swallow-everything stance as
+    tropo-lineage.py's own crew announce()). `release_plan_uid` comes from
+    the caller's own parameter, not `notes` -- the lock never stashes the
+    subject uid it was already given.
+
+    `files_dir` derives the studio root the SAME way `plan_release_lock`'s
+    own governed-file writes already do, rather than resolving from this
+    module's own `__file__` -- test_release_plan_lock_end_to_end.py loads
+    this module directly from its real production path (a legitimate,
+    different isolation strategy than temp_studio.py's file-copying: it
+    redirects every write via `files_dir`/`runs_dir` parameters and keeps
+    the module itself pointed at production). A `__file__`-relative
+    resolution ignores that redirection and writes through the REAL
+    vault/tools/tropo-emit-event.py against the REAL event bus -- found
+    live: 40 stray rows of this event landed in production
+    vault/events/streams/ during this fix's own test runs before this
+    parameter existed. Cleaned up; not repeatable now.
+    """
+    data = {
+        "saga_id": notes.get("saga_id", ""),
+        "release_plan_uid": release_plan_uid,
+        "activation_uid": notes.get("activation_uid", ""),
+        "activation_root_uid": notes.get("activation_root_uid", ""),
+        "pipeline_run_uid": notes.get("release_pipeline_run_uid", ""),
+        "release_entry_uid": notes.get("release_entry_uid", ""),
+    }
+    studio_root = files_dir.resolve().parents[1]
+    tool = studio_root / "vault" / "tools" / "tropo-emit-event.py"  # emit-event
+    if not tool.is_file():
+        return
+    try:
+        subprocess.run(
+            [sys.executable, str(tool), "--type", "tropo.release.scope_locked",
+             "--source", "/tools/tropo-lock-release-plan", "--source-uid", TOOL_UID,
+             "--lifecycle", "evergreen", "--data", json.dumps(data)],
+            capture_output=True, text=True, timeout=30, cwd=str(studio_root))
+    except Exception:
+        pass
+
+
 def lock_release_plan(release_plan_uid: str, locked_by: str,
                       files_dir: Path = VAULT_FILES,
                       runs_dir: Path = PIPELINE_RUNS) -> tuple[int, str]:
@@ -1075,6 +1142,7 @@ def lock_release_plan(release_plan_uid: str, locked_by: str,
                 return 0, (f"{release_plan_uid} already locked by this exact plan "
                            "(idempotent retry)")
             journal = lt.apply_plan(plan)
+            _emit_scope_locked(release_plan_uid, plan.notes, files_dir)
     except (LockRefused, fan_in.FanInRefusal, ignition.IgnitionRefusal) as exc:
         return 1, f"REFUSED: {exc}"
     except lt.LockRefusal as exc:

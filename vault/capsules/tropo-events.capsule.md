@@ -4,8 +4,10 @@ name: events
 title: events — Canonical Event Log Primitive
 type: capsule-definition
 extends: core
-version: '1.11'
-supersedes_version: '1.10'
+version: '1.13'
+supersedes_version: '1.12'
+v1_13_amendment_note: 'v1.12 → v1.13 bounded ADDITIVE amendment authored 2026-08-23 by Argus A155 under Mike-locked dev-spec 3fb41c99 (v1.91 S2), whose lock IS the lock-break authority per the same composition law used at v1.8/v1.9/v1.10/v1.11/v1.12; Mike''s word given in session 2026-08-23, verbatim: "Yes, talos can add it." Registers tropo.release.scope_locked and NOTHING ELSE — no type removed, no envelope field changed, no schema version moved. Added to both REGISTERED_TYPES surfaces (vault/tools/tropo-emit-event.py + .tropo/scripts/lib/event_validators.py) in the same gesture. WHY: S2 declares scope_locked as one of four release events requiring exactly one writer; argus-a155 ruled its honest emit point is the studio bus rather than the pipeline run journal (the run journal at lock time is a bootstrap contract surface, and the studio already models scope-lock as a principal INPUT to the run — release_metrics.py:55, tropo-release.py:329 --scope-locked-at). talos-t49 then proved by running the real subprocess in an isolated temp studio that the emission is REFUSED at runtime while the type is unregistered — a gap the AC1 emit-site detector cannot see, because a source-pattern check proves the code SHAPE and not that it runs. A declared event that cannot be emitted is S2 AC2''s own defect class; registering it completes the spec rather than extending it. This capsule is already inside 3fb41c99''s committed_substrate, so the lock always contemplated this file.'
+v1_12_amendment_note: 'v1.11 → v1.12 bounded ADDITIVE amendment authored 2026-08-23 by Argus A154 under Mike-locked dev-spec 29506520 (v1.91 S4), whose lock IS the lock-break authority per the same composition law used at v1.8/v1.9/v1.10/v1.11; Mike''s word given in session 2026-08-23. Adds `retirement` to the declared values of data.category on tropo.broadcast.crew, and NOTHING ELSE — no value removed, no envelope field changed, no event schema version moved. WHY: two governing documents required different values for one field and neither was enforced. Playbook e2c7d185 §Required Practice step 8 mandates `category: retirement` on the retirement notice; this capsule''s enum did not contain it; tropo-lineage.py emits `crew-state` from a payload shared by births and retirements, so the tool satisfied the capsule and broke the playbook. Measured on the live bus 2026-08-23: 82 of 310 crew broadcasts (26%) carried a category this capsule does not declare, `retirement` the largest at 47. The reconciliation ruled in 29506520: the capsule wins on SHAPE, the playbook wins on VALUE, so the enum gains the value rather than the playbook losing it. THIS AMENDMENT IS STEP 1 OF 3 AND AUTHORISES NOTHING FURTHER: enforcement at emit is step 2, freezing the 82 undeclared historicals under a dated cohort is step 3. Enforcing before reconciling would have refused the value the playbook mandates and rejected 47 events of established practice.'
 v1_10_amendment_note: 'v1.9 → v1.10 bounded one-type lock-break authored 2026-07-23 by Talos under Mike-approved locked dev-spec 8078657b (activation 95355ef7; approval verbatim: "I approve the bounded events"). Registers only tropo.distill.usage.recorded. Its top-level segment is mandatory, internally attested from the exact ranked chunk partition, and viewer-filtered; segment remains forbidden on every pre-v1.10 type. CLI usage emission is forbidden. No model/provider/spend/pricing/metering/consent/egress/learning event or behavior is authorized.'
 v1_11_amendment_note: 'v1.10 → v1.11 bounded amendment authored 2026-08-20 by Talos T47 under Mike-locked dev-spec 3f38521a (activation 4ea1b155). Declares the non-authoritative tool-telemetry record class: refused/failed outcomes only, one generated schema registry, most-restrictive derived segment, recursion-impossible enqueue-only producer, sealed local telemetry-only shards with bounded retention. Telemetry is a distinct durability lane, never canonical events; the release journal remains authority. Extending outcomes, instruments, or argument fingerprints requires a new explicit capsule amendment.'
 v1_9_amendment_note: 'v1.8 → v1.9 amendment authored 2026-07-15 by Argus A132 under Mike-approved Event Ledger Distributed Identity dev-spec f15a9b85 (activation 57470c10). Identity/order split: event_uid becomes immutable CloudEvents identity; writer_instance_uid + stream_uid + local_seq identify one per-writer append stream; causationid joins correlationid; display_seq is a disposable projection. New canonical writes target vault/events/streams/<writer>.jsonl after cutover; the existing numeric global log is preserved byte-for-byte as legacy epoch 1 and dual-read during migration. Capsule remains locked; the dev-spec lock is the amendment authority.'
@@ -377,6 +379,20 @@ data:
 required_extensions: [vault_refs, severity (info)]
 ```
 
+**`tropo.release.scope_locked`** (v1.91 S2, 3fb41c99, Mike-locked 2026-08-23 — this spec's lock IS the lock-break authority for this registration) - emitted once by `tropo-lock-release-plan.py`'s `plan_release_lock()` after `apply_plan` succeeds, recording that the principal locked the release's scope. It is a principal INPUT to the release run, not a step of it: the run journal at lock time is a bootstrap contract surface whose adoption gate admits exactly one seeded event, and scope-lock is the fact that authorised the run to exist. Never emitted on a failed or partial lock.
+
+```yaml
+type: tropo.release.scope_locked
+data:
+  saga_id: "release:<8-hex>"
+  release_plan_uid: "<8-hex>"
+  activation_uid: "<8-hex>"
+  activation_root_uid: "<8-hex>"
+  pipeline_run_uid: "<8-hex>"
+  release_entry_uid: "<8-hex>"
+required_extensions: [vault_refs, severity (info)]
+```
+
 ### Distillation Usage Capture (v1.10 bounded lock-break)
 
 **`tropo.distill.usage.recorded`** — one append-only capture-now/learn-later
@@ -476,7 +492,7 @@ data:
   headline: "<one-line broadcast headline>"
   body: "<short broadcast body string OR null if body_file populated>"   # ≤500 chars inline; else body_file
   body_file: "vault/events/files/<id>.md"   # optional; for prose-heavy broadcasts
-  category: "<enum: ship | cycle-state | ops | governance | crew-state | alert>"
+  category: "<enum: ship | cycle-state | ops | governance | crew-state | alert | retirement>"
 required_extensions: [lifecycle (evergreen)]
 optional_extensions: [recipients (omit for all-crew; populate for targeted subset), severity (flash for FLASH-urgency)]
 ```

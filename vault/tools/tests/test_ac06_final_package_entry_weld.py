@@ -182,12 +182,66 @@ class ThePackagePathConsultsTheFreezeGate(unittest.TestCase):
         )
 
     def test_the_freeze_records_one_identity_from_the_shipped_bytes(self):
+        """Stale since v1.91 S2 (3fb41c99): `reconcile_existing_freeze` and
+        `package_frozen_payload` were this function's names under 0a0a6777,
+        before the split moved package_frozen off the build entirely (the
+        build now records candidate_built -- bytes-produced -- and leaves
+        evidence-bound package_frozen to the freeze tool alone, dev-spec
+        2fae6312). Updated to the names the split actually left behind
+        rather than the ones it replaced; this test was RED against current
+        code before this fix (found investigating S2 AC6, unrelated to and
+        predating any change of mine this session)."""
         node = _function("stage6_freeze_package")
         self.assertIsNotNone(node)
         calls = _calls_within(node)
         self.assertIn("hash_final_zip", calls)
-        self.assertIn("reconcile_existing_freeze", calls)
-        self.assertIn("package_frozen_payload", calls)
+        self.assertIn("candidate_built_payload", calls)
+        self.assertIn(
+            "active_candidate", calls,
+            "the build no longer checks the existing candidate before "
+            "recording a new one -- an idempotent retry or a second live "
+            "candidate would go unnoticed",
+        )
+
+    def test_the_build_never_freezes_unconditionally(self):
+        """v1.91 S2 AC6 (3fb41c99): the build freezing unconditionally in
+        stage6 is exactly what made the pipeline's freeze step's own
+        precondition ('no active freeze yet') the build's guaranteed output,
+        so the freeze step's criterion 4 could never be evaluated for real.
+
+        This is the reachability half AC6's declared verify command
+        (test_one_prompt_release_2fae6312) never checks -- that suite never
+        imports or executes tropo-build-release.py at all (confirmed: zero
+        references), so it cannot detect a regression here. Filed to G111
+        as a gap in the locked command; this test covers the gap in the
+        meantime, in the file that already owns stage6's structural claims.
+
+        Mutation: restore an unconditional `package_frozen` emission (or a
+        call naming PACKAGE_FROZEN_EVENT) inside stage6_freeze_package, and
+        this turns RED.
+        """
+        node = _function("stage6_freeze_package")
+        self.assertIsNotNone(node)
+        calls = _calls_within(node)
+        self.assertNotIn(
+            "package_frozen_payload", calls,
+            "stage6_freeze_package calls package_frozen_payload -- the build "
+            "is constructing a package_frozen payload itself again, which is "
+            "the unconditional-freeze defect AC6 exists to remove",
+        )
+        body = ast.dump(node)
+        self.assertNotIn(
+            "PACKAGE_FROZEN_EVENT", body,
+            "stage6_freeze_package references PACKAGE_FROZEN_EVENT -- the "
+            "build must never be able to emit package_frozen; only the "
+            "freeze tool may, and only once evidence exists",
+        )
+        self.assertIn(
+            "active_frozen_payload", calls,
+            "stage6_freeze_package does not check active_frozen_payload -- "
+            "an idempotent rebuild could no longer refuse cleanly against an "
+            "existing freeze",
+        )
 
     def test_package_identity_does_not_depend_on_who_built_it(self):
         """A148 blocker 2 (evt_a9360f18f56fe472_00000022).

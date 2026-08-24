@@ -131,7 +131,7 @@ Each outcome playbook lives at `.tropo/playbooks/concierge-paths/<name>.playbook
 **Skill / playbook callees per path:**
 
 - All 4 outcome playbooks call [`tropo-create-executive-agent`](../../vault/skills/tropo-create-executive-agent.md) when they need to create an agent (3-file end-user pattern; the single source of truth for those 13 agent-creation Rules). *(v1.4.7: pointer reconciled to the One-Home location — the `.tropo/skills/` path no longer exists; this was the c7ea9e01 dead-path class the cold-stranger walk hit.)*
-- For deep, generational, durable crew-class agents: route via [`personal-chief-of-staff.playbook.md (7f3b9e42)`](../playbooks/concierge-paths/personal-chief-of-staff.playbook.md) directly (thin-loader pattern via [agent-configurator.capsule v2.1](../capsules/agent-configurator.capsule.md); class-equivalent to a working crew member). This path is library substrate, not a routing entry.
+- For deep, generational, durable crew-class agents: route via [`create-an-agent.playbook.md`](../playbooks/concierge-paths/create-an-agent.playbook.md) — the same outcome playbook, driven to its crew-class depth — which calls [`tropo-create-executive-agent`](../../vault/skills/tropo-create-executive-agent.md) and composes the thin-loader pattern from [`tropo-agent-configurator.capsule`](../../vault/capsules/tropo-agent-configurator.capsule.md). *(v1.90.1, argus-a154: this line previously routed to `concierge-paths/personal-chief-of-staff.playbook.md` and `.tropo/capsules/agent-configurator.capsule.md` — NEITHER SHIPS. The playbook was recycled 2026-05-10 and the routing line was never retired with it; the capsule ships under `vault/capsules/` with the `tropo-` prefix. Verified absent from the live v1.90.0 box before this edit, and every target above verified present in it. Two lines below, this same file declares the rule the old line broke.)*
 
 **v1.43.0 routing-table alignment note:** prior v1.4.0 amendment carried 6 routing entries including `welcome` (primary depth-first walk) and `tour-tropo` (5-minute orientation); neither playbook currently ships on disk. Per Stream F substrate-honesty discipline (canonical-content-doctrine: routing tables cite only what ships), the routing-table reduces to the 4 playbooks present on disk. If `welcome` or `tour-tropo` ship as future-cycle work (v1.45+ canonical-content candidate), they re-enter the routing table at that ship. The personal-chief-of-staff library path replaces welcome's "primary crew-class scaffolding" role.
 
@@ -533,7 +533,7 @@ Applying an update is the only time you write to `.tropo/` (the kernel). Outside
 
 ---
 
-*Tropo Concierge | Tropo-OS v1.90.0*
+*Tropo Concierge | Tropo-OS v1.91.0*
 *"The first agent you meet. She draws before she pitches, hands you the one line that opens it, and helps before she asks you to set anything up."*
 
 ---

@@ -305,7 +305,7 @@ def _index_union_uids(vault: Path) -> set[str]:
 
 def _canonical_event_union(vault: Path) -> list[dict]:
     """Load canonical legacy-plus-stream history for event-backed checks."""
-    studio_root = vault.parent if (vault / "files").is_dir() else vault
+    studio_root = vault if (vault / "files").is_dir() else vault
     return event_identity.load_event_union(studio_root)
 
 
@@ -8380,6 +8380,61 @@ def check_ship_python_interpreter_floor(vault: Path) -> tuple[list[str], int, in
     return findings, total_checked, defects
 
 
+def check_release_event_writers(vault: Path) -> tuple[list[str], int, int]:
+    """v1.91 S2 AC2 (3fb41c99): a declared release event with no WRITER in
+    the shipped tree FAILS AT VALIDATE, not at the first recovery that
+    needs it.
+
+    Writer detection is emit-position, NOT reference counting (A154's
+    mutation proof against real history: on the tree before G110's supersede
+    writer landed, package_superseded carried a constant definition and
+    documentation prose — references a-plenty, writer none — and a
+    reference-based check passes exactly the substrate that stalled v1.90
+    for hours). The ONE resolver is lib/event_writers.py: constant
+    indirection resolved, emit windows only, comparison-reads excluded.
+    Shared with the AC1 test so the two instruments cannot disagree.
+    """
+    import importlib.util as _ilu
+    import types as _types
+    findings: list[str] = []
+    checked = 0
+    defects = 0
+    try:
+        sys.modules.setdefault("release_events_v191",
+                               _types.ModuleType("release_events_v191"))
+        spec = _ilu.spec_from_file_location(
+            "release_events_v191", vault / "vault" / "tools" / "lib" / "release_events.py")
+        mod = _ilu.module_from_spec(spec)
+        sys.modules["release_events_v191"] = mod
+        spec.loader.exec_module(mod)
+        declared = sorted(mod.RELEASE_EVENTS.keys())
+    except Exception as exc:
+        return ([f"[UNKNOWN] release-event writer check cannot load the "
+                 f"declared vocabulary: {exc}"], 0, 0)
+    try:
+        sys.modules.setdefault("event_writers_v191",
+                               _types.ModuleType("event_writers_v191"))
+        spec2 = _ilu.spec_from_file_location(
+            "event_writers_v191", vault / "vault" / "tools" / "lib" / "event_writers.py")
+        ew = _ilu.module_from_spec(spec2)
+        sys.modules["event_writers_v191"] = ew
+        spec2.loader.exec_module(ew)
+    except Exception as exc:
+        return ([f"[UNKNOWN] release-event writer check cannot load the "
+                 f"shared resolver: {exc}"], 0, 0)
+    studio_root = vault
+    for event_name in declared:
+        checked += 1
+        sites = ew.emit_sites(event_name, studio_root)
+        if not sites:
+            defects += 1
+            findings.append(
+                f"[FAIL] declared release event {event_name!r} has NO WRITER in "
+                f"the shipped tree (emit-position scan; references do not "
+                f"count). An event that cannot be emitted is a recovery act "
+                f"that will fail at runtime instead of here (v1.91 S2 AC2).")
+    return findings, checked, defects
+
 def check_boot_derivation_fresh(vault: Path) -> tuple[list[str], int, int]:
     """v1.70 S3.5.2 — Drift-gate for compressed boot artifacts.
 
@@ -11405,11 +11460,195 @@ def _has_fold(agent_dir: Path, gen: str, session_date: str) -> bool:
             m = re.search(r'^last_curated:\s*["\']?(\d{4}-\d{2}-\d{2})',
                           surface.read_text(encoding='utf-8', errors='replace'),
                           re.MULTILINE)
-            if m and (not session_date or m.group(1) >= session_date):
+            # TIMEZONE TOLERANCE (argus-a154, 2026-08-23). `last_curated` is a LOCAL
+            # date the agent writes; `session_date` is the UTC date of the lineage
+            # close. An agent who folds at 23:00 local and closes at 03:00Z the next
+            # day writes a last_curated one day BEHIND its own close and reads as
+            # never having folded. Measured on two agents the same night: argus A153
+            # folded minutes before closing (last_curated 2026-08-21, close
+            # 2026-08-22T03:00:28Z) and metis G109 hit the identical edge. Both were
+            # reported as missing a practice they had performed.
+            # One day of slack covers every real offset (UTC-12..UTC+14 spans <2
+            # calendar days) without weakening the check: a stale fold is still
+            # caught at two days and beyond, and the fold-boundary record above
+            # remains the primary, generation-named signal.
+            if m and not session_date:
                 return True
+            if m:
+                try:
+                    from datetime import date as _date, timedelta as _td
+                    folded = _date.fromisoformat(m.group(1))
+                    closed = _date.fromisoformat(session_date[:10])
+                    if folded >= closed - _td(days=1):
+                        return True
+                except ValueError:
+                    if m.group(1) >= session_date:
+                        return True
         except OSError:
             pass
     return False
+
+
+
+def _has_session_memories(agent_dir: Path, gen: str) -> bool:
+    """Step 1 — at least one episodic record naming this generation."""
+    jsonl = agent_dir / '.tropo-capsule' / 'memory' / 'agent-memories.jsonl'
+    if not jsonl.is_file():
+        return False
+    try:
+        for raw in jsonl.read_text(encoding='utf-8', errors='replace').splitlines():
+            if not raw.strip():
+                continue
+            try:
+                rec = json.loads(raw)
+            except ValueError:
+                continue
+            if not isinstance(rec, dict):
+                continue
+            if _names_generation(str(rec.get('gen') or rec.get('generation') or ''), gen):
+                return True
+    except OSError:
+        pass
+    return False
+
+
+def _status_notes_name_generation(vault: Path, slug: str, gen: str) -> bool:
+    """Step 7 (the durable half) — the unified entry's §Status-Notes names this gen.
+
+    The crew-brief re-render is the other half of step 7 and leaves no
+    per-generation artifact, so it is not checked here; see the note at the call
+    site. Resolves the entry by agent: field rather than by a hard-coded uid map.
+    """
+    agents_dir = vault / 'vault' / 'agents'
+    if not agents_dir.is_dir():
+        agents_dir = vault / 'agents'
+    for entry in agents_dir.glob('*.md') if agents_dir.is_dir() else []:
+        try:
+            text = entry.read_text(encoding='utf-8', errors='replace')
+        except OSError:
+            continue
+        if not re.search(rf'^agent:\s*["\']?{re.escape(slug)}\b', text, re.MULTILINE):
+            continue
+        idx = text.find('§Status-Notes')
+        if idx == -1:
+            return False
+        # MATCH THE ENTRY SHAPE, NOT A MENTION. A bare generation search returns
+        # True on the bounded surface's own aging-out sentence — "A151 and older
+        # aged out of the bounded status surface" — so a generation that was
+        # correctly DROPPED reads as present. Caught by the known-negative
+        # (argus A151) before this shipped. Entries are bolded headers:
+        #   **A153 — RETIRED 2026-08-22T03:00:28Z (...)**
+        section = text[idx:]
+        return re.search(rf'\*\*{re.escape(gen)}\b[^*]*RETIRED', section,
+                         re.IGNORECASE) is not None
+    return False
+
+
+def _has_retirement_notice(vault: Path, slug: str, gen: str) -> bool:
+    """Step 8 — a crew broadcast naming this generation's retirement.
+
+    EXISTENCE ONLY, deliberately. The playbook requires category:retirement; the
+    events capsule declares an enum that does not contain it; 82 of 310 live
+    broadcasts carry undeclared categories. Checking the VALUE before those two
+    authorities are reconciled would refuse the value the playbook mandates and
+    fire on 47 historical events. Reconcile, then enforce (29506520 §The
+    category-enum reconciliation). Until then this asks only: did the crew get told?
+    """
+    streams = vault / 'vault' / 'events' / 'streams'
+    if not streams.is_dir():
+        streams = vault / 'events' / 'streams'
+    if not streams.is_dir():
+        return False
+    needle = gen.lower()
+    for f in streams.glob('*.jsonl'):
+        try:
+            for raw in f.read_text(encoding='utf-8', errors='replace').splitlines():
+                if needle not in raw.lower() or 'broadcast.crew' not in raw:
+                    continue
+                try:
+                    ev = json.loads(raw)
+                except ValueError:
+                    continue
+                body = str((ev.get('data') or {}).get('body') or '')
+                if 'retire' in body.lower() and _names_generation(body, gen):
+                    return True
+        except OSError:
+            continue
+    return False
+
+
+
+
+def check_no_procedure_summaries_in_identity(vault: Path) -> tuple[list[str], int, int]:
+    """S4 AC4(a) (29506520), argus-a154 2026-08-23 — an identity file may POINT AT a
+    canonical procedure; it may not enumerate that procedure's steps.
+
+    WHY THE OBVIOUS DETECTOR DOES NOT WORK, recorded because I built it first and it
+    failed both ways: matching the playbook's own step LABELS against the identity file
+    misses the defect entirely. The playbook's labels are "Memory fold" and "The letter";
+    argus's summary said "(fold, letter, reflection, Captain's Log, memory capture,
+    drain)". Two of eight labels matched, so the real case scored below threshold and
+    passed — while files merely DISCUSSING a reflection or a Captain's Log tripped it.
+    A summary is a PARAPHRASE, so label-matching is aimed at the one form the defect
+    never takes.
+
+    WHAT IS ACTUALLY DETECTABLE is the SHAPE, scoped to the reference: an enumeration —
+    a markdown list of 3+ items, or a parenthetical comma-series of 3+ short phrases —
+    sitting in the same passage as a pointer to a canonical playbook. That is what both
+    known cases looked like, and prose about a procedure does not take that shape.
+
+    Findings are WARN: this observes a documentation defect and never fails a lifecycle
+    act (e2c7d185's layered truth; the close stays ungated per AC6).
+    """
+    findings: list[str] = []
+    checked = 0
+    agents_dir = vault / 'vault' / 'agents'
+    if not agents_dir.is_dir():
+        agents_dir = vault / 'agents'
+    playbooks = vault / 'vault' / 'playbooks'
+    if not agents_dir.is_dir() or not playbooks.is_dir():
+        return findings, checked, 0
+
+    canonical = {pb.stem for pb in playbooks.glob('*.md')}
+    WINDOW = 900
+    series = re.compile(r'\(([^()\n]{15,240})\)')
+    listitem = re.compile(r'^\s*(?:[-*+]|\d+\.)\s+\S', re.MULTILINE)
+
+    for entry in sorted(agents_dir.glob('*.md')):
+        try:
+            text = entry.read_text(encoding='utf-8', errors='replace')
+        except OSError:
+            continue
+        if not re.search(r'^type:\s*agent\b', text, re.MULTILINE):
+            continue
+        checked += 1
+        slug_m = re.search(r'^agent:\s*["\']?([A-Za-z0-9_-]+)', text, re.MULTILINE)
+        slug = slug_m.group(1) if slug_m else entry.stem
+        seen = set()
+        for m in re.finditer(r'\b([0-9a-f]{8})\b', text):
+            uid = m.group(1)
+            if uid not in canonical or uid in seen:
+                continue
+            seen.add(uid)
+            passage = text[m.start(): m.start() + WINDOW]
+            hit = None
+            for sm in series.finditer(passage):
+                parts = [x.strip() for x in sm.group(1).split(',') if x.strip()]
+                if len(parts) >= 3 and all(len(x.split()) <= 4 for x in parts):
+                    hit = f'a {len(parts)}-item series "({sm.group(1)[:70]}...)"'
+                    break
+            if hit is None and len(listitem.findall(passage)) >= 3:
+                hit = f'a {len(listitem.findall(passage))}-item list'
+            if hit:
+                findings.append(
+                    f'[WARN] procedure summary in identity file: {slug} '
+                    f'({entry.name}) carries {hit} in the same passage as its pointer '
+                    f'to canonical playbook {uid}. An identity file may POINT AT a '
+                    f'procedure; enumerating its steps makes the file a second author '
+                    f'that goes stale silently — metis G110 and argus A153 each carried '
+                    f'six of eight and each missed the same two. Cure: keep the pointer, '
+                    f'delete the enumeration.')
+    return findings, checked, 0
 
 
 def check_retirement_ceremony_completeness(vault: Path) -> tuple[list[str], int, int]:
@@ -11460,12 +11699,45 @@ def check_retirement_ceremony_completeness(vault: Path) -> tuple[list[str], int,
         if not _has_reflection(path.parent, gen):
             missing.append('reflection (nothing at reflections/ matching this '
                            'generation)')
+        # S4 AC3 (29506520), argus-a154 2026-08-23: the observer checked THREE of
+        # e2c7d185's EIGHT required steps and reported completeness on that basis.
+        # It passed A153's close, which had missed the Captain's Log AND the notice;
+        # it passed G110's, which missed three. Steps added below: 1 session
+        # memories, 3 the letter (non-empty — A152 found an EMPTY letter permanently
+        # consuming the create-only slot), 7 the §Status-Notes half of crew surfaces,
+        # 8 the retirement notice.
+        #
+        # NOT CHECKED, DECLARED RATHER THAN SILENT: step 6 event drain and the
+        # crew-brief half of step 7 leave no durable per-generation artifact, so
+        # neither is verifiable after the fact. They belong to S4's DRIVER (AC1/AC2),
+        # which observes them live. An observer that silently skipped them would
+        # report 8-of-8 while measuring 7.
+        letter = path.parent / 'transfers' / f'{gen}.md'
+        if not letter.is_file():
+            missing.append(f'the successor letter (nothing at transfers/{gen}.md)')
+        elif not letter.read_text(encoding='utf-8', errors='replace').strip():
+            missing.append(f'a NON-EMPTY successor letter (transfers/{gen}.md exists '
+                           f'but is empty, and the path is create-only — an empty '
+                           f'letter consumes the slot permanently)')
+
+        if not _has_session_memories(path.parent, gen):
+            missing.append('session memories (no agent-memories.jsonl record naming '
+                           'this generation)')
+
         if slug in ARGO_EXECUTIVE_SLUGS:
             log = vault / 'library' / 'captains-log.md'
             has_log = log.is_file() and _names_generation(
                 log.read_text(encoding='utf-8', errors='replace'), gen)
             if not has_log:
                 missing.append("Captain's Log line for this generation")
+
+            if not _status_notes_name_generation(vault, slug, gen):
+                missing.append('§Status-Notes naming this generation in the unified '
+                               'entry (step 7, crew surfaces)')
+
+            if not _has_retirement_notice(vault, slug, gen):
+                missing.append('a retirement notice on the crew bus naming this '
+                               'generation (step 8)')
         for artifact in missing:
             findings.append(
                 f'[WARN] retirement practice: {slug} {gen} closed '
@@ -12358,6 +12630,51 @@ def emit_validator_run_completed(
     return exit_code
 
 
+class _EnumerableTee:
+    """v1.91 S1 AC3 (0a0e94d1; Argus F-01): the summary is DERIVED from the
+    printed lines, not maintained as a parallel counter. Every fail-class
+    line printed ([FAIL], [ERROR], indented per-finding [ERROR]) IS the
+    failure count; warnings and passes likewise. A debt number you cannot
+    enumerate is a number you cannot disposition -- 100+ failures were
+    emitting nothing while the counter claimed them."""
+
+    FAIL_STARTS = ("[FAIL]", "[ERROR]", " [ERROR]", "\t[ERROR]")
+    WARN_STARTS = ("[WARN]", " [WARN]", "\t[WARN]")
+    PASS_STARTS = ("[PASS]",)
+
+    def __init__(self, orig):
+        self._orig = orig
+        self._buf = ""
+        self.fail_lines = 0
+        self.warn_lines = 0
+        self.pass_lines = 0
+
+    def _consume(self, line):
+        stripped = line.lstrip()
+        if stripped.startswith("[ERROR]") or stripped.startswith("[FAIL]"):
+            self.fail_lines += 1
+        elif stripped.startswith("[WARN]"):
+            self.warn_lines += 1
+        elif stripped.startswith("[PASS]"):
+            self.pass_lines += 1
+
+    def write(self, s):
+        self._orig.write(s)
+        self._buf += s
+        while "\n" in self._buf:
+            line, self._buf = self._buf.split("\n", 1)
+            self._consume(line)
+
+    def flush(self):
+        self._orig.flush()
+
+    def counts(self):
+        if self._buf:
+            self._consume(self._buf)
+            self._buf = ""
+        return self.pass_lines, self.fail_lines, self.warn_lines
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description='Structural validator for a Tropo vault.',
@@ -12409,6 +12726,8 @@ def main() -> int:
                              'baseline. Violations or stale baseline rows exit 1; malformed or '
                              'incomplete evaluation exits 2.')
     args = parser.parse_args()
+    _enum_tee = _EnumerableTee(sys.stdout)
+    sys.stdout = _enum_tee
 
     # The machine modes are mutually exclusive with each other and with the
     # fingerprint writer, and compose only with --vault-path. A mode that
@@ -13680,6 +13999,22 @@ def main() -> int:
         import traceback as _tb
         print(f'[FAIL] ship python interpreter floor check CRASHED: {e}')
         _tb.print_exc()
+        total_fails += 1
+
+    # --- v1.91 S2 AC2: Release-event writer floor (spec 3fb41c99) ---
+    print('\n--- Release-Event Writer Floor (v1.91 S2 AC2; spec 3fb41c99; ERROR) ---')
+    try:
+        rew_findings, rew_checked, rew_defects = check_release_event_writers(vault)
+        if rew_defects == 0:
+            print(f'[PASS] {rew_checked} declared release event(s) all have writer references')
+            total_passes += 1
+        else:
+            print(f'[FAIL] {rew_checked} declared event(s) checked; {rew_defects} with NO writer')
+            total_fails += 1
+        for line in rew_findings:
+            print(line)
+    except Exception as e:
+        print(f'[FAIL] release-event writer check CRASHED: {e}')
         total_fails += 1
 
     # --- v1.70 Check 34: Boot-Derivation Freshness (Drift-Gate) ---
@@ -15150,6 +15485,28 @@ def main() -> int:
                 print(f'  ... and {len(rc_findings) - 25} more')
     except Exception as e:
         print(f'[WARN] retirement-practice check CRASHED: {e} (warn-only; not a fail)')
+
+    # --- S4 AC4(a) 29506520 (argus-a154 2026-08-23): no procedure summaries in
+    # identity files. WARN-only for the same reason as the block above — it observes
+    # a documentation defect and never fails a lifecycle act (AC6 keeps the close
+    # ungated). Registered here so it runs on every pass rather than on demand.
+    print('\n--- Procedure Summaries in Identity Files (S4 AC4a 29506520; WARN-only) ---')
+    try:
+        ps_findings, ps_checked, _ps = check_no_procedure_summaries_in_identity(vault)
+        if ps_checked == 0:
+            print('[INFO] No identity entries found — nothing to observe')
+        elif not ps_findings:
+            print(f'[PASS] {ps_checked} identity file(s) checked — each points at its '
+                  f'canonical procedures without reciting them')
+            total_passes += 1
+        else:
+            print(f'[WARN] {ps_checked} identity file(s) checked; {len(ps_findings)} '
+                  f'recite a procedure instead of pointing at it:')
+            total_warnings += len(ps_findings)
+            for line in ps_findings[:25]:
+                print(f'  {line}')
+    except Exception as e:
+        print(f'[WARN] procedure-summary check CRASHED: {e} (warn-only; not a fail)')
     try:
         cd_findings, cd_checked, _cd_defects = check_lifecycle_card_drift(vault)
         if cd_checked and cd_findings:
@@ -15306,17 +15663,21 @@ def main() -> int:
         for finding in ps_findings:
             print(str(finding))
 
-    # --- Summary ---
+    # --- Summary (v1.91 S1 AC3: DERIVED from printed lines via _EnumerableTee;
+    # the parallel counters above remain for section-level ratchets only) ---
+    sys.stdout = _enum_tee._orig
+    d_pass, d_fail, d_warn = _enum_tee.counts()
     print()
     print('=' * 70)
-    print(f'Summary: {total_passes} passed, {total_fails} failed, {total_warnings} warnings, {total_normalizable} normalizable')
+    print(f'Summary: {d_pass} passed, {d_fail} failed, {d_warn} warnings '
+          f'(enumerable: counts derived from printed finding lines)')
     print('=' * 70)
 
-    validator_status = 0 if total_fails == 0 else 1
+    validator_status = 0 if d_fail == 0 else 1
     return emit_validator_run_completed(
-        passed=total_passes,
-        failed=total_fails,
-        warnings=total_warnings,
+        passed=d_pass,
+        failed=d_fail,
+        warnings=d_warn,
         normalizable=total_normalizable,
         meta_status_coverage_gaps=ms_gaps,
         meta_status_unresolved=ms_unresolved,

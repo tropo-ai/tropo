@@ -51,6 +51,12 @@ def _source(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def contextlib_redirect_stdout():
+    """Swallow the adapter's progress lines (S3 AC4) without a module-level import churn."""
+    import contextlib
+    return contextlib.redirect_stdout(io.StringIO())
+
+
 class ShipManifestTests(unittest.TestCase):
     """AC1 — RELEASE-NOTES.md and TROPO-CAPABILITIES.md leave the box."""
 
@@ -277,10 +283,56 @@ class ShipManifestCapabilitiesDoorTests(unittest.TestCase):
 
 
 class BadgeStampTests(unittest.TestCase):
-    """AC3 — the website badge, stamped from the artifact that actually shipped."""
+    """AC3 — the website badge, stamped from the artifact that actually shipped.
+
+    S3 AC4 (176a8995, v1.91): the stamp is now an ADAPTER that writes the badge
+    to the repository the site deploys from (resolved from configuration) and
+    pushes it — no longer a studio-side write plus a printed "commit + push".
+    The cases below that drove the stamp against STUDIO_ROOT/tropo-app/os-release.json
+    now give it a local bare repository as the deploy target (env
+    TROPO_SITE_BADGE_REMOTE) and assert the DEPLOYED badge; the studio mirror
+    is kept in step and is checked second. test_badge_adapter_v191 owns the
+    adapter contract itself.
+    """
 
     def setUp(self):
         self.publish = _load("publish_under_test_ac3", PUBLISH_TOOL)
+
+    def _deploy_repo(self, root: Path, *, with_badge: bool) -> Path:
+        """A bare 'tropo-ai/tropo-app' with (or without) os-release.json at its root."""
+        import json as _json
+        import os as _os
+        import subprocess as _sp
+        env = dict(_os.environ, GIT_TERMINAL_PROMPT="0", GIT_CONFIG_NOSYSTEM="1",
+                   GIT_CONFIG_GLOBAL="/dev/null")
+
+        def git(args, cwd):
+            _sp.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
+                    cwd=str(cwd), check=True, capture_output=True, env=env)
+        bare = root / "tropo-app.git"
+        git(["init", "--bare", "-q", str(bare)], root)
+        git(["symbolic-ref", "HEAD", "refs/heads/main"], bare)
+        seed = root / "seed"
+        git(["init", "-q", "-b", "main", str(seed)], root)
+        if with_badge:
+            (seed / "os-release.json").write_text(_json.dumps({
+                "schema": "tropo.os-release/v1", "version": "v1.80.0",
+                "fileSize": "5.0 MB", "sizeBytes": 1, "releasedAt": "2026-01-01",
+            }))
+        else:
+            (seed / "README.md").write_text("no badge here\n")
+        git(["add", "-A"], seed)
+        git(["commit", "-q", "-m", "seed"], seed)
+        git(["remote", "add", "origin", str(bare)], seed)
+        git(["push", "-q", "origin", "main"], seed)
+        return bare
+
+    def _deployed(self, bare: Path) -> dict:
+        import json as _json
+        import subprocess as _sp
+        shown = _sp.run(["git", "--git-dir", str(bare), "show", "main:os-release.json"],
+                        capture_output=True, text=True, check=True)
+        return _json.loads(shown.stdout)
 
     def test_human_size_reproduces_the_hand_maintained_convention(self):
         """6552432 bytes was hand-written as '6.2 MB' for v1.87.
@@ -292,11 +344,13 @@ class BadgeStampTests(unittest.TestCase):
 
     def test_the_badge_is_stamped_from_the_real_zip_not_a_receipt_field(self):
         import json as _json
+        import os as _os
         import tempfile
+        from unittest.mock import patch
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve()
             (root / "tropo-app").mkdir(parents=True)
-            badge = root / "tropo-app" / "os-release.json"
+            badge = root / "tropo-app" / "os-release.json"  # the studio MIRROR
             badge.write_text(_json.dumps({
                 "schema": "tropo.os-release/v1", "version": "v1.80.0",
                 "fileSize": "5.0 MB", "sizeBytes": 1, "releasedAt": "2026-01-01",
@@ -305,21 +359,30 @@ class BadgeStampTests(unittest.TestCase):
             dist.mkdir()
             payload = b"x" * 3_000_000
             (dist / "tropo-os-v1.88.0.zip").write_bytes(payload)
+            # S3 AC4 (176a8995): the adapter writes to the DEPLOY repository,
+            # resolved from configuration; the studio copy is only a mirror.
+            deploy = self._deploy_repo(root, with_badge=True)
 
-            original_root = self.publish.tropo_roots.STUDIO_ROOT
-            self.publish.tropo_roots.STUDIO_ROOT = root
-            try:
+            with patch.object(self.publish.tropo_roots, "STUDIO_ROOT", root), \
+                 patch.object(self.publish.tropo_roots, "DEV_HOME", root), \
+                 patch.object(self.publish.tropo_roots, "RELEASES_DIR", root / "releases"), \
+                 patch.dict(_os.environ, {"TROPO_SITE_BADGE_REMOTE": str(deploy),
+                                          "GIT_TERMINAL_PROMPT": "0",
+                                          "GIT_CONFIG_NOSYSTEM": "1",
+                                          "GIT_CONFIG_GLOBAL": "/dev/null"}), \
+                 contextlib_redirect_stdout():
                 self.publish._stamp_os_release_badge("1.88.0", dist, "2026-08-15")
-            finally:
-                self.publish.tropo_roots.STUDIO_ROOT = original_root
 
-            stamped = _json.loads(badge.read_text())
+            stamped = self._deployed(deploy)
+            mirror = _json.loads(badge.read_text())
         self.assertEqual(stamped["version"], "v1.88.0")
         self.assertEqual(stamped["sizeBytes"], len(payload),
                          "sizeBytes must measure the real zip")
         self.assertEqual(stamped["releasedAt"], "2026-08-15")
         self.assertEqual(stamped["schema"], "tropo.os-release/v1",
                          "unrelated fields must survive the stamp")
+        self.assertEqual(mirror["version"], "v1.88.0",
+                         "the studio mirror is kept in step with the deployed badge")
 
     def test_refuses_when_there_is_no_package_to_measure(self):
         import tempfile
@@ -329,27 +392,42 @@ class BadgeStampTests(unittest.TestCase):
         self.assertIn("no package", str(caught.exception))
 
     def test_refuses_when_the_badge_file_is_missing(self):
+        """S3 AC4 (176a8995): 'missing' now means missing at the ROOT of the deploy
+        repository — the wrong-target shape G110 met — not in the studio."""
+        import os as _os
         import tempfile
+        from unittest.mock import patch
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve()
             dist = root / "dist"
             dist.mkdir(parents=True)
             (dist / "tropo-os-v1.88.0.zip").write_bytes(b"z")
-            original_root = self.publish.tropo_roots.STUDIO_ROOT
-            self.publish.tropo_roots.STUDIO_ROOT = root
-            try:
+            deploy = self._deploy_repo(root, with_badge=False)
+            with patch.object(self.publish.tropo_roots, "STUDIO_ROOT", root), \
+                 patch.object(self.publish.tropo_roots, "DEV_HOME", root), \
+                 patch.object(self.publish.tropo_roots, "RELEASES_DIR", root / "releases"), \
+                 patch.dict(_os.environ, {"TROPO_SITE_BADGE_REMOTE": str(deploy),
+                                          "GIT_TERMINAL_PROMPT": "0",
+                                          "GIT_CONFIG_NOSYSTEM": "1",
+                                          "GIT_CONFIG_GLOBAL": "/dev/null"}):
                 with self.assertRaises(self.publish.PublishError) as caught:
                     self.publish._stamp_os_release_badge("1.88.0", dist, "2026-08-15")
-            finally:
-                self.publish.tropo_roots.STUDIO_ROOT = original_root
         self.assertIn("not found", str(caught.exception))
+        self.assertIn(str(deploy), str(caught.exception),
+                      "the refusal names the deploy repository it looked in")
 
-    def test_the_manual_site_split_step_is_named_not_implied(self):
-        """A stamped studio badge with an unpublished site is the same
-        correct-here-wrong-there shape the briefing notes had."""
+    def test_the_site_split_is_an_adapter_not_a_printed_instruction(self):
+        """S3 AC4 (176a8995) REPLACES the v1.88 pin. v1.88 named the manual
+        'commit + push' step so it could not be implied; v1.90 showed a named
+        manual step is still knowledge living in heads (the push went to argo-os,
+        the site deploys from tropo-ai/tropo-app). The adapter writes to the
+        configured deploy remote and pushes; no manual instruction is printed,
+        and the committed default names the deploy repo, not the studio."""
         source = _source(PUBLISH_TOOL)
-        self.assertIn("NEXT (manual)", source)
-        self.assertIn("npm run deploy", source)
+        self.assertNotIn("NEXT (manual)", source)
+        self.assertNotIn("npm run deploy", source)
+        self.assertIn("tropo-ai/tropo-app", self.publish.DEFAULT_SITE_BADGE_REMOTE)
+        self.assertNotIn("argo-os", self.publish.DEFAULT_SITE_BADGE_REMOTE)
 
     def test_the_stamp_runs_at_fire(self):
         source = _source(PUBLISH_TOOL)

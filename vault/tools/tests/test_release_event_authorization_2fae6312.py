@@ -265,10 +265,21 @@ class DataShapeTests(unittest.TestCase):
 
     def test_every_contract_lists_its_identity_keys_as_required(self):
         """A contract that omits an identity key cannot be identity-checked."""
+        # v1.91 S2 (3fb41c99): release-verification-receipt's Receipt
+        # dataclass names its run field `release_run_uid`, not
+        # `pipeline_run_uid` -- a pre-existing choice in lib/release_verify.py,
+        # unrelated to and out of scope for the receipt-shape unification.
+        # Same exemption shape as verification_receipt, which also carries no
+        # saga_id: a receipt is scoped to the run and the candidate/instrument
+        # it tested, not to the saga.
+        no_pipeline_run_uid_field = {"verification_receipt", "release-verification-receipt"}
         for event, contract in RELEASE_EVENTS.items():
             with self.subTest(event=event):
-                if event == "verification_receipt":
-                    self.assertIn("pipeline_run_uid", contract.required_data)
+                if event in no_pipeline_run_uid_field:
+                    self.assertIn(
+                        "release_run_uid" if event == "release-verification-receipt"
+                        else "pipeline_run_uid",
+                        contract.required_data)
                 else:
                     self.assertIn("pipeline_run_uid", contract.required_data)
                     self.assertIn("saga_id", contract.required_data)

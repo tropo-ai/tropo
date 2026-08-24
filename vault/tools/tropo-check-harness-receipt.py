@@ -52,7 +52,7 @@ def _load(name: str, filename: str):
     return module
 
 
-def find_harness_receipt(events, release_run_uid: str, package_sha256: str) -> dict:
+def find_harness_receipt(events, release_run_uid: str, candidate_sha256: str) -> dict:
     """Exactly one passing agent-executed harness receipt for these bytes."""
     release_verify = _load("q9_verify", "lib/release_verify.py")
 
@@ -65,7 +65,7 @@ def find_harness_receipt(events, release_run_uid: str, package_sha256: str) -> d
             continue
         if str(data.get("release_run_uid") or "") != release_run_uid:
             continue
-        if str(data.get("package_sha256") or "") != package_sha256:
+        if str(data.get("candidate_sha256") or "") != candidate_sha256:
             continue
         candidates.append(data)
 
@@ -88,10 +88,10 @@ def find_harness_receipt(events, release_run_uid: str, package_sha256: str) -> d
             f"the harness receipt belongs to run {receipt.release_run_uid}, "
             f"not {release_run_uid}"
         )
-    if receipt.package_sha256 != package_sha256:
+    if receipt.candidate_sha256 != candidate_sha256:
         raise HarnessEvidenceRefusal(
-            f"the harness tested package {receipt.package_sha256[:12]} and the "
-            f"package about to ship is {package_sha256[:12]}"
+            f"the harness tested {receipt.candidate_sha256[:12]} and the "
+            f"candidate about to be verified is {candidate_sha256[:12]}"
         )
     if receipt.execution_mode != "agent":
         raise HarnessEvidenceRefusal(
@@ -147,9 +147,14 @@ def resolve_evidence(receipt: dict, read_entry) -> dict:
     # Both fields must be present AND equal. This is the same
     # absence-is-not-agreement shape as G99's index comment and my own
     # unknown-versus-empty bug: a missing value is not a matching one.
+    # v1.91 S2 (3fb41c99): the evidence record's OWN frontmatter field stays
+    # `package_sha256` -- that is sa.release-test-harness's contract (Vela's
+    # lane), unrelated to and untouched by the receipt-shape unification.
+    # Only the VALUE side changed: the receipt no longer carries a
+    # package_sha256 key to read it from.
     for field, expected, label in (
         ("release_pipeline_run_uid", receipt["release_run_uid"], "release run"),
-        ("package_sha256", receipt["package_sha256"], "package"),
+        ("package_sha256", receipt["candidate_sha256"], "package"),
     ):
         recorded = str(fm.get(field) or "")
         if not recorded:
@@ -183,16 +188,25 @@ def check(activation_uid: str) -> dict:
     if not run_folder:
         raise HarnessEvidenceRefusal(f"run {run_uid} declares no run_folder")
 
+    # v1.91 S2 (3fb41c99), Argus A155's ruling parts 2/3: this node is one of
+    # the four VERIFY instruments (release-harness-gate, a0f2bea8) -- it runs
+    # BEFORE a freeze can exist under the post-split design (freeze requires
+    # four passing receipts, which requires verify to have already run).
+    # Requiring active_frozen_payload here made this gate unreachable by
+    # construction on every real release since the split, the same defect
+    # emit_release_verification_receipt had. Bound to the active CANDIDATE
+    # instead -- the freeze gate re-hashes and re-binds at freeze time, where
+    # the weld can be true.
     events = runtime.read_events(runtime.VAULT_ROOT / run_folder)
-    frozen = release_package.active_frozen_payload(events, run_uid)
-    if not frozen or not str(frozen.get("package_sha256") or ""):
+    active = release_package.active_candidate(events, run_uid)
+    if not active or not str(active.get("candidate_sha256") or ""):
         raise HarnessEvidenceRefusal(
-            f"run {run_uid} has no frozen package, so there is nothing for the "
-            f"harness to have tested")
+            f"run {run_uid} has no active candidate, so there is nothing for "
+            f"the harness to have tested")
 
-    receipt = find_harness_receipt(events, run_uid, str(frozen["package_sha256"]))
+    receipt = find_harness_receipt(events, run_uid, str(active["candidate_sha256"]))
     evidence = resolve_evidence(receipt, runtime.read_vault_entry)
-    return {"run": run_uid, "package_sha256": receipt["package_sha256"],
+    return {"run": run_uid, "candidate_sha256": receipt["candidate_sha256"],
             "evidence": evidence}
 
 
@@ -211,8 +225,8 @@ def main(argv=None) -> int:
     except Exception as exc:  # noqa: BLE001 -- unreadable state is a refusal
         print(f"REFUSED: harness evidence could not be read: {exc}", file=sys.stderr)
         return EXIT_REFUSED
-    print(f"✓ release-harness evidence verified — run {result['run']}, package "
-          f"{result['package_sha256'][:12]}…, evidence {result['evidence']['uid']} "
+    print(f"✓ release-harness evidence verified — run {result['run']}, candidate "
+          f"{result['candidate_sha256'][:12]}…, evidence {result['evidence']['uid']} "
           f"owned by {result['evidence']['owner']}")
     return EXIT_OK
 

@@ -286,9 +286,16 @@ def _head_commit() -> str:
 def _require_governed_main() -> str:
     """Require the checked-out branch itself to be synchronized governed main."""
     branch = _run_git("branch", "--show-current").strip()
-    if branch != "main":
+    # S1 AC2 (0a0e94d1, metis-g111 2026-08-23): the intent of this gate is "derive from the
+    # exact governed, pushed commit" — which the HEAD == origin/main check below carries.
+    # Requiring the branch NAME as well refused a pinned, detached worktree checked out at
+    # origin/main, which is exactly how an agent-run build avoids a live shared checkout
+    # whose sources move mid-pass. Detached HEAD is accepted only when it equals
+    # origin/main (checked next); any other branch name is still refused.
+    if branch not in ("main", ""):
         raise public_snapshot.SnapshotContractError(
-            "normal public snapshot requires the actual checked-out branch main"
+            "normal public snapshot requires the checked-out branch main "
+            "(or a detached HEAD pinned to origin/main)"
         )
     head = _head_commit()
     try:

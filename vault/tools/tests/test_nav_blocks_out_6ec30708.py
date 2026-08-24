@@ -552,10 +552,16 @@ class TestLongRunningProcessFilterIsTheWiredDriver(unittest.TestCase):
                  STRIP_TOOL.CLEAN_COMMAND)
             self.assertEqual(
                 STRIP_TOOL.cmd_install(root), 0, 'install must succeed')
-            self.assertEqual(
-                _git(root, 'config', '--get', 'filter.navblockstrip.process')
-                .stdout.strip(),
-                STRIP_TOOL.PROCESS_COMMAND)
+            # S1 AC2 (0a0e94d1, 2026-08-23): --install now registers the ABSOLUTE driver
+            # path so `git worktree add` (which runs the filter with cwd in the new,
+            # half-populated worktree) can find the script; argus-a154 measured the
+            # relative form aborting a worktree checkout at 57% (387d17765).
+            installed = (_git(root, 'config', '--get', 'filter.navblockstrip.process')
+                         .stdout.strip())
+            self.assertEqual(installed, STRIP_TOOL.PROCESS_COMMAND_ABSOLUTE)
+            self.assertTrue(installed.startswith('python3 /'),
+                            f'driver must be an absolute path (worktree-safe), got {installed!r}')
+            self.assertTrue(installed.endswith('/vault/tools/tropo-navblock-strip.py --process'))
             self.assertNotEqual(
                 _git(root, 'config', '--get', 'filter.navblockstrip.clean')
                 .returncode, 0,

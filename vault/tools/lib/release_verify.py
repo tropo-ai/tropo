@@ -39,16 +39,33 @@ INSTRUMENT_NODES = {
     "cold-walk": "c6b61fb9",
 }
 
+#: v1.91 S2 (3fb41c99), Argus A155's ruling part 5: ONE instrument
+#: vocabulary. tropo-freeze-release-candidate.py kept its own step-uid-keyed
+#: dict with DIFFERENT NAMES for the same four instruments (e.g.
+#: "full-release-validation" here spelled "full-validator") -- a
+#: sibling-drift pair, not two designs. Derived, not hand-duplicated, so the
+#: two can never drift again.
+NODE_INSTRUMENTS = {node_uid: name for name, node_uid in INSTRUMENT_NODES.items()}
+
 RECEIPT_KIND = "release-verification-receipt"
 
 #: Every receipt binds all of these. A receipt missing any one of them cannot
 #: answer the question Publish asks -- "did THIS instrument pass against THESE
 #: bytes on THIS run" -- and a receipt that cannot answer that is not evidence.
+#:
+#: v1.91 S2 (3fb41c99), Argus A155's ruling: `candidate_sha256`, not
+#: `package_sha256`. A receipt is written at VERIFY time, before a freeze can
+#: exist -- binding it to a package identity that does not exist yet is the
+#: ordering defect this spec removes. No guarantee is lost: the freeze gate
+#: re-hashes the candidate on disk and requires every receipt to bind THAT
+#: hash before it will freeze, so the evidence-to-freeze weld is enforced at
+#: freeze, where it can be true, and package_sha256 == candidate_sha256 the
+#: instant a freeze happens (freezing does not change the bytes).
 RECEIPT_FIELDS = (
     "receipt_kind",
     "instrument",
     "release_run_uid",
-    "package_sha256",
+    "candidate_sha256",
     "verdict",
     "executor_or_attester",
     "execution_mode",
@@ -79,7 +96,7 @@ class VerifyRefusal(Exception):
 class Receipt:
     instrument: str
     release_run_uid: str
-    package_sha256: str
+    candidate_sha256: str
     verdict: str
     executor_or_attester: str
     execution_mode: str
@@ -92,7 +109,7 @@ class Receipt:
             "receipt_kind": RECEIPT_KIND,
             "instrument": self.instrument,
             "release_run_uid": self.release_run_uid,
-            "package_sha256": self.package_sha256,
+            "candidate_sha256": self.candidate_sha256,
             "verdict": self.verdict,
             "executor_or_attester": self.executor_or_attester,
             "execution_mode": self.execution_mode,
@@ -150,16 +167,16 @@ def validate_receipt(raw: dict) -> Receipt:
     if not _UID.match(run_uid):
         raise VerifyRefusal(f"release_run_uid {run_uid!r} is not a governed uid")
 
-    digest = str(raw["package_sha256"])
+    digest = str(raw["candidate_sha256"])
     if not _SHA256.match(digest):
         raise VerifyRefusal(
-            f"package_sha256 {digest[:16]!r} is not a sha-256 hex digest"
+            f"candidate_sha256 {digest[:16]!r} is not a sha-256 hex digest"
         )
 
     return Receipt(
         instrument=instrument,
         release_run_uid=run_uid,
-        package_sha256=digest,
+        candidate_sha256=digest,
         verdict=verdict,
         executor_or_attester=str(raw["executor_or_attester"]),
         execution_mode=mode,
@@ -172,7 +189,7 @@ def validate_receipt(raw: dict) -> Receipt:
 def resolve_receipt_set(
     raw_receipts: Iterable[dict],
     release_run_uid: str,
-    package_sha256: str,
+    expected_sha256: str,
 ) -> dict:
     """The one-digest bundle: exactly four passing receipts, or refuse.
 
@@ -181,6 +198,13 @@ def resolve_receipt_set(
     move differs: a missing receipt means run the instrument, a wrong-digest
     receipt means the artefact changed under the verification, and a duplicate
     means something ran twice and one of those runs is unaccounted for.
+
+    `expected_sha256` names two different facts depending on the caller:
+    `assert_ready_to_freeze` passes the CANDIDATE digest (the only one that
+    exists before a freeze); `assert_ready_to_publish` passes the FROZEN
+    PACKAGE digest. Both compare against `receipt.candidate_sha256` --
+    freezing does not change the bytes, so the two digests are the same
+    value by the time a publish is possible.
     """
     by_instrument: dict = {}
     for raw in raw_receipts or []:
@@ -192,12 +216,12 @@ def resolve_receipt_set(
                 f"{receipt.release_run_uid}, not {release_run_uid}. Evidence "
                 f"from another release does not transfer."
             )
-        if receipt.package_sha256 != package_sha256:
+        if receipt.candidate_sha256 != expected_sha256:
             raise VerifyRefusal(
                 f"the {receipt.instrument} receipt tested "
-                f"{receipt.package_sha256[:12]} but the package about to ship "
-                f"is {package_sha256[:12]}. Whatever that instrument approved, "
-                f"it is not this artefact."
+                f"{receipt.candidate_sha256[:12]} but the bytes about to ship "
+                f"are {expected_sha256[:12]}. Whatever that instrument "
+                f"approved, it is not this artefact."
             )
 
         # LATEST RECEIPT PER INSTRUMENT GOVERNS; AGREEING PASS DUPLICATES STILL
@@ -228,8 +252,8 @@ def resolve_receipt_set(
     if missing:
         raise VerifyRefusal(
             f"no receipt for {', '.join(missing)} on run {release_run_uid}. "
-            f"AC7 requires all four instruments against the frozen digest "
-            f"{package_sha256[:12]}; an instrument that did not report is not "
+            f"AC7 requires all four instruments against digest "
+            f"{expected_sha256[:12]}; an instrument that did not report is not "
             f"an instrument that passed."
         )
 
@@ -237,8 +261,7 @@ def resolve_receipt_set(
     if failed:
         raise VerifyRefusal(
             f"{', '.join(sorted(failed))} reported a failing verdict against "
-            f"package {package_sha256[:12]}. A present receipt is not a "
-            f"passing one."
+            f"{expected_sha256[:12]}. A present receipt is not a passing one."
         )
 
     return by_instrument

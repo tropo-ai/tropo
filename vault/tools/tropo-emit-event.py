@@ -125,6 +125,12 @@ REGISTERED_TYPES = {
     # --fire on full green (tag + main sha + release object all verified live); never
     # emitted on a partial/unverified outcome.
     "tropo.release.published",
+    # v1.91 S2 (3fb41c99, Mike-locked -- this spec's lock IS the lock-break
+    # authority per v1.8/v1.9/v1.10/v1.11/v1.12's composition law): emitted
+    # once by tropo-lock-release-plan.py's plan_release_lock() after
+    # apply_plan succeeds, recording the principal locked the release's
+    # scope. Never on a failed or partial lock.
+    "tropo.release.scope_locked",
     # Cycle Coordination Family (v1.59 Lane A events.capsule v1.2 §3)
     "tropo.cycle.activated", "tropo.cycle.ship_gate_progress",
     # v1.61 Lane EC events.capsule v1.3 additions

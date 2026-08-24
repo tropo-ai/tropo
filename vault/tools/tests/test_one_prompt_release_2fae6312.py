@@ -570,6 +570,7 @@ class EvidenceBeforeFreezeTests(unittest.TestCase):
     def setUpClass(cls):
         cls.freeze = _load_tool(
             "tropo-freeze-release-candidate.py", "ac2_freeze")
+        cls.release_verify = _load_tool("lib/release_verify.py", "ac2_release_verify")
 
     def build(self, *, receipts=None, invalidate=False, frozen=False,
               mutate=False) -> Path:
@@ -587,11 +588,20 @@ class EvidenceBeforeFreezeTests(unittest.TestCase):
              "data": {"pipeline_run_uid": "934436ca", "candidate_sha256": sha,
                       "candidate_path": str(candidate)}},
         ]
+        # v1.91 S2 (3fb41c99): the REAL shape release-verification-receipt
+        # writes, per Argus A155's ruling -- not the generic dev-pipeline
+        # verification_receipt name it collided with.
         for step in (receipts if receipts is not None else list(self.freeze.INSTRUMENTS)):
-            rows.append({"event": "verification_receipt", "step": step,
-                         "data": {"pipeline_run_uid": "934436ca",
-                                  "candidate_sha256": sha,
-                                  "instrument_step_uid": step, "verdict": "pass"}})
+            rows.append({"event": self.release_verify.RECEIPT_KIND,
+                         "data": {"receipt_kind": self.release_verify.RECEIPT_KIND,
+                                  "instrument": self.freeze.INSTRUMENTS[step],
+                                  "release_run_uid": "934436ca",
+                                  "candidate_sha256": sha, "verdict": "pass",
+                                  "executor_or_attester": "test",
+                                  "execution_mode": "machine",
+                                  "evidence_ref": step,
+                                  "started_at": "2026-08-23T00:00:00Z",
+                                  "completed_at": "2026-08-23T00:00:00Z"}})
         if invalidate:
             rows.append({"event": "tropo.release.candidate_invalidated",
                          "data": {"candidate_sha256": sha, "reason": "prose fix"}})
@@ -622,7 +632,9 @@ class EvidenceBeforeFreezeTests(unittest.TestCase):
                 run = self.build(
                     receipts=[u for u in self.freeze.INSTRUMENTS if u != absent])
                 _p, refusal = self.freeze.decide(run, run / "pkg.zip")
-                self.assertIn(absent, refusal)
+                # v1.91 S2 (3fb41c99): the shared resolver names the
+                # INSTRUMENT, not the step uid (Argus A155's ruling part 5).
+                self.assertIn(self.freeze.INSTRUMENTS[absent], refusal)
 
     def test_a_live_invalidation_blocks_the_freeze(self):
         run = self.build(invalidate=True)

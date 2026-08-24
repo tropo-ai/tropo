@@ -1,5 +1,5 @@
 {
- "file_count": 1032,
+ "file_count": 1258,
  "files": {
   ".claude/settings.json": {
    "bytes": 451,
@@ -40,6 +40,14 @@
   ".tropo-studio/directives/example.directive.md": {
    "bytes": 3824,
    "sha256": "fb9436fbf73d6e24d515395856f3a189b3b431c3fe715604e3f56946f1cf68fd"
+  },
+  ".tropo-studio/dirty-counter.json": {
+   "bytes": 106,
+   "sha256": "6d6fd09088e5ff2a07087dd07098d0d87faf2c929de9d4d244d37d962efcbffd"
+  },
+  ".tropo-studio/gardener-wall-clock.json": {
+   "bytes": 387,
+   "sha256": "53b6720dc91ee3b6225a54ebd2a17f6f3680d2273641836c75c94143c6d64a4c"
   },
   ".tropo-studio/memory/CAPSULE.md": {
    "bytes": 2189,
@@ -93,6 +101,10 @@
    "bytes": 2614,
    "sha256": "52803a1403753eeca380cd44644b6e80edf47d96f415656e2f51b4fd86d2606d"
   },
+  ".tropo-studio/shards/index-rebuild-run.json": {
+   "bytes": 134527,
+   "sha256": "4ace11c4d0f7319b8448511cef862f11f2f70989d64323b0328fde5621e02bce"
+  },
   ".tropo/00-index.md": {
    "bytes": 7694,
    "sha256": "c3bac54166a650afd166461d6373a40e990ad78a5863c1f12dbab349047bd54a"
@@ -134,8 +146,8 @@
    "sha256": "ff7290ce3b023167b6aa9885a05e2a67170cc960e6cac0c0aefc132209c991d4"
   },
   ".tropo/concierge/activate.md": {
-   "bytes": 70331,
-   "sha256": "296a3ac626e85079bc6f25dfbbbef6d5257c437cf0864f0819b121cee869af11"
+   "bytes": 70907,
+   "sha256": "dfbaa98642569060e77f474ca6fdb037589b439ddc2019dc293045eedafbf901"
   },
   ".tropo/definitions/AGENTS.md": {
    "bytes": 640,
@@ -286,8 +298,8 @@
    "sha256": "a413db139858dd35001a622a253ea108da8251e711b5995b51a0b7bd52401cd1"
   },
   ".tropo/sa-agent-catalog.md": {
-   "bytes": 18817,
-   "sha256": "9a4cd219a955ec88e7dcbce78404fed23251ff82b8ee295e195f819a9391dab9"
+   "bytes": 5996,
+   "sha256": "3dfa04bd2ce4ef6fda6bb1759555c03042d5c8c96a4f766c0229e49220b6205c"
   },
   ".tropo/scheduled-agents.md": {
    "bytes": 5054,
@@ -386,8 +398,8 @@
    "sha256": "e36dd0676a6d9864dade323a40dfd55614676eaa3dc269b494fa02606349514e"
   },
   ".tropo/scripts/lib/event_validators.py": {
-   "bytes": 20374,
-   "sha256": "bb6d5669332b598e3f29a882f6caa857de03d28146193322c0eeb0ae782c4f5a"
+   "bytes": 20749,
+   "sha256": "a5a70499afb47caaaf51eb8b44592c512d20d7bfda9f749a3f847a9d84dd1bdd"
   },
   ".tropo/scripts/lib/fast_yaml.py": {
    "bytes": 2324,
@@ -410,8 +422,8 @@
    "sha256": "b81c88d1e653cc35734f01cda3e3aab4c27879efea4925b691458e3dd8f6b78f"
   },
   ".tropo/scripts/lib/release_authorization.py": {
-   "bytes": 39706,
-   "sha256": "e245eed859b9e0415008aa6002b1d1ef3749061b77a30bbec44d3a70942c84dd"
+   "bytes": 41082,
+   "sha256": "c6324cdd46080fdaa46ba4d4a5ce82d4c91bd7e6672ee2a0b2a419c7f3e0ee4f"
   },
   ".tropo/scripts/lib/release_validators.py": {
    "bytes": 7756,
@@ -575,7 +587,7 @@
   },
   ".tropo/skill-catalog.md": {
    "bytes": 24435,
-   "sha256": "c86b8e546df396eb0c65936211e3565d363758267c1181e7ffb2ebe2b2b47cde"
+   "sha256": "bf7a0d335d4a1b8f61cfe36176e117cc02df5dc7aed2846510fb342183c605cc"
   },
   ".tropo/state-pairing-debt-baseline.json": {
    "bytes": 137179,
@@ -591,11 +603,11 @@
   },
   ".tropo/tool-catalog.md": {
    "bytes": 55984,
-   "sha256": "f1b8c226ba097c0bba1a8a16335e67fabda5b68af7515c923f62869719c8443f"
+   "sha256": "a5552a7d6e5d0062fa43167af91ea86d61fad4b708920d701a01037003cecbdc"
   },
   ".tropo/toolbelt.md": {
-   "bytes": 4600,
-   "sha256": "b2c32f6f3aa48416eb8deed48754515eb6b3b99523f5914d95716c1e32a88713"
+   "bytes": 4394,
+   "sha256": "9afdff591ba1e52009ffb64bbf222dcd5dcbc250c41159cb478bd9125eda4dc0"
   },
   ".tropo/update-source.json": {
    "bytes": 428,
@@ -603,11 +615,803 @@
   },
   ".tropo/version.md": {
    "bytes": 8,
-   "sha256": "06ca49274ef03e4fdc7754e4d3a03ea7c9c52983436ff903d0aca4bc2649a4c7"
+   "sha256": "998d5a67e8fb03f70e0f59df64455ef9dd0d7f055fef6f107096cb934048be42"
   },
   ".tropo/vocabulary/edge-types.md": {
    "bytes": 3300,
    "sha256": "53899e8768430bd032ffd6d80c7fd0db7ee270f20b8d277be8797b5432ae0af9"
+  },
+  "00-tropo-nav/00-tropo-active/01-studio-inbox/2d5f9b04 \u2014 01-studio-inbox.md": {
+   "bytes": 3856,
+   "sha256": "4cdb0a5e05cb05ecf93429c7ec521f022c237c1feeaea64677a535cdce1ebb04"
+  },
+  "00-tropo-nav/00-tropo-active/external-context/48f8c52c \u2014 external-context.md": {
+   "bytes": 1673,
+   "sha256": "f6ecd517a9a792232c731e28c450efa01b946e81a1e211b627081c53f97545af"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Agents/99ed55fd \u2014 Tropo Agents.md": {
+   "bytes": 39491,
+   "sha256": "479e0930a6b916ba5dc38ad7308dbd157ce610aed845550346b1254f9890eb6f"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Documentation/f87e33f0 \u2014 Tropo Documentation.md": {
+   "bytes": 54398,
+   "sha256": "705b1597b0faa722b93ed26df836f740b91a96e978ee3e276cb6155230fbaa36"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Governance/8dd772a0 \u2014 Tropo Governance.md": {
+   "bytes": 98372,
+   "sha256": "b33c7bcfee744801d7cc9742a07ed503949b9cf91204944fe2a67aa6e4d2c15e"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Governance/Import Primitive \u2014 Capability Overview/58722bdf \u2014 Import Primitive \u2014 Capability Overview.md": {
+   "bytes": 9325,
+   "sha256": "ab6f70d87468fa1ea5b5ebe75e947fee2337c3c30dc4af20f4dedf9cd5390681"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Governance/Tropo Link/3a207ed3 \u2014 Tropo Link.md": {
+   "bytes": 12284,
+   "sha256": "5d6f4e2aae5f28e9a673d811d3a9626c8814c9f8c5fd28058e167a1141932fb4"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Library/1aba710c \u2014 Tropo Library.md": {
+   "bytes": 26725,
+   "sha256": "17805508db9334f38d7f7126c60e2d70c5d55fc1530a44987d742e8f89b1e23d"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Library/Packs/d9b8a9bb \u2014 Packs.md": {
+   "bytes": 5193,
+   "sha256": "163f014e34424c925eb1b457a0cd4a68aa9d2c54e3cd5a058d62689ae1aac492"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Link/3a207ed3 \u2014 Tropo Link.md": {
+   "bytes": 12284,
+   "sha256": "5d6f4e2aae5f28e9a673d811d3a9626c8814c9f8c5fd28058e167a1141932fb4"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Playbooks/76bab75f \u2014 Tropo Playbooks.md": {
+   "bytes": 82647,
+   "sha256": "e0e112c6606d42a2b202f51f4e1b76caf76fb0d43b9920e6c87a84290b39db68"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Playbooks/publish-pipeline/6c4a8e21 \u2014 The Pipeline That Published This Article.md": {
+   "bytes": 17012,
+   "sha256": "a89d63a48cdcdc239ecac2c9f42853f57ff44e0351868cf4830e53e9a3c66145"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Playbooks/publish-pipeline/e2f4a8c1 \u2014 publish-pipeline.md": {
+   "bytes": 12029,
+   "sha256": "aacde227e24ef9702ec8eb1ec0662c64f9e60a0d7282337ea67b9a84e86c1e57"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Playbooks/release-pipeline/634913c2 \u2014 release-pipeline.md": {
+   "bytes": 2113,
+   "sha256": "829ab5c73e86da478195dbf9b5ff34c7f71d21c1e4c367d37c2933ee34d46004"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Rendering/dbc1cbbf \u2014 Tropo Rendering.md": {
+   "bytes": 38107,
+   "sha256": "c507f38e2c9af5674fb2af39d6bd57395021359b57ab591f745ca34fee0fd94c"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Test Harness/952f3aa3 \u2014 Tropo Test Harness.md": {
+   "bytes": 16116,
+   "sha256": "e0dcf5e27d64b0473d12f3c00ca729d77dad1ef27f97a80554fbf0ffe5cf29cd"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/2026 Customer Event Plan \u2014 Master Pipeline/Booth Workstream \u2014 2026 Customer Event Plan/c6a1f483 \u2014 Booth Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2507,
+   "sha256": "dba6a43c867dfa262a15eefe1a4950488eabcfdd0f4d58228bcbc222c94d34bc"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/2026 Customer Event Plan \u2014 Master Pipeline/Content Workstream \u2014 2026 Customer Event Plan/b5d4a1f8 \u2014 Content Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2486,
+   "sha256": "b372fe7059742995a96d859f7b7625dda938897feeb9a8b4dbd9164379017317"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/2026 Customer Event Plan \u2014 Master Pipeline/Finance Workstream \u2014 2026 Customer Event Plan/b4e9d572 \u2014 Finance Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2921,
+   "sha256": "4a376ef0876d52405aafefc5afbcb1e3724c0b237fcc5bab93bf3756f670e719"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/2026 Customer Event Plan \u2014 Master Pipeline/Hospitality Workstream \u2014 2026 Customer Event Plan/a7f4b2e3 \u2014 Hospitality Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2501,
+   "sha256": "34101c2d0726c8da54bb97fd59707a34824d04fe67284d89fd438347d6a26889"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/2026 Customer Event Plan \u2014 Master Pipeline/Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn)/e1c8d3a5 \u2014 Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn).md": {
+   "bytes": 5023,
+   "sha256": "44154120caf64cdc7afa4ea2ef52dc6aec8868fd9c43fbd64514f523ea76106a"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/2026 Customer Event Plan \u2014 Master Pipeline/Staffing Workstream \u2014 2026 Customer Event Plan/d28e95b1 \u2014 Staffing Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2483,
+   "sha256": "6c18ec64362c6bde7d3da0740843f1be425706372792a1668d8565a374288b8b"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/2026 Customer Event Plan \u2014 Master Pipeline/f3a2c819 \u2014 2026 Customer Event Plan \u2014 Master Pipeline.md": {
+   "bytes": 7049,
+   "sha256": "682a75496d9d678f1c038eec1e936c99a1486cd039737d198d367464ab7eeb61"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/2d083137 \u2014 Tropo Work.md": {
+   "bytes": 40379,
+   "sha256": "e472e250e1ad4b6269ad1549dff8016229b7179b38831b1a67ecb29812d55bc8"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Booth Workstream \u2014 2026 Customer Event Plan/c6a1f483 \u2014 Booth Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2507,
+   "sha256": "dba6a43c867dfa262a15eefe1a4950488eabcfdd0f4d58228bcbc222c94d34bc"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Content Workstream \u2014 2026 Customer Event Plan/b5d4a1f8 \u2014 Content Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2486,
+   "sha256": "b372fe7059742995a96d859f7b7625dda938897feeb9a8b4dbd9164379017317"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Finance Workstream \u2014 2026 Customer Event Plan/b4e9d572 \u2014 Finance Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2921,
+   "sha256": "4a376ef0876d52405aafefc5afbcb1e3724c0b237fcc5bab93bf3756f670e719"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Booth Workstream \u2014 2026 Customer Event Plan/c6a1f483 \u2014 Booth Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2507,
+   "sha256": "dba6a43c867dfa262a15eefe1a4950488eabcfdd0f4d58228bcbc222c94d34bc"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Content Workstream \u2014 2026 Customer Event Plan/b5d4a1f8 \u2014 Content Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2486,
+   "sha256": "b372fe7059742995a96d859f7b7625dda938897feeb9a8b4dbd9164379017317"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Finance Workstream \u2014 2026 Customer Event Plan/b4e9d572 \u2014 Finance Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2921,
+   "sha256": "4a376ef0876d52405aafefc5afbcb1e3724c0b237fcc5bab93bf3756f670e719"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Hospitality Workstream \u2014 2026 Customer Event Plan/a7f4b2e3 \u2014 Hospitality Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2501,
+   "sha256": "34101c2d0726c8da54bb97fd59707a34824d04fe67284d89fd438347d6a26889"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn)/e1c8d3a5 \u2014 Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn).md": {
+   "bytes": 5023,
+   "sha256": "44154120caf64cdc7afa4ea2ef52dc6aec8868fd9c43fbd64514f523ea76106a"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Staffing Workstream \u2014 2026 Customer Event Plan/d28e95b1 \u2014 Staffing Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2483,
+   "sha256": "6c18ec64362c6bde7d3da0740843f1be425706372792a1668d8565a374288b8b"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/f3a2c819 \u2014 2026 Customer Event Plan \u2014 Master Pipeline.md": {
+   "bytes": 7049,
+   "sha256": "682a75496d9d678f1c038eec1e936c99a1486cd039737d198d367464ab7eeb61"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/Booth Workstream \u2014 2026 Customer Event Plan/c6a1f483 \u2014 Booth Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2507,
+   "sha256": "dba6a43c867dfa262a15eefe1a4950488eabcfdd0f4d58228bcbc222c94d34bc"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/Content Workstream \u2014 2026 Customer Event Plan/b5d4a1f8 \u2014 Content Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2486,
+   "sha256": "b372fe7059742995a96d859f7b7625dda938897feeb9a8b4dbd9164379017317"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/Finance Workstream \u2014 2026 Customer Event Plan/b4e9d572 \u2014 Finance Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2921,
+   "sha256": "4a376ef0876d52405aafefc5afbcb1e3724c0b237fcc5bab93bf3756f670e719"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/Hospitality Workstream \u2014 2026 Customer Event Plan/a7f4b2e3 \u2014 Hospitality Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2501,
+   "sha256": "34101c2d0726c8da54bb97fd59707a34824d04fe67284d89fd438347d6a26889"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn)/e1c8d3a5 \u2014 Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn).md": {
+   "bytes": 5023,
+   "sha256": "44154120caf64cdc7afa4ea2ef52dc6aec8868fd9c43fbd64514f523ea76106a"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/Staffing Workstream \u2014 2026 Customer Event Plan/d28e95b1 \u2014 Staffing Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2483,
+   "sha256": "6c18ec64362c6bde7d3da0740843f1be425706372792a1668d8565a374288b8b"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/e8d1a4f6 \u2014 Hello Tropo \u2014 2026 Customer Event Plan.md": {
+   "bytes": 5688,
+   "sha256": "70ff4e93bfcfdc93d8c3c5f1cca84c31a9059fff6e5d8059767f0e13594d77e4"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Hospitality Workstream \u2014 2026 Customer Event Plan/a7f4b2e3 \u2014 Hospitality Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2501,
+   "sha256": "34101c2d0726c8da54bb97fd59707a34824d04fe67284d89fd438347d6a26889"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn)/e1c8d3a5 \u2014 Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn).md": {
+   "bytes": 5023,
+   "sha256": "44154120caf64cdc7afa4ea2ef52dc6aec8868fd9c43fbd64514f523ea76106a"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Work/Staffing Workstream \u2014 2026 Customer Event Plan/d28e95b1 \u2014 Staffing Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2483,
+   "sha256": "6c18ec64362c6bde7d3da0740843f1be425706372792a1668d8565a374288b8b"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-subsystems/aae9a37b \u2014 tropo-subsystems.md": {
+   "bytes": 4195,
+   "sha256": "e1f31eb4c497895678b11281451c11e3b0db56bc9a584abe18688317956ab1f2"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Booth Workstream \u2014 2026 Customer Event Plan/c6a1f483 \u2014 Booth Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2507,
+   "sha256": "dba6a43c867dfa262a15eefe1a4950488eabcfdd0f4d58228bcbc222c94d34bc"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Content Workstream \u2014 2026 Customer Event Plan/b5d4a1f8 \u2014 Content Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2486,
+   "sha256": "b372fe7059742995a96d859f7b7625dda938897feeb9a8b4dbd9164379017317"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Finance Workstream \u2014 2026 Customer Event Plan/b4e9d572 \u2014 Finance Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2921,
+   "sha256": "4a376ef0876d52405aafefc5afbcb1e3724c0b237fcc5bab93bf3756f670e719"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Hospitality Workstream \u2014 2026 Customer Event Plan/a7f4b2e3 \u2014 Hospitality Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2501,
+   "sha256": "34101c2d0726c8da54bb97fd59707a34824d04fe67284d89fd438347d6a26889"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn)/e1c8d3a5 \u2014 Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn).md": {
+   "bytes": 5023,
+   "sha256": "44154120caf64cdc7afa4ea2ef52dc6aec8868fd9c43fbd64514f523ea76106a"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Staffing Workstream \u2014 2026 Customer Event Plan/d28e95b1 \u2014 Staffing Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2483,
+   "sha256": "6c18ec64362c6bde7d3da0740843f1be425706372792a1668d8565a374288b8b"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/f3a2c819 \u2014 2026 Customer Event Plan \u2014 Master Pipeline.md": {
+   "bytes": 7049,
+   "sha256": "682a75496d9d678f1c038eec1e936c99a1486cd039737d198d367464ab7eeb61"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/Booth Workstream \u2014 2026 Customer Event Plan/c6a1f483 \u2014 Booth Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2507,
+   "sha256": "dba6a43c867dfa262a15eefe1a4950488eabcfdd0f4d58228bcbc222c94d34bc"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/Content Workstream \u2014 2026 Customer Event Plan/b5d4a1f8 \u2014 Content Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2486,
+   "sha256": "b372fe7059742995a96d859f7b7625dda938897feeb9a8b4dbd9164379017317"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/Finance Workstream \u2014 2026 Customer Event Plan/b4e9d572 \u2014 Finance Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2921,
+   "sha256": "4a376ef0876d52405aafefc5afbcb1e3724c0b237fcc5bab93bf3756f670e719"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/Hospitality Workstream \u2014 2026 Customer Event Plan/a7f4b2e3 \u2014 Hospitality Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2501,
+   "sha256": "34101c2d0726c8da54bb97fd59707a34824d04fe67284d89fd438347d6a26889"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn)/e1c8d3a5 \u2014 Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn).md": {
+   "bytes": 5023,
+   "sha256": "44154120caf64cdc7afa4ea2ef52dc6aec8868fd9c43fbd64514f523ea76106a"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/Staffing Workstream \u2014 2026 Customer Event Plan/d28e95b1 \u2014 Staffing Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2483,
+   "sha256": "6c18ec64362c6bde7d3da0740843f1be425706372792a1668d8565a374288b8b"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/e8d1a4f6 \u2014 Hello Tropo \u2014 2026 Customer Event Plan.md": {
+   "bytes": 5688,
+   "sha256": "70ff4e93bfcfdc93d8c3c5f1cca84c31a9059fff6e5d8059767f0e13594d77e4"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/app-pipeline/2918e3b4 \u2014 app-pipeline.md": {
+   "bytes": 12078,
+   "sha256": "bac2628e86d71acc7ea83f4c4a95849610aa3e4580d7a6da967a21c68a6eea70"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/app-pipeline/4b71b571 \u2014 deploy \u2014 app-pipeline stage.md": {
+   "bytes": 5434,
+   "sha256": "b5446c54f49879dc5ac18eb53e54cd436cd4cf27c4eed964ad29f8f8a23b41a4"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/app-pipeline/5e865a88 \u2014 build \u2014 app-pipeline stage.md": {
+   "bytes": 4813,
+   "sha256": "d7cafce9d5199ed39869811ca07d01b40dfe6d957855c8d318734239d1602ac6"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/app-pipeline/76cf302e \u2014 specify \u2014 app-pipeline stage.md": {
+   "bytes": 3554,
+   "sha256": "3f7e47f309084ba54bd89c29ee13131811cf0f66ea2214cf94d88dc57b436a56"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/app-pipeline/app-pipeline-01-inbox \u2014 app-pipeline/46dfbb0a \u2014 01-inbox \u2014 app-pipeline.md": {
+   "bytes": 3288,
+   "sha256": "b45004e595306e1abe14e6791f3462b4dbab053a177677842af339b95b75e2e4"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/app-pipeline/b31e8115 \u2014 Tropo Platform UI Foundation Refactor \u2014 Project Plan.md": {
+   "bytes": 15199,
+   "sha256": "c4cac9e8ffb20626d49ca187a0dd601ed2f6130b54f7759b23da598e5f1a5887"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/b8e5f3a2 \u2014 tropo-work.md": {
+   "bytes": 7392,
+   "sha256": "8622e0912a192000945d0e32f92fc2fdca3fe3168f43c45a6bd6f9a3f6c51a03"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/dev-pipeline/47c26a60 \u2014 Memory reinforcement scoring \u2014 a recurrence counter for the curator.md": {
+   "bytes": 11251,
+   "sha256": "a5795bc481af916df7464f52ba14194e4582c2b8437980ee243eccffc2723943"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/dev-pipeline/cd1fcd25 \u2014 dev-pipeline.md": {
+   "bytes": 17202,
+   "sha256": "7c192468c1be2348071334b0d4e0a5761c8ea45ec9e209272ba084b16e2cfaeb"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/doc-pipeline/5a4337ff \u2014 doc-pipeline.md": {
+   "bytes": 11784,
+   "sha256": "1d4d6a2f21c89fc31c04eb3b1dcc25abe1d2f4e38820b50a70eb621b8b7769b7"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/doc-pipeline/5f8be017 \u2014 verify-and-close \u2014 doc-pipeline stage.md": {
+   "bytes": 1760,
+   "sha256": "55dba56fa73d36582b60e8a74e97ca24eab1d048d2de967afd462435f379f1b1"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/doc-pipeline/be7e3792 \u2014 prepare \u2014 doc-pipeline stage.md": {
+   "bytes": 1346,
+   "sha256": "e2e29c24a0fc51b1681827c68ef2cc2ad588df0ec8cc58cce22beb70b2259b21"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/doc-pipeline/e51f5c9f \u2014 execute \u2014 doc-pipeline stage.md": {
+   "bytes": 1630,
+   "sha256": "a8a9bba5fd8fee2bfaa4ac28a62570c3e08e36826fd4b2646d150535b94b0a21"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/publish-pipeline/6c4a8e21 \u2014 The Pipeline That Published This Article.md": {
+   "bytes": 17012,
+   "sha256": "a89d63a48cdcdc239ecac2c9f42853f57ff44e0351868cf4830e53e9a3c66145"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/publish-pipeline/e2f4a8c1 \u2014 publish-pipeline.md": {
+   "bytes": 12029,
+   "sha256": "aacde227e24ef9702ec8eb1ec0662c64f9e60a0d7282337ea67b9a84e86c1e57"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/test-pipeline/2e097029 \u2014 execute \u2014 test-pipeline stage.md": {
+   "bytes": 1398,
+   "sha256": "29cf343af61758c639643cdee433b9209398cc29aec845c5ab31e0e9e615d1a0"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/test-pipeline/69c291b7 \u2014 prepare \u2014 test-pipeline stage.md": {
+   "bytes": 1238,
+   "sha256": "e7d32525b62a656510a71d89b29125e947599f4628e2e924ac0538634bc2dc31"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/test-pipeline/92133de1 \u2014 verify-and-close \u2014 test-pipeline stage.md": {
+   "bytes": 1601,
+   "sha256": "b2019f2cdb0b614a7ce3750c1d931ed39bcc2493dbe25e821ff8b978024afd5e"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/test-pipeline/da3f50dc \u2014 test-pipeline.md": {
+   "bytes": 9552,
+   "sha256": "61aa05b0f9a5ae109aaa6f23541d330553057c1b39dffc842b120cd07cdbd559"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/vault-ops-pipeline/7a683e3a \u2014 execute-vault-ops - vault-ops-pipeline step 3.md": {
+   "bytes": 3946,
+   "sha256": "a9133667036a83c40a28d82421c4c4f927d1f586c6be40f95feacae76e41841a"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/vault-ops-pipeline/8cc1b5ea \u2014 validate-evidence - vault-ops-pipeline step 4.md": {
+   "bytes": 4431,
+   "sha256": "106e6756e5bc87c093af4303ce536f106773af688f7ffcf7730db4106d29119a"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/vault-ops-pipeline/98de904e \u2014 close-activation - vault-ops-pipeline step 5.md": {
+   "bytes": 4385,
+   "sha256": "116bbff7a17a9546019222be750cfd1432626378f50717a71b7133d8b0c9b6c6"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/vault-ops-pipeline/9dab87a0 \u2014 vault-ops-pipeline.md": {
+   "bytes": 11960,
+   "sha256": "b7380c7e198d441f4b6e908f81c99ea8d3b6f739d28957fa018661e790d6f6df"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/vault-ops-pipeline/bd298097 \u2014 plan-vault-ops - vault-ops-pipeline step 2.md": {
+   "bytes": 3868,
+   "sha256": "abf3b37baffddce03df5cd543814276c0ba829c5f12513825e6e125ce403074c"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/vault-ops-pipeline/dac91126 \u2014 accept-vault-ops-spec - vault-ops-pipeline step 1.md": {
+   "bytes": 2616,
+   "sha256": "202751c2be4c1b0b23c7127777a141da3741fcf2372c1379584cd9790bb69f35"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/3a8d92c1 \u2014 Agent-Builder Wizard \u2014 Design Brief.md": {
+   "bytes": 26092,
+   "sha256": "a5c332c757aef86be47b2eb05d52d2a68a0fc7839dfcf556c7ad715f36ce51d1"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/6d4f7a82 \u2014 tropo-ai.com Launch Foundations \u2014 Project Plan.md": {
+   "bytes": 17280,
+   "sha256": "1587eb09abfaad14e3182d6a904553966cebea4a6f04272b7de88716f2c7c570"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/6dfa2757 \u2014 web-deploy-1 (homepage Blocks 1-4 + 7-9 + repo merge) \u2014 Project Plan.md": {
+   "bytes": 15580,
+   "sha256": "8635b2b3d22d79acb5089ff57e15d69c1a4d8cd60d219f18eed5701656848654"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/7b2e94c1 \u2014 web-pipeline.md": {
+   "bytes": 10864,
+   "sha256": "9b881add9e9dc503ca476b793ec774fe690b1b67ef292d3e50901c0518500f9b"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/84d15fb9 \u2014 deploy \u2014 web-pipeline stage.md": {
+   "bytes": 5379,
+   "sha256": "b961fdb6bb147603ed52ddfe34a3da55ed103a47cfc2a6e03c6d53a527f1c443"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/a3f81d52 \u2014 specify \u2014 web-pipeline stage.md": {
+   "bytes": 3489,
+   "sha256": "f2608634f33b0ea18aa52aca8cf00831913a034a99b4a5d8e3551dae57bea719"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/b7e9c41d \u2014 OSS License Research \u2014 Apache 2.0 vs MIT for Tropo-OS.md": {
+   "bytes": 21720,
+   "sha256": "35e1b960d5883aeaa9a5e5fe5df6af31effeca91ef9fbe4aa06ec7c3a05cf912"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/c6e29a47 \u2014 build \u2014 web-pipeline stage.md": {
+   "bytes": 4295,
+   "sha256": "1f5ca4c88d9300b5a164c8e00be78cfad7889e621be92dfd7f4603e0f165e264"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/tropo-ai.com Launch Foundations/2c8e93f1 \u2014 tropo-ai.com Launch Foundations.md": {
+   "bytes": 10121,
+   "sha256": "7d4214bb5a8c4facdae6062dbbc5624eefde92bde9ad1a2f9fde6990d34165e4"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/tropo-ai.com Launch Foundations/3a8d92c1 \u2014 Agent-Builder Wizard \u2014 Design Brief.md": {
+   "bytes": 26092,
+   "sha256": "a5c332c757aef86be47b2eb05d52d2a68a0fc7839dfcf556c7ad715f36ce51d1"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/tropo-ai.com Launch Foundations/6d4f7a82 \u2014 tropo-ai.com Launch Foundations \u2014 Project Plan.md": {
+   "bytes": 17280,
+   "sha256": "1587eb09abfaad14e3182d6a904553966cebea4a6f04272b7de88716f2c7c570"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/tropo-ai.com Launch Foundations/b7e9c41d \u2014 OSS License Research \u2014 Apache 2.0 vs MIT for Tropo-OS.md": {
+   "bytes": 21720,
+   "sha256": "35e1b960d5883aeaa9a5e5fe5df6af31effeca91ef9fbe4aa06ec7c3a05cf912"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/web-pipeline-01-inbox/b39e7d54 \u2014 01-inbox.md": {
+   "bytes": 2443,
+   "sha256": "eb69d266237dea15a12d5bae2c38592203e8a419c48a734f31b7ac9bab987c7a"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/web-pipeline-01-inbox/e8d3a275 \u2014 Website strategic expansion \u2014 from marketing surface to community + learning hub.md": {
+   "bytes": 13924,
+   "sha256": "2dd6311c35b3db63409919abc3b9000dc27e64e291b09c053766d169d3ebaf43"
+  },
+  "00-tropo-nav/00-tropo-active/tropo-work/web-pipeline/web-pipeline-01-inbox/f4a82d61 \u2014 Hosting research \u2014 tropo-ai.com host selection + DNS wiring + CI-CD setup.md": {
+   "bytes": 5133,
+   "sha256": "039d1e4025aa3554d3cc6ac1f386fcbdeaeb912b961085c7ceaa3085815e568d"
+  },
+  "00-tropo-nav/00-tropo-all/01-studio-inbox/2d5f9b04 \u2014 01-studio-inbox.md": {
+   "bytes": 3856,
+   "sha256": "4cdb0a5e05cb05ecf93429c7ec521f022c237c1feeaea64677a535cdce1ebb04"
+  },
+  "00-tropo-nav/00-tropo-all/external-context/48f8c52c \u2014 external-context.md": {
+   "bytes": 1673,
+   "sha256": "f6ecd517a9a792232c731e28c450efa01b946e81a1e211b627081c53f97545af"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Agents/99ed55fd \u2014 Tropo Agents.md": {
+   "bytes": 39491,
+   "sha256": "479e0930a6b916ba5dc38ad7308dbd157ce610aed845550346b1254f9890eb6f"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Documentation/f87e33f0 \u2014 Tropo Documentation.md": {
+   "bytes": 54398,
+   "sha256": "705b1597b0faa722b93ed26df836f740b91a96e978ee3e276cb6155230fbaa36"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Governance/8dd772a0 \u2014 Tropo Governance.md": {
+   "bytes": 98372,
+   "sha256": "b33c7bcfee744801d7cc9742a07ed503949b9cf91204944fe2a67aa6e4d2c15e"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Governance/Import Primitive \u2014 Capability Overview/58722bdf \u2014 Import Primitive \u2014 Capability Overview.md": {
+   "bytes": 9325,
+   "sha256": "ab6f70d87468fa1ea5b5ebe75e947fee2337c3c30dc4af20f4dedf9cd5390681"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Governance/Tropo Link/3a207ed3 \u2014 Tropo Link.md": {
+   "bytes": 12284,
+   "sha256": "5d6f4e2aae5f28e9a673d811d3a9626c8814c9f8c5fd28058e167a1141932fb4"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Library/1aba710c \u2014 Tropo Library.md": {
+   "bytes": 26725,
+   "sha256": "17805508db9334f38d7f7126c60e2d70c5d55fc1530a44987d742e8f89b1e23d"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Library/Packs/d9b8a9bb \u2014 Packs.md": {
+   "bytes": 5193,
+   "sha256": "163f014e34424c925eb1b457a0cd4a68aa9d2c54e3cd5a058d62689ae1aac492"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Link/3a207ed3 \u2014 Tropo Link.md": {
+   "bytes": 12284,
+   "sha256": "5d6f4e2aae5f28e9a673d811d3a9626c8814c9f8c5fd28058e167a1141932fb4"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Playbooks/76bab75f \u2014 Tropo Playbooks.md": {
+   "bytes": 82647,
+   "sha256": "e0e112c6606d42a2b202f51f4e1b76caf76fb0d43b9920e6c87a84290b39db68"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Playbooks/publish-pipeline/6c4a8e21 \u2014 The Pipeline That Published This Article.md": {
+   "bytes": 17012,
+   "sha256": "a89d63a48cdcdc239ecac2c9f42853f57ff44e0351868cf4830e53e9a3c66145"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Playbooks/publish-pipeline/e2f4a8c1 \u2014 publish-pipeline.md": {
+   "bytes": 12029,
+   "sha256": "aacde227e24ef9702ec8eb1ec0662c64f9e60a0d7282337ea67b9a84e86c1e57"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Playbooks/release-pipeline/634913c2 \u2014 release-pipeline.md": {
+   "bytes": 2113,
+   "sha256": "829ab5c73e86da478195dbf9b5ff34c7f71d21c1e4c367d37c2933ee34d46004"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Rendering/dbc1cbbf \u2014 Tropo Rendering.md": {
+   "bytes": 38107,
+   "sha256": "c507f38e2c9af5674fb2af39d6bd57395021359b57ab591f745ca34fee0fd94c"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Test Harness/952f3aa3 \u2014 Tropo Test Harness.md": {
+   "bytes": 16116,
+   "sha256": "e0dcf5e27d64b0473d12f3c00ca729d77dad1ef27f97a80554fbf0ffe5cf29cd"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/2026 Customer Event Plan \u2014 Master Pipeline/Booth Workstream \u2014 2026 Customer Event Plan/c6a1f483 \u2014 Booth Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2507,
+   "sha256": "dba6a43c867dfa262a15eefe1a4950488eabcfdd0f4d58228bcbc222c94d34bc"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/2026 Customer Event Plan \u2014 Master Pipeline/Content Workstream \u2014 2026 Customer Event Plan/b5d4a1f8 \u2014 Content Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2486,
+   "sha256": "b372fe7059742995a96d859f7b7625dda938897feeb9a8b4dbd9164379017317"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/2026 Customer Event Plan \u2014 Master Pipeline/Finance Workstream \u2014 2026 Customer Event Plan/b4e9d572 \u2014 Finance Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2921,
+   "sha256": "4a376ef0876d52405aafefc5afbcb1e3724c0b237fcc5bab93bf3756f670e719"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/2026 Customer Event Plan \u2014 Master Pipeline/Hospitality Workstream \u2014 2026 Customer Event Plan/a7f4b2e3 \u2014 Hospitality Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2501,
+   "sha256": "34101c2d0726c8da54bb97fd59707a34824d04fe67284d89fd438347d6a26889"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/2026 Customer Event Plan \u2014 Master Pipeline/Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn)/e1c8d3a5 \u2014 Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn).md": {
+   "bytes": 5023,
+   "sha256": "44154120caf64cdc7afa4ea2ef52dc6aec8868fd9c43fbd64514f523ea76106a"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/2026 Customer Event Plan \u2014 Master Pipeline/Staffing Workstream \u2014 2026 Customer Event Plan/d28e95b1 \u2014 Staffing Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2483,
+   "sha256": "6c18ec64362c6bde7d3da0740843f1be425706372792a1668d8565a374288b8b"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/2026 Customer Event Plan \u2014 Master Pipeline/f3a2c819 \u2014 2026 Customer Event Plan \u2014 Master Pipeline.md": {
+   "bytes": 7049,
+   "sha256": "682a75496d9d678f1c038eec1e936c99a1486cd039737d198d367464ab7eeb61"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/2d083137 \u2014 Tropo Work.md": {
+   "bytes": 40379,
+   "sha256": "e472e250e1ad4b6269ad1549dff8016229b7179b38831b1a67ecb29812d55bc8"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Booth Workstream \u2014 2026 Customer Event Plan/c6a1f483 \u2014 Booth Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2507,
+   "sha256": "dba6a43c867dfa262a15eefe1a4950488eabcfdd0f4d58228bcbc222c94d34bc"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Content Workstream \u2014 2026 Customer Event Plan/b5d4a1f8 \u2014 Content Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2486,
+   "sha256": "b372fe7059742995a96d859f7b7625dda938897feeb9a8b4dbd9164379017317"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Finance Workstream \u2014 2026 Customer Event Plan/b4e9d572 \u2014 Finance Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2921,
+   "sha256": "4a376ef0876d52405aafefc5afbcb1e3724c0b237fcc5bab93bf3756f670e719"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Booth Workstream \u2014 2026 Customer Event Plan/c6a1f483 \u2014 Booth Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2507,
+   "sha256": "dba6a43c867dfa262a15eefe1a4950488eabcfdd0f4d58228bcbc222c94d34bc"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Content Workstream \u2014 2026 Customer Event Plan/b5d4a1f8 \u2014 Content Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2486,
+   "sha256": "b372fe7059742995a96d859f7b7625dda938897feeb9a8b4dbd9164379017317"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Finance Workstream \u2014 2026 Customer Event Plan/b4e9d572 \u2014 Finance Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2921,
+   "sha256": "4a376ef0876d52405aafefc5afbcb1e3724c0b237fcc5bab93bf3756f670e719"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Hospitality Workstream \u2014 2026 Customer Event Plan/a7f4b2e3 \u2014 Hospitality Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2501,
+   "sha256": "34101c2d0726c8da54bb97fd59707a34824d04fe67284d89fd438347d6a26889"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn)/e1c8d3a5 \u2014 Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn).md": {
+   "bytes": 5023,
+   "sha256": "44154120caf64cdc7afa4ea2ef52dc6aec8868fd9c43fbd64514f523ea76106a"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Staffing Workstream \u2014 2026 Customer Event Plan/d28e95b1 \u2014 Staffing Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2483,
+   "sha256": "6c18ec64362c6bde7d3da0740843f1be425706372792a1668d8565a374288b8b"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/f3a2c819 \u2014 2026 Customer Event Plan \u2014 Master Pipeline.md": {
+   "bytes": 7049,
+   "sha256": "682a75496d9d678f1c038eec1e936c99a1486cd039737d198d367464ab7eeb61"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/Booth Workstream \u2014 2026 Customer Event Plan/c6a1f483 \u2014 Booth Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2507,
+   "sha256": "dba6a43c867dfa262a15eefe1a4950488eabcfdd0f4d58228bcbc222c94d34bc"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/Content Workstream \u2014 2026 Customer Event Plan/b5d4a1f8 \u2014 Content Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2486,
+   "sha256": "b372fe7059742995a96d859f7b7625dda938897feeb9a8b4dbd9164379017317"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/Finance Workstream \u2014 2026 Customer Event Plan/b4e9d572 \u2014 Finance Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2921,
+   "sha256": "4a376ef0876d52405aafefc5afbcb1e3724c0b237fcc5bab93bf3756f670e719"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/Hospitality Workstream \u2014 2026 Customer Event Plan/a7f4b2e3 \u2014 Hospitality Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2501,
+   "sha256": "34101c2d0726c8da54bb97fd59707a34824d04fe67284d89fd438347d6a26889"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn)/e1c8d3a5 \u2014 Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn).md": {
+   "bytes": 5023,
+   "sha256": "44154120caf64cdc7afa4ea2ef52dc6aec8868fd9c43fbd64514f523ea76106a"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/Staffing Workstream \u2014 2026 Customer Event Plan/d28e95b1 \u2014 Staffing Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2483,
+   "sha256": "6c18ec64362c6bde7d3da0740843f1be425706372792a1668d8565a374288b8b"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hello Tropo \u2014 2026 Customer Event Plan/e8d1a4f6 \u2014 Hello Tropo \u2014 2026 Customer Event Plan.md": {
+   "bytes": 5688,
+   "sha256": "70ff4e93bfcfdc93d8c3c5f1cca84c31a9059fff6e5d8059767f0e13594d77e4"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Hospitality Workstream \u2014 2026 Customer Event Plan/a7f4b2e3 \u2014 Hospitality Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2501,
+   "sha256": "34101c2d0726c8da54bb97fd59707a34824d04fe67284d89fd438347d6a26889"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn)/e1c8d3a5 \u2014 Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn).md": {
+   "bytes": 5023,
+   "sha256": "44154120caf64cdc7afa4ea2ef52dc6aec8868fd9c43fbd64514f523ea76106a"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Work/Staffing Workstream \u2014 2026 Customer Event Plan/d28e95b1 \u2014 Staffing Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2483,
+   "sha256": "6c18ec64362c6bde7d3da0740843f1be425706372792a1668d8565a374288b8b"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-subsystems/aae9a37b \u2014 tropo-subsystems.md": {
+   "bytes": 4195,
+   "sha256": "e1f31eb4c497895678b11281451c11e3b0db56bc9a584abe18688317956ab1f2"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Booth Workstream \u2014 2026 Customer Event Plan/c6a1f483 \u2014 Booth Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2507,
+   "sha256": "dba6a43c867dfa262a15eefe1a4950488eabcfdd0f4d58228bcbc222c94d34bc"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Content Workstream \u2014 2026 Customer Event Plan/b5d4a1f8 \u2014 Content Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2486,
+   "sha256": "b372fe7059742995a96d859f7b7625dda938897feeb9a8b4dbd9164379017317"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Finance Workstream \u2014 2026 Customer Event Plan/b4e9d572 \u2014 Finance Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2921,
+   "sha256": "4a376ef0876d52405aafefc5afbcb1e3724c0b237fcc5bab93bf3756f670e719"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Hospitality Workstream \u2014 2026 Customer Event Plan/a7f4b2e3 \u2014 Hospitality Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2501,
+   "sha256": "34101c2d0726c8da54bb97fd59707a34824d04fe67284d89fd438347d6a26889"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn)/e1c8d3a5 \u2014 Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn).md": {
+   "bytes": 5023,
+   "sha256": "44154120caf64cdc7afa4ea2ef52dc6aec8868fd9c43fbd64514f523ea76106a"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/Staffing Workstream \u2014 2026 Customer Event Plan/d28e95b1 \u2014 Staffing Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2483,
+   "sha256": "6c18ec64362c6bde7d3da0740843f1be425706372792a1668d8565a374288b8b"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/2026 Customer Event Plan \u2014 Master Pipeline/f3a2c819 \u2014 2026 Customer Event Plan \u2014 Master Pipeline.md": {
+   "bytes": 7049,
+   "sha256": "682a75496d9d678f1c038eec1e936c99a1486cd039737d198d367464ab7eeb61"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/Booth Workstream \u2014 2026 Customer Event Plan/c6a1f483 \u2014 Booth Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2507,
+   "sha256": "dba6a43c867dfa262a15eefe1a4950488eabcfdd0f4d58228bcbc222c94d34bc"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/Content Workstream \u2014 2026 Customer Event Plan/b5d4a1f8 \u2014 Content Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2486,
+   "sha256": "b372fe7059742995a96d859f7b7625dda938897feeb9a8b4dbd9164379017317"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/Finance Workstream \u2014 2026 Customer Event Plan/b4e9d572 \u2014 Finance Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2921,
+   "sha256": "4a376ef0876d52405aafefc5afbcb1e3724c0b237fcc5bab93bf3756f670e719"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/Hospitality Workstream \u2014 2026 Customer Event Plan/a7f4b2e3 \u2014 Hospitality Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2501,
+   "sha256": "34101c2d0726c8da54bb97fd59707a34824d04fe67284d89fd438347d6a26889"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn)/e1c8d3a5 \u2014 Promotion Workstream \u2014 2026 Customer Event Plan (teach-by-example- auto-task-spawn).md": {
+   "bytes": 5023,
+   "sha256": "44154120caf64cdc7afa4ea2ef52dc6aec8868fd9c43fbd64514f523ea76106a"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/Staffing Workstream \u2014 2026 Customer Event Plan/d28e95b1 \u2014 Staffing Workstream \u2014 2026 Customer Event Plan.md": {
+   "bytes": 2483,
+   "sha256": "6c18ec64362c6bde7d3da0740843f1be425706372792a1668d8565a374288b8b"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/Hello Tropo \u2014 2026 Customer Event Plan/e8d1a4f6 \u2014 Hello Tropo \u2014 2026 Customer Event Plan.md": {
+   "bytes": 5688,
+   "sha256": "70ff4e93bfcfdc93d8c3c5f1cca84c31a9059fff6e5d8059767f0e13594d77e4"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/app-pipeline/2918e3b4 \u2014 app-pipeline.md": {
+   "bytes": 12078,
+   "sha256": "bac2628e86d71acc7ea83f4c4a95849610aa3e4580d7a6da967a21c68a6eea70"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/app-pipeline/4b71b571 \u2014 deploy \u2014 app-pipeline stage.md": {
+   "bytes": 5434,
+   "sha256": "b5446c54f49879dc5ac18eb53e54cd436cd4cf27c4eed964ad29f8f8a23b41a4"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/app-pipeline/5e865a88 \u2014 build \u2014 app-pipeline stage.md": {
+   "bytes": 4813,
+   "sha256": "d7cafce9d5199ed39869811ca07d01b40dfe6d957855c8d318734239d1602ac6"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/app-pipeline/76cf302e \u2014 specify \u2014 app-pipeline stage.md": {
+   "bytes": 3554,
+   "sha256": "3f7e47f309084ba54bd89c29ee13131811cf0f66ea2214cf94d88dc57b436a56"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/app-pipeline/app-pipeline-01-inbox \u2014 app-pipeline/46dfbb0a \u2014 01-inbox \u2014 app-pipeline.md": {
+   "bytes": 3288,
+   "sha256": "b45004e595306e1abe14e6791f3462b4dbab053a177677842af339b95b75e2e4"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/app-pipeline/b31e8115 \u2014 Tropo Platform UI Foundation Refactor \u2014 Project Plan.md": {
+   "bytes": 15199,
+   "sha256": "c4cac9e8ffb20626d49ca187a0dd601ed2f6130b54f7759b23da598e5f1a5887"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/b8e5f3a2 \u2014 tropo-work.md": {
+   "bytes": 7392,
+   "sha256": "8622e0912a192000945d0e32f92fc2fdca3fe3168f43c45a6bd6f9a3f6c51a03"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/47c26a60 \u2014 Memory reinforcement scoring \u2014 a recurrence counter for the curator.md": {
+   "bytes": 11251,
+   "sha256": "a5795bc481af916df7464f52ba14194e4582c2b8437980ee243eccffc2723943"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/cd1fcd25 \u2014 dev-pipeline.md": {
+   "bytes": 17202,
+   "sha256": "7c192468c1be2348071334b0d4e0a5761c8ea45ec9e209272ba084b16e2cfaeb"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/doc-pipeline/5a4337ff \u2014 doc-pipeline.md": {
+   "bytes": 11784,
+   "sha256": "1d4d6a2f21c89fc31c04eb3b1dcc25abe1d2f4e38820b50a70eb621b8b7769b7"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/doc-pipeline/5f8be017 \u2014 verify-and-close \u2014 doc-pipeline stage.md": {
+   "bytes": 1760,
+   "sha256": "55dba56fa73d36582b60e8a74e97ca24eab1d048d2de967afd462435f379f1b1"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/doc-pipeline/be7e3792 \u2014 prepare \u2014 doc-pipeline stage.md": {
+   "bytes": 1346,
+   "sha256": "e2e29c24a0fc51b1681827c68ef2cc2ad588df0ec8cc58cce22beb70b2259b21"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/doc-pipeline/e51f5c9f \u2014 execute \u2014 doc-pipeline stage.md": {
+   "bytes": 1630,
+   "sha256": "a8a9bba5fd8fee2bfaa4ac28a62570c3e08e36826fd4b2646d150535b94b0a21"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/publish-pipeline/6c4a8e21 \u2014 The Pipeline That Published This Article.md": {
+   "bytes": 17012,
+   "sha256": "a89d63a48cdcdc239ecac2c9f42853f57ff44e0351868cf4830e53e9a3c66145"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/publish-pipeline/e2f4a8c1 \u2014 publish-pipeline.md": {
+   "bytes": 12029,
+   "sha256": "aacde227e24ef9702ec8eb1ec0662c64f9e60a0d7282337ea67b9a84e86c1e57"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/test-pipeline/2e097029 \u2014 execute \u2014 test-pipeline stage.md": {
+   "bytes": 1398,
+   "sha256": "29cf343af61758c639643cdee433b9209398cc29aec845c5ab31e0e9e615d1a0"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/test-pipeline/69c291b7 \u2014 prepare \u2014 test-pipeline stage.md": {
+   "bytes": 1238,
+   "sha256": "e7d32525b62a656510a71d89b29125e947599f4628e2e924ac0538634bc2dc31"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/test-pipeline/92133de1 \u2014 verify-and-close \u2014 test-pipeline stage.md": {
+   "bytes": 1601,
+   "sha256": "b2019f2cdb0b614a7ce3750c1d931ed39bcc2493dbe25e821ff8b978024afd5e"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/test-pipeline/da3f50dc \u2014 test-pipeline.md": {
+   "bytes": 9552,
+   "sha256": "61aa05b0f9a5ae109aaa6f23541d330553057c1b39dffc842b120cd07cdbd559"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/vault-ops-pipeline/7a683e3a \u2014 execute-vault-ops - vault-ops-pipeline step 3.md": {
+   "bytes": 3946,
+   "sha256": "a9133667036a83c40a28d82421c4c4f927d1f586c6be40f95feacae76e41841a"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/vault-ops-pipeline/8cc1b5ea \u2014 validate-evidence - vault-ops-pipeline step 4.md": {
+   "bytes": 4431,
+   "sha256": "106e6756e5bc87c093af4303ce536f106773af688f7ffcf7730db4106d29119a"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/vault-ops-pipeline/98de904e \u2014 close-activation - vault-ops-pipeline step 5.md": {
+   "bytes": 4385,
+   "sha256": "116bbff7a17a9546019222be750cfd1432626378f50717a71b7133d8b0c9b6c6"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/vault-ops-pipeline/9dab87a0 \u2014 vault-ops-pipeline.md": {
+   "bytes": 11960,
+   "sha256": "b7380c7e198d441f4b6e908f81c99ea8d3b6f739d28957fa018661e790d6f6df"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/vault-ops-pipeline/bd298097 \u2014 plan-vault-ops - vault-ops-pipeline step 2.md": {
+   "bytes": 3868,
+   "sha256": "abf3b37baffddce03df5cd543814276c0ba829c5f12513825e6e125ce403074c"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/vault-ops-pipeline/dac91126 \u2014 accept-vault-ops-spec - vault-ops-pipeline step 1.md": {
+   "bytes": 2616,
+   "sha256": "202751c2be4c1b0b23c7127777a141da3741fcf2372c1379584cd9790bb69f35"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/3a8d92c1 \u2014 Agent-Builder Wizard \u2014 Design Brief.md": {
+   "bytes": 26092,
+   "sha256": "a5c332c757aef86be47b2eb05d52d2a68a0fc7839dfcf556c7ad715f36ce51d1"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/6d4f7a82 \u2014 tropo-ai.com Launch Foundations \u2014 Project Plan.md": {
+   "bytes": 17280,
+   "sha256": "1587eb09abfaad14e3182d6a904553966cebea4a6f04272b7de88716f2c7c570"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/6dfa2757 \u2014 web-deploy-1 (homepage Blocks 1-4 + 7-9 + repo merge) \u2014 Project Plan.md": {
+   "bytes": 15580,
+   "sha256": "8635b2b3d22d79acb5089ff57e15d69c1a4d8cd60d219f18eed5701656848654"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/7b2e94c1 \u2014 web-pipeline.md": {
+   "bytes": 10864,
+   "sha256": "9b881add9e9dc503ca476b793ec774fe690b1b67ef292d3e50901c0518500f9b"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/84d15fb9 \u2014 deploy \u2014 web-pipeline stage.md": {
+   "bytes": 5379,
+   "sha256": "b961fdb6bb147603ed52ddfe34a3da55ed103a47cfc2a6e03c6d53a527f1c443"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/a3f81d52 \u2014 specify \u2014 web-pipeline stage.md": {
+   "bytes": 3489,
+   "sha256": "f2608634f33b0ea18aa52aca8cf00831913a034a99b4a5d8e3551dae57bea719"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/b7e9c41d \u2014 OSS License Research \u2014 Apache 2.0 vs MIT for Tropo-OS.md": {
+   "bytes": 21720,
+   "sha256": "35e1b960d5883aeaa9a5e5fe5df6af31effeca91ef9fbe4aa06ec7c3a05cf912"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/c6e29a47 \u2014 build \u2014 web-pipeline stage.md": {
+   "bytes": 4295,
+   "sha256": "1f5ca4c88d9300b5a164c8e00be78cfad7889e621be92dfd7f4603e0f165e264"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/tropo-ai.com Launch Foundations/2c8e93f1 \u2014 tropo-ai.com Launch Foundations.md": {
+   "bytes": 10121,
+   "sha256": "7d4214bb5a8c4facdae6062dbbc5624eefde92bde9ad1a2f9fde6990d34165e4"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/tropo-ai.com Launch Foundations/3a8d92c1 \u2014 Agent-Builder Wizard \u2014 Design Brief.md": {
+   "bytes": 26092,
+   "sha256": "a5c332c757aef86be47b2eb05d52d2a68a0fc7839dfcf556c7ad715f36ce51d1"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/tropo-ai.com Launch Foundations/6d4f7a82 \u2014 tropo-ai.com Launch Foundations \u2014 Project Plan.md": {
+   "bytes": 17280,
+   "sha256": "1587eb09abfaad14e3182d6a904553966cebea4a6f04272b7de88716f2c7c570"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/tropo-ai.com Launch Foundations/b7e9c41d \u2014 OSS License Research \u2014 Apache 2.0 vs MIT for Tropo-OS.md": {
+   "bytes": 21720,
+   "sha256": "35e1b960d5883aeaa9a5e5fe5df6af31effeca91ef9fbe4aa06ec7c3a05cf912"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/web-pipeline-01-inbox/b39e7d54 \u2014 01-inbox.md": {
+   "bytes": 2443,
+   "sha256": "eb69d266237dea15a12d5bae2c38592203e8a419c48a734f31b7ac9bab987c7a"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/web-pipeline-01-inbox/e8d3a275 \u2014 Website strategic expansion \u2014 from marketing surface to community + learning hub.md": {
+   "bytes": 13924,
+   "sha256": "2dd6311c35b3db63409919abc3b9000dc27e64e291b09c053766d169d3ebaf43"
+  },
+  "00-tropo-nav/00-tropo-all/tropo-work/web-pipeline/web-pipeline-01-inbox/f4a82d61 \u2014 Hosting research \u2014 tropo-ai.com host selection + DNS wiring + CI-CD setup.md": {
+   "bytes": 5133,
+   "sha256": "039d1e4025aa3554d3cc6ac1f386fcbdeaeb912b961085c7ceaa3085815e568d"
   },
   "01-studio-inbox/README.md": {
    "bytes": 429,
@@ -630,8 +1434,8 @@
    "sha256": "c426753cff870e141beafa690046285a845673d8d02269202693e4aad7018eb1"
   },
   "AGENT-ORIENTATION.md": {
-   "bytes": 5476,
-   "sha256": "3baff0db9e43ef3da165c3856a024806b9d4d1a467d8162dec0a173e6222a7b8"
+   "bytes": 5443,
+   "sha256": "4fdefd0b15999fcebf3e34760166c121251597060dbf5cc32590ab45a4d180d6"
   },
   "AGENTS.md": {
    "bytes": 1502,
@@ -642,36 +1446,36 @@
    "sha256": "746156509579ef9510b497e0dd8842f7a64db1f8f29aadce82e3d8a86f1c5356"
   },
   "CHANGELOG.md": {
-   "bytes": 23376,
-   "sha256": "3248e5d38ac045f2db1df91f21a050257005e3284c91c5f08d8b5eb061455318"
+   "bytes": 26243,
+   "sha256": "3e74b1843c10305923a99a6c2d9e6df7725e7ebd978560e5b6e023ed220f8b4d"
   },
   "CLAUDE.md": {
-   "bytes": 3814,
-   "sha256": "6ad6771f5b55b44c7194f6514134ace377075b6fca5e2d4fafaa89ea3b1f4cd9"
+   "bytes": 3781,
+   "sha256": "c5c181e32f7fa4a05948729a6cb6202f8c57df4cdc1c84efe1fa1b113ba38327"
   },
   "GEMINI.md": {
-   "bytes": 1114,
-   "sha256": "98e0f669dfa58afe2ba9820b887181c5f5c35561b13800b61eb9b355a94a0433"
+   "bytes": 1082,
+   "sha256": "b4204b3e191cac521ed1120c0c554225ff6ae007e2325048ccf9f0171545faa5"
   },
   "LICENSE": {
    "bytes": 11301,
    "sha256": "177efa1f59a62625c95e35018abbe6f2f6a69d956ee61b72cb4991501967397a"
   },
   "MANIFEST.md": {
-   "bytes": 122577,
-   "sha256": "2752c1e66e3e0254e5634ef362d938ac527dde0c04e5ff16a00f64d05f42a4ec"
+   "bytes": 172623,
+   "sha256": "66239f5c96f248805ed0adf378acc10698172abebf571729a47c4e205d4b2406"
   },
   "README.md": {
    "bytes": 4685,
-   "sha256": "2a9b96f1775a99ac8cb41f97f054afe3d5c303cb03d4107cc8782f92ef590392"
+   "sha256": "0f3a53f6ca049a399fab177da055c7810eaab60ca7a2e46ebe67806fce7327c7"
   },
   "RELEASING.md": {
    "bytes": 6567,
    "sha256": "911012d1d508f3fd95697f645fc4f9ef763ca70f2c70a843421aa8a9cc6005f3"
   },
   "START-TROPO.md": {
-   "bytes": 3823,
-   "sha256": "6e0d09a48a7790305185ec87290650aa3db6cc3055b8f5a1dafd2b9f99a3821d"
+   "bytes": 3791,
+   "sha256": "ffc8061e0f748ea8b8aa4c428c1e368ad9a4ffe4bf07fc7fec2a3bea690454e7"
   },
   "STUDIO.md": {
    "bytes": 5432,
@@ -718,8 +1522,8 @@
    "sha256": "db754e224814b93c5bc255f5fcc52b3e212e7df7e825647b76bd5536578f89b9"
   },
   "agents/tropo/briefing-package/current-release-notes.md": {
-   "bytes": 2915,
-   "sha256": "0a14a7430a4f75618ba2064f77e21e449fd284be168563d414a151e26477c17b"
+   "bytes": 3189,
+   "sha256": "62156652a206531e84a845bfe94765a445a57cb9361afe9d319d586c2d04c016"
   },
   "channels/AGENTS.md": {
    "bytes": 642,
@@ -745,9 +1549,9 @@
    "bytes": 889,
    "sha256": "44f8e72043d940d5678da5fc1bacd2f12b85012277f523c3f62ccb335d5f68db"
   },
-  "vault/00-index.jsonl": {
-   "bytes": 876223,
-   "sha256": "95cb829162c19376c0545c3acdcf1cdb9772d69f21c7a681605df19de050bb4c"
+  "test-report.md": {
+   "bytes": 1276,
+   "sha256": "97924789db5cc9aa48823d3745cf4e171d2fe14caae3466e931f904c6cf34542"
   },
   "vault/AGENTS.md": {
    "bytes": 23273,
@@ -798,8 +1602,8 @@
    "sha256": "a78fe091db2781318c77f222bb9ba3899d8f77eca49d18de5a8721f6790c1856"
   },
   "vault/agents/3031ffa3.md": {
-   "bytes": 22861,
-   "sha256": "810802e3b2332f858da5b2b601b4ccbf9cb931a63fb219d9d1acbc6089d5a8e8"
+   "bytes": 23685,
+   "sha256": "c7fd7c386dd437e2ba0084741866d9202c31d5ebdb7943732e1f3edf95504747"
   },
   "vault/agents/523d663d.md": {
    "bytes": 45705,
@@ -814,12 +1618,16 @@
    "sha256": "0a797d1655e62171da2daf94d3317669b34e998cb648a9916da2a9ae4082a622"
   },
   "vault/agents/8b81aecf.md": {
-   "bytes": 50620,
-   "sha256": "a2e9cc180d9e667f978268493027828045c8aad31ac354a7a4b3a826ff6ba5e1"
+   "bytes": 51505,
+   "sha256": "b897663225247f91e42cf4e3decd839964c8285cad713a388e225f95fab3673e"
   },
   "vault/agents/9fc001c3.md": {
-   "bytes": 46335,
-   "sha256": "d2b90b692bd71deef4573c998395ccaaea4abb0ffe3f78f3c5ffed3331c89ee7"
+   "bytes": 50801,
+   "sha256": "37841dbd1b62a6b157044fc66b9ce790d13d2c696096e33cd11efc6d36a916b3"
+  },
+  "vault/capsules/mint-registry.json": {
+   "bytes": 18466,
+   "sha256": "9373f7412dafcc108f3c57fc712a96fa5392e0e52ac05499f6e014ff1cfc73d4"
   },
   "vault/capsules/templates/design-brief.template.md": {
    "bytes": 1057,
@@ -938,8 +1746,8 @@
    "sha256": "8a728082656c0b03785f515504568e7cbd08bf69f3e16ac866c1ed931a254504"
   },
   "vault/capsules/tropo-events.capsule.md": {
-   "bytes": 61890,
-   "sha256": "266b0c6e21d86753933898ba920f87999e090ed926d869e0390be18f61f1cea2"
+   "bytes": 65721,
+   "sha256": "cd8154387104eceaa173e78faf4662053594844845dab35514109d0362bee4be"
   },
   "vault/capsules/tropo-external-artifact.capsule.md": {
    "bytes": 36252,
@@ -986,8 +1794,8 @@
    "sha256": "969c60eb396f2f6d62300700594472cc37a8bd2fa3b52cd9135e54fc8e3c6003"
   },
   "vault/capsules/tropo-numeric-folder-prefix.capsule.md": {
-   "bytes": 16726,
-   "sha256": "4e1df94405611ccfe3945db3abfb79a16346c25c656d7f638c9cb1970fc35d15"
+   "bytes": 16724,
+   "sha256": "e7e417a0da7ce6b1fc38f97b012f2a03395b3f2e4e46fac9f8759cf58e6fd8ac"
   },
   "vault/capsules/tropo-os-config.capsule.md": {
    "bytes": 4781,
@@ -1050,8 +1858,8 @@
    "sha256": "f0d21fce5e3fad0b668bfb78d3be4ee62a91127ec1d73caf1624b2f4d40210e8"
   },
   "vault/capsules/tropo-ship-artifact.capsule.md": {
-   "bytes": 62468,
-   "sha256": "930d0397302aa6e5e32b42fe2119501f2a9f64de89a601d66b9b635fba1d969a"
+   "bytes": 62463,
+   "sha256": "cd1170e116d5c374781a17d545c8500ab470ba578b88fae1e6a5e4aeb854e228"
   },
   "vault/capsules/tropo-subsystem-hub.capsule.md": {
    "bytes": 26878,
@@ -1100,6 +1908,10 @@
   "vault/capsules/tropo-working-copy.capsule.md": {
    "bytes": 16440,
    "sha256": "eb0bc5fea2022f0ed3869acb1010d93290c221fc6281be8da2a22277330f7357"
+  },
+  "vault/events/00-events.jsonl": {
+   "bytes": 1486,
+   "sha256": "09867ae47a142b53f32f29c56be7998f5192c1ce4f330f6c8fd8755431982868"
   },
   "vault/files/008b86cc.md": {
    "bytes": 6653,
@@ -1242,8 +2054,8 @@
    "sha256": "674863027a289459928ae6ca8c598cfee5ec28e199424f49cfe79d33b68a4e4e"
   },
   "vault/files/2ffdd9d6.md": {
-   "bytes": 8321,
-   "sha256": "178091fdf775386243519dd07bc623542ad2dfe858c980ecde2980808c1cb87d"
+   "bytes": 8233,
+   "sha256": "17567ae9d246dac822d446b9909bedde57a84d4e766af5a624243d5b870865b4"
   },
   "vault/files/30137f44.md": {
    "bytes": 19153,
@@ -1298,8 +2110,8 @@
    "sha256": "111ae735cd7a11f19568a575badab15c6ade568a107e3fcce86ed5fe3e0a40d1"
   },
   "vault/files/3f3f67f4.md": {
-   "bytes": 3484,
-   "sha256": "da3503f3a0b9c6abb47a9783f43e31da49feabe67eac63bb8a3c746c3bd99d02"
+   "bytes": 3389,
+   "sha256": "a3d5abe039924200a5237aa2e37961c3e1032ad4c9336035deca4b84a805b709"
   },
   "vault/files/3f6e2c84.md": {
    "bytes": 2019,
@@ -1318,8 +2130,8 @@
    "sha256": "04d16e195b799b508fa10009aebe7822a6b07ecae013b0aefb4a61559f886682"
   },
   "vault/files/432d1f56.md": {
-   "bytes": 2534,
-   "sha256": "7e2515e9f2c7dca0ebe2aeeee172a93d58593a1a16f41484791173be8835e152"
+   "bytes": 2439,
+   "sha256": "76a005f65803d9b018399d32287e8fd53af47e1fde96dbe3abc1f8c1e203730d"
   },
   "vault/files/43dc39bc.md": {
    "bytes": 1853,
@@ -1342,16 +2154,16 @@
    "sha256": "f6ecd517a9a792232c731e28c450efa01b946e81a1e211b627081c53f97545af"
   },
   "vault/files/4938b65a.md": {
-   "bytes": 2560,
-   "sha256": "e25cc674120ae306bf38367cd1857ad6023010e534fd44ab4b50dc638e1e1ed9"
+   "bytes": 2465,
+   "sha256": "8340d7cafab2ee4be8cd130794d3ef698c0da35889902518a7090ab1bc35a9f4"
   },
   "vault/files/4a4a1235.md": {
    "bytes": 10247,
    "sha256": "25445a53f1f42ed98d51afa16268f337db0a413616bf46b31a8b08539b49d837"
   },
   "vault/files/4ae35612.md": {
-   "bytes": 3273,
-   "sha256": "331352b8cbe9bb073eabbcb98f7f99d04a1789320ee9e5675fa084e55f008368"
+   "bytes": 3178,
+   "sha256": "2232e7f4210485e80aa9ead5513b9fd3f0bd690d1796e2f04cea91d3bf48f59a"
   },
   "vault/files/4b6e2c8a.md": {
    "bytes": 3424,
@@ -1382,8 +2194,8 @@
    "sha256": "c48327dfa880dd007f742ad66990eab65d3c56d2b7108f02b56e57ca67d4c40e"
   },
   "vault/files/4dd40f6f.md": {
-   "bytes": 3567,
-   "sha256": "593ad4381f0c96fe289f5d0f63777a50ccfc199be1696524a9cfc7a55d1ff571"
+   "bytes": 3472,
+   "sha256": "e87039787bb127b4d5c3217335a921a13da110b0b16149baf54f7f483bda34e5"
   },
   "vault/files/4e12ed59.md": {
    "bytes": 5559,
@@ -1478,8 +2290,8 @@
    "sha256": "ab0ccccc04d64ed18ce631443f120792bd1f9896aff5e07140d9c7d8e2dee7b1"
   },
   "vault/files/62823771.md": {
-   "bytes": 2665,
-   "sha256": "39ebab62d00ee1b85c0ea20b274b553760bc45c0de5086a998146b40caf7bb34"
+   "bytes": 2570,
+   "sha256": "18d0bc26eb6e454a80eef806435333e5540c4240937d44b626d8236641f559f4"
   },
   "vault/files/634913c2.md": {
    "bytes": 2113,
@@ -1546,8 +2358,8 @@
    "sha256": "2498ea4e70a3c3fd94b72ab2f1b6482d298731834c9aef888e5e5293bf939d56"
   },
   "vault/files/76bab75f.md": {
-   "bytes": 82648,
-   "sha256": "c27e0dcc4d901fbf73d2ab348fef6081081a755c0ffd619a67a508717eb171c4"
+   "bytes": 82647,
+   "sha256": "e0e112c6606d42a2b202f51f4e1b76caf76fb0d43b9920e6c87a84290b39db68"
   },
   "vault/files/76cf302e.md": {
    "bytes": 3554,
@@ -1642,12 +2454,12 @@
    "sha256": "8458e7c6a903b51d37f88de55b96a30c5b8b2ccb4cc07f352a5b4da462d5bfa0"
   },
   "vault/files/8dd292e3.md": {
-   "bytes": 18602,
-   "sha256": "f38380b380db6541f793418832d7c5ae2b1cde9a4912fa8ae0d6292bb891b91c"
+   "bytes": 18497,
+   "sha256": "faea1efc56ad5650cc895d98fe6bcedeecc90394dec434c4e412d6a32a11c6c2"
   },
   "vault/files/8dd772a0.md": {
-   "bytes": 97190,
-   "sha256": "0ebdae86d66127ac689682291880630ee1cc3ca3ae909dad5fecaa218240ded9"
+   "bytes": 98372,
+   "sha256": "b33c7bcfee744801d7cc9742a07ed503949b9cf91204944fe2a67aa6e4d2c15e"
   },
   "vault/files/8e03f8d6.md": {
    "bytes": 975,
@@ -1706,8 +2518,8 @@
    "sha256": "b7380c7e198d441f4b6e908f81c99ea8d3b6f739d28957fa018661e790d6f6df"
   },
   "vault/files/9e2b4c87.md": {
-   "bytes": 16569,
-   "sha256": "7a9fa18356507a83f50459eafedc41e675c2668299d2684b83a2a0cc6d6ff800"
+   "bytes": 16503,
+   "sha256": "f63baee2cfd13337775ea2415deb68461a1d86db5992c7e1bb5781ad505d0d53"
   },
   "vault/files/9e4f7a5c.md": {
    "bytes": 4586,
@@ -1722,24 +2534,24 @@
    "sha256": "81366644199319fbd0dee47a9187ec28cf72ccaeabb961a6bf3e91a8ab988087"
   },
   "vault/files/a205f415.md": {
-   "bytes": 3202,
-   "sha256": "7174727f75fcbf5199568a2a757d8e315faba613aea1ec09d0ef778294229bfd"
+   "bytes": 3107,
+   "sha256": "097953394ac5152e6e3ba7342310a16745e55331ef4414ab4034f1ae5c521787"
   },
   "vault/files/a24c5b66.md": {
    "bytes": 6653,
    "sha256": "ed75284f607bf75403014ae59ff59e2bf25ee16918c26cae2fb00e842e3cd8d4"
   },
   "vault/files/a3b56c75.md": {
-   "bytes": 3292,
-   "sha256": "113710040e6e8117b32227ee5f429c1fefc5059cb327283f1088a30b95770bcd"
+   "bytes": 3197,
+   "sha256": "a29528a86bcc5293d2614ac043b9228a074f4c570bd8d2719c5a88b236907671"
   },
   "vault/files/a3f81d52.md": {
    "bytes": 3489,
    "sha256": "f2608634f33b0ea18aa52aca8cf00831913a034a99b4a5d8e3551dae57bea719"
   },
   "vault/files/a5554670.md": {
-   "bytes": 15560,
-   "sha256": "88a2d030b1f6e17b134ce50a883a87497f57393704ff7e6692724202bd8e7d29"
+   "bytes": 15502,
+   "sha256": "06a61c320a2378ace0c8ec649dbd0c8441ba1620bae2e9bdcd83e078c39aebc8"
   },
   "vault/files/a69fcab3.md": {
    "bytes": 6858,
@@ -1766,8 +2578,8 @@
    "sha256": "fa9cd8b49007f8b22efcb37ab0be6f0e256d532dd58720b72570704339768236"
   },
   "vault/files/b31e8115.md": {
-   "bytes": 15290,
-   "sha256": "7a6e99c53972f7c4c424a93dddbff4b7714f88b98e8cc8a1d1340ccab0c0a83f"
+   "bytes": 15199,
+   "sha256": "c4cac9e8ffb20626d49ca187a0dd601ed2f6130b54f7759b23da598e5f1a5887"
   },
   "vault/files/b39e7d54.md": {
    "bytes": 2443,
@@ -1802,8 +2614,8 @@
    "sha256": "9b5da4a14ed60e16f890b52a13c47ab32545056031fe6b26fd9584cb8773f6eb"
   },
   "vault/files/b72bd718.md": {
-   "bytes": 2571,
-   "sha256": "c967bca48faf14f45e11ca917a9e0f3e77d73100c1e4960b8137204d9389c11c"
+   "bytes": 2476,
+   "sha256": "068913f62b118364b2313a392c59a6ddad3a306cf778da22a818ee1638940dc2"
   },
   "vault/files/b7e9c41d.md": {
    "bytes": 21720,
@@ -1830,8 +2642,8 @@
    "sha256": "5981b05d1283d7c65d15e2c613ef7f0acdca1ad0a8018eb6971ba91385f18252"
   },
   "vault/files/c3b9e1a5.md": {
-   "bytes": 2646,
-   "sha256": "062ac4d444cd0d5a44363511f5d3dd21615ead87edbbf99ad24414b6ef7d66de"
+   "bytes": 2650,
+   "sha256": "161d19efc2d330ddc9e3ceaf4fa65aedaeccf428c57c07edd7689096320b105e"
   },
   "vault/files/c3f9a1e7.md": {
    "bytes": 6367,
@@ -1875,7 +2687,7 @@
   },
   "vault/files/d1a4f8e2.md": {
    "bytes": 2853,
-   "sha256": "bea21ff3135a07294f15d20aca7c5d35ebe700ad0fa5b22172157684018fd6f8"
+   "sha256": "8df66030228b3b1310fa33c9c39631b61d69aa2c24f202eafdef2a09f5175e1d"
   },
   "vault/files/d28e95b1.md": {
    "bytes": 2483,
@@ -1886,8 +2698,8 @@
    "sha256": "765bfafa6b13ee2401fcdf9a2743b4343fb51d0d82c76a42bd7c897333db53cc"
   },
   "vault/files/d4c11288.md": {
-   "bytes": 10506,
-   "sha256": "f724eacda94754e093e1c7407a802f8f052ef14e5fabb834fa55aed86436ad06"
+   "bytes": 10445,
+   "sha256": "a13af78585fdf4fb23c94e6650fbae4f396ea7f68481816a4e3d1cf910fcd8f2"
   },
   "vault/files/d61ce0a7.md": {
    "bytes": 20574,
@@ -1958,8 +2770,8 @@
    "sha256": "2dd6311c35b3db63409919abc3b9000dc27e64e291b09c053766d169d3ebaf43"
   },
   "vault/files/e92b48a1.md": {
-   "bytes": 10799,
-   "sha256": "5e09a8b742e5ed65b77b20c6984b9e045c07ee96155396bca73cc1766fe5ee3d"
+   "bytes": 10718,
+   "sha256": "b43006a2aa6ef3a0b6842b85ed39a454df86c9cfd39fc3f1e6ff16fd194018d0"
   },
   "vault/files/e98420c3.md": {
    "bytes": 21062,
@@ -1974,8 +2786,8 @@
    "sha256": "77eb35956c7b8123eb29d21f058f4eb04e176a51c32a87eac9723e7681598421"
   },
   "vault/files/ebfa7fcc.md": {
-   "bytes": 3223,
-   "sha256": "04be5b6bf0220fe04188d435f37fe48a879e2a9dda44a05d602f3816ea6d4777"
+   "bytes": 3128,
+   "sha256": "472b2ed73a3499cfe4cd512db60765d09daa8506683c25f2ab0525c3ab305cdb"
   },
   "vault/files/eca73d77.md": {
    "bytes": 44906,
@@ -1983,7 +2795,7 @@
   },
   "vault/files/f2a7d3c8.md": {
    "bytes": 3865,
-   "sha256": "e141810078e8e41c7209368ae72d51018dcd1019161438879c51e72e917dba71"
+   "sha256": "05a649fca95ec260b7e1440a34aa41fabe8b9788363ad283c841e9485ab6a208"
   },
   "vault/files/f3906b76.md": {
    "bytes": 14659,
@@ -2010,8 +2822,8 @@
    "sha256": "e87d7cdae9ef04b9a0119d53cde1c16660257b6fb149849c71a0b995db65d96b"
   },
   "vault/files/f87e33f0.md": {
-   "bytes": 54399,
-   "sha256": "f80b1c5e14c8f6704a6f54a65ed7c54efb936f0e47bcb2316669ed5699044cd8"
+   "bytes": 54398,
+   "sha256": "705b1597b0faa722b93ed26df836f740b91a96e978ee3e276cb6155230fbaa36"
   },
   "vault/files/f9365ede.md": {
    "bytes": 3378,
@@ -2418,8 +3230,8 @@
    "sha256": "f3faf175fbc81e5122ba4a9312d2339fc721f012db7a20c8259e50fe7de36a84"
   },
   "vault/tools/34fb726c.py": {
-   "bytes": 13540,
-   "sha256": "8343b4598dc78cb57d248428ba0c70446148cc83c091e04a97a3295157c45e32"
+   "bytes": 13539,
+   "sha256": "9b47305240f75731dd9087a476ceb1638641aff7fd5d56fdd87fbac18de79c1b"
   },
   "vault/tools/40b2f455.py": {
    "bytes": 117167,
@@ -2450,8 +3262,12 @@
    "sha256": "0d9be44abf6be3331532e37cf9ec94c2d0935f55a46a749b858bbde2ead991de"
   },
   "vault/tools/9e7003b1.py": {
-   "bytes": 299552,
-   "sha256": "bc1aa1ec81b16c3f0e8a9aaca3a15aa021c7cebe69cc79e575b49010af320c01"
+   "bytes": 300272,
+   "sha256": "5b8d6969fa46902a31cb97cb29eab0b698344adbb28b92962826d0b2a44d73c0"
+  },
+  "vault/tools/_test_mint_id_bypass_fixture.py": {
+   "bytes": 233,
+   "sha256": "fde19d6342dba6f103228f80b5c0f92ff983d71a20e6c981809e5fb86059f3c9"
   },
   "vault/tools/c778f748.py": {
    "bytes": 8723,
@@ -2585,6 +3401,10 @@
    "bytes": 32767,
    "sha256": "fba47d8f5bc6e7fcbbca4be255f990310496d7c9773d981bd3675f5b021c9781"
   },
+  "vault/tools/lib/debt_rule.py": {
+   "bytes": 2513,
+   "sha256": "101c0cc62e581da1e80eee6248f3aaeb12c8b4a13fd036032a4f48d920d6a6b4"
+  },
   "vault/tools/lib/decay_gate.py": {
    "bytes": 2007,
    "sha256": "90ce380ca93f63ed66631022cfeeffbad49cb9b5dc0deca4397b4f421cbdb8c1"
@@ -2628,6 +3448,10 @@
   "vault/tools/lib/event_visibility.py": {
    "bytes": 3112,
    "sha256": "ef8813a423dad27874c3f91d31aba8bc393d3779f67316f28da25ad9dd099012"
+  },
+  "vault/tools/lib/event_writers.py": {
+   "bytes": 5108,
+   "sha256": "04427add8c2484d2ae70856a0c4dd19aa0528661f8ddf61476aed0bbaed7b02b"
   },
   "vault/tools/lib/fan_in.py": {
    "bytes": 11874,
@@ -2682,8 +3506,8 @@
    "sha256": "95ea7526593e9b4ccb890440d6c464e92d78876850f0bb82cd80119069f5dbef"
   },
   "vault/tools/lib/ignition.py": {
-   "bytes": 18420,
-   "sha256": "b145a3d7795b2d4b14ab14b7ed95da682debaee57c5f572caa794331f06344cc"
+   "bytes": 19185,
+   "sha256": "f0eb4e18b211cf7271627df3f03361852ab88395c9e0a83297bb6d047a2a3527"
   },
   "vault/tools/lib/index_surfaces.py": {
    "bytes": 145106,
@@ -2790,8 +3614,8 @@
    "sha256": "aff7404aa38149700148d13c54990bf9923cb5e2036eaba2409b2def0906b87c"
   },
   "vault/tools/lib/release_events.py": {
-   "bytes": 18367,
-   "sha256": "dea495003b0094f74e302e7d9079ff17229f46dee2fc6737ef7ca7c0e9a7a38a"
+   "bytes": 22723,
+   "sha256": "aacb8f78328dc81166ad130df621547448ebbafd9675736c58c6a784f036f6e4"
   },
   "vault/tools/lib/release_gates.py": {
    "bytes": 14992,
@@ -2822,8 +3646,8 @@
    "sha256": "84fd83dedc2fe6249bfc7336ff525b233303a6a9f47fb3f87b12ada25987e03f"
   },
   "vault/tools/lib/release_verify.py": {
-   "bytes": 11423,
-   "sha256": "8213ab77d3df44edbacbb50da53a8457916408d9972adad6373589c8089feed6"
+   "bytes": 12882,
+   "sha256": "a9a91ff65239b32aa71e094d35f22fcbe52fa8b6678538b531fd44c54a0d1532"
   },
   "vault/tools/lib/segment.py": {
    "bytes": 23049,
@@ -2842,8 +3666,8 @@
    "sha256": "c99f8b29e9ffdf9ff2363f3088aee98d4b1a4ce2e9bbb1621e0e8824aa55ef59"
   },
   "vault/tools/lib/template_leg.py": {
-   "bytes": 43059,
-   "sha256": "de4dea17dc72211dd33147f1c0d1e2292a71c04086fa6d562c1cf5337f8f4aba"
+   "bytes": 45582,
+   "sha256": "a5c13ce1e53f1d45777c9b7b0f4d795045bd5a9057103f4c11fde680d4ffc3d6"
   },
   "vault/tools/lib/tested_tree.py": {
    "bytes": 7036,
@@ -2934,16 +3758,16 @@
    "sha256": "14a2885fed3d99f671af09f2a1845f8e8fb65c6d1083a896582f2a64d6f62a8d"
   },
   "vault/tools/tests/fixtures/dry-run-frozen-2026-07/0c9dbe07.md": {
-   "bytes": 9490,
-   "sha256": "fd04d8b8dbf3b4d5b822c11d3d260e69ba33533ab3e142df1c2d94e2dc64f226"
+   "bytes": 9457,
+   "sha256": "b8865522314f84367fb20eed9ebae6b1c9d7361e9fd1397c5359c397880e6915"
   },
   "vault/tools/tests/fixtures/dry-run-frozen-2026-07/1366af30.md": {
    "bytes": 2169,
    "sha256": "d4785a93b23b6b3d09fbd9fd03878c42b5b92824f7cbeb4d7788b0d60e08b33c"
   },
   "vault/tools/tests/fixtures/dry-run-frozen-2026-07/fc4874f4.md": {
-   "bytes": 36367,
-   "sha256": "0762d9691e716f4e2392fbf6350d293533d9a0b17cec1e15e5ab6bdf1274c139"
+   "bytes": 36334,
+   "sha256": "1ce4eb5e454129f695253551f167e1402a8995d89892c76f1dba8e3b02f66734"
   },
   "vault/tools/tests/fixtures/governed-path-vectors.json": {
    "bytes": 17802,
@@ -2962,8 +3786,8 @@
    "sha256": "8d96c5efbd8cf87cd358269a5443cb933a5247e65d118116ffbbb8e0f1a61c6e"
   },
   "vault/tools/tests/studio-validator-debt-baseline.json": {
-   "bytes": 3269,
-   "sha256": "0c3e30d5e3796103ed3c047ade0d1a309c446574fb957ee71d0f10266f0299cd"
+   "bytes": 2726,
+   "sha256": "ab0468a0ac8d699e279c67ec31df4aa8461ce2b0d1990892ac0d9e62dec90de1"
   },
   "vault/tools/tests/studio_debt_classes.py": {
    "bytes": 4624,
@@ -2974,8 +3798,8 @@
    "sha256": "8a5525f8076fae87d9a777b9527798c0e4bbc679fe22145a54d41854c68abf55"
   },
   "vault/tools/tests/test_ac06_final_package_entry_weld.py": {
-   "bytes": 10429,
-   "sha256": "045f0d6324055808baf34b21b65aaa0abfcb810556dc9dfaa211621d2d0d5852"
+   "bytes": 13283,
+   "sha256": "5aff0197bfd20b2f98326756250c917018d1abf925a6a9d1f4cd9a98933d8744"
   },
   "vault/tools/tests/test_ac06_release_legs_wait_before_package.py": {
    "bytes": 30512,
@@ -3016,6 +3840,10 @@
   "vault/tools/tests/test_activation_mint.py": {
    "bytes": 30082,
    "sha256": "01872ef95bf252c9334fa123ad51ec4dae77f80837570ff1e5a0e42cd8fce06c"
+  },
+  "vault/tools/tests/test_allowlist_derived_v191.py": {
+   "bytes": 8148,
+   "sha256": "d8855ebc3e95ea2f674ba0e15cafc533d14f485b88a2076c76817b66aca1a43f"
   },
   "vault/tools/tests/test_appship_scope_gate_498e88fc.py": {
    "bytes": 19816,
@@ -3061,6 +3889,10 @@
    "bytes": 31428,
    "sha256": "11bde0bf6c61538ec4594a12c3ea5ccf15be9087b334187b2cb99dac69dcaae5"
   },
+  "vault/tools/tests/test_badge_adapter_v191.py": {
+   "bytes": 6633,
+   "sha256": "76cfc9f7349c81d0073ec36606ea46efd19c08e10c0513b598968eb7515ccba5"
+  },
   "vault/tools/tests/test_birth_syncs_agent_card.py": {
    "bytes": 7457,
    "sha256": "67586284dacb95f2c9263f84234ee77e115ad6587fd02706c8cdd28e6c106b0f"
@@ -3097,6 +3929,10 @@
    "bytes": 11543,
    "sha256": "18706ce87ed23b90dff053f62f10f34b0aa77699c67ff36f4c23c0de17c60918"
   },
+  "vault/tools/tests/test_bypass_is_recorded_v191.py": {
+   "bytes": 3000,
+   "sha256": "9f499c17c6d2a1feb0a9fd6af9f6b9a3bac52f462431df28c7bbe2fba3bfc2f2"
+  },
   "vault/tools/tests/test_canonical_l0_stale_surface.py": {
    "bytes": 7248,
    "sha256": "624f48b82f012cbb113a32fe1acb05f6031f541d791c2662cdef6f4f6df71070"
@@ -3106,12 +3942,16 @@
    "sha256": "54a4184c6bbef8b99e4f139c54e21fd4345c0fc05de44daf443ed9aaf89cadf4"
   },
   "vault/tools/tests/test_capability_release_scope.py": {
-   "bytes": 2202,
-   "sha256": "0c0a4dd43c04a05e5ad1e3c43a78486facf6449b4a5025db7660062ab3f1b854"
+   "bytes": 2555,
+   "sha256": "8c12a5cb0fe4ae2488cc62c369d55e9a1239dfbc73996bb5dfd388787dde6008"
   },
   "vault/tools/tests/test_capture_segment.py": {
    "bytes": 6159,
    "sha256": "edcc37deb7799211a4769af2ffe934837d3b5553995267dd45ff6dafb7f4a4dc"
+  },
+  "vault/tools/tests/test_changelog_at_build_v191.py": {
+   "bytes": 4599,
+   "sha256": "472640089409a1cb1c3ff5022e469b39e866edf6d2f2e363ae9058139cb27d64"
   },
   "vault/tools/tests/test_check_events_renders_every_body_shape.py": {
    "bytes": 6780,
@@ -3180,6 +4020,10 @@
   "vault/tools/tests/test_daily_spend.py": {
    "bytes": 29947,
    "sha256": "3face4c7e46c13d4e8b83fda164326f8c1fc6442b3c9ae0ebb1aff6a71d833b7"
+  },
+  "vault/tools/tests/test_debt_enumerable_v191.py": {
+   "bytes": 3608,
+   "sha256": "e7bcac344cd2c45c36a1d8c29fddf05a9640aa6102841b81b2f00cdfa87c6c70"
   },
   "vault/tools/tests/test_derived_row_title.py": {
    "bytes": 5232,
@@ -3258,8 +4102,8 @@
    "sha256": "5fdc6b074f4dd7e23760c9ff2946f7dfe598a069e94cf5f372dc952dc2c98917"
   },
   "vault/tools/tests/test_freeze_release_candidate_2fae6312.py": {
-   "bytes": 6229,
-   "sha256": "2878df213a2f195d24af868e1d3ac7f02af726d20c0953575a1b5ebb5aebc9a7"
+   "bytes": 7300,
+   "sha256": "4c8f51156652a8d1cd2d61572457680c2ff001b5c3e4ebbb35a1e869b2462e47"
   },
   "vault/tools/tests/test_fresh_box_gate_e52826c5.py": {
    "bytes": 49973,
@@ -3385,6 +4229,10 @@
    "bytes": 18151,
    "sha256": "6dca482e10af215a3cda6af1e6df02999c3e30f760c4aa380a21c57f17a1d5d4"
   },
+  "vault/tools/tests/test_lock_refuses_on_own_findings_v191.py": {
+   "bytes": 4868,
+   "sha256": "16fe4a74fc52707ed6ddd0c19592b47f9a359849ed1e64efb37052279df72ae0"
+  },
   "vault/tools/tests/test_lock_transaction_and_fan_in.py": {
    "bytes": 44834,
    "sha256": "eaf6d10f5b202ca7098871a6ea1a64f4a55df484f5368a91c91b2afe627ea57f"
@@ -3392,6 +4240,10 @@
   "vault/tools/tests/test_lock_transaction_crash_matrix.py": {
    "bytes": 30880,
    "sha256": "cf563b045fef657c769ccd70e4f8c27b27bb477b9e051ff9c2f80aa85c3a24ef"
+  },
+  "vault/tools/tests/test_lock_writes_entry_uid_v191.py": {
+   "bytes": 4104,
+   "sha256": "cb93314e5724cfb297cd74ec5f93b75d303cdad712fae9f90bf86beefc92ebf4"
   },
   "vault/tools/tests/test_loop_capsule_schema.py": {
    "bytes": 2046,
@@ -3438,8 +4290,12 @@
    "sha256": "6b50548064a43fb2196593f5e7e57b3ffd4ccad8554e686eeaf880a37cf7c6b2"
   },
   "vault/tools/tests/test_nav_blocks_out_6ec30708.py": {
-   "bytes": 35302,
-   "sha256": "2382152187d04eef0b950d989ad1c52fe53360852990105e6ce3c4e07e8243c7"
+   "bytes": 35918,
+   "sha256": "cc1ec9fee4768e84c15d082737b879841ca6c3779fd90256fae5c1759e3245f8"
+  },
+  "vault/tools/tests/test_no_procedure_summaries_v191.py": {
+   "bytes": 5568,
+   "sha256": "fed2e74391734745f82db2aa5b14f16410e8bf6bf1d52a6b863c39c0566671f3"
   },
   "vault/tools/tests/test_no_stale_constant_copies.py": {
    "bytes": 11084,
@@ -3462,8 +4318,12 @@
    "sha256": "aaf130ae670e88ffb55c81852c0a7e6a3e1e92d72c6892a93e1b5786d3d5bc72"
   },
   "vault/tools/tests/test_one_prompt_release_2fae6312.py": {
-   "bytes": 46152,
-   "sha256": "90c992ec195e3d7e8b9a1df031c6a809060a643327f5e6113831a0bcb674b125"
+   "bytes": 47039,
+   "sha256": "1f359a68a5d539e72d01ba5f42b0d32bbf4404c9dde56b0c74ae3e812a038c04"
+  },
+  "vault/tools/tests/test_one_writer_per_event_v191.py": {
+   "bytes": 4724,
+   "sha256": "ea4c5b704c65805c9db187248774605d3b23643030415dafa98d0801ea7a4b28"
   },
   "vault/tools/tests/test_orient_cascade_phase1_4883fa94.py": {
    "bytes": 11949,
@@ -3494,8 +4354,8 @@
    "sha256": "b2d6934e4d5d400bd645726e009199cd76b623b2d51d9559e777327228de92b2"
   },
   "vault/tools/tests/test_post_migration_release_clean.py": {
-   "bytes": 11807,
-   "sha256": "4957178da0a98a363af25baf773bf57201325b15dc55c2a2ec4916f8ad9e3db3"
+   "bytes": 11309,
+   "sha256": "138ef71f8e68766a0f9b09271b95422043a3b793c33a1ad82ddb78e5cf19c75f"
   },
   "vault/tools/tests/test_provenance_before_close_0caad12b.py": {
    "bytes": 19263,
@@ -3513,9 +4373,17 @@
    "bytes": 71865,
    "sha256": "0b7b6ed8a0b72df2a1232daa1434c524039db812815ca28215d736ea88e2c35f"
   },
+  "vault/tools/tests/test_publish_pending_written_v191.py": {
+   "bytes": 7174,
+   "sha256": "a96b9e19e49acd7e459537ddf3c7f66d604c89f5836d260c25f4a540e4820878"
+  },
+  "vault/tools/tests/test_publish_preflight_v191.py": {
+   "bytes": 4452,
+   "sha256": "f3f8e469477df7471e5450ddf4f93587fbf17b94793052fddfe1787c011d0992"
+  },
   "vault/tools/tests/test_q9_harness_evidence.py": {
-   "bytes": 8685,
-   "sha256": "cfb49fa82ca1d4ba8dd07ba259a3c75b4d0076e3b21d8943d234debd3012a597"
+   "bytes": 8689,
+   "sha256": "be379f3c0e5a687ff0fe92ceeae4b41cff85f49b3af5e482f42a4755b1ad28f9"
   },
   "vault/tools/tests/test_recycle_search_paths_2c6afe9e.py": {
    "bytes": 7227,
@@ -3530,8 +4398,8 @@
    "sha256": "8340055874b48555b580a9f3426a88852a891149fd217afc2a411ec7ef318a0b"
   },
   "vault/tools/tests/test_release_adapters_v190.py": {
-   "bytes": 20402,
-   "sha256": "3ff5e5e35c160cdd43fc9be6cbab74e5200654eb322ba8024265560f2c231f7a"
+   "bytes": 20940,
+   "sha256": "7c4dde0d5400f40bf7a836186caebfde4e5ba16df0feab6fad05950f7f46c0ef"
   },
   "vault/tools/tests/test_release_authorization.py": {
    "bytes": 17775,
@@ -3549,9 +4417,13 @@
    "bytes": 32414,
    "sha256": "bf2ca91f8359fa10f58338874aaa45dc5854c59a7d5672d90e80b7c0ff737361"
   },
+  "vault/tools/tests/test_release_entry_reverse_map_v191.py": {
+   "bytes": 8320,
+   "sha256": "81842863bc5f159d3d52af3a52b555213d06d54c22fda6ff6d5f9574ff696241"
+  },
   "vault/tools/tests/test_release_event_authorization_2fae6312.py": {
-   "bytes": 12843,
-   "sha256": "2ad2ebd29d4abf1a9ca70d85357e9ca8fe1d74241567518e22c39bf8d3fee5de"
+   "bytes": 13561,
+   "sha256": "f1cc5d72bf25e98d99a4cedb1a057036efa2e7bc4be500d5659a2b84ab8539c3"
   },
   "vault/tools/tests/test_release_facade_2fae6312.py": {
    "bytes": 8133,
@@ -3578,8 +4450,8 @@
    "sha256": "7a860f132e0477355d760fc2a29d7611b64d6a9a3fa51b0f531789744b75e591"
   },
   "vault/tools/tests/test_release_receipt_adapter.py": {
-   "bytes": 55494,
-   "sha256": "742c5ff8b5cd6ac935c21d49f1a1c2e2b615cdca8930ff53a35e7ea7dd2e8e41"
+   "bytes": 56492,
+   "sha256": "34138cab0144171750415d4af09fe132b0b23a82539047e09045dea312781bf6"
   },
   "vault/tools/tests/test_release_site_target_2fae6312.py": {
    "bytes": 12079,
@@ -3609,6 +4481,10 @@
    "bytes": 44750,
    "sha256": "7332aa089fb6e2ea716971ef0360bee8257e18bf53a753b999ec39612784f28b"
   },
+  "vault/tools/tests/test_retirement_notice_category_v191.py": {
+   "bytes": 5764,
+   "sha256": "17f93276b3669549f6e0d684aeed58696379e44011aa5d82f8cdb14f1f104c5c"
+  },
   "vault/tools/tests/test_retirement_single_source_v189.py": {
    "bytes": 26583,
    "sha256": "6757c369030ec2fde3b12dcdab04886bbec317ef782d7756d6f0b486c1abb2bc"
@@ -3625,13 +4501,17 @@
    "bytes": 3398,
    "sha256": "c092e1b987c90c128a66f9eca9488dac1fb2938a975efbe934f31d2263000d1e"
   },
+  "vault/tools/tests/test_severity_by_radius_v191.py": {
+   "bytes": 3597,
+   "sha256": "90baa2d1186d11fe45535d4533e1f94d8977ee7d87b1532a1216eafeaa993b7d"
+  },
   "vault/tools/tests/test_shard_index_c6f6bea4.py": {
    "bytes": 36656,
    "sha256": "e0b5a5b9b567aaed86e64e4b935f7e95e8536ec26e4c7ddc7a319921cca99995"
   },
   "vault/tools/tests/test_ship_census_gates_v1901.py": {
-   "bytes": 6168,
-   "sha256": "67f8732931eb1899ea0ce67627cd8d5cf65365e9110abacdcd785a388c431fe5"
+   "bytes": 6163,
+   "sha256": "7615cf7dfe70b744dc294fd9c90f66e9b1728255714d0071420dfe825b0eb172"
   },
   "vault/tools/tests/test_ship_python_interpreter_floor.py": {
    "bytes": 23929,
@@ -3640,6 +4520,22 @@
   "vault/tools/tests/test_shipgate_signoff_independence.py": {
    "bytes": 11062,
    "sha256": "cc020374b50d08d4da2ea009781ca4f634aee651d033ef3999a53b09d90d464b"
+  },
+  "vault/tools/tests/test_single_debt_rule_v191.py": {
+   "bytes": 3129,
+   "sha256": "9925bd0a87d4c0787a96de886e90f3b4a868f643311a9113e2548f5729703d3f"
+  },
+  "vault/tools/tests/test_single_reader_v191.py": {
+   "bytes": 12529,
+   "sha256": "f878ef1526e74925eb607d97589bc2152459984b36db42fe9fad633ed0e15573"
+  },
+  "vault/tools/tests/test_single_receipt_shape_v191.py": {
+   "bytes": 7711,
+   "sha256": "409e696341cfb2ef0f458e8ada66a3f43c1b582ace1910e2db5381fd7985f8a5"
+  },
+  "vault/tools/tests/test_site_endpoint_observed_v191.py": {
+   "bytes": 6187,
+   "sha256": "0997d1ac2da530fef22a85b7a4c93b0249dfe020f73ad212be5a6e10c0ecaf13"
   },
   "vault/tools/tests/test_spec_substrate_refs.py": {
    "bytes": 38327,
@@ -3676,6 +4572,10 @@
   "vault/tools/tests/test_tool_telemetry_v189.py": {
    "bytes": 46398,
    "sha256": "02ed817919746c333caf89f6baf6d9e0b24828da551d59f3750f89a1ca95c1bd"
+  },
+  "vault/tools/tests/test_transport_preflight_v191.py": {
+   "bytes": 8177,
+   "sha256": "f38314aefe91db9fa5ac8e14fd927f2f79d407c5d4a85f531563d9045689706f"
   },
   "vault/tools/tests/test_tropo_folder.py": {
    "bytes": 186752,
@@ -3718,16 +4618,16 @@
    "sha256": "fe94645710388ce8fdf8f55fc8f3d994cf1755099a57ded56830a65baee3adbe"
   },
   "vault/tools/tests/test_typed_mint_phase1.py": {
-   "bytes": 53603,
-   "sha256": "bcac91a62a822cbb62ce929e3b993a2d6050e8d27a862ace589e8fd482d67fc0"
+   "bytes": 58514,
+   "sha256": "8f4066bb4ee1a2b18bce1ca5b687766e76cdc4051f5df3dd1962266081c3bb5a"
   },
   "vault/tools/tests/test_v187_legacy_convergence_58e8b6cf.py": {
    "bytes": 6642,
    "sha256": "d8141e9b2780028919c9181fb634ef29440d6495319330a68b52cfd574a59c7c"
   },
   "vault/tools/tests/test_v188_weld_batch_cb194126.py": {
-   "bytes": 43169,
-   "sha256": "e13e78f0d786736df69a8945ce51005a943ceb368c1ce3a031d3c68e969c9594"
+   "bytes": 47749,
+   "sha256": "615c0f92f55ab3179b3c52c6cbe391ed6374db3a4f2182903d83f48c3b91c64f"
   },
   "vault/tools/tests/test_v1_84_1_closeout_hardening_8c8ca68c.py": {
    "bytes": 31740,
@@ -3782,16 +4682,16 @@
    "sha256": "f86351e2d32b1595d651a468585921140bd8ed359c93d49bb801cd7a807d7d73"
   },
   "vault/tools/tropo-build-release.py": {
-   "bytes": 195372,
-   "sha256": "38d54c8144c3ae8f771f869c241826d4591b08f1ba5c86a2a5842d209fcc479b"
+   "bytes": 202975,
+   "sha256": "3147629ddb51ebc29de4bc55fec4a3af8ea4a694ca90492f17290d6472dfdf7a"
   },
   "vault/tools/tropo-check-events.py": {
    "bytes": 37166,
    "sha256": "6dba9592a8569162369e24b90f9f315aed7578ed2f2f13b2250ee9a383fe878c"
   },
   "vault/tools/tropo-check-harness-receipt.py": {
-   "bytes": 9389,
-   "sha256": "ef421452b7d8b95992e15411856625ea61cc61ec40e17f4bdb68093cd7838f24"
+   "bytes": 10386,
+   "sha256": "f611f391819da0aed363ff3cc72c2319e8214beadd734068448eff9b2dbb2c6f"
   },
   "vault/tools/tropo-check-one.py": {
    "bytes": 22279,
@@ -3806,8 +4706,8 @@
    "sha256": "ade96bc8e66c9c2645f4f41ee5db2639f8ae98c7ea5b0372cb17d715b53a8b7a"
   },
   "vault/tools/tropo-compact-continue.py": {
-   "bytes": 30746,
-   "sha256": "74c33436fe8cd7ec7319554a80ef05f9f4b585d630781b42e6f426474d257bc1"
+   "bytes": 31075,
+   "sha256": "661bc2a5500c29249bd897946200adee1c332959a248d01281d74b43b38f5308"
   },
   "vault/tools/tropo-disposition.py": {
    "bytes": 18073,
@@ -3826,12 +4726,12 @@
    "sha256": "389d87b9d4d5c8520c9b90c913137f01167f1bc41dccf205937e149db12aa7ee"
   },
   "vault/tools/tropo-emit-event.py": {
-   "bytes": 43145,
-   "sha256": "8c68d60e9073b8955731d3b3d971b384e571d2a993ff2b4f954bc5ad04731e67"
+   "bytes": 43520,
+   "sha256": "c6ec6837658f3e453f3398e7c254fa3b417aedffd2311e0f69a4e59bfda3444c"
   },
   "vault/tools/tropo-export-public-snapshot.py": {
-   "bytes": 28377,
-   "sha256": "e0d691d0305f274e216e910389d5ca9c235e1f555c877f23dc7ef6e493cc21a8"
+   "bytes": 28957,
+   "sha256": "a38ea1a7c36fbd429949953c7bddc55e19beb2b79ccf254547210b3a7150a4d3"
   },
   "vault/tools/tropo-export.py": {
    "bytes": 99204,
@@ -3854,8 +4754,8 @@
    "sha256": "f5d976544ecaa30977a886dc958a25e55bc74194cd773e71109dd8fdd6c38276"
   },
   "vault/tools/tropo-freeze-release-candidate.py": {
-   "bytes": 7704,
-   "sha256": "0705f7da3faab842fb1517d1378af429795efef617cf69bd943fbfda09c0621d"
+   "bytes": 12803,
+   "sha256": "816648ac3603fcd27d9afee32a7d6a329b65ae932e1fe88016cbaaa66de15e20"
   },
   "vault/tools/tropo-gardener-body-judge.py": {
    "bytes": 50375,
@@ -3898,16 +4798,16 @@
    "sha256": "61897da8548044944c76e160d423d032536c874987518df04735c096cc5cd647"
   },
   "vault/tools/tropo-lineage.py": {
-   "bytes": 17352,
-   "sha256": "4ed1dcba7f0c4ee5389c7b0ae156383d845ab54e9d5bc7852bea3ee492e10baf"
+   "bytes": 18448,
+   "sha256": "bb3cd38718494049cd871bafc31094f9800588a52986b9f58638d9ff72f6124a"
   },
   "vault/tools/tropo-lock-dev-spec.py": {
-   "bytes": 31989,
-   "sha256": "8769ce79e16bd3fe29571231daf423a092d38812fac45ce413ec00cb413eea7e"
+   "bytes": 35253,
+   "sha256": "8be571968f35ea6fa35f92ca88a9ac8e12801c68d53a1184e454d854a1824df1"
   },
   "vault/tools/tropo-lock-release-plan.py": {
-   "bytes": 48924,
-   "sha256": "b2dddcda1493f838274eaea80a68ea68f9252ebb706e9670f0ec32c3e4c36ff9"
+   "bytes": 52637,
+   "sha256": "ad3ea9e0d40aa03ef2d65b89f298a0bd9f4ba83d278808fbd14f941eac4371bb"
   },
   "vault/tools/tropo-migrate-memory-schema.py": {
    "bytes": 9025,
@@ -3930,8 +4830,8 @@
    "sha256": "684a235d0ac8f4ac575293d2c126102152e9c8b7ea018b276ff3ca0753269217"
   },
   "vault/tools/tropo-navblock-strip.py": {
-   "bytes": 25160,
-   "sha256": "1c3c0f32a45ae39d029c192cbf722546b3edeae196a7a9de31c881d830104340"
+   "bytes": 25844,
+   "sha256": "f6f4e48fe590fed2aabaee22c26c74a40449c783a2be699d0639772cd5ec9422"
   },
   "vault/tools/tropo-office-styles.py": {
    "bytes": 19233,
@@ -3946,8 +4846,8 @@
    "sha256": "7e099a7eb2c1a2875a3bacf7bd0ac82f77ec27eb18bdd764fd0a93e60c2a4a0f"
   },
   "vault/tools/tropo-publish-release.py": {
-   "bytes": 111599,
-   "sha256": "d8c43a7e6d5b5feddb90b40840e6e02ac17e54a5a8165629aad1dcbbd6f14d62"
+   "bytes": 141288,
+   "sha256": "5ffc53a5443e766d4c77dfc084d6f2740540b19610737417b78166a8a9a2032d"
   },
   "vault/tools/tropo-publish-scope-gate.py": {
    "bytes": 26575,
@@ -3978,8 +4878,8 @@
    "sha256": "525e7b9a220b5b1b6131e0d40cdc525c9fb5a82a7bc6cbbf7b55976a4ba5eb9a"
   },
   "vault/tools/tropo-rebuild-vault.py": {
-   "bytes": 31683,
-   "sha256": "627aa73b8f83d4ca7aaccfc4e442689d62e2c2ec5265c1f87e75c191308d8b5b"
+   "bytes": 33011,
+   "sha256": "4b0f4086cb1f1ee5a54d60498de6d3b79583a98be87418b1765fb7e29ca9bc97"
   },
   "vault/tools/tropo-recycle.py": {
    "bytes": 15409,
@@ -3998,16 +4898,16 @@
    "sha256": "02c26d7c293cff216490c4a927f46455caf7afa6d77c3f7a5eb477c4eb2d88b4"
   },
   "vault/tools/tropo-release-preflight.py": {
-   "bytes": 6784,
-   "sha256": "f947764d13a3042519ae87a800df2411a8fb60e8c1875aef8f8c9dea6f1ca67c"
+   "bytes": 12375,
+   "sha256": "030573a019598baf0248a2cd3776de8404c239f2477d9851b5cdecca366dbd02"
   },
   "vault/tools/tropo-release-validation-gate.py": {
-   "bytes": 31999,
-   "sha256": "4cdd37efa91a065e74fde1333e1c9fcd07ab6e876b7960f689781b6325a267d0"
+   "bytes": 35053,
+   "sha256": "37873586f4f2bce071bccc8a3704aa5b7b9cd0ce73b2472e890e5f6ba28d557a"
   },
   "vault/tools/tropo-release.py": {
-   "bytes": 20838,
-   "sha256": "c9f3b022553fc150bebbc42469f67ea5de3a6b4eb45c4ec7b515067d9a5741a0"
+   "bytes": 23374,
+   "sha256": "fd8134e993d07016d87c48c014cb5a2ee0cc282d044905950700495188515db0"
   },
   "vault/tools/tropo-restore.py": {
    "bytes": 7457,
@@ -4058,8 +4958,8 @@
    "sha256": "f3482d21de8288c7c31b4cec76b2ef16a83fe23dc6d5ccf59deddfbc61ebd6b0"
   },
   "vault/tools/tropo-validate-capability-membership.py": {
-   "bytes": 52717,
-   "sha256": "67012ca79887f358584ae69b0927aa6e4b07f3b320260ce62de1cf7722203720"
+   "bytes": 55287,
+   "sha256": "658bacf1e0934eabbc38db751c36fd4ee1caac19d7f0e44b63ebb4ba92455bf0"
   },
   "vault/tools/tropo-validate-no-absolute-paths.py": {
    "bytes": 13480,
@@ -4074,8 +4974,8 @@
    "sha256": "7942b8643451f63ba415e75d25e099db77cdfeb714cbcbdced482e58a09e2570"
   },
   "vault/tools/tropo-validate.py": {
-   "bytes": 702422,
-   "sha256": "962c913d997748665f61550a4931717bc73b3e95ec910f3d94b27b7d1935502b"
+   "bytes": 719683,
+   "sha256": "b3f6eaf0684965807a5aaaf1086bbe1cf9c925c11ae9b1eb173ff219e8523867"
   },
   "vault/tools/tropo-vault-git-commit.py": {
    "bytes": 1832,
@@ -4090,8 +4990,8 @@
    "sha256": "02ce34ffe5c04552ea2698d6a9c63def56fe104fc0b3777a029659cba2c7040f"
   },
   "vault/tools/tropo-verify-release-live.py": {
-   "bytes": 11990,
-   "sha256": "6a80449700d46d40483377e64258bdc8575d22840f01bddb7954c5ed0b90859a"
+   "bytes": 28786,
+   "sha256": "c5d219606b31912ba179dee4418abb483c20d82445a76936b29fb8c023051890"
   },
   "vault/tropo-vault-steward/CAPSULE.md": {
    "bytes": 2464,
@@ -4122,15 +5022,19 @@
    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "vault/updates/updates-manifest.json": {
-   "bytes": 38075,
-   "sha256": "2f26ca0cd08f8abd9a00d658c46166263aa163c9934ecec0f0c15f25ecf7050a"
+   "bytes": 38371,
+   "sha256": "2c1e7a9065655b82c262fb091842e9cc2ad893b639c7751027af6e5c438112c7"
   },
   "vault/updates/v1.90-validator-baseline-2026-08-21.md": {
    "bytes": 1311,
    "sha256": "a1f82d469adb4a653319882c6763d562d8204e5cb99af7375729eba3a79d2b9c"
+  },
+  "vault/vendor-refs-manifest.json": {
+   "bytes": 5638,
+   "sha256": "47ea743c96b0c43ed805e6d64c3e999521ce24e522b528dd89ca5bf8230e2db9"
   }
  },
- "generated_utc": "2026-08-22T19:51:56Z",
+ "generated_utc": "2026-08-24T08:48:21Z",
  "schema": "tropo.image-manifest/v1",
- "version": "1.90.0"
+ "version": "1.91.0"
 }

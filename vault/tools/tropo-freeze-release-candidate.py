@@ -50,13 +50,18 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-#: The four instruments the Verify stage declares, by step UID.
-INSTRUMENTS: Dict[str, str] = {
-    "4262d5fa": "full-release-validation",
-    "a0f2bea8": "release-harness-gate",
-    "bc6b17ec": "external-test",
-    "c6b61fb9": "cold-boot-walk",
-}
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib import release_package  # noqa: E402
+from lib import release_verify  # noqa: E402
+
+#: The four instruments the Verify stage declares, by step UID. v1.91 S2
+#: (3fb41c99), Argus A155's ruling part 5: derived from
+#: release_verify.NODE_INSTRUMENTS, not hand-duplicated -- this dict and
+#: release_verify.INSTRUMENT_NODES were a sibling-drift pair with DIFFERENT
+#: NAMES for the same four instruments (e.g. "full-release-validation" here,
+#: "full-validator" there), so the receipt writer's instrument names never
+#: matched what this reader looked for.
+INSTRUMENTS: Dict[str, str] = dict(release_verify.NODE_INSTRUMENTS)
 
 FREEZE_STEP = "7de2c49f"
 
@@ -94,10 +99,22 @@ def decide(run_dir: Path, candidate: Path) -> Tuple[Dict[str, Any], Optional[str
     """Return (payload, refusal). `refusal` is None when the freeze is earned."""
     rows = read_journal(run_dir / "run.jsonl")
 
+    # v1.91 S2 AC3 (3fb41c99): "is this run frozen" and "which candidate is
+    # live" are answered by lib/release_package's shared resolvers, not by a
+    # second loop here. This loop is now identity + reporting-only bookkeeping
+    # (who is this run, which shas were EVER invalidated, was a candidate ever
+    # built at all) -- none of which the shared resolvers exist to answer.
+    # The prior version tracked `already_frozen` itself, and its own comment
+    # admitted the defect: two readers of one journal disagreeing --
+    # release_package.active_frozen_payload() returned NONE for a run this
+    # loop called "already frozen". Found live on v1.90.0 with all four
+    # instrument receipts bound and nothing left to do but freeze.
+    # metis-g110, 2026-08-22 (found it); argus-a154, 2026-08-23 (ruled the
+    # fix is delegation, not a second patch).
     identity: Dict[str, str] = {}
-    recorded_sha: Optional[str] = None
     invalidated = set()
-    already_frozen = False
+    any_candidate_built = False
+    last_built_sha: Optional[str] = None
     for row in rows:
         data = row.get("data") or {}
         for key in ("saga_id", "pipeline_run_uid"):
@@ -105,18 +122,17 @@ def decide(run_dir: Path, candidate: Path) -> Tuple[Dict[str, Any], Optional[str
                 identity[key] = str(data[key])
         event = row.get("event")
         if event == "tropo.release.candidate_built":
-            recorded_sha = data.get("candidate_sha256")
+            any_candidate_built = True
+            last_built_sha = data.get("candidate_sha256")
         elif event == "tropo.release.candidate_invalidated":
             invalidated.add(data.get("candidate_sha256"))
-        elif event == "tropo.release.package_frozen":
-            already_frozen = True
 
     run_uid = identity.get("pipeline_run_uid", "")
     payload: Dict[str, Any] = {
         "verdict": "fail",
         "verifier_role_resolved": "talos",
         "run_uid": run_uid,
-        "candidate_sha256": recorded_sha or "",
+        "candidate_sha256": "",
         "rehashed_sha256": "",
         "instrument_receipts": {},
         "live_invalidations": sorted(x for x in invalidated if x),
@@ -128,8 +144,22 @@ def decide(run_dir: Path, candidate: Path) -> Tuple[Dict[str, Any], Optional[str
         return payload, "the run journal names no pipeline_run_uid"
     if not candidate.is_file():
         return payload, "no candidate at %s" % candidate
-    if recorded_sha is None:
+
+    try:
+        active_candidate = release_package.active_candidate(rows, run_uid)
+    except release_package.PackageRefusal as exc:
+        return payload, str(exc)
+
+    if active_candidate is None:
+        if any_candidate_built:
+            return payload, (
+                "candidate %s carries a live invalidation; it must be rebuilt and "
+                "re-verified" % str(last_built_sha)[:16]
+            )
         return payload, "no candidate_built event; there is no recorded hash to compare against"
+
+    recorded_sha = active_candidate.get("candidate_sha256")
+    payload["candidate_sha256"] = recorded_sha or ""
 
     # 1 — the bytes are the same bytes.
     rehashed = sha256_file(candidate)
@@ -141,48 +171,49 @@ def decide(run_dir: Path, candidate: Path) -> Tuple[Dict[str, Any], Optional[str
             % (rehashed[:16], str(recorded_sha)[:16])
         )
 
-    # 2 — exactly four passing receipts, bound to these bytes.
-    receipts: Dict[str, Dict[str, Any]] = {}
-    for row in rows:
-        if row.get("event") != "verification_receipt":
-            continue
-        data = row.get("data") or {}
-        step = data.get("instrument_step_uid") or row.get("step")
-        if step not in INSTRUMENTS:
-            continue
-        if str(data.get("pipeline_run_uid") or run_uid) != run_uid:
-            continue
-        if data.get("candidate_sha256") != recorded_sha:
-            continue
-        if str(data.get("verdict")) != "pass":
-            continue
-        receipts[step] = {
-            "receipt_uid": data.get("receipt_uid") or row.get("span_id") or "",
-            "verdict": "pass",
-            "bound_sha256": recorded_sha,
+    # 2 — exactly four passing receipts, bound to these bytes. v1.91 S2
+    # (3fb41c99), Argus A155's ruling parts 1/2/5: resolved through
+    # release_verify.assert_ready_to_freeze -- the SAME shared resolver the
+    # writer (9e7003b1.py's emit_release_verification_receipt) and the
+    # publisher (assert_ready_to_publish) use, reading release_kind
+    # `release-verification-receipt` rows (NOT the generic dev-pipeline
+    # `verification_receipt` name those collided with -- 389 unrelated rows
+    # in production under that name, per A155's measurement), keyed by
+    # INSTRUMENT NAME (not step uid) and bound on candidate_sha256 (not
+    # package_sha256, which no longer exists on the receipt at all: a
+    # candidate has no package identity before it is frozen).
+    raw_receipts = [
+        row.get("data") or {} for row in rows
+        if row.get("event") == release_verify.RECEIPT_KIND
+        and (row.get("data") or {}).get("release_run_uid") == run_uid
+    ]
+    try:
+        by_instrument = release_verify.assert_ready_to_freeze(
+            raw_receipts, run_uid, recorded_sha)
+    except release_verify.VerifyRefusal as exc:
+        payload["instrument_receipts"] = {}
+        return payload, str(exc)
+
+    receipts: Dict[str, Dict[str, Any]] = {
+        release_verify.INSTRUMENT_NODES[name]: {
+            "instrument": name,
+            "verdict": receipt.verdict,
+            "bound_sha256": receipt.candidate_sha256,
         }
+        for name, receipt in by_instrument.items()
+    }
     payload["instrument_receipts"] = receipts
 
-    missing = [
-        "%s (%s)" % (uid, name)
-        for uid, name in INSTRUMENTS.items()
-        if uid not in receipts
-    ]
-    if missing:
-        return payload, (
-            "%d of 4 instrument receipt(s) absent for this candidate: %s"
-            % (len(missing), ", ".join(sorted(missing)))
-        )
-
-    # 3 — no live invalidation.
-    if recorded_sha in invalidated:
-        return payload, (
-            "candidate %s carries a live invalidation; it must be rebuilt and "
-            "re-verified" % str(recorded_sha)[:16]
-        )
+    # 3 — no live invalidation. Already guaranteed: active_candidate() above
+    # returns None (handled earlier) for exactly this case, so reaching here
+    # means the resolver already confirmed recorded_sha is not invalidated.
 
     # 4 — the freeze is singular.
-    if already_frozen:
+    try:
+        active_frozen = release_package.active_frozen_payload(rows, run_uid)
+    except release_package.PackageRefusal as exc:
+        return payload, str(exc)
+    if active_frozen:
         return payload, (
             "this run already has an active package_frozen; a second freeze is a "
             "supersession and needs package_superseded, not another freeze"
@@ -203,6 +234,9 @@ def main(argv=None) -> int:
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--candidate", required=True)
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--emit", action="store_true",
+                        help="on a PASS verdict, append the tropo.release.package_frozen "
+                             "this node declares it emits. Ignored on any other verdict.")
     args = parser.parse_args(argv)
 
     run_dir = Path(args.run_dir)
@@ -213,6 +247,49 @@ def main(argv=None) -> int:
     payload, refusal = decide(run_dir, Path(args.candidate))
     if refusal:
         payload["rationale"] = refusal
+
+    # THE MISSING WRITE HALF. This node's own Event Vocabulary declares
+    # "tropo.release.package_frozen | this step, on all four criteria | exactly one
+    # active per run" -- and nothing implemented it. The studio's only emitter was
+    # tropo-build-release.py's stage6, which cannot run while a prior freeze is
+    # active. So a run that legitimately superseded a freeze can satisfy every
+    # criterion here, verify pass, and still leave the publisher with no digest to
+    # bind to: v1.90.0 reached `fire` and was refused with "no package_frozen event".
+    # Third instance of one shape in a single release -- package_superseded and
+    # candidate_invalidated were the others. The reader, the refusal message and the
+    # spec all existed; the writer did not.
+    # Emits ONLY on a pass. A refusal can never write a freeze.
+    # metis-g110, 2026-08-22.
+    if args.emit and refusal is None:
+        import uuid as _uuid
+        from datetime import datetime as _dt, timezone as _tz
+        journal = run_dir / "run.jsonl"
+        identity = {}
+        for row in read_journal(journal):
+            data = row.get("data") or {}
+            for key in ("release_activation_uid", "release_pipeline_run_uid",
+                        "activation_root_uid", "release_plan_uid", "package_path",
+                        "version"):
+                if data.get(key) and key not in identity:
+                    identity[key] = data[key]
+        identity["package_sha256"] = payload["rehashed_sha256"]
+        identity["frozen_by_step"] = FREEZE_STEP
+        identity["note"] = ("emitted by the freeze step itself on a pass verdict, with "
+                            "all four instrument receipts bound to these bytes")
+        with journal.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({
+                "event": "tropo.release.package_frozen",
+                "ts": _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "actor": "/tools/freeze-release-candidate",
+                "actor_label_resolved": None,
+                "step": FREEZE_STEP, "stage": None, "data": identity,
+                "schema_version": 2,
+                "trace_id": identity.get("release_pipeline_run_uid", ""),
+                "span_id": _uuid.uuid4().hex[:16], "parent_span_id": None,
+            }, ensure_ascii=False) + "\n")
+        payload["frozen_event_uid"] = "emitted"
+    elif args.emit and refusal is not None:
+        print("[REFUSED] --emit ignored: the verdict is not pass", file=sys.stderr)
 
     print(json.dumps(payload, indent=2, sort_keys=True))
     if refusal and not args.quiet:

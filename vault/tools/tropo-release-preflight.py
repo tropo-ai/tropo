@@ -49,7 +49,7 @@ import argparse
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 TOOLS = Path(__file__).resolve().parent
 if str(TOOLS) not in sys.path:
@@ -119,7 +119,102 @@ def _ship_python_floor(context: Dict[str, Any]) -> GateOutcome:
     )
 
 
-def build_registry() -> GateRegistry:
+# --------------------------------------------------------------------------- #
+# pre-outward-fire — S3 AC1 (176a8995)                                         #
+# --------------------------------------------------------------------------- #
+
+#: S3 AC1 (176a8995): every precondition the fire enforces, declared HERE so
+#: there is ONE roster — `tropo-publish-release.py preflight` and the fire's
+#: own pre-confirm pass both run this phase through this registry. Each row is
+#: (gate_id, refusal_class, required_inputs, description); the description
+#: names the cmd_fire refusal the gate pre-empts, because v1.90 met each of
+#: them AFTER Mike typed y (62deeec1). The verifiers are supplied by the
+#: publisher: every gate reads the publisher's staged world (publish-state.json,
+#: the staged clone, the AC7 receipt set, its credentials), which this CLI has
+#: no honest way to reach on its own — so `build_registry()` without them
+#: registers none of these, and `--list` says so rather than listing gates that
+#: cannot speak here.
+PRE_OUTWARD_FIRE_ROSTER = (
+    ("fire-staged-state", "stale-stage",
+     ("version_string", "staged_release_commit", "staged_site_commit"),
+     "the staged clone exists and its HEAD is the staged_sha "
+     "(cmd_fire: STALE-STAGE, exit 7)"),
+    ("fire-remote-identity", "remote-not-pinned",
+     ("remote_identity", "staged_site_commit"),
+     "the release remote is the pinned one and the staged clone's origin "
+     "names it (cmd_fire exits 3 / 7)"),
+    ("fire-transport", "transport-unproven",
+     ("remote_identity", "provider_reachability"),
+     "read-only `git ls-remote` reaches the pinned remote without a prompt, "
+     "and an http(s) remote has a non-interactive credential (v1.90: "
+     "'Username for https://github.com', 120s, after the confirm — S3 AC2)"),
+    ("fire-receipt-set", "ac7-receipt-set",
+     ("frozen_package", "staged_release_commit"),
+     "the four-instrument receipt set is bound to the frozen package and the "
+     "activation names release_entry_uid (cmd_fire exit 6)"),
+    ("fire-authorization", "fire-unauthorized",
+     ("fire_authorization", "version_string"),
+     "the release-authorization key verifies with human signoff and "
+     "CHANGELOG.md carries [version] (cmd_fire exit 4)"),
+    ("fire-package-asset", "package-asset-missing",
+     ("frozen_package",),
+     "the zip is at dist/ and its sealed briefing notes name this version "
+     "(cmd_fire exits 9 / 11)"),
+    ("fire-release-entry", "release-entry-missing",
+     ("version_string", "staged_release_commit"),
+     "a type:release entry for this version exists for the shipped flip and "
+     "the update manifest (cmd_fire exit 11)"),
+    ("fire-gh-auth", "provider-credentials",
+     ("provider_credentials",),
+     "`gh auth status` is green for the release host, so `gh release create` "
+     "will not refuse (cmd_fire exit 10)"),
+    ("fire-supabase-credentials", "provider-credentials",
+     ("provider_credentials",),
+     "the Supabase URL and secret resolve (env or tropo-app/.env.local), so "
+     "the zip + update-manifest upload will not refuse (cmd_fire exit 11)"),
+    ("fire-badge-target", "badge-target-unreachable",
+     ("provider_reachability",),
+     "the website badge's deploy remote (S3 AC4 adapter) answers a read-only "
+     "`git ls-remote` without a prompt, so the badge push will not hang"),
+)
+
+
+def register_pre_outward_fire_gates(
+    registry: GateRegistry, verifiers: Dict[str, Any]
+) -> GateRegistry:
+    """Bind the roster to the publisher's verifiers, one per row.
+
+    A roster row with no verifier is registry misuse, not a skip: a gate that
+    silently drops out of the phase is how a precondition reaches the human
+    unchecked. A verifier for a gate the roster does not name is the second
+    gate list forming, and is refused for the same reason.
+    """
+    roster_ids = {row[0] for row in PRE_OUTWARD_FIRE_ROSTER}
+    stray = sorted(set(verifiers) - roster_ids)
+    if stray:
+        raise ReleaseGateError(
+            "verifier(s) supplied for gate(s) not on PRE_OUTWARD_FIRE_ROSTER: %s "
+            "— add the row here; this roster is the only list" % ", ".join(stray)
+        )
+    for gate_id, refusal_class, inputs, description in PRE_OUTWARD_FIRE_ROSTER:
+        verifier = verifiers.get(gate_id)
+        if verifier is None:
+            raise ReleaseGateError(
+                "no verifier supplied for pre-outward-fire gate %r" % gate_id
+            )
+        registry.register(
+            Gate(
+                gate_id=gate_id,
+                refusal_class=refusal_class,
+                required_inputs=tuple(inputs),
+                verifier=verifier,
+                description=description,
+            )
+        )
+    return registry
+
+
+def build_registry(fire_verifiers: Optional[Dict[str, Any]] = None) -> GateRegistry:
     registry = GateRegistry()
     registry.register(
         Gate(
@@ -133,6 +228,10 @@ def build_registry() -> GateRegistry:
             ),
         )
     )
+    # S3 AC1 (176a8995): the pre-outward-fire roster, when the publisher
+    # hands in the verifiers that can read its staged world.
+    if fire_verifiers is not None:
+        register_pre_outward_fire_gates(registry, fire_verifiers)
     return registry
 
 
@@ -162,6 +261,15 @@ def main(argv=None) -> int:
                 "%-24s %-28s inputs=%s"
                 % (gate.gate_id, gate.refusal_class, ",".join(gate.required_inputs))
             )
+        if args.phase == "pre-outward-fire":
+            # S3 AC1 (176a8995): the roster is declared here but its verifiers
+            # live with the publisher's staged world; list it, and say where it runs.
+            for gate_id, refusal_class, inputs, _description in PRE_OUTWARD_FIRE_ROSTER:
+                print(
+                    "%-24s %-28s inputs=%s  (runs via: tropo-publish-release.py "
+                    "preflight --version <v>)"
+                    % (gate_id, refusal_class, ",".join(inputs))
+                )
         return EXIT_OK
 
     context: Dict[str, Any] = {

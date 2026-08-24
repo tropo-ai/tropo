@@ -39,6 +39,12 @@ ROOT = Path(__file__).resolve().parents[3]
 VALIDATOR = ROOT / "vault" / "tools" / "tropo-validate.py"
 BASELINE_PATH = Path(__file__).with_name("studio-validator-debt-baseline.json")
 
+# v1.91 S1 AC4: the ONE debt predicate — this ratchet and the release-
+# validation gate resolve the same question through the same function
+# (lib/debt_rule.py). No private copy of the rule may live here.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.debt_rule import debt_verdict  # noqa: E402
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import studio_debt_classes  # noqa: E402
 
@@ -192,7 +198,8 @@ def main() -> int:
     else:
         gating_growth = report_itemized_delta(output, baseline_classes, non_gating)
         if gating_growth > 0:
-            print(f"\nFAIL — {gating_growth} new finding(s) in gating classes.")
+            _v = debt_verdict(failed, ceiling, gating_growth)
+            print(f"\nFAIL — {_v.reason}.")
             print("       The classes and the lines are printed above; no archaeology")
             print("       needed. If the growth is deliberate, either pay it down or")
             print(f"       re-record {BASELINE_PATH.name} with the reason.")
@@ -204,25 +211,11 @@ def main() -> int:
             print(f"\n({len(non_gating)} class(es) excused from gating by recorded "
                   "decision; growth in them is reported above, never fatal.)")
 
-    if failed <= ceiling:
-        if failed < ceiling:
-            print(f"PASS — studio debt DOWN {ceiling - failed} from the recorded "
-                  f"baseline. Re-record {BASELINE_PATH.name} to lock the gain in, "
-                  f"or the ratchet keeps allowing the old ceiling.")
-        else:
-            print(f"PASS — studio debt unchanged at {failed}.")
-        return 0
-
-    # The total grew while no gating class did. That is not a contradiction: it
-    # is growth inside excused classes, or in a shape the per-class parse could
-    # not attribute. Report it honestly rather than passing quietly on a
-    # technicality — a gate that finds a way to say yes is the failure mode.
-    print(f"FAIL — studio debt UP {failed - ceiling}, from {ceiling} to {failed}, "
-          "with no gating class grown.")
-    print("       Either the growth is in excused classes (listed above), or the")
-    print("       per-class parse missed a finding shape. The second is a defect in")
-    print("       this gate, not in the studio — check the delta above against the")
-    print("       validator output before raising the ceiling.")
+    # v1.91 S1 AC4: the ONE predicate decides; this site prints its verdict.
+    verdict = debt_verdict(current_failed=failed, ceiling=ceiling,
+                           gating_growth=gating_growth)
+    print(f"{'PASS' if verdict.ok else 'FAIL'} — {verdict.reason}.")
+    return 0 if verdict.ok else 1
     return 1
 
 

@@ -36,15 +36,20 @@ class ReleaseScopeTests(unittest.TestCase):
             "release_version": "1.49.0",
         }), [("INFO", "SUPERSEDED-release-record")])
 
-    def test_canonical_semver_release_remains_hard_gated(self):
+    def test_canonical_semver_release_radius_severities(self):
+        """v1.91 S1 AC6: this release entry has no active plan, so it is
+        public history, not the image under build — R12 reads INFO. R11
+        missing-rows WARNs naming the deriver (the registry is rebuild-time
+        derivation): the old ERROR-at-R11 contract is superseded by the
+        blast-radius rule (metis-g111 review 2026-08-23)."""
         codes = _codes({
             "type": "release",
             "status": "shipped",
             "state": "active",
             "release_version": "1.72.0",
         })
-        self.assertIn(("ERROR", "R11-missing-registry-rows"), codes)
-        self.assertIn(("ERROR", "R12-brief-based-release-missing-fields"), codes)
+        self.assertIn(("WARN", "R11-missing-registry-rows"), codes)
+        self.assertIn(("INFO", "R12-brief-based-release-missing-fields"), codes)
 
     def test_governed_python_tools_participate_in_subsystem_derivation(self):
         member_map = VALIDATOR.load_member_of_map()

@@ -2921,6 +2921,18 @@ def emit_release_verification_receipt(run_folder, pr: dict, step_uid: str,
     other step and every dev run is untouched — a gate on a hot path it does
     not belong to is a cost with no matching harm.
 
+    v1.91 S2 (3fb41c99), Argus A155's ruling parts 2/3: binds the ACTIVE
+    CANDIDATE, not an active freeze. Verify runs before a freeze can exist
+    under the post-split design (freeze requires four passing receipts,
+    which requires verify to have already run) — the old
+    active_frozen_payload precondition made this function unreachable by
+    construction on every real release since the split, confirmed by
+    checking the historical record: every real release-verification-receipt
+    predates 3fb41c99. No guarantee is lost: the freeze gate re-hashes the
+    candidate and requires every receipt to bind that hash before it will
+    freeze, so the evidence-to-freeze weld is enforced there, where it can
+    be true.
+
     Returns True when a receipt was written.
     """
     from lib import release_package as _pkg, release_verify as _rv
@@ -2933,20 +2945,21 @@ def emit_release_verification_receipt(run_folder, pr: dict, step_uid: str,
         return False
 
     events = read_events(run_folder)
-    frozen = _pkg.active_frozen_payload(events, str(fm.get("uid") or ""))
-    if not frozen or not str(frozen.get("package_sha256") or ""):
+    run_uid = str(fm.get("uid") or "")
+    active = _pkg.active_candidate(events, run_uid)
+    if not active or not str(active.get("candidate_sha256") or ""):
         raise ContractError(
             f"step {step_uid} is the {instrument} instrument but this run has "
-            f"no frozen package. A verification receipt has to name the bytes "
-            f"it tested, and there are none yet."
+            f"no active candidate. A verification receipt has to name the "
+            f"bytes it tested, and there are none yet."
         )
 
     now = now_iso()
     receipt = {
         "receipt_kind": _rv.RECEIPT_KIND,
         "instrument": instrument,
-        "release_run_uid": str(fm.get("uid") or ""),
-        "package_sha256": str(frozen["package_sha256"]),
+        "release_run_uid": run_uid,
+        "candidate_sha256": str(active["candidate_sha256"]),
         "verdict": "pass" if str(verdict) in ("pass", "passed") else "fail",
         "executor_or_attester": actor,
         "execution_mode": execution_mode,
@@ -2957,7 +2970,7 @@ def emit_release_verification_receipt(run_folder, pr: dict, step_uid: str,
     _rv.validate_receipt(receipt)
     append_event(run_folder, make_event(
         _rv.RECEIPT_KIND, actor, step=step_uid,
-        data=receipt, trace_id=str(fm.get("uid") or step_uid)))
+        data=receipt, trace_id=run_uid))
     return True
 
 

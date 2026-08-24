@@ -1,5 +1,5 @@
 {
-  "current": "1.88.0",
+  "current": "1.90.0",
   "minimum_supported": "1.2.0",
   "updates": [
     {
@@ -631,6 +631,13 @@
       "description": "Self-stamping release surfaces, the artifact hand-back as a tested tool path, and index truth as a property of every governed type — the mechanical welds the v1.87 retrospective named, shipped",
       "url": "https://hnghnxyevylqjhtrbtvw.supabase.co/storage/v1/object/public/releases/updates/tropo-update-v1.88.0.zip",
       "min_compatible": "1.87.0"
+    },
+    {
+      "version": "1.90.0",
+      "type": "feature",
+      "description": "Release 1.90.0 governed by release-plan cf0da4bc.",
+      "url": "https://hnghnxyevylqjhtrbtvw.supabase.co/storage/v1/object/public/releases/updates/tropo-update-v1.90.0.zip",
+      "min_compatible": "1.88.0"
     }
   ]
 }

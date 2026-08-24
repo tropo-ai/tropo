@@ -28,9 +28,14 @@ member_of:
   - aae9a37b
 lifecycle: standing
 created_by: argus-a23
-last_release_reflected: 1.88.0
+last_release_reflected: 1.91.0
 aligned_with: 8a4e21c5
 release_history:
+  - release_uid: e4f5353a
+    release_version: 1.91.0
+    summary: "v1.91 ship: the release path made honest about itself. Every declared release event now has exactly one writer named in its own declaration; the four orphaned events (completion_verified, fire_authorized, orchestrator_invoked, scope_locked) gained emitters and the overloaded package_frozen was split by assertion into bytes-produced and evidence-bound. One reader answers each question, one receipt shape serves both the freeze gate and the publisher (they previously shared one field of ten), and the authorisation allowlist derives from the declared event set instead of a hand-kept list. The build reaches its own gates rather than refusing at enforcement; everything that can refuse the outward act now refuses before the fire; the retirement procedure gained an observer that reads all eight of its steps. tropo-events.capsule moved v1.11 to v1.13 (registering tropo.release.scope_locked under Mike's word). 23 of 23 non-deferred acceptance criteria verified green on their own locked commands, each paired by an agent that did not build it."
+    registry_uid: 9db48800
+    derived_from: capabilities_touched
   - release_uid: 37d7b13a
     release_version: 1.54.0
     summary: v1.54 Lane V V2 + V3 + Lane R R1 capsule schema amendments at release.capsule v3.6→v3.7 (substrate_verify_twice_findings field + Rule 14 extended derivation + Check 26 + path-pattern table) + doc-spec.capsule v1.0.1→v1.0.2 (mirror substrate_verify_twice_findings field + Check 15). Governance-class kernel substrate touch.

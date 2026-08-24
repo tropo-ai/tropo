@@ -127,6 +127,13 @@ FILTER_NAME = 'navblockstrip'
 GITATTRIBUTES_PATH_PATTERN = 'vault/files/*.md'
 CLEAN_COMMAND = 'python3 vault/tools/tropo-navblock-strip.py --clean'
 PROCESS_COMMAND = 'python3 vault/tools/tropo-navblock-strip.py --process'
+# S1 AC2 (0a0e94d1, metis-g111 2026-08-23; measured by argus-a154 387d17765): git runs the
+# filter driver with cwd in whatever worktree it is populating. With the RELATIVE command
+# above, `git worktree add` on a default studio aborts at ~57% because the script does not
+# exist yet in the half-populated worktree. --install therefore registers the ABSOLUTE path
+# of THIS script (the installing checkout's copy, shared by every worktree of this repo).
+import shlex as _shlex
+PROCESS_COMMAND_ABSOLUTE = f"python3 {_shlex.quote(str(Path(__file__).resolve()))} --process"
 
 #: git's long-running filter protocol. Payload ceiling is git's
 #: LARGE_PACKET_DATA_MAX (65520 - 4 bytes of length header).
@@ -353,12 +360,13 @@ def cmd_process(stdin=None, stdout=None) -> int:
 
 def cmd_install(vault_root: Path) -> int:
     r = subprocess.run(
-        ['git', 'config', f'filter.{FILTER_NAME}.process', PROCESS_COMMAND],
+        ['git', 'config', f'filter.{FILTER_NAME}.process', PROCESS_COMMAND_ABSOLUTE],
         cwd=str(vault_root), capture_output=True, text=True,
     )
     if r.returncode != 0:
         print(f'[FAIL] git config install failed: {r.stderr.strip()}', file=sys.stderr)
         return 1
+    print(f'[OK] filter.{FILTER_NAME}.process = {PROCESS_COMMAND_ABSOLUTE}  (absolute: worktree-safe)')
     # Retire the slow wiring in the same gesture. git prefers `process` when
     # both are present, so a leftover `.clean` would not change behaviour --
     # but it would sit in every existing clone looking correct, and the next

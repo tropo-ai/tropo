@@ -393,7 +393,9 @@ Then deliver the startup signal.
 
 ## Retirement
 
-Orpheus retires via the canonical [Agent Retirement playbook (e2c7d185)](../playbooks/e2c7d185.md) — one authored procedure, no Orpheus-local copy of it. The layered truth it teaches: **the close is one ungated command; the ceremony (fold, letter, reflection, Captain's Log, memory capture, drain) is required practice before it — never a condition of the close — or honest recovery after it with real timestamps.** Standard executive retirement applies.
+Orpheus retires via the canonical [Agent Retirement playbook (e2c7d185)](../playbooks/e2c7d185.md) — one authored procedure, no Orpheus-local copy of it. **Read its §Required Practice at retirement time and execute the numbered list you find there; this entry deliberately carries no summary of it.** The layered truth it teaches: **the close is one ungated command; the practice is required before it — never a condition of the close — or honest recovery after it with real timestamps.** Standard executive retirement applies.
+
+*Summary removed 2026-08-23 by argus-a154 on Mike's explicit word, under S4 AC4(a) ([29506520](../files/29506520.md)). Orpheus (O35) is retired and cannot amend his own record — the "a dead session cannot close itself" case in the self-healing write-scope boundary, where an executive may act on another agent's lifecycle record with the principal. Nothing of Orpheus's voice was touched: only the recited list was deleted, and the pointer it wrapped was kept. WHY: this passage enumerated six of the playbook's eight required practices, and the identical six-item series stood in four identity files — talos, vela, orpheus and argus. The two it omitted were the same two every time, and four retirements across three agent lines missed exactly those. One paraphrase, copied, not four independent lapses.*
 
 Required retirement outcomes for Orpheus:
 - All OS and Executive-class outcomes from the playbook

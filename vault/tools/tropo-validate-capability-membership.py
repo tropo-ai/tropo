@@ -689,16 +689,12 @@ def validate_release_plan(uid: str, fm: dict, mo_map: dict[str, list[str]], stri
     if capsule_version not in ("1.2", "1.3"):
         return findings
 
-    # v1.10 Q8 lock: pre-v1.9.2 release plans grandfathered (Checks 19-23 skipped)
-    if is_grandfathered_release_plan(fm):
-        findings.append(Finding(
-            "INFO", "GRANDFATHERED-pre-v1.9.2-plan", uid,
-            f"release-plan v{capsule_version} targets pre-v1.9.2 release; "
-            "Checks 19-23 skipped per Q8 lock 2026-05-07."
-        ))
-        return findings
-
+    # v1.91 S1 AC6 (metis-g111 review 2026-08-23): severity by BLAST RADIUS,
+    # not record age. The v1.10 Q8 version-grandfather skip is REPLACED by
+    # the radius question: is this plan under build, or already settled?
+    # Age decides nothing. The check always RUNS.
     status = str(fm.get("status", "")).lower()  # v1.89: release-plan status, never stage
+    plan_under_build = status in ("active", "build", "specify")
     # v1.89's stage->status rename left Checks 19/21/22 reading `stage`; the
     # old tuple maps onto status as below (specify/build collapse to active —
     # a release-plan is being worked — and done/closed are done). Found as a
@@ -708,7 +704,10 @@ def validate_release_plan(uid: str, fm: dict, mo_map: dict[str, list[str]], stri
     if isinstance(capabilities_touched, str):
         capabilities_touched = [capabilities_touched]
 
-    severity_19_20 = "ERROR" if strict else "WARNING"
+    # v1.91 S1 AC6: C19/C20 severity by radius. A plan under build WILL
+    # ship — a missing hub edge there breaks the image being built (ERROR in
+    # strict). A done/cancelled plan cannot ship anything — INFO, never a refusal.
+    severity_19_20 = ("ERROR" if strict else "WARNING") if plan_under_build else "INFO"
 
     # Check 19: non-empty at specify onward
     if status in ("active", "closed") and not capabilities_touched:
@@ -733,7 +732,7 @@ def validate_release_plan(uid: str, fm: dict, mo_map: dict[str, list[str]], stri
         ))
 
     # Checks 21/22 only apply to v1.3+ (hub_summaries field introduced v1.9.2)
-    if capsule_version == "1.3" and stage in ("specify", "build", "done"):
+    if capsule_version == "1.3" and status in ("active", "build", "specify", "done"):
         hub_summaries = fm.get("hub_summaries") or {}
         if isinstance(hub_summaries, dict):
             hs_keys = {str(k) for k in hub_summaries}
@@ -781,7 +780,9 @@ def validate_release_plan(uid: str, fm: dict, mo_map: dict[str, list[str]], stri
 
 
 def validate_release_entry(uid: str, fm: dict, mo_map: dict[str, list[str]],
-                            registry: dict[str, set[str]], strict: bool) -> list[Finding]:
+                            registry: dict[str, set[str]], strict: bool,
+                            plan_by_release: dict[str, str] | None = None,
+                            releases_under_build: set[str] | None = None) -> list[Finding]:
     """Validates a release entry against Rule 11 + Rule 12 + structural-consistency.
 
     v1.10 hard-gates (effective at B6 atomic-triangle ship):
@@ -801,7 +802,12 @@ def validate_release_entry(uid: str, fm: dict, mo_map: dict[str, list[str]],
     if fm.get("status") not in ("done", "shipped"):
         return findings  # only check shipped releases
 
-    severity = "ERROR" if strict else "WARNING"
+    # v1.91 S1 AC6: severity by BLAST RADIUS, age decides nothing. The
+    # v1.10 Q8 version-grandfather skip is REPLACED: checks RUN on every
+    # release entry; ERROR only for the release under build (its plan is
+    # active/build — the image being shipped next); INFO for public history.
+    under_build = bool(releases_under_build) and uid in (releases_under_build or set())
+    severity = ("ERROR" if strict else "WARNING") if under_build else "INFO"
 
     # Rules 11/12 govern Tropo-OS semver releases. Other release families
     # (for example kb-marketing-v14.1) share type:release but do not participate
@@ -825,16 +831,8 @@ def validate_release_entry(uid: str, fm: dict, mo_map: dict[str, list[str]],
         ))
         return findings
 
-    # Grandfather pre-v1.9.2 (by version comparison OR explicit UID set)
-    if is_grandfathered_release(uid, fm):
-        version = release_version or "?"
-        findings.append(Finding(
-            "INFO", "GRANDFATHERED-pre-v1.9.2", uid,
-            f"release entry release_version={version} pre-dates v1.9.2 mechanical derivation; "
-            "Rule 11 + Rule 12 + structural-consistency check skipped per v1.10 Q8 lock 2026-05-07. "
-            "Substrate-membership-backfill gap routed to v1.11 Substrate Repair."
-        ))
-        return findings
+    # (v1.91 S1 AC6: the version-grandfather skip lived here; age decides
+    # nothing now — checks run at radius-derived severity instead.)
 
     subsystems_touched = fm.get("subsystems_touched") or []
     if isinstance(subsystems_touched, str):
@@ -846,10 +844,14 @@ def validate_release_entry(uid: str, fm: dict, mo_map: dict[str, list[str]],
     # so registry.get(int) doesn't miss a string-keyed entry (str key is the canonical form).
     registry_subs = registry.get(str(uid), set())
     if not registry_subs:
+        # v1.91 S1 AC6: the registry is a REBUILD-TIME derivation — a missing
+        # row is stale derivation, not substrate defect; the cure is one
+        # gesture. WARNs naming the deriver. Never ERROR.
         findings.append(Finding(
-            severity, "R11-missing-registry-rows", uid,
-            f"release status:done has no rows in subsystem-registry.jsonl for release_uid={uid} "
-            "(Rule 11 violation — every shipped release must have matching registry rows)"
+            "WARN" if strict else "WARNING", "R11-missing-registry-rows", uid,
+            f"release has no rows in subsystem-registry.jsonl for release_uid={uid}; "
+            "the registry is derived — cure: python3 vault/tools/6342d0ca.py "
+            "(derive-subsystem-registry), then re-run"
         ))
     else:
         # Cross-check declared vs registry
@@ -866,8 +868,15 @@ def validate_release_entry(uid: str, fm: dict, mo_map: dict[str, list[str]],
 
     # Rule 12 + structural-consistency: derive from release-plan.capabilities_touched
     shipped_release_plan_uid = fm.get("shipped_release_plan")
-    if not shipped_release_plan_uid:
-        # Try to find by reverse pointer
+    if not shipped_release_plan_uid and plan_by_release is not None:
+        # S1 AC2 (0a0e94d1, metis-g111 2026-08-23): one reverse map built once by
+        # main(), first plan in glob order wins — identical to the per-entry scan
+        # below, which re-read and parsed every vault/files/*.md once PER release
+        # entry lacking shipped_release_plan (46 x ~16.7s = the 12m30s run that
+        # overran the build's 600s enforcement-gate timeout).
+        shipped_release_plan_uid = plan_by_release.get(uid)
+    elif not shipped_release_plan_uid:
+        # Fallback for direct callers that pass no map: the original reverse scan.
         for f in (VAULT_ROOT / "vault/files").glob("*.md"):
             try:
                 text = f.read_text(encoding="utf-8")
@@ -1083,6 +1092,13 @@ def main(strict: bool = True, json_output: bool = False) -> int:
     # every release entry (Rule 11 + Rule 12 + structural-consistency)
     ledger_dir = VAULT_ROOT / "vault/files"
     if ledger_dir.exists():
+        # S1 AC2 (0a0e94d1): read vault/files once. Phase 1 collects the parsed
+        # frontmatter and the release-plan -> shipped_release reverse map (first
+        # plan in glob order wins, matching the retired per-entry scan's break);
+        # phase 2 dispatches. Release entries may precede their plans in glob
+        # order, which is why the map must be complete before any dispatch.
+        collected: list[tuple[str, dict]] = []
+        plan_by_release: dict[str, str] = {}
         for path in ledger_dir.glob("*.md"):
             try:
                 text = path.read_text(encoding="utf-8")
@@ -1092,13 +1108,28 @@ def main(strict: bool = True, json_output: bool = False) -> int:
             if not fm:
                 continue
             ftype = fm.get("type")
-            if ftype == "release-plan":
-                all_findings.extend(validate_release_plan(
-                    fm.get("uid", path.stem), fm, mo_map, strict
-                ))
-            elif ftype == "release":
+            if ftype in ("release-plan", "release"):
+                collected.append((fm.get("uid", path.stem), fm))
+            if ftype == "release-plan" and fm.get("shipped_release"):
+                plan_by_release.setdefault(fm["shipped_release"], fm.get("uid", path.stem))
+        # v1.91 S1 AC6: the blast-radius map — a release whose plan is still
+        # active/build is the image being built; everything else is history.
+        plan_status_by_uid = {
+            f.get("uid", path.stem): str(f.get("status", "")).lower()
+            for (u, f) in collected if f.get("type") == "release-plan"
+        }
+        releases_under_build = {
+            rel for rel, plan_uid in plan_by_release.items()
+            if plan_status_by_uid.get(plan_uid, "") in ("active", "build", "specify")
+        }
+        for uid_, fm in collected:
+            if fm.get("type") == "release-plan":
+                all_findings.extend(validate_release_plan(uid_, fm, mo_map, strict))
+            else:
                 all_findings.extend(validate_release_entry(
-                    fm.get("uid", path.stem), fm, mo_map, registry, strict
+                    uid_, fm, mo_map, registry, strict,
+                    plan_by_release=plan_by_release,
+                    releases_under_build=releases_under_build
                 ))
 
     # Tally

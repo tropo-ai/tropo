@@ -188,8 +188,8 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-events.capsule.md",
-      "capsule_sha256": "266b0c6e21d86753933898ba920f87999e090ed926d869e0390be18f61f1cea2",
-      "capsule_version": "1.11",
+      "capsule_sha256": "cd8154387104eceaa173e78faf4662053594844845dab35514109d0362bee4be",
+      "capsule_version": "1.13",
       "mint_mode": "disabled",
       "type": "events"
     },
