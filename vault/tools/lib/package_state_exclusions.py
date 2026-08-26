@@ -51,6 +51,12 @@ from pathlib import PurePosixPath
 #: runtime state.
 STATE_DIR_PREFIXES: tuple[str, ...] = (
     ".tropo/flags/",
+    # F7 (5f75c7f3), vela-v73's classification 2026-08-24: 198 DERIVED
+    # navigation files. Regenerable by nature and already gitignored as such in
+    # this very repo. Excluded rather than replaced because tropo-apply-image.py
+    # has no REGENERATED class today (confirmed in e843dedf) — when one exists,
+    # these move to it. A prefix, not 198 entries: the nature is uniform.
+    "00-tropo-nav/",
 )
 
 #: Path SEGMENTS that are machine-local build artifacts wherever they appear.
@@ -63,6 +69,88 @@ STATE_DIR_PREFIXES: tuple[str, ...] = (
 ARTIFACT_SEGMENTS: frozenset[str] = frozenset({"__pycache__", ".pytest_cache"})
 
 #: Individual files that are per-studio state despite living beside OS content.
+#: F7 (5f75c7f3) — the customer-state boundary, path -> why.
+#:
+#: The F1 fix made tropo-image-manifest.json COMPLETE, and apply derives its
+#: replace-set from that manifest minus is_studio_state(). Before F1 the
+#: incomplete manifest was an accidental shield; after it, a lift-and-replace
+#: update would overwrite a recipient's own event log, memory surfaces and
+#: registries with our bytes.
+#:
+#: CLASSIFIED BY vela-v73, 2026-08-24, VERIFIED NOT PATTERN-MATCHED: every path
+#: below was diffed against the actual shipped genesis bytes of v1.91.0, never
+#: judged by filename. That method is why the list is right. Her first pass read
+#: mission-brief.md, operating-principles.md and the top-level CAPSULE.md as
+#: generic doctrine — because what she had read earlier was THIS studio's
+#: filled-in copy. The shipped ones open `<FILL: Your Studio Name>`, carry
+#: `owner: vault-admin`, and carry a different uid entirely. She caught her own
+#: reversal by reading the bytes.
+#:
+#: SIX SIBLINGS ARE DELIBERATELY ABSENT and stay in the replace set as genuine
+#: OS doctrine: .tropo-studio/README.md, memory/three-instrument-verification.md,
+#: and the directives/ memory/ registries/ runs/ CAPSULE.md files.
+#:
+#: The dict IS the membership list — STATE_FILES derives from it below. A second
+#: list of the same paths is the defect this cycle exists to remove, and the
+#: suite requires every excluded path to explain itself anyway.
+F7_STATE_REASONS: dict[str, str] = {
+    ".tropo-studio/CAPSULE.md":
+        "per-studio governance: the customer's real owner, real write-access "
+        "list and own uid — ours would overwrite who is allowed to write",
+    ".tropo-studio/agent-boot.extension.md":
+        "Tier-2 boot configuration, filled in per studio over time; replacing "
+        "it silently changes how every one of their agents boots",
+    ".tropo-studio/bindings/CAPSULE.md":
+        "ships `status: reserved` and 'empty in the skeleton' — the customer "
+        "populates it INSIDE the file, so this looks generic and is not (one "
+        "of the two capsules that break the */CAPSULE.md pattern)",
+    ".tropo-studio/directives/example.directive.md":
+        "ships as a reference example whose own text invites 'keep it, amend "
+        "it, or replace it' — an amended copy is the customer's content",
+    ".tropo-studio/dirty-counter.json":
+        "runtime counter of uncommitted files: stateful by nature even on the "
+        "days its value happens to match ours",
+    ".tropo-studio/gardener-wall-clock.json":
+        "ships Argo's own private_ages keyed by Argo UIDs — F7's own finding, "
+        "and decay signals about entries the customer does not have",
+    ".tropo-studio/memory/MEMORY.md":
+        "ships as a one-entry index saying 'add your own memories below'; "
+        "replacing it deletes the crew memory index they built on it",
+    ".tropo-studio/memory/entries/839a65f9.md":
+        "an actual memory entry, not a template — a real pin the customer's "
+        "agents read at boot",
+    ".tropo-studio/memory/memory-current.md":
+        "the customer's accumulated crew memory; overwriting it is the "
+        "headline harm this boundary exists to prevent",
+    ".tropo-studio/memory/short-term-memory.jsonl":
+        "per-studio append-only memory log by nature; an append-only log that "
+        "gets replaced has lost history no rebuild can restore",
+    ".tropo-studio/mission-brief.md":
+        "ships as `# Mission Brief — <FILL: Your Studio Name>`; a filled-in "
+        "brief is the customer's own statement of what they are doing",
+    ".tropo-studio/operating-principles.md":
+        "ships with `owner: vault-admin` and placeholder dates; a studio's "
+        "amended principles are governance they authored",
+    ".tropo-studio/registries/agent-registry.yaml":
+        "the customer's actual agent registry — replacing it unregisters "
+        "every agent they commissioned",
+    ".tropo-studio/registries/registry.jsonl":
+        "the customer's actual registry data",
+    ".tropo-studio/scripts/CAPSULE.md":
+        "ships generic but the registry grows INLINE, so a studio's real owned "
+        "tooling is declared in this file (the second of the two capsules that "
+        "break the */CAPSULE.md pattern)",
+    ".tropo-studio/shards/index-rebuild-run.json":
+        "runtime rebuild state describing a rebuild that happened here",
+    "vault/capsules/mint-registry.json":
+        "the customer's own mint registry: overwriting it is a UID-COLLISION "
+        "surface, which is worse than losing the file",
+    "vault/events/00-events.jsonl":
+        "the customer's actual event history — the concern F7 is named for, "
+        "and append-only by contract",
+}
+
+
 STATE_FILES: frozenset[str] = frozenset(
     {
         # Discovery manifest: a dev copy that names its own version current, so
@@ -86,7 +174,7 @@ STATE_FILES: frozenset[str] = frozenset(
         ".gemini/settings.json",
         ".cursorrules",
     }
-)
+) | frozenset(F7_STATE_REASONS)
 
 
 def _normalise(relative_path: str) -> str:
@@ -124,6 +212,15 @@ def is_studio_state(relative_path: str) -> bool:
 def why_excluded(relative_path: str) -> str:
     """A reason a human can act on, for the manifest and for build output."""
     normalised = _normalise(relative_path)
+    f7 = F7_STATE_REASONS.get(normalised)
+    if f7:
+        return "customer state (F7, vela-v73 verified against shipped bytes): %s" % f7
+    if normalised.startswith("00-tropo-nav/"):
+        return (
+            "derived navigation, regenerable by nature and gitignored as such "
+            "in this very repo; excluded rather than replaced because apply has "
+            "no REGENERATED class yet — when one exists these move to it"
+        )
     if normalised.startswith(".tropo/flags/"):
         return (
             "per-studio runtime flag: these are READ by the machinery that wrote "

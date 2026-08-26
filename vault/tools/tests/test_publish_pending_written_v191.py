@@ -39,6 +39,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import temp_studio  # noqa: E402
+import release_fixture_v192 as fixture  # noqa: E402
 
 TOOLS = Path(__file__).resolve().parents[1]
 MARKER = Path(".tropo") / "publish-pending.json"
@@ -107,17 +108,16 @@ class VerifyLiveGreenClearsTheMarker(unittest.TestCase):
             {"event": "run_created", "data": {"saga_id": "release:r1",
                                               "pipeline_run_uid": "r1",
                                               "release_version": "9.9.9"}},
-            {"event": "tropo.release.published", "data": {"publication_receipt_sha256": SHA}},
-            {"event": "tropo.release.closed", "data": {"closed_uids": ["00000001"],
-                                                       "publication_receipt_sha256": SHA}},
         ]
-        (self.run_dir / "run.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
-        (self.run_dir / "publication-receipt.json").write_text(
-            json.dumps({"publication_receipt_sha256": SHA, "version": "9.9.9"}))
-        (self.run_dir / "scorecard.json").write_text(json.dumps({"scorecard_sha256": "cd" * 32}))
+        # AMENDED 2026-08-24 by argus-a156 (Stream 1 AC4; Mike verbatim "1 yes,
+        # 2 yes, 3 yes"; routed by metis-g112). This built a finished release
+        # from two filenames no producer has ever written. It now builds what
+        # the producers build. See release_fixture_v192 for the full reason.
+        self.receipt_sha = fixture.build_finished_release(
+            self.run_dir, self.studio.root, extra_rows=rows)
         self.bus = tmp / "bus.jsonl"
-        self.bus.write_text(json.dumps({"type": "tropo.release.published",
-                                        "data": {"publication_receipt_sha256": SHA}}) + "\n")
+        self.bus.write_text(
+            json.dumps(fixture.bus_published_row(self.receipt_sha)) + "\n")
         self.marker = self.studio.root / MARKER
         self.marker.write_text(json.dumps({"version": "9.9.9", "publish_state": "not-staged"}))
 

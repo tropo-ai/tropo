@@ -19,11 +19,11 @@ owner: "founder's name" # The human owner — written into every charter
 
 scope:
  reads:
- - "channels/"
+ - "vault/events/"   # drain with tropo-check-events.py --as [name]
  - "agents/"
  writes:
  - "agents/[name]/"
- - "channels/"
+ - "vault/events/"   # emit with tropo-emit-event.py --as [name] --subject <party-uid>
 
 boot_protocol: full # full | parent-inherit
 

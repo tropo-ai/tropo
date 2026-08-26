@@ -28,6 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import temp_studio  # noqa: E402
+import release_fixture_v192 as fixture  # noqa: E402
 
 SHA = "ab" * 32
 BADGE = json.dumps({"version": "v9.9.9", "fileSize": "2.9 MB",
@@ -69,21 +70,17 @@ class SiteEndpointObservedTests(unittest.TestCase):
                      self.studio.tools / "tropo-verify-release-live.py")
         self.run_dir = self.studio.runs / "release-pipeline-r1-2026-08-23"
         self.run_dir.mkdir(parents=True)
-        rows = [
-            {"event": "run_created", "data": {"saga_id": "release:r1",
-                                              "pipeline_run_uid": "r1",
-                                              "release_version": "9.9.9"}},
-            {"event": "tropo.release.published", "data": {"publication_receipt_sha256": SHA}},
-            {"event": "tropo.release.closed", "data": {"closed_uids": ["00000001"],
-                                                       "publication_receipt_sha256": SHA}},
-        ]
-        (self.run_dir / "run.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
-        (self.run_dir / "publication-receipt.json").write_text(
-            json.dumps({"publication_receipt_sha256": SHA, "version": "9.9.9"}))
-        (self.run_dir / "scorecard.json").write_text(json.dumps({"scorecard_sha256": "cd" * 32}))
+        self.receipt_sha = fixture.build_finished_release(
+            self.run_dir,
+            self.studio.root,
+            extra_rows=[{"event": "run_created",
+                         "data": {"saga_id": "release:r1",
+                                  "pipeline_run_uid": "r1",
+                                  "release_version": "9.9.9"}}],
+        )
         self.bus = tmp / "bus.jsonl"
-        self.bus.write_text(json.dumps({"type": "tropo.release.published",
-                                        "data": {"publication_receipt_sha256": SHA}}) + "\n")
+        self.bus.write_text(
+            json.dumps(fixture.bus_published_row(self.receipt_sha)) + "\n")
         self.marker = self.studio.root / ".tropo" / "publish-pending.json"
         self.marker.write_text(json.dumps({"version": "9.9.9", "publish_state": "not-staged"}))
 

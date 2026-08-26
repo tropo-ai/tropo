@@ -11,6 +11,7 @@ Dev-spec 2fae6312 step 6. Two properties carry this file:
 
 from __future__ import annotations
 
+import json as _json
 import sys
 import unittest
 from pathlib import Path
@@ -19,7 +20,10 @@ ROOT = Path(__file__).resolve().parents[3]
 TOOLS = ROOT / "vault" / "tools"
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import release_fixture_v192 as fixture  # noqa: E402
 from lib.release_completion import (  # noqa: E402
     CO_BOUND_FACTS,
     COMPLETION_EVENT,
@@ -294,46 +298,65 @@ class LiveVerifierCliTests(unittest.TestCase):
         spec.loader.exec_module(cls.cli)
 
     def finished_run(self, **omit) -> Path:
-        import json as _json
+        """A finished release, in the shape the PRODUCERS leave behind.
+
+        AMENDED 2026-08-24 by argus-a156 under Stream 1 5b608d28 AC4, on Mike's
+        verbatim approval in session ("1 yes, 2 yes, 3 yes"), routed by
+        metis-g112 who declined to grant a locked-record edit on delegated
+        authority.
+
+        This used to write run_dir/publication-receipt.json and
+        run_dir/scorecard.json -- two filenames NO PRODUCER IN THIS STUDIO HAS
+        EVER WRITTEN -- carrying a publication_receipt_sha256 field nothing
+        emits. The verifier read the same names, so fixture and reader agreed
+        with each other and disagreed with the world, staying green through four
+        releases while the verifier could not pass a single real one.
+
+        Every omit-flag this suite could express before, it still expresses.
+        """
         import shutil
         import tempfile
 
         tmp = Path(tempfile.mkdtemp(prefix="release-live-"))
         self.addCleanup(shutil.rmtree, tmp, True)
+        self.studio_root = tmp / "studio"
+
+        # Content-addressed: the sha IS the hash of the bytes written, so this
+        # fixture cannot drift from the addressing rule it exercises.
+        self.receipt_sha = fixture.write_publication_receipt(self.studio_root)
+        if omit.get("receipt"):
+            (self.studio_root / "vault" / "events" / "release-receipts"
+             / ("%s.json" % self.receipt_sha)).unlink()
 
         rows = [
             {"event": "tropo.release.scope_locked",
              "data": {"saga_id": SAGA, "pipeline_run_uid": RUN}},
         ]
         if not omit.get("run_event"):
-            rows.append({
-                "event": "tropo.release.published",
-                "data": {"saga_id": SAGA, "pipeline_run_uid": RUN,
-                         "publication_receipt_sha256": self.RSHA},
-            })
+            row = fixture.published_event_row(self.receipt_sha)
+            row["data"].update({"saga_id": SAGA, "pipeline_run_uid": RUN})
+            rows.append(row)
         if not omit.get("closure"):
-            rows.append({
-                "event": "tropo.release.closed",
-                "data": {"pipeline_run_uid": RUN,
-                         "publication_receipt_sha256": self.RSHA,
-                         "closed_uids": omit.get("closed_uids", ["c45da26c"])},
-            })
+            row = fixture.closure_event_row(self.receipt_sha)
+            row["data"]["pipeline_run_uid"] = RUN
+            if "closed_uids" in omit:
+                # An explicitly empty closure must still close nothing, so every
+                # record key is stripped and the derived set is genuinely empty.
+                row["data"] = {
+                    k: v for k, v in row["data"].items()
+                    if k not in fixture.CLOSED_RECORD_KEYS
+                }
+                row["data"]["closed_uids"] = omit["closed_uids"]
+            rows.append(row)
         (tmp / "run.jsonl").write_text(
             "".join(_json.dumps(r) + "\n" for r in rows), encoding="utf-8"
         )
-        if not omit.get("receipt"):
-            (tmp / "publication-receipt.json").write_text(
-                _json.dumps({"publication_receipt_sha256": self.RSHA}), encoding="utf-8"
-            )
         if not omit.get("scorecard"):
-            (tmp / "scorecard.json").write_text(
-                _json.dumps({"scorecard_sha256": "score998877"}), encoding="utf-8"
-            )
+            fixture.write_scorecard(tmp)
         bus = tmp / "bus.jsonl"
         if not omit.get("bus"):
             bus.write_text(
-                _json.dumps({"type": "tropo.release.published",
-                             "data": {"publication_receipt_sha256": self.RSHA}}) + "\n",
+                _json.dumps(fixture.bus_published_row(self.receipt_sha)) + "\n",
                 encoding="utf-8",
             )
         else:
@@ -344,6 +367,7 @@ class LiveVerifierCliTests(unittest.TestCase):
         run_dir = self.finished_run()
         code = self.cli.main([
             "--run-dir", str(run_dir),
+            "--vault", str(self.studio_root),
             "--bus-events", str(run_dir / "bus.jsonl"),
             "--write-receipt",
         ])
@@ -398,7 +422,8 @@ class LiveVerifierCliTests(unittest.TestCase):
     def test_an_empty_closure_closes_nothing(self):
         run_dir = self.finished_run(closed_uids=[])
         code = self.cli.main([
-            "--run-dir", str(run_dir), "--bus-events", str(run_dir / "bus.jsonl"),
+            "--run-dir", str(run_dir),
+            "--vault", str(self.studio_root), "--bus-events", str(run_dir / "bus.jsonl"),
         ])
         self.assertEqual(code, self.cli.EXIT_INCOMPLETE)
 
@@ -408,6 +433,7 @@ class LiveVerifierCliTests(unittest.TestCase):
                 run_dir = self.finished_run(**{omission: True})
                 code = self.cli.main([
                     "--run-dir", str(run_dir),
+            "--vault", str(self.studio_root),
                     "--bus-events", str(run_dir / "bus.jsonl"),
                 ])
                 self.assertEqual(code, self.cli.EXIT_INCOMPLETE)
@@ -415,7 +441,8 @@ class LiveVerifierCliTests(unittest.TestCase):
     def test_an_incomplete_run_writes_no_receipt(self):
         run_dir = self.finished_run(scorecard=True)
         self.cli.main([
-            "--run-dir", str(run_dir), "--bus-events", str(run_dir / "bus.jsonl"),
+            "--run-dir", str(run_dir),
+            "--vault", str(self.studio_root), "--bus-events", str(run_dir / "bus.jsonl"),
             "--write-receipt",
         ])
         self.assertFalse((run_dir / "completion-receipt.json").exists())
@@ -427,3 +454,57 @@ class LiveVerifierCliTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TheOldFictionMustNotSatisfyTheVerifier(unittest.TestCase):
+    """MUTATION GUARD — metis-g112's condition on the fixture repair.
+
+    These suites were green for four releases because they built a release out
+    of two filenames nothing produces, and the verifier read the same two names.
+    Repairing the fixtures without this guard would leave nothing stopping a
+    future change from reintroducing the agreement.
+
+    So: build the OLD shape and require the verifier to call it ABSENT. If
+    someone repoints the reader at run_dir/publication-receipt.json, or makes
+    it tolerate both names "for compatibility", this goes red.
+    """
+
+    def setUp(self):
+        import shutil
+        import tempfile
+
+        self.tmp = Path(tempfile.mkdtemp(prefix="old-fiction-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.studio = self.tmp / "studio"
+        (self.studio / ".tropo").mkdir(parents=True)
+        self.run_dir = self.tmp / "run"
+        self.run_dir.mkdir()
+
+    def test_the_two_filenames_no_producer_writes_are_not_evidence(self):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "vrl_old_fiction", TOOLS / "tropo-verify-release-live.py"
+        )
+        cli = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = cli
+        spec.loader.exec_module(cli)
+
+        fixture.write_the_old_fiction(self.run_dir)
+        (self.run_dir / "run.jsonl").write_text(
+            _json.dumps({"event": "tropo.release.published",
+                         "data": {"publication_receipt_sha256": "ab" * 32}}) + "\n",
+            encoding="utf-8",
+        )
+        observers = cli.build_observers(self.run_dir, [], "9.9.9", self.studio)
+
+        self.assertFalse(
+            observers["publication_receipt"]().present,
+            "run_dir/publication-receipt.json must NOT count as evidence — "
+            "no producer has ever written it",
+        )
+        self.assertFalse(
+            observers["scorecard"]().present,
+            "run_dir/scorecard.json must NOT count as evidence — the producer "
+            "writes a mode-specific name",
+        )

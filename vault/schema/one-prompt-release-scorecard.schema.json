@@ -18,18 +18,37 @@
     "verdict"
   ],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {
+      "const": 1
+    },
     "mode": {
-      "enum": ["rehearsal", "real-fire"],
+      "enum": [
+        "rehearsal",
+        "real-fire"
+      ],
       "description": "Rehearsal and real-fire scorecards live at separate fixed paths and are never merged; a rehearsal that could be read as a real fire is a false public record."
     },
-    "saga_id": {"type": "string", "pattern": "^release:[0-9a-f]{8}$"},
-    "pipeline_run_uid": {"type": "string", "pattern": "^[0-9a-f]{8}$"},
-    "release_version": {"type": "string", "minLength": 1},
+    "saga_id": {
+      "type": "string",
+      "pattern": "^release:[0-9a-f]{8}$"
+    },
+    "pipeline_run_uid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}$"
+    },
+    "release_version": {
+      "type": "string",
+      "minLength": 1
+    },
     "gestures": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["principal_inputs", "target", "met", "detail"],
+      "required": [
+        "principal_inputs",
+        "target",
+        "met",
+        "detail"
+      ],
       "description": "The three-gesture target. Machine continuation is not a gesture; every manual resume or re-invocation is another principal input and fails the target.",
       "properties": {
         "principal_inputs": {
@@ -38,7 +57,10 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["input", "at"],
+            "required": [
+              "input",
+              "at"
+            ],
             "properties": {
               "input": {
                 "enum": [
@@ -49,13 +71,22 @@
                   "manual_reinvocation"
                 ]
               },
-              "at": {"type": "string", "minLength": 1}
+              "at": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           }
         },
-        "target": {"const": 3},
-        "met": {"type": "boolean"},
-        "detail": {"type": "string"}
+        "target": {
+          "const": 3
+        },
+        "met": {
+          "type": "boolean"
+        },
+        "detail": {
+          "type": "string"
+        }
       }
     },
     "timestamps": {
@@ -69,20 +100,51 @@
       ],
       "description": "Four distinct moments. primary_live_at and all_targets_live_at differ whenever the site lags the primary publication, which is exactly the partial state the saga refuses to paper over.",
       "properties": {
-        "scope_locked_at": {"type": "string", "minLength": 1},
-        "orchestrator_started_at": {"type": "string", "minLength": 1},
-        "primary_live_at": {"type": ["string", "null"]},
-        "all_targets_live_at": {"type": ["string", "null"]}
+        "scope_locked_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "orchestrator_started_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "primary_live_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "all_targets_live_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "elapsed": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["lock_to_all_targets_live_seconds", "active_machine_seconds"],
-      "description": "Wall-clock from lock to all targets live INCLUDES human waits, retries, provider latency and process loss — it is the number an operator actually experiences. Active machine time is reported separately so the two are never conflated.",
+      "required": [
+        "lock_to_all_targets_live_seconds",
+        "active_machine_seconds"
+      ],
+      "description": "Wall-clock from lock to all targets live INCLUDES human waits, retries, provider latency and process loss \u2014 it is the number an operator actually experiences. Active machine time is reported separately so the two are never conflated.",
       "properties": {
-        "lock_to_all_targets_live_seconds": {"type": ["number", "null"], "minimum": 0},
-        "active_machine_seconds": {"type": ["number", "null"], "minimum": 0}
+        "lock_to_all_targets_live_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "active_machine_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
       }
     },
     "refusals": {
@@ -99,24 +161,65 @@
       ],
       "description": "Occurrences and distinct classes are counted separately: five refusals of one class and five of five are different releases. An ID absent from the baseline is new by definition and is never folded in silently.",
       "properties": {
-        "baseline_version": {"type": "string", "minLength": 1},
-        "baseline_composite_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "classifier_version": {"type": "string", "minLength": 1},
-        "occurrences": {"type": "integer", "minimum": 0},
-        "distinct_classes": {"type": "integer", "minimum": 0},
+        "baseline_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "baseline_composite_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "classifier_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "occurrences": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "null when refusals were not recorded."
+        },
+        "distinct_classes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "null when refusals were not recorded."
+        },
         "known": {
           "type": "array",
-          "items": {"type": "string", "pattern": "^R188-[0-9]{2}-[a-z0-9-]+$"}
+          "items": {
+            "type": "string",
+            "pattern": "^R188-[0-9]{2}-[a-z0-9-]+$"
+          }
         },
         "unknown": {
           "type": "array",
-          "items": {"type": "string", "minLength": 1},
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
           "description": "New refusal classes. A non-empty list is a finding, not a failure of this schema."
+        },
+        "recorded": {
+          "type": "boolean",
+          "description": "Whether refusals were MEASURED for this run. false means not recorded, which is a different fact from zero observed; the schema previously could not express the difference, so every scorecard it accepted asserted a measurement it may not have taken. Stream 1 AC4, 2026-08-24."
+        },
+        "coverage": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The surfaces the refusal count actually observed. Refusal telemetry is emitted by five tools, not by every refusing surface; a count that does not say what it covered invites being read as a total."
         }
       }
     },
     "verdict": {
-      "enum": ["pass", "fail"],
+      "enum": [
+        "pass",
+        "fail"
+      ],
       "description": "pass requires the three-gesture target met, every timestamp present, elapsed measured, and no unknown refusal class."
     }
   }

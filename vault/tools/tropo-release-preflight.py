@@ -55,6 +55,7 @@ TOOLS = Path(__file__).resolve().parent
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 
+from lib import release_gate_inputs as gate_inputs  # noqa: E402
 from lib.release_gates import (  # noqa: E402
     PHASES,
     VERDICT_ERROR,
@@ -179,6 +180,223 @@ PRE_OUTWARD_FIRE_ROSTER = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Stream 1 AC1 (5b608d28): the governance preconditions, registered as gates.
+#
+# Every row below is a refusal v1.91 discovered ONE AT A TIME, from inside the
+# build, after the run had started. Each one was knowable before anything ran:
+# their inputs are all planning facts, so the registry computes every one of
+# them to lock-static. That is the whole point — a gate does not choose its
+# boundary, and these could not have chosen a later one.
+#
+# The retro's Action 1 in one table. The observations note (56158edc §C1) asked
+# for exactly this and called it "a release-readiness check that runs before the
+# technical preflight and asserts the GOVERNANCE preconditions".
+# ---------------------------------------------------------------------------
+
+LOCK_STATIC_GOVERNANCE_ROSTER = (
+    ("lock-plan-record", "release-plan-absent",
+     ("release_plan",),
+     "a release-plan record exists and is locked — v1.91 had none, and nothing "
+     "said so until stage and fire could not resolve an activation (56158edc C1)"),
+    ("lock-ratchet-targets", "ratchet-targets-empty",
+     ("release_plan",),
+     "the plan declares its ratchet targets; an empty declaration refused the "
+     "BUILD in v1.91 although the produced bytes would have been identical"),
+    ("lock-members-terminal", "member-not-done",
+     ("fan_in_manifest", "member_states"),
+     "every fan-in member is at a terminal done state before the plan locks; "
+     "unsettled legs refused the build rather than the publish decision"),
+    ("lock-criteria-readable", "criteria-not-where-the-gesture-reads",
+     ("fan_in_manifest", "governed_index"),
+     "every fan-in dev-spec carries acceptance_criteria where the lock gesture "
+     "reads them; all four v1.91 specs carried theirs in the BODY and the "
+     "gesture reads frontmatter, which is 29506520 AC8's whole subject"),
+    ("lock-verify-commands-runnable", "verify-command-unrunnable",
+     ("fan_in_manifest", "shipped_tool_corpus"),
+     "every acceptance verify command names a target that exists; three locked "
+     "v1.91 commands were placeholders and were only discovered at verification"),
+    ("lock-target-release-current", "target-release-already-shipped",
+     ("fan_in_manifest", "governed_index", "version_string"),
+     "no fan-in member targets a release that already shipped; six specs sat "
+     "locked against shipped versions, oldest 47 days, and nothing reported it"),
+)
+
+
+def _plan_frontmatter(context: Dict[str, Any]) -> Dict[str, Any]:
+    """The release plan as data, or {} when it cannot be read.
+
+    Callers distinguish "cannot see" from "is wrong": an unreadable plan is an
+    operational error, never a refusal. "I cannot see" is never "you are wrong".
+    """
+    plan = context.get("release_plan")
+    if isinstance(plan, dict):
+        return plan
+    return {}
+
+
+def _governance_outcome(gate_id: str, failures: List[str], subject: str) -> GateOutcome:
+    """One shape for all six: name every failure, never only the first."""
+    if failures:
+        return GateOutcome(
+            gate_id=gate_id,
+            verdict=VERDICT_REFUSED,
+            detail="%s: %s" % (subject, "; ".join(failures)),
+            evidence={"failures": list(failures), "count": len(failures)},
+        )
+    return GateOutcome(gate_id=gate_id, verdict=VERDICT_PASS)
+
+
+def _lock_plan_record(context: Dict[str, Any]) -> GateOutcome:
+    fm = _plan_frontmatter(context)
+    if not fm:
+        return GateOutcome(
+            gate_id="lock-plan-record", verdict=VERDICT_ERROR,
+            detail="the release plan could not be read as a record",
+        )
+    failures = []
+    if not fm.get("uid"):
+        failures.append("the plan record names no uid")
+    if str(fm.get("status") or "") not in ("locked", "active", "design"):
+        failures.append("plan status is %r, not a plan state" % fm.get("status"))
+    return _governance_outcome("lock-plan-record", failures, "release plan")
+
+
+def _lock_ratchet_targets(context: Dict[str, Any]) -> GateOutcome:
+    fm = _plan_frontmatter(context)
+    if not fm:
+        return GateOutcome(
+            gate_id="lock-ratchet-targets", verdict=VERDICT_ERROR,
+            detail="the release plan could not be read as a record",
+        )
+    targets = fm.get("ratchet_targets")
+    failures = []
+    if targets is None:
+        failures.append("ratchet_targets is undeclared")
+    elif isinstance(targets, (list, tuple)) and not targets:
+        failures.append("ratchet_targets is declared but empty")
+    return _governance_outcome("lock-ratchet-targets", failures, "ratchet targets")
+
+
+def _lock_members_terminal(context: Dict[str, Any]) -> GateOutcome:
+    members = context.get("fan_in_manifest") or []
+    states = context.get("member_states") or {}
+    if not isinstance(states, dict):
+        return GateOutcome(
+            gate_id="lock-members-terminal", verdict=VERDICT_ERROR,
+            detail="member_states is not a mapping",
+        )
+    failures = [
+        "%s is %r" % (uid, states.get(uid))
+        for uid in members
+        if str(states.get(uid) or "") != "done"
+    ]
+    return _governance_outcome("lock-members-terminal", failures, "fan-in members")
+
+
+def _lock_criteria_readable(context: Dict[str, Any]) -> GateOutcome:
+    members = context.get("fan_in_manifest") or []
+    index = context.get("governed_index") or {}
+    if not isinstance(index, dict):
+        return GateOutcome(
+            gate_id="lock-criteria-readable", verdict=VERDICT_ERROR,
+            detail="governed_index is not a mapping",
+        )
+    failures = []
+    for uid in members:
+        row = index.get(uid) or {}
+        if row.get("type") != "dev-spec":
+            continue
+        if not row.get("acceptance_criteria"):
+            failures.append("%s carries no acceptance_criteria in frontmatter" % uid)
+    return _governance_outcome("lock-criteria-readable", failures, "acceptance criteria")
+
+
+def _lock_verify_commands_runnable(context: Dict[str, Any]) -> GateOutcome:
+    members = context.get("fan_in_manifest") or []
+    index = context.get("governed_index") or {}
+    root = Path(str(context.get("shipped_tool_corpus") or "."))
+    failures = []
+    for uid in members:
+        row = index.get(uid) or {}
+        for crit in (row.get("acceptance_criteria") or []):
+            if not isinstance(crit, dict):
+                continue
+            command = str((crit.get("verify") or {}).get("command") or "")
+            for token in command.split():
+                if "/" not in token or token.startswith("-"):
+                    continue
+                if not (root / token).exists():
+                    failures.append(
+                        "%s %s names %s, which does not exist"
+                        % (uid, crit.get("id") or "?", token)
+                    )
+    return _governance_outcome(
+        "lock-verify-commands-runnable", failures, "verify commands")
+
+
+def _lock_target_release_current(context: Dict[str, Any]) -> GateOutcome:
+    members = context.get("fan_in_manifest") or []
+    index = context.get("governed_index") or {}
+    current = str(context.get("version_string") or "")
+    if not isinstance(index, dict) or not current:
+        return GateOutcome(
+            gate_id="lock-target-release-current", verdict=VERDICT_ERROR,
+            detail="need a governed index and the version being cut to compare",
+        )
+    # Shipped versions are DERIVED from the index this gate already declares,
+    # not read from a second context key. A gate that declares one input and
+    # reads another is the defect this whole stream exists to remove, and I
+    # wrote one here before catching it.
+    shipped = {
+        str(row.get("release_version") or "")
+        for row in index.values()
+        if isinstance(row, dict) and row.get("type") == "release"
+        and str(row.get("status") or "") == "shipped"
+    } - {""}
+    failures = [
+        "%s targets %s, already shipped" % (uid, (index.get(uid) or {}).get("target_release"))
+        for uid in members
+        if str((index.get(uid) or {}).get("target_release") or "") in shipped
+    ]
+    return _governance_outcome(
+        "lock-target-release-current", failures, "target releases")
+
+
+GOVERNANCE_VERIFIERS = {
+    "lock-plan-record": _lock_plan_record,
+    "lock-ratchet-targets": _lock_ratchet_targets,
+    "lock-members-terminal": _lock_members_terminal,
+    "lock-criteria-readable": _lock_criteria_readable,
+    "lock-verify-commands-runnable": _lock_verify_commands_runnable,
+    "lock-target-release-current": _lock_target_release_current,
+}
+
+
+def register_governance_gates(registry: GateRegistry) -> GateRegistry:
+    """Bind the lock-static roster. Same one-list discipline as the fire roster."""
+    stray = sorted(set(GOVERNANCE_VERIFIERS) - {r[0] for r in LOCK_STATIC_GOVERNANCE_ROSTER})
+    if stray:
+        raise ReleaseGateError(
+            "verifier(s) for gate(s) not on LOCK_STATIC_GOVERNANCE_ROSTER: %s"
+            % ", ".join(stray)
+        )
+    for gate_id, refusal_class, inputs, description in LOCK_STATIC_GOVERNANCE_ROSTER:
+        verifier = GOVERNANCE_VERIFIERS.get(gate_id)
+        if verifier is None:
+            raise ReleaseGateError("no verifier for governance gate %r" % gate_id)
+        registry.register(
+            Gate(
+                gate_id=gate_id,
+                refusal_class=refusal_class,
+                required_inputs=tuple(inputs),
+                verifier=verifier,
+                description=description,
+            )
+        )
+    return registry
+
+
 def register_pre_outward_fire_gates(
     registry: GateRegistry, verifiers: Dict[str, Any]
 ) -> GateRegistry:
@@ -216,6 +434,10 @@ def register_pre_outward_fire_gates(
 
 def build_registry(fire_verifiers: Optional[Dict[str, Any]] = None) -> GateRegistry:
     registry = GateRegistry()
+    # Stream 1 AC1: the governance preconditions, at the boundary the registry
+    # computes for them — which is lock-static, because their inputs are all
+    # planning facts. v1.91 met these one at a time from inside the build.
+    register_governance_gates(registry)
     registry.register(
         Gate(
             gate_id="ship-python-floor",
@@ -239,7 +461,10 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Run the release gates for one truthful boundary."
     )
-    parser.add_argument("--phase", required=True, choices=list(PHASES))
+    parser.add_argument("--phase", required=True,
+                        choices=list(PHASES) + ["all"],
+                        help="a boundary, or 'all' to report every boundary in "
+                             "one pass")
     parser.add_argument(
         "--vault", default=".", help="vault root (default: current directory)"
     )
@@ -250,17 +475,29 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--list", action="store_true", help="list the gates for this phase and exit"
     )
+    parser.add_argument(
+        "--plan-uid",
+        help="the release plan to evaluate against. Omitted, only the gates "
+             "needing no plan can fire.",
+    )
+    parser.add_argument("--version-string", default="")
     args = parser.parse_args(argv)
 
     vault = Path(args.vault).resolve()
     registry = build_registry()
 
     if args.list:
-        for gate in registry.gates_for_phase(args.phase):
+        listed = registry.gates_for_phase(args.phase)
+        for gate in listed:
             print(
-                "%-24s %-28s inputs=%s"
+                "%-30s %-34s inputs=%s"
                 % (gate.gate_id, gate.refusal_class, ",".join(gate.required_inputs))
             )
+        if not listed and args.phase != "pre-outward-fire":
+            # Stream 1 AC1: an empty boundary says so. Printing nothing is
+            # ambiguous between "no gates here" and "the listing broke", and
+            # three boundaries stood empty for months behind that blank.
+            print("(0 gates registered at %s)" % args.phase)
         if args.phase == "pre-outward-fire":
             # S3 AC1 (176a8995): the roster is declared here but its verifiers
             # live with the publisher's staged world; list it, and say where it runs.
@@ -272,27 +509,45 @@ def main(argv=None) -> int:
                 )
         return EXIT_OK
 
-    context: Dict[str, Any] = {
-        "source_tree": str(vault),
-        "shipped_tool_corpus": str(vault / "vault" / "tools"),
-    }
-
+    # v1.92 Stream 3 AC1/AC2 (61f3153a). This built a context of exactly
+    # source_tree and shipped_tool_corpus, so six of seven lock-static gates
+    # reported SKIPPED-INPUTS-ABSENT and the command exited 0 having evaluated
+    # one precondition. The gates declared what they needed and nothing read it.
+    # `shipped_tool_corpus` is the STUDIO ROOT now: verify commands are
+    # studio-relative, and rooting them at vault/tools made
+    # lock-verify-commands-runnable refuse on files that exist.
     try:
-        outcomes = registry.run_phase(args.phase, context)
+        context = gate_inputs.build_context(
+            vault, args.plan_uid, version_string=args.version_string
+        )
+    except gate_inputs.GateInputError as exc:
+        # An input that cannot be read is operational, never a verdict.
+        print("[OPERATIONAL] %s" % exc, file=sys.stderr)
+        return EXIT_OPERATIONAL
+
+    phases = list(PHASES) if args.phase == "all" else [args.phase]
+    outcomes = []
+    try:
+        for phase in phases:
+            phase_outcomes = registry.run_phase(phase, context)
+            print("--- release preflight: %s (%d gate(s)) ---"
+                  % (phase, len(phase_outcomes)))
+            if not phase_outcomes and phase != "pre-outward-fire":
+                print("(0 gates registered at %s)" % phase)
+            for outcome in phase_outcomes:
+                print("[%s] %s — %s"
+                      % (outcome.verdict.upper(), outcome.gate_id, outcome.detail))
+            outcomes.extend(phase_outcomes)
     except ReleaseGateError as exc:
         print("[MISUSE] %s" % exc, file=sys.stderr)
         return EXIT_MISUSE
-
-    print("--- release preflight: %s (%d gate(s)) ---" % (args.phase, len(outcomes)))
-    for outcome in outcomes:
-        print("[%s] %s — %s" % (outcome.verdict.upper(), outcome.gate_id, outcome.detail))
 
     if args.run_dir:
         path = write_evidence(Path(args.run_dir), args.phase, outcomes, registry)
         print("evidence: %s" % path)
 
-    unreached = registry.unreached_gates([args.phase])
-    if unreached and args.phase == PHASES[-1]:
+    unreached = registry.unreached_gates(phases)
+    if unreached and (args.phase == "all" or args.phase == PHASES[-1]):
         print(
             "[WARN] %d registered gate(s) were never scheduled: %s"
             % (len(unreached), ", ".join(g.gate_id for g in unreached))

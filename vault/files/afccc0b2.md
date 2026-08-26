@@ -8,8 +8,8 @@ state: active
 author: argus-a55
 created: 2026-05-11
 created_by: argus-a55
-modified: 2026-05-11
-modified_by: argus-a56
+modified: '2026-08-25'
+modified_by: talos-t51
 schema_version: 2
 governed_by: 4cb20382
 extraction_scope: ship
@@ -109,6 +109,28 @@ capsule_version: '2.5'
 
 ---
 
+## Release Pipeline
+
+*Added 2026-08-25 (Talos T51, Mike-directed — Orpheus dormant for weeks). These terms have been load-bearing across governed release substrate since at least v1.87.0 without ever being defined here; that gap is the reason this section exists.*
+
+**Release Plan / Lock** — The ignition point for a release. A `release-plan` entry, locked once — the lock writes a complete immutable snapshot transaction and is the ONLY thing that starts a release, symmetric with a dev-spec's lock starting dev work. Nothing before the lock pays release-class cost.
+
+**Assemble / Verify / Publish** — The release pipeline's three stages, in fixed order. Assemble turns a locked plan into a built box. Verify checks that box with something that didn't build it. Publish is the one outward, irreversible act.
+
+**Box / Candidate Box** — The actual release artifact: the zip/folder the build produces, the thing a customer downloads and unzips to get a working Studio. "Candidate" while unverified and unfired — a candidate box only becomes the live release after Verify passes and Publish fires.
+
+**Freeze** — Locking a verified box as the immutable release candidate: no further changes, the exact bytes that will publish if fired.
+
+**Gate** — A registered precondition check tied to a computed boundary (lock-static / candidate / pre-freeze / pre-outward-fire / post-publication-reconcile). A gate declares what it needs to see; the boundary it runs at is computed from that, never self-declared — so a failing gate can't dodge a hard question by choosing to run later.
+
+**Fire** — The one irreversible outward act: publishing a release live. Gated and human-confirmed. Studio law: a refusal in the release path earns its existence by naming the harm it prevents, or it's a warning that proceeds and records.
+
+**Scorecard** — A release's own completion verdict: did every required fact about this release get observed, and does the record say so honestly, never asserting a measurement that was never taken.
+
+**Release Profile** — A typed vault entry (new in v1.92) that tells the release machine what it's shipping, so the machine itself never has to know the product. Binds the pipeline's three generic slots (build / verify / publish) to real steps, each either a tool the machine runs or a playbook a named person/role performs. One profile per product; fork the profile, not the machine.
+
+---
+
 ## Infrastructure
 
 **Session** — A single conversation between a human and an agent. Agents don't retain memory natively, but the vault persists state between sessions. Boot from the charter + briefing + transfer.
@@ -155,5 +177,5 @@ capsule_version: '2.5'
 
 ---
 
-*Glossary | Tropo OS | Last updated 2026-04-12 by Vela V27*
+*Glossary | Tropo OS | Last updated 2026-08-25 by Talos T51 (Release Pipeline section) | Prior update 2026-04-12 by Vela V27*
 *Build note: the Aliases section is Argo-specific. The build agent produces a clean release version without crew aliases.*

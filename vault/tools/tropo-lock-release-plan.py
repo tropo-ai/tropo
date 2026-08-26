@@ -638,6 +638,70 @@ def _render_release_entry(
     )
 
 
+def _refuse_on_unmet_preconditions(release_plan_uid, fm, files_dir) -> None:
+    """Run the lock-static boundary before locking. AC3 of 61f3153a.
+
+    Fail-closed, harm named (deb77758): a release-plan locked over unmet
+    governance preconditions opens a run, reserves its members and writes an
+    immutable fan-in manifest — a transaction whose digest attests to a set that
+    was never eligible, and which cannot be withdrawn from the receipts that
+    later cite it.
+
+    THIS TOOL REFERENCED THE PREFLIGHT ZERO TIMES. Seven gates were registered
+    at `lock-static` — the boundary named for this gesture — and the only
+    production caller of `run_phase` anywhere was the publish tool, for a
+    different boundary. The preconditions existed and the gesture they govern
+    never asked.
+
+    WARN-SAFE ON ITS OWN FAILURE. A gate that cannot reach an answer must not
+    refuse the lock: an unreadable input is "I cannot see", never "you are
+    wrong". Operational failures surface and the lock proceeds, which is the
+    deb77758 default and the reason this catches GateInputError separately from
+    a REFUSED verdict.
+    """
+    studio_root = Path(files_dir).resolve().parent.parent
+    try:
+        from lib import release_gate_inputs as gate_inputs
+        from lib.release_gates import VERDICT_REFUSED
+
+        preflight = _load_preflight(studio_root)
+        context = gate_inputs.build_context(
+            studio_root, release_plan_uid,
+            version_string=str(fm.get("release_version") or ""),
+        )
+        outcomes = preflight.build_registry().run_phase("lock-static", context)
+    except Exception as exc:  # noqa: BLE001 — operational, never a verdict
+        print(
+            f"  [WARN] lock-static preconditions could not be evaluated "
+            f"({type(exc).__name__}: {exc}); proceeding per warn-safe. The lock "
+            f"is not gated on a check that could not run.",
+            file=sys.stderr,
+        )
+        return
+
+    refused = [o for o in outcomes if o.verdict == VERDICT_REFUSED]
+    if not refused:
+        return
+    # EVERY unmet precondition, not the first. An operator who fixes the named
+    # one only to meet the next is being drip-fed a truth this already had —
+    # which is the whole reason the retrospective asked for one report.
+    detail = "\n  ".join(f"{o.gate_id}: {o.detail}" for o in refused)
+    raise LockRefused(
+        f"release-plan {release_plan_uid} has {len(refused)} unmet governance "
+        f"precondition(s):\n  {detail}"
+    )
+
+
+def _load_preflight(studio_root: Path):
+    import importlib.util
+
+    path = Path(studio_root) / "vault" / "tools" / "tropo-release-preflight.py"
+    spec = importlib.util.spec_from_file_location("tropo_release_preflight_ac3", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def plan_release_lock(
     release_plan_uid: str,
     locked_by: str,
@@ -676,6 +740,8 @@ def plan_release_lock(
             "members are the plan's content; locking an empty plan would produce "
             "a valid digest for a release that attests to nothing."
         )
+
+    _refuse_on_unmet_preconditions(release_plan_uid, fm, files_dir)
 
     plans = all_release_plans(files_dir)
     members = []

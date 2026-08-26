@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -83,10 +84,12 @@ def load_refusal_baseline(vault: Path) -> Dict[str, Any]:
     """
     path = Path(vault) / BASELINE_PATH
     if not path.is_file():
+        # refusal: misuse — no refusal baseline file at the expected path
         raise ReleaseMetricsError("no refusal baseline at %s" % path)
     try:
         baseline = json.loads(path.read_text(encoding="utf-8"))
     except ValueError as exc:
+        # refusal: misuse — the refusal baseline does not parse as JSON
         raise ReleaseMetricsError("refusal baseline does not parse: %s" % exc)
 
     recorded = baseline.get("composite_sha256")
@@ -97,6 +100,7 @@ def load_refusal_baseline(vault: Path) -> Dict[str, Any]:
     )
     computed = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     if recorded != computed:
+        # refusal: priced/false-success — an in-place edited baseline reclassifies genuinely new refusal classes as known, so the written scorecard records a passing verdict for a release whose refusal profile nobody measured
         raise ReleaseMetricsError(
             "refusal baseline digest does not match its contents (recorded %s, "
             "computed %s). Edits require a separately reviewed baseline version, "
@@ -106,21 +110,50 @@ def load_refusal_baseline(vault: Path) -> Dict[str, Any]:
 
 
 def classify_refusals(
-    observed: Sequence[str], baseline: Mapping[str, Any]
+    observed: Optional[Sequence[str]], baseline: Mapping[str, Any],
+    coverage: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
-    """Split observed refusal IDs into known and new, and count both ways."""
-    known_ids = {row["id"] for row in baseline.get("classes", [])}
-    known = [r for r in observed if r in known_ids]
-    unknown = [r for r in observed if r not in known_ids]
-    return {
+    """Split observed refusal IDs into known and new, and count both ways.
+
+    `observed` is None when refusals were NOT RECORDED for this run. That is a
+    different fact from an empty list, which asserts that none occurred, and
+    conflating them is how a scorecard reports a clean night that nobody
+    measured. v1.91 is the worked example: roughly twenty refusals, recorded
+    only as prose in a retrospective, and a scorecard built with
+    `observed_refusals=[]` would have said zero.
+
+    `coverage` names the surfaces the count actually saw. Refusal telemetry is
+    emitted by five tools in this Studio, not by every refusing surface — the
+    validator, the lock and the freeze refuse without recording. A count that
+    does not say what it covered invites being read as a total. (Stream 1 AC4;
+    substrate amendment Mike-approved 2026-08-24.)
+    """
+    base = {
         "baseline_version": baseline.get("baseline_version", ""),
         "baseline_composite_sha256": baseline.get("composite_sha256", ""),
         "classifier_version": baseline.get("classifier_version", ""),
-        "occurrences": len(observed),
-        "distinct_classes": len(set(observed)),
-        "known": sorted(set(known)),
-        "unknown": sorted(set(unknown)),
+        "coverage": sorted(coverage) if coverage else [],
     }
+    if observed is None:
+        return dict(
+            base,
+            recorded=False,
+            occurrences=None,
+            distinct_classes=None,
+            known=[],
+            unknown=[],
+        )
+    known_ids = {row["id"] for row in baseline.get("classes", [])}
+    known = [r for r in observed if r in known_ids]
+    unknown = [r for r in observed if r not in known_ids]
+    return dict(
+        base,
+        recorded=True,
+        occurrences=len(observed),
+        distinct_classes=len(set(observed)),
+        known=sorted(set(known)),
+        unknown=sorted(set(unknown)),
+    )
 
 
 def count_gestures(inputs: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
@@ -135,12 +168,14 @@ def count_gestures(inputs: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
     for index, item in enumerate(inputs):
         name = item.get("input")
         if name not in PRINCIPAL_GESTURES and name not in EXTRA_INPUTS:
+            # refusal: misuse — a caller-supplied input name is not a principal input
             raise ReleaseMetricsError(
                 "input[%d] %r is not a principal input. Machine continuation is "
                 "not a gesture and must not be recorded as one; a manual resume "
                 "is, and must be recorded as manual_resume" % (index, name)
             )
         if not item.get("at"):
+            # refusal: misuse — a caller-supplied input row carries no timestamp
             raise ReleaseMetricsError("input[%d] %r has no timestamp" % (index, name))
         recorded.append({"input": str(name), "at": str(item["at"])})
 
@@ -174,6 +209,7 @@ def count_gestures(inputs: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
 
 def scorecard_path(run_folder: Path, mode: str) -> Path:
     if mode not in SCORECARD_FILENAMES:
+        # refusal: misuse — the scorecard mode argument is not one of the two
         raise ReleaseMetricsError(
             "mode must be %s" % " or ".join(sorted(SCORECARD_FILENAMES))
         )
@@ -189,6 +225,7 @@ def _elapsed_seconds(start: Optional[str], end: Optional[str]) -> Optional[float
     try:
         return (datetime.strptime(end, fmt) - datetime.strptime(start, fmt)).total_seconds()
     except ValueError as exc:
+        # refusal: misuse — a timestamp is not in the required format
         raise ReleaseMetricsError("timestamps must be %s: %s" % (fmt, exc))
 
 
@@ -201,11 +238,13 @@ def build_scorecard(
     principal_inputs: Sequence[Mapping[str, Any]],
     timestamps: Mapping[str, Optional[str]],
     active_machine_seconds: Optional[float],
-    observed_refusals: Sequence[str],
+    observed_refusals: Optional[Sequence[str]],
     baseline: Mapping[str, Any],
+    refusal_coverage: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     """Assemble one scorecard. Verdict is derived, never supplied."""
     if mode not in SCORECARD_FILENAMES:
+        # refusal: misuse — the scorecard mode argument is unknown
         raise ReleaseMetricsError("unknown scorecard mode %r" % mode)
 
     required_stamps = (
@@ -216,13 +255,15 @@ def build_scorecard(
     )
     missing_keys = [k for k in required_stamps if k not in timestamps]
     if missing_keys:
+        # refusal: misuse — the caller's timestamps mapping is missing required keys
         raise ReleaseMetricsError(
             "timestamps missing %s; a scorecard with a hole is not a partial "
             "measurement" % ", ".join(missing_keys)
         )
 
     gestures = count_gestures(principal_inputs)
-    refusals = classify_refusals(observed_refusals, baseline)
+    refusals = classify_refusals(
+        observed_refusals, baseline, coverage=refusal_coverage)
     elapsed = {
         "lock_to_all_targets_live_seconds": _elapsed_seconds(
             timestamps.get("scope_locked_at"), timestamps.get("all_targets_live_at")
@@ -236,6 +277,10 @@ def build_scorecard(
     elif any(timestamps.get(k) is None for k in required_stamps):
         verdict = "fail"
     elif elapsed["lock_to_all_targets_live_seconds"] is None:
+        verdict = "fail"
+    elif not refusals.get("recorded", True):
+        # A missing measurement cannot pass. The schema says so; this enforces
+        # it for the refusal block the same way it already does for timestamps.
         verdict = "fail"
     elif refusals["unknown"]:
         verdict = "fail"
@@ -275,6 +320,79 @@ def validate_scorecard(scorecard: Mapping[str, Any], schema_path: Path) -> List[
     ]
 
 
+_JSON_TYPES = {
+    "string": str,
+    "boolean": bool,
+    "object": dict,
+    "array": list,
+}
+
+
+def _type_findings(value: Any, schema: Mapping[str, Any], where: str) -> List[str]:
+    """Enforce `type`, `minLength`, `pattern`, `minItems` — the scalar contract.
+
+    THE FALLBACK USED TO SKIP ALL OF THIS, and that is how an invalid real-fire
+    scorecard validated clean on every machine without `jsonschema` installed
+    (which is every machine in this studio). `release_version: ""` passed
+    minLength 1; `timestamps.scope_locked_at: null` passed type ["string"]. A
+    validator that answers VALID for something it never examined is the
+    false-success class the release doctrine names by name — worse than no
+    validator, because it is quoted as evidence.
+
+    Recursion into objects/arrays stays where it was; this only adds the leaf
+    constraints the old code walked straight past.
+    (argus-a158, 2026-08-25.)
+    """
+    findings: List[str] = []
+    declared = schema.get("type")
+    if declared is not None:
+        allowed = declared if isinstance(declared, list) else [declared]
+        ok = False
+        for name in allowed:
+            if name == "null":
+                if value is None:
+                    ok = True
+            elif name in ("integer", "number"):
+                if isinstance(value, bool):
+                    continue
+                if name == "integer" and isinstance(value, int):
+                    ok = True
+                elif name == "number" and isinstance(value, (int, float)):
+                    ok = True
+            else:
+                expected = _JSON_TYPES.get(name)
+                # bool is a subclass of int; guard the reverse direction too.
+                if expected is not None and isinstance(value, expected):
+                    if expected is not bool and isinstance(value, bool):
+                        continue
+                    ok = True
+            if ok:
+                break
+        if not ok:
+            findings.append(
+                "%s: expected type %r, got %s" % (where, declared, type(value).__name__)
+            )
+            return findings
+    if isinstance(value, str):
+        min_length = schema.get("minLength")
+        if isinstance(min_length, int) and len(value) < min_length:
+            findings.append(
+                "%s: shorter than minLength %d (value %r)" % (where, min_length, value)
+            )
+        pattern = schema.get("pattern")
+        if isinstance(pattern, str):
+            try:
+                if re.search(pattern, value) is None:
+                    findings.append("%s: %r does not match %r" % (where, value, pattern))
+            except re.error:
+                pass
+    if isinstance(value, list):
+        min_items = schema.get("minItems")
+        if isinstance(min_items, int) and len(value) < min_items:
+            findings.append("%s: fewer than minItems %d" % (where, min_items))
+    return findings
+
+
 def _structural_check(value: Any, schema: Mapping[str, Any], where: str = "<root>") -> List[str]:
     findings: List[str] = []
     if "const" in schema:
@@ -284,6 +402,9 @@ def _structural_check(value: Any, schema: Mapping[str, Any], where: str = "<root
     if "enum" in schema:
         if value not in schema["enum"]:
             findings.append("%s: %r not in %r" % (where, value, schema["enum"]))
+        return findings
+    findings.extend(_type_findings(value, schema, where))
+    if findings:
         return findings
     if schema.get("type") == "object":
         if not isinstance(value, dict):

@@ -26,14 +26,14 @@ output:
   description: "prints '<dev_spec_uid> LOCKED activation=<activation_uid>' on success (exit 0); refuses (non-zero exit, dev-spec file UNCHANGED byte-for-byte) if the activation cannot be opened or the dev-spec is not in a lockable state"
 created: '2026-07-07'
 created_by: talos-t25
-modified: '2026-07-07'
-modified_by: talos-t25
+modified: '2026-08-24'
+modified_by: talos-t50
 governed_by: d5e1b4a3
 member_of:
   - "8dd772a0"
 schema_version: 2
 belt: false  # trimmed from belt by vela-v65 2026-07-10 — over the 15-entry cap; mount/publish are federation-specific, lock-dev-spec is ceremony-specific. Cataloged + functional; not in quick-ref.
-extraction_scope: argo-reference
+extraction_scope: ship  # v1.92 Stream 2 AC1 (1a478c48), 2026-08-24 by talos-t50: the dev-pipeline's only ignition was argo-reference — a stranger studio received a pipeline it could not start. Flipped alongside b281edeb (the lib/ closure) and confirmed clean of absolute paths / argo-private UID references (see 5187be30's fix, same build).
 trigger_description: "Lock a dev-spec; atomically opens its correlated dev-pipeline activation in the same gesture (ADR-052)."
 belt_invocation: "python3 vault/tools/tropo-lock-dev-spec.py --dev-spec-uid <uid> --locked-by <agent>"
 belt_example: "python3 vault/tools/tropo-lock-dev-spec.py --dev-spec-uid 943bb220 --locked-by argus"

@@ -205,6 +205,7 @@ def active_candidate(events, run_uid: str) -> Optional[dict]:
                 previous = str(active.get("candidate_sha256") or "")[:12]
                 incoming = str(data.get("candidate_sha256") or "")[:12]
                 if previous != incoming:
+                    # refusal: priced/false-success — two live candidates stand in one run's stream, so the Verify receipts bound to the first digest are read as attesting bytes they never covered
                     raise PackageRefusal(
                         "run {} already has an active candidate {} and built {} "
                         "without invalidating it. Receipts bind to a candidate "
@@ -218,6 +219,7 @@ def active_candidate(events, run_uid: str) -> Optional[dict]:
             retired = str(data.get("candidate_sha256") or "")
             current = str((active or {}).get("candidate_sha256") or "")
             if not active or current != retired:
+                # refusal: priced/false-success — a candidate is retired by an event naming different bytes, so the freeze tool resolves the wrong live digest and binds receipts to bytes that candidate never contained
                 raise PackageRefusal(
                     "candidate invalidation names {} but the active candidate "
                     "is {}".format(retired[:12], current[:12] or "absent")
@@ -241,6 +243,7 @@ def active_frozen_payload(events, run_uid: str) -> Optional[dict]:
             old = str(data.get("old_package_sha256") or "")
             active_digest = str((active or {}).get("package_sha256") or "")
             if not active or active_digest != old:
+                # refusal: priced/false-success — a supersession that matches nothing retires the wrong freeze, so the publisher ships a stale package digest while everyone reads the superseded one as replaced
                 raise PackageRefusal(
                     f"package supersession names {old[:12]} but active freeze is "
                     f"{active_digest[:12]}"
@@ -259,18 +262,23 @@ def _frontmatter(path: Path) -> dict:
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
+        # refusal: misuse — could not read the governed entry at that path
         raise PackageRefusal(f"cannot read {path}: {exc}") from exc
     if not text.startswith("---"):
+        # refusal: misuse — the named file carries no frontmatter block
         raise PackageRefusal(f"{path} has no frontmatter; it is not a governed entry")
     end = text.find("\n---", 3)
     if end < 0:
+        # refusal: misuse — the frontmatter block is unterminated
         raise PackageRefusal(f"{path} has an unterminated frontmatter block")
     try:
         import yaml  # local import: this module is imported by tools that may not need yaml
         parsed = yaml.safe_load(text[3:end])
     except Exception as exc:  # noqa: BLE001 -- any parse failure is a refusal
+        # refusal: misuse — the frontmatter does not parse as YAML
         raise PackageRefusal(f"{path} frontmatter does not parse: {exc}") from exc
     if not isinstance(parsed, dict):
+        # refusal: misuse — the parsed frontmatter is not a mapping
         raise PackageRefusal(f"{path} frontmatter is not a mapping")
     return parsed
 
@@ -288,6 +296,7 @@ def resolve_release_run(
     Missing, ambiguous or mismatched identity refuses before package writes.
     """
     if not activation_uid or not str(activation_uid).strip():
+        # refusal: misuse — no activation uid was supplied, so there is nothing to resolve
         raise PackageRefusal(
             "package production requires --activation-uid. There is no "
             "no-activation path: a package that cannot name the release run "
@@ -296,6 +305,7 @@ def resolve_release_run(
         )
     activation_uid = str(activation_uid).strip()
     if not _UID.match(activation_uid):
+        # refusal: misuse — the activation argument is not an 8-hex governed uid
         raise PackageRefusal(
             f"{activation_uid!r} is not a governed uid; refusing rather than "
             f"searching for something that resembles it"
@@ -303,11 +313,13 @@ def resolve_release_run(
 
     activation_path = Path(files_dir) / f"{activation_uid}.md"
     if not activation_path.is_file():
+        # refusal: misuse — the named activation file does not exist
         raise PackageRefusal(
             f"activation {activation_uid} does not resolve at {activation_path}"
         )
     activation = _frontmatter(activation_path)
     if str(activation.get("type") or "") != "activation":
+        # refusal: misuse — the named entry is not an activation
         raise PackageRefusal(
             f"{activation_uid} is type {activation.get('type')!r}, not an activation"
         )
@@ -322,17 +334,20 @@ def resolve_release_run(
         or ""
     ).strip()
     if not run_uid:
+        # refusal: misuse — the activation names no pipeline run to resolve
         raise PackageRefusal(
             f"activation {activation_uid} names no pipeline_run_uid, so there "
             f"is no run to bind this package to"
         )
     if not root_uid:
+        # refusal: priced/unreconstructable-identity-or-lineage — the package and the public v2 receipt record an empty activation_root_uid, so the root project this release closed is unnameable in the permanent published record
         raise PackageRefusal(
             f"activation {activation_uid} names no activation_root_project"
         )
 
     run_path = Path(files_dir) / f"{run_uid}.md"
     if not run_path.is_file():
+        # refusal: misuse — the named run file does not exist
         raise PackageRefusal(
             f"activation {activation_uid} names run {run_uid}, which does not "
             f"resolve at {run_path}"
@@ -347,6 +362,7 @@ def resolve_release_run(
         run.get("activation") or run.get("activation_uid") or ""
     ).strip()
     if back_activation and back_activation != activation_uid:
+        # refusal: priced/unreconstructable-identity-or-lineage — two identities are in play and the package binds to whichever record was read first, freezing into every downstream receipt a lineage claim the substrate itself contradicts
         raise PackageRefusal(
             f"identity disagreement: activation {activation_uid} names run "
             f"{run_uid}, but that run names activation {back_activation}"
@@ -354,6 +370,7 @@ def resolve_release_run(
 
     pipeline = str(run.get("pipeline") or run.get("pipeline_uid") or "").strip()
     if pipeline != RELEASE_PIPELINE_UID:
+        # refusal: priced/unreconstructable-identity-or-lineage — a dev run authorises a release package, so the box and its receipts become indistinguishable from pipeline-produced ones and are believed to have passed release gates that never ran
         raise PackageRefusal(
             f"run {run_uid} belongs to pipeline {pipeline or '(unset)'}, not "
             f"the release pipeline {RELEASE_PIPELINE_UID}. A dev run cannot "
@@ -363,6 +380,7 @@ def resolve_release_run(
     snapshot_path = _snapshot_for(run, run_uid, runs_dir)
     plan_uid = str(run.get("release_plan_uid") or "").strip()
     if not plan_uid:
+        # refusal: misuse — the run names no release-plan to resolve
         raise PackageRefusal(
             f"run {run_uid} names no release_plan_uid; the package would have "
             f"no plan to close against"
@@ -374,6 +392,7 @@ def resolve_release_run(
     # an unverifiable membership as an acceptable one.
     plan_path = Path(files_dir) / f"{plan_uid}.md"
     if not plan_path.is_file():
+        # refusal: misuse — the named release-plan file does not exist
         raise PackageRefusal(
             f"run {run_uid} names release-plan {plan_uid}, which does not "
             f"resolve at {plan_path}"
@@ -381,12 +400,14 @@ def resolve_release_run(
     plan = _frontmatter(plan_path)
     plan_activation = str(plan.get("release_activation_uid") or "").strip()
     if plan_activation and plan_activation != activation_uid:
+        # refusal: priced/unreconstructable-identity-or-lineage — the package closes against a release-plan locked by a different activation, permanently binding the public receipt to a plan this activation never authorised
         raise PackageRefusal(
             f"identity disagreement: release-plan {plan_uid} was locked by "
             f"activation {plan_activation}, not {activation_uid}"
         )
     stored_digest = str(plan.get("fan_in_digest") or "").strip()
     if not stored_digest:
+        # refusal: priced/false-success — the package ships and its public v2 receipt records an empty fan_in_digest, so its membership claim rests on nothing and nobody can ever prove which dev-spec set was released
         raise PackageRefusal(
             f"release-plan {plan_uid} carries no fan_in_digest, so there is "
             f"nothing to verify the package's membership against"
@@ -416,6 +437,7 @@ def _snapshot_for(run: dict, run_uid: str, runs_dir: Optional[Path]) -> Optional
     tail = Path(folder).name if folder.startswith("vault/") else folder
     path = Path(runs_dir) / tail / "declaration-snapshot.json"
     if not path.is_file():
+        # refusal: warn — unpriced: nothing in the build or publish path reads identity.snapshot_path, the two sibling branches above return the same missing-snapshot end state silently, and the zip is identical either way
         raise PackageRefusal(
             f"run {run_uid} declares run_folder {folder} but its immutable "
             f"snapshot does not resolve at {path}; a package cannot be frozen "
@@ -440,6 +462,7 @@ def verify_fan_in_digest(identity: ReleaseIdentity, manifest_rows) -> str:
             for row in manifest_rows]
     recomputed = fan_in.manifest_digest(rows)
     if recomputed != identity.fan_in_digest:
+        # refusal: priced/false-success — the locked manifest moved after the lock and the package ships a dev-spec set nobody approved while its recorded digest still asserts the approved one
         raise PackageRefusal(
             f"fan-in digest mismatch for run {identity.run_uid}: the lock "
             f"recorded {identity.fan_in_digest[:12]} and the manifest now "
@@ -459,6 +482,7 @@ def hash_final_zip(zip_path: Path) -> str:
     """
     path = Path(zip_path)
     if not path.is_file():
+        # refusal: misuse — there is no zip at that path to hash
         raise PackageRefusal(f"no package to hash at {path}")
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -504,12 +528,14 @@ def reconcile_existing_freeze(
         return True
     recorded = str(existing.get("package_sha256") or "").strip()
     if not recorded:
+        # refusal: misuse — the existing freeze event records no digest to compare against
         raise PackageRefusal(
             f"run {run_uid} already carries a package_frozen event with no "
             f"digest; refusing to guess whether this build supersedes it"
         )
     if recorded == package_sha256:
         return False
+    # refusal: priced/false-success — one release run carries two package identities, so every receipt already written against the first digest is read as attesting the bytes this build replaced
     raise PackageRefusal(
         f"run {run_uid} was already frozen at {recorded[:12]} and this build "
         f"produced {package_sha256[:12]}. One release run has one package "

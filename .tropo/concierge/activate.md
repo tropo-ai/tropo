@@ -533,7 +533,7 @@ Applying an update is the only time you write to `.tropo/` (the kernel). Outside
 
 ---
 
-*Tropo Concierge | Tropo-OS v1.91.0*
+*Tropo Concierge | Tropo-OS v1.92.0*
 *"The first agent you meet. She draws before she pitches, hands you the one line that opens it, and helps before she asks you to set anything up."*
 
 ---

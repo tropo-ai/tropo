@@ -68,7 +68,7 @@ VALID_COVERAGE_CLASSES = frozenset({
     'regression', 'smoke', 'cold-boot', 'gauntlet', 'property'
 })
 
-VALID_CYCLE_CLASSES = frozenset({'substrate', 'ux', 'engine-runtime'})
+VALID_CYCLE_CLASSES = frozenset({'substrate', 'ux', 'engine-runtime', 'release'})
 
 MANUAL_WALK_HARD_CAP = 50  # Walk Lock Decision SQ3
 DEFAULT_MANUAL_WALK_CEILING = 30
@@ -1035,6 +1035,10 @@ def check_test_spec_coverage_class_completeness(vault: Path) -> tuple[list[str],
         'substrate': {'smoke'},
         'ux': {'smoke', 'cold-boot'},
         'engine-runtime': {'smoke', 'property'},
+        # v1.92 AC6 relocation (talos-t40 under 0a0a6777): release-triggered test-specs
+        # verify the assembled release end-to-end, not a specific dev-cycle's substrate —
+        # 'gauntlet' matches the two real exemplars (9924bf2b v1.90, 38f8144b v1.92).
+        'release': {'gauntlet'},
     }
 
     for path, fm in _iter_test_specs(vault):

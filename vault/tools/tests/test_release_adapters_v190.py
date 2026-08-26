@@ -271,13 +271,17 @@ class FireIntegrationTests(unittest.TestCase):
     until the wiring lands, cmd_fire performs its acts with no journal.
     """
 
-    def _drive_cmd_fire(self, *, skip_checkpoint=None, stub_adapter=None):
+    def _drive_cmd_fire(self, *, skip_checkpoint=None, stub_adapter=None,
+                        invalid_scorecard=False):
         """One full cmd_fire run against real fixture git and mocked edges.
 
         Returns (exit_code, journal, run_uid). `skip_checkpoint` simulates a
         removed wire_checkpoint call site (the AC1 integration mutation);
         `stub_adapter` simulates a no-op adapter (the WiringTests mutation,
-        applied on the real path).
+        applied on the real path); `invalid_scorecard` makes the producer emit
+        a well-formed-JSON but schema-INVALID card, which is the shape that used
+        to satisfy completion_verification and let a fire report LIVE over a
+        measurement nobody could trust.
         """
         publisher = _load_publisher()
         tmp, clone, tip = _cas_fixture("fireint")
@@ -286,7 +290,11 @@ class FireIntegrationTests(unittest.TestCase):
         subprocess.run(["git", "-C", str(clone), "tag", "v1.90.0"], check=True)
         releases = tmp / "releases"
         releases.mkdir()
-        run_uid = "run-v190-fireint"
+        # 8-hex, because that is what the scorecard schema's `pipeline_run_uid`
+        # and `saga_id` patterns require. The old placeholder ("run-v190-fireint")
+        # violated both and nothing said so — the structural fallback skipped
+        # `pattern` entirely. The strict fallback caught it the first time it ran.
+        run_uid = "a190f1e7"
         state = {
             "version": "1.90.0", "tag": "v1.90.0", "staged_sha": tip,
             "staged_at": "2026-08-21T00:00:00Z", "activation_uid": run_uid,
@@ -297,7 +305,80 @@ class FireIntegrationTests(unittest.TestCase):
         state_file.write_text(json.dumps(state), encoding="utf-8")
 
         ac7 = {"package_sha256": "a" * 64, "identity": type(
-            "I", (), {"activation_uid": run_uid})()}
+            "I", (), {"activation_uid": run_uid, "run_uid": run_uid})()}
+
+        # THE SEAM THIS TEST EXISTS TO HOLD, wired the way production wires it.
+        #
+        # Two fixture gaps used to make the eight-act-site contract unsatisfiable
+        # here, and together they hid a real deadlock for a full release cycle:
+        #
+        #   1. `identity` carried no `run_uid`, so `_run_journal_folder` returned
+        #      None and the scorecard path could not even be computed.
+        #   2. No `scorecard_producer` was injected, so nothing could write the
+        #      card that `completion_verification` observes.
+        #
+        # The fix is NOT to pre-plant a scorecard — that would encode "a first
+        # fire cannot complete" as intended behaviour. It is to inject the
+        # producer the orchestrator injects, so this drives the real seam:
+        # publisher calls producer, producer writes a real card, publisher
+        # validates it, completion is observed. Remove the producer call from
+        # cmd_fire and this test goes red, which is the whole point of it.
+        run_folder = tmp / "pipeline-runs" / f"release-{run_uid}"
+        run_folder.mkdir(parents=True)
+
+        def _fixture_scorecard_producer(fired_version: str) -> None:
+            """Stands in for tropo-release.py::_write_real_fire_scorecard."""
+            if invalid_scorecard:
+                # Exactly the shape a real fire produced before this cycle: a
+                # card naming no release, with a null required timestamp. Valid
+                # JSON, invalid measurement.
+                target = publisher.release_metrics.scorecard_path(
+                    run_folder, publisher.release_metrics.REAL_FIRE)
+                target.write_text(json.dumps({
+                    "schema_version": 1,
+                    "mode": publisher.release_metrics.REAL_FIRE,
+                    "saga_id": f"release:{run_uid}",
+                    "pipeline_run_uid": run_uid,
+                    "release_version": "",
+                    "gestures": {"count": 0, "target": 3, "met": False,
+                                 "inputs": []},
+                    "timestamps": {"scope_locked_at": None,
+                                   "orchestrator_started_at": None,
+                                   "primary_live_at": None,
+                                   "all_targets_live_at": None},
+                    "elapsed": {"lock_to_all_targets_live_seconds": None,
+                                "active_machine_seconds": None},
+                    "refusals": {"recorded": False},
+                    "verdict": "fail",
+                }, indent=2) + "\n", encoding="utf-8")
+                return
+            card = publisher.release_metrics.build_scorecard(
+                mode=publisher.release_metrics.REAL_FIRE,
+                saga_id=f"release:{run_uid}",
+                pipeline_run_uid=run_uid,
+                release_version=fired_version,
+                principal_inputs=[
+                    {"input": "release_scope_locked", "at": "2026-08-21T00:00:00Z"},
+                    {"input": "release_orchestrator_invoked",
+                     "at": "2026-08-21T00:05:00Z"},
+                    {"input": "release_fire_authorized", "at": "2026-08-21T00:10:00Z"},
+                ],
+                timestamps={
+                    "scope_locked_at": "2026-08-21T00:00:00Z",
+                    "orchestrator_started_at": "2026-08-21T00:05:00Z",
+                    "primary_live_at": "2026-08-21T00:10:00Z",
+                    "all_targets_live_at": "2026-08-21T00:12:00Z",
+                },
+                active_machine_seconds=None,
+                observed_refusals=[],
+                baseline={"baseline_version": "1", "composite_sha256": "b" * 64,
+                          "classifier_version": "1", "classes": []},
+                refusal_coverage=["tropo-build-release.py"],
+            )
+            target = publisher.release_metrics.scorecard_path(
+                run_folder, publisher.release_metrics.REAL_FIRE)
+            target.write_text(json.dumps(card, indent=2, sort_keys=True) + "\n",
+                              encoding="utf-8")
         vstate = {
             "status": "verified", "expect": "1.90.0", "tag": "v1.90.0",
             "expected_sha": tip, "remote_main_sha": tip, "remote_tag_sha": tip,
@@ -359,13 +440,42 @@ class FireIntegrationTests(unittest.TestCase):
             stub_patch.start()
             self.addCleanup(stub_patch.stop)
 
+        run_folder_patch = mock.patch.object(
+            publisher, "_run_journal_folder", return_value=run_folder)
+        run_folder_patch.start()
+        self.addCleanup(run_folder_patch.stop)
+
         import argparse as _argparse
-        args = _argparse.Namespace(version="1.90.0")
+        args = _argparse.Namespace(
+            version="1.90.0",
+            scorecard_producer=_fixture_scorecard_producer,
+        )
         exit_code = publisher.cmd_fire(args)
         journal = saga.SagaJournal.open(
             releases / "v1.90.0" / "release-saga.jsonl",
             saga.saga_id_for(run_uid))
         return exit_code, journal, run_uid, tip
+
+    def test_an_invalid_scorecard_does_not_satisfy_completion(self) -> None:
+        """The false-green control, and the reason existence is not the bar.
+
+        Before this cycle the completion adapter asked only whether a file was
+        at the path. So a card naming no release, with four null timestamps and
+        no recorded refusals, satisfied the act site — and the fire printed
+        LIVE and returned 0 over a measurement that was structurally incapable
+        of being trusted. Here the same card must NOT satisfy it.
+
+        Paired deliberately with the green case above: together they prove the
+        gate discriminates on VALIDITY. A control that only ever sees an invalid
+        card cannot tell "rejects bad" from "rejects everything".
+        """
+        exit_code, journal, run_uid, tip = self._drive_cmd_fire(
+            invalid_scorecard=True)
+        self.assertNotEqual(exit_code, 0,
+                            "an invalid measurement must not report a clean fire")
+        self.assertIsNone(
+            journal.observed("completion_verification"),
+            "completion may not be observed from a schema-invalid scorecard")
 
     def test_cmd_fire_journals_all_eight_act_sites(self) -> None:
         exit_code, journal, run_uid, tip = self._drive_cmd_fire()

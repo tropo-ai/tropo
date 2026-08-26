@@ -7,6 +7,135 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.92.0] - 2026-08-25
+
+The release stopped being an adjudication and became a build again. Three goals only: rebuild the
+release build process from first principles, ship a dev-pipeline a stranger studio can actually
+start work with, and clear the deferred list — proven by shipping this version through the new
+path, every step run.
+
+### Added
+- **The dev pipeline now ships with its ignition.** The command that opens a dev cycle was
+  previously kept in-house, so a fresh install received a pipeline it could describe but not start;
+  it now ships alongside mint, evidence, and close, making the complete minimal loop available out
+  of the box. The shipped tools were also scrubbed of absolute machine paths and internal-only
+  identifiers, so they run somewhere other than where they were written.
+- **Opening a cycle declares the process that actually runs.** The lock step used to copy a step
+  list out of a template that the runtime then refused to start, so a newly-opened cycle promised a
+  machine that did not exist. There is now exactly one writer of that declaration, it names the live
+  process — lock, per-criterion evidence, independent verification, close — and both consumers of
+  the declaration accept the corrected shape.
+- **A dev cycle can no longer fail because of release machinery.** The final verification step used
+  to run the release-pipeline contract suite, which meant a studio that had never cut a release
+  could fail its own development work for entirely unrelated reasons. That step now checks
+  dev-scope substrate only — the run's own evidence completeness and close integrity.
+- **Someone new can go from nothing to a closed spec using only what's in the box.** A shipped
+  how-to walks the whole path, and every command in it is copy-pasteable in a bare install with its
+  script operand resolving to a file the install actually contains; the pipeline definition is
+  pinned to its current three-stage shape so superseded deploy-and-release steps cannot reappear as
+  live structure.
+- **The release preflight gathers its own inputs, so every precondition actually gets checked.**
+  Before this, the command supplied only two of the seven inputs its checks needed, so six of seven
+  reported "inputs absent" and the run exited clean having evaluated a single precondition. It now
+  reads the release plan, its members and their states directly, and every check reaches a real
+  verdict.
+- **One invocation reports every unmet precondition across every stage.** Seeing the whole picture
+  previously took five separate commands, one per stage. A single run now walks every boundary in
+  order and produces one report, saying explicitly which boundaries have no checks registered
+  rather than printing nothing, and keeping the existing exit-code contract — refusal, operational
+  error, and misuse stay distinct.
+- **Locking a release runs its own preconditions and refuses with the complete list.** The lock
+  previously never consulted the preflight at all, so the checks guarding that exact gesture were
+  enforced only by an operator who remembered to ask. It now evaluates them first and names every
+  unmet one. If a check itself cannot run, the error surfaces and the lock proceeds rather than
+  blocking on an unanswerable question.
+- **Retirement is executed by an instrument, not remembered by a person.** A driver command walks
+  the eight required retirement steps in order, checks the world for each step's artifact instead
+  of accepting a claim that it happened, and cannot return a complete verdict while any step is
+  open — the report names which ones. It reports rather than blocks, and refuses to run at all if
+  the published practice no longer matches the steps it knows how to observe, so amending the
+  procedure breaks the driver loudly instead of silently orphaning a check.
+- **A successor boots into a clean inbox or a named debt.** Unanswered reply-required threads are
+  reported as an open step on both coordination axes, or recorded as an explicit flag-and-proceed
+  naming each outstanding thread. Silently leaving a thread unanswered is no longer a possible
+  outcome.
+- **A spec marked done must be true on disk.** Validation compares a completed spec's declared
+  deliverables against what actually exists and reports every unresolvable target by name, not just
+  the first — scoped as an error for specs under the current schema, a named debt class for older
+  ones, and a warning for deliverables that were only ever planned identifiers.
+
+### Changed
+- **Every step of the release names who or what runs it.** Each of the twelve declared pipeline
+  steps binds to exactly one executor and declares its kind — a tool entry point, or a playbook
+  with a named executor class for the legs that are deliberately human- or agent-run. When
+  something refuses, the message names the pipeline step it belongs to rather than just the script
+  that raised it, so an operator can tell where in the release they actually are.
+- **A refusal has to justify blocking you.** Every stop in the build path is classified as one of
+  three things: a priced refusal that names the irreversible harm it prevents, a warning that
+  proceeds and records, or a plain operational error such as a bad argument or unreadable input —
+  and that last class is barred from presenting itself as a verdict on the release. Checks that
+  could not name a harm were demoted to warnings rather than removed, so detection is retained and
+  only the block goes away.
+- **The completion check reads where the release actually writes.** The verifier resolves the
+  publication receipt by the hash the publish event itself names and confirms it by hashing the
+  file's bytes, binding the artifact to the event instead of trusting that some file landed in the
+  run folder. The release scorecard can now record "not measured" instead of being forced by its
+  own format to assert a count of zero that nobody took.
+- **The release machine no longer hardcodes what it ships.** Product-specific step sets moved out
+  of the tooling into a typed, governed release profile loaded like any other governed record, with
+  a profile that binds a judgment step without naming its executor refused at load time. A single
+  runner reads that profile plus the step bindings to drive a release end to end: deterministic
+  steps execute, and judgment steps halt and print the named executor and the exact command a
+  person needs to run next.
+
+### Fixed
+- **Registry identifiers are stable, so a run only writes what actually changed.** Each row's
+  identifier is keyed to the release-and-subsystem pair and looked up before anything is minted, so
+  existing rows survive re-runs byte-for-byte and only genuinely new pairs get new identifiers.
+  Previously a single added release could re-mint the identifiers of every row — leaving the
+  working tree permanently dirty after any run and breaking any downstream reference to a row. Two
+  runs back to back now produce a zero diff.
+- **A shipped release that yields no subsystems is announced, not swallowed.** Derivation that
+  reaches zero results emits a warning naming the release and version, and the run still completes
+  normally. Before, the empty case recorded nothing anywhere, so a shipped release could simply be
+  missing from the registry until a strict validation pass caught it much later.
+- **Ship dates come from the actual publish event, not a file's creation date.** New rows resolve
+  their shipped-at value from the release's published event, and record it as explicitly unknown,
+  with a note saying why, when no such event exists. The old fallback read the release entry's
+  creation date, which could be off by a day or more from when the release actually went out.
+  Existing rows keep their current values rather than being rewritten.
+- **A transfer letter written in place no longer blocks the close.** Closing with a letter already
+  authored at its final destination is accepted when source and destination are the same file,
+  removing a manual workaround three successive handoffs had to route around. Pointing at a
+  different source over an occupied destination still refuses, and an empty letter still refuses.
+
+### Known and named
+- Six residual items on the release-runtime stream were accepted knowingly at close: the
+  capabilities are built and running, but their test evidence is thinner than the rest of the work.
+  They are enumerated individually in that stream's verification report rather than summarized
+  here.
+- Sixteen stops in the build path are counted as demotion candidates — they block over something
+  reversible and could become warnings. They are named and visible; nothing was demoted, because
+  converting release-tool control flow is a behavior change carrying its own risk. The decision is
+  recorded open.
+- The release suite stands at nine failures over 685 passing tests, measured on this release's own
+  tree rather than carried forward from an earlier count. Five are inherited from before this cycle
+  and keep their recorded disposition; a sixth from that same inherited set was fixed by this work.
+  Two of the five fail only inside the full run, which is test-ordering state leakage rather than a
+  logic defect.
+- Three of the nine are in the preflight's own acceptance suite, and they assert a refusal from the
+  live release plan. Now that the plan meets all seven of its preconditions, those three fail —
+  they encode a world-state this release corrected. The capability itself is exercised by the
+  remaining fifteen tests in that file.
+- The debt ratchet counts a validator section's own summary line as if it were one of that
+  section's findings, so every class carrying a summary header reads one higher than the defects it
+  actually holds, and such a class can never legitimately report a count of one. Found while
+  verifying a class that dropped to zero; the drop was genuine, and the counter was not.
+- The governance preflight reports "0 gate(s)" for the pre-outward-fire boundary, where six gates
+  are in fact registered and delegated to the publish tool. The count reports outcomes produced
+  here, not gates that exist; the explanatory line is deliberately suppressed for that one
+  boundary.
+
 ## [1.91.0] - 2026-08-23
 
 The build that does not need the founder's hand. Four locked specs, every acceptance

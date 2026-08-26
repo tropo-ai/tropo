@@ -7,8 +7,8 @@ title: Tropo Governance
 description: Living history of Tropo Governance — architectural invariants, ADRs, operating principles, verification instruments (sa.cold-boot / sa.research / sa.arch-specs / sa.skeptic), three-instrument discipline, kernel validator. One subsystem spanning governance + verification per sa.research 029.
 owner: argus
 created: 2026-04-14 00:00:00+00:00
-modified: 2026-05-26
-modified_by: orpheus-o11
+modified: 2026-08-26
+modified_by: vela-v74
 tags:
   - governance
   - tvs
@@ -28,9 +28,18 @@ member_of:
   - aae9a37b
 lifecycle: standing
 created_by: argus-a23
-last_release_reflected: 1.91.0
+last_release_reflected: 1.92.0
 aligned_with: 8a4e21c5
 release_history:
+  - release_uid: b7f176ab
+    release_version: 1.92.0
+    summary: "v1.92 conforms the release runtime to the pipeline that already governs it. Every one of 634913c2's twelve leaves now binds exactly one executor; every stop site in the build path declares whether it earned the right to stop (120 sites, 28 priced / 16 warn / 65 misuse, enumerated by AST); the completion verifier reads what producers actually write and returned complete for the first time in this Studio's history; the governance preflight gained a producer for its inputs and the lock now runs its own boundary. The dev-pipeline ships fully formed, the retirement driver walks its eight steps against the real playbook, and the subsystem-registry deriver stops churning identity. Proven by shipping v1.92 itself through the new path, every step run."
+    registry_uid: 622755f8
+    derived_from: capabilities_touched
+    # Same release, re-vesseled after 088e21aa/42261546's abandon+re-lock
+    # (vela-v74, 2026-08-26; content unchanged, identity only). Not a field
+    # — the abandoned entry is unindexed/unshipped, and a real field here
+    # would be a dangling UID cross-reference in the built box.
   - release_uid: e4f5353a
     release_version: 1.91.0
     summary: "v1.91 ship: the release path made honest about itself. Every declared release event now has exactly one writer named in its own declaration; the four orphaned events (completion_verified, fire_authorized, orchestrator_invoked, scope_locked) gained emitters and the overloaded package_frozen was split by assertion into bytes-produced and evidence-bound. One reader answers each question, one receipt shape serves both the freeze gate and the publisher (they previously shared one field of ten), and the authorisation allowlist derives from the declared event set instead of a hand-kept list. The build reaches its own gates rather than refusing at enforcement; everything that can refuse the outward act now refuses before the fire; the retirement procedure gained an observer that reads all eight of its steps. tropo-events.capsule moved v1.11 to v1.13 (registering tropo.release.scope_locked under Mike's word). 23 of 23 non-deferred acceptance criteria verified green on their own locked commands, each paired by an agent that did not build it."

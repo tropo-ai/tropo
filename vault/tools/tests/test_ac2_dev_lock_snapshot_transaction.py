@@ -67,8 +67,24 @@ class TheDevLockWritesItsSnapshot(unittest.TestCase):
                                  "title: specify", "status: active"])
         self._write("fa3a49c8", ["type: pipeline", "subtype: workflow-node",
                                  "title: build", "status: active"])
+        # acceptance_criteria is REQUIRED at lock since S4 AC8 (29506520):
+        # tropo-lock-dev-spec.refuse_on_own_findings raises on its absence,
+        # because a lock with no criteria the machine can find is a close
+        # nobody can judge. This fixture predates that refusal and described a
+        # dev-spec that is no longer lockable, so every test here that reached
+        # the lock died on a SystemExit about the fixture rather than about the
+        # behaviour under test — including the command 0c6518ef
+        # (confirm-dev-spec-snapshot) declares as its own verification_command.
+        # A new gate whose existing consumers were never visited: retro
+        # 25c70440 §Actions 4. (argus-a156, 2026-08-24.)
         self._write("5ec00001", ["type: dev-spec", "title: the spec",
-                                 "status: draft"])
+                                 "status: draft",
+                                 "acceptance_criteria:",
+                                 "  - id: AC1",
+                                 "    behavior: the snapshot transaction writes all four records or none",
+                                 "    verify:",
+                                 "      method: automated",
+                                 "      command: python3 -m pytest -q vault/tools/tests/test_ac2_dev_lock_snapshot_transaction.py"])
 
     def _plan(self):
         """Called inside a span by the tests that apply it.

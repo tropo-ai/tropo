@@ -189,7 +189,7 @@ Walk content files across the vault and verify each has the convention fields re
 Detect unregistered agent activity per the three-tier identity model in `.tropo/TROPO-CONTROL.md`.
 
 **Checks:**
-- Scan `channels/ops.md` for entries without a `tropo-agent-id`.
+- Scan the event bus for records without a resolvable emitter identity (`tropo-query-events.py`). (`channels/ops.md` retired at v1.61, Rule 13.)
 - Scan recently modified files (by filesystem timestamp) for changes not attributable to a registered agent.
 - Cross-reference ops.md entries against agent registration records in `agents/` and `agents/visitors/`.
 
@@ -424,7 +424,7 @@ The vault steward ran on [date] and applied auto-repair fixes inside this worksp
 
 ### Tier 3 — ops.md One-Line Summary
 
-**Location:** `channels/ops.md` — one line appended at the end of every steward run, regardless of fix count.
+**Location:** a `tropo.broadcast.crew` event — one emitted at the end of every steward run, regardless of fix count. (`channels/ops.md` retired at v1.61, Rule 13.)
 
 **Format:**
 

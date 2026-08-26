@@ -65,6 +65,20 @@ INSTRUMENTS: Dict[str, str] = dict(release_verify.NODE_INSTRUMENTS)
 
 FREEZE_STEP = "7de2c49f"
 
+#: The release-pipeline leaf this tool executes (v1.92 Stream 1, AC2).
+#: 7de2c49f already declares this exact command in its `verification_command`,
+#: and its §Gaps records the wiring closed on 2026-08-16. The binding makes the
+#: same fact readable from the runtime side, so a runner asking "what performs
+#: the freeze" gets an answer without parsing a vault entry.
+PIPELINE_BINDINGS = (
+    {
+        "step_uid": FREEZE_STEP,
+        "kind": "tool",
+        "entry": "tropo-freeze-release-candidate.py:decide",
+        "description": "freeze the candidate on evidence bound to its exact bytes",
+    },
+)
+
 EXIT_FROZEN = 0
 EXIT_REFUSED = 1
 EXIT_MISUSE = 4
@@ -182,10 +196,25 @@ def decide(run_dir: Path, candidate: Path) -> Tuple[Dict[str, Any], Optional[str
     # INSTRUMENT NAME (not step uid) and bound on candidate_sha256 (not
     # package_sha256, which no longer exists on the receipt at all: a
     # candidate has no package identity before it is frozen).
+    # Bind to THESE bytes before resolving. resolve_receipt_set REFUSES on any
+    # receipt whose digest differs rather than ignoring it — correct when a run
+    # has one candidate, fatal once a candidate is invalidated and rebuilt: the
+    # retired candidate's receipts stay in the append-only journal forever, so
+    # the freeze could never pass again. Found live on run 7ee91e0b (argus-a155,
+    # 2026-08-24) after Mike ordered a rebuild to fix F1 (33d5bca1): the freeze
+    # refused with "the full-validator receipt tested 149e2e98d06e but the bytes
+    # about to ship are 3cfb4fe4d537" — naming a candidate this same function had
+    # already listed under live_invalidations a few lines earlier.
+    #
+    # Filtering here does not weaken the check: the resolver still requires all
+    # four instruments present and passing FOR THIS DIGEST, so a missing one
+    # still refuses. What it stops doing is refusing on evidence about bytes that
+    # were deliberately retired and will never ship.
     raw_receipts = [
         row.get("data") or {} for row in rows
         if row.get("event") == release_verify.RECEIPT_KIND
         and (row.get("data") or {}).get("release_run_uid") == run_uid
+        and (row.get("data") or {}).get("candidate_sha256") == recorded_sha
     ]
     try:
         by_instrument = release_verify.assert_ready_to_freeze(

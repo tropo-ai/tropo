@@ -157,7 +157,7 @@ Do not guess. The answer is in the kernel.
 
 **When something seems wrong:** The vault integrity auditor checks kernel coverage. If a file listed here is missing, that is a governance gap — flag it, do not silently work around it.
 
-**When you want to update the kernel:** You do not. Kernel files are maintained by Tropo through the update pipeline. Flag the gap in `channels/ops.md` or raise it with the vault architect (Argus).
+**When you want to update the kernel:** You do not. Kernel files are maintained by Tropo through the update pipeline. Flag the gap as a `tropo.broadcast.crew` event, or raise it with the vault architect (Argus). (`channels/ops.md` retired at v1.61, Rule 13.)
 
 ---
 

@@ -90,44 +90,75 @@ def load_baseline() -> tuple[int, str]:
         return -1, "absent"
 
 
-def load_class_baseline() -> tuple[dict, list, bool]:
-    """Per-class debt, and the curated list of classes that may NOT gate.
+def load_class_baseline() -> tuple[dict, list, dict, bool]:
+    """Per-class debt, the legacy exemption list, and the CURATED GATE LIST.
 
-    Returns (classes, non_gating, present). `present` is False when the baseline
-    predates the per-class record, in which case the total-only ratchet below
-    still runs unchanged — this addition may not turn into a reason the gate
-    stops working on a studio that has not re-recorded yet.
+    Returns (classes, non_gating, gating, present). `present` is False when the
+    baseline predates the per-class record, in which case the total-only ratchet
+    below still runs unchanged — this addition may not turn into a reason the
+    gate stops working on a studio that has not re-recorded yet.
 
-    NON-GATING IS AN ALLOW-LIST OF EXEMPTIONS, NOT A GATE LIST, and the
-    direction is deliberate. If the file named the classes that DO gate, then
-    every check added to the validator afterwards would arrive ungated by
-    default and nobody would notice. This way a new class gates the moment it
-    exists, and only the classes a human has deliberately excused stop counting.
+    GATING IS AN OPT-IN LIST THAT NAMES ITS HARM, per Mike's standing ruling
+    (`.tropo-studio/memory/entries/deb77758.md`, 2026-08-09): "A new refusal must
+    name, in one sentence, the irreversible harm it prevents. If it cannot, it is
+    a WARNING: visible, stated in the record, and the work proceeds."
+
+    THIS REVERSES THE PRIOR DEFAULT, DELIBERATELY, AND HERE IS WHY THE PRIOR
+    ARGUMENT DOES NOT HOLD. What stood here said an opt-in gate list would let
+    new checks "arrive ungated by default and nobody would notice." That defends
+    against losing DETECTION — but detection is never lost: every class is still
+    classified, still printed, and any untriaged class that grows is now named
+    explicitly under "reporting-only (never triaged)". Nothing hides. What the
+    old default actually bought was ENFORCEMENT-BY-ACCIDENT: eighteen classes
+    became release blockers without one of them ever being asked to name a harm,
+    and the measured result was 1 finding in 148 that warranted stopping a ship,
+    zero of the eighteen classes examining a byte that reaches a customer, and a
+    663-byte overage in a private memory file halting a release whose total debt
+    had gone DOWN six.
+
+    The shape is the one this studio already uses for build refusals: every stop
+    site declares priced/warn/misuse, and undispositioned sites are reported
+    rather than silently defaulted. Same discipline, applied to validator classes.
+
+    Curated by argus-a158 on Mike's explicit authorization, 2026-08-25. The plan
+    Mike approved (v1.86 retrospective, velocity item 3) specified "gates on a
+    curated class list"; the inversion to an exemptions allow-list happened during
+    implementation with no decision record. This restores what was approved.
     """
     try:
         data = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return {}, [], False
+        return {}, [], {}, False
     classes = data.get("classes")
     if not isinstance(classes, dict):
-        return {}, [], False
+        return {}, [], {}, False
     non_gating = data.get("non_gating_classes")
     if not isinstance(non_gating, list):
         non_gating = []
+    gating = data.get("gating_classes")
+    if not isinstance(gating, dict):
+        gating = {}
     return (
         {str(k): int(v) for k, v in classes.items()},
         [str(x) for x in non_gating],
+        {str(k): str(v) for k, v in gating.items()},
         True,
     )
 
 
-def report_itemized_delta(output: str, baseline_classes: dict, non_gating: list) -> int:
+def report_itemized_delta(output: str, baseline_classes: dict, non_gating: list,
+                          gating: dict) -> int:
     """Print what moved, per class, and the actual lines for anything that grew.
 
     Returns the number of GATING findings added. This is the half of item 3 that
     replaces an hour of archaeology: the gate already parsed the output, so it
     can say which class grew and show the lines, instead of telling a human at
     midnight to go and read 2,000 lines of validator output for themselves.
+
+    A class gates ONLY if it is named in `gating_classes` with the harm it
+    prevents. Everything else reports. When `gating_classes` is absent the legacy
+    behaviour is preserved exactly, so a studio that has not re-recorded keeps
+    the gate it had.
     """
     current = studio_debt_classes.classify(output)
     moved = studio_debt_classes.delta(baseline_classes, current)
@@ -135,20 +166,45 @@ def report_itemized_delta(output: str, baseline_classes: dict, non_gating: list)
         print("Per-class delta: no class moved.")
         return 0
 
+    curated = bool(gating)
     excused = set(non_gating)
+
+    def _gates(name: str) -> bool:
+        if curated:
+            return name in gating
+        return name not in excused
+
     grew_gating: list[str] = []
+    untriaged_growth: list[str] = []
     print("\nPer-class delta (against the recorded per-class baseline):")
     for name, (was, now) in moved.items():
-        mark = " " if now <= was else ("~" if name in excused else "!")
+        grew = now > was
+        gates = _gates(name)
+        mark = " " if not grew else ("!" if gates else "~")
         note = ""
-        if now > was and name in excused:
+        if grew and gates:
+            note = "  [GATING — %s]" % gating.get(name, "recorded decision")
+        elif grew and curated:
+            note = "  [reporting-only — not on the gate list, never triaged]"
+        elif grew and name in excused:
             note = "  [non-gating by recorded decision]"
         elif now == 0 and was > 0:
             # A class that vanishes is not automatically good news.
             note = "  [class produced NO findings — verify the check still runs]"
         print(f"  {mark} {name}: {was} -> {now}{note}")
-        if now > was and name not in excused:
+        if grew and gates:
             grew_gating.append(name)
+        elif grew and curated:
+            untriaged_growth.append(name)
+
+    if untriaged_growth:
+        # The whole objection to an opt-in gate list was that new checks would
+        # "arrive ungated and nobody would notice." This is the answer: they are
+        # named, every run, in the one place a human is already reading.
+        print("\nReporting-only classes that grew (visible, not fatal — triage if "
+              "one of these names a harm worth stopping a ship for):")
+        for name in untriaged_growth:
+            print(f"    ~ {name}")
 
     if grew_gating:
         print("\nThe findings that grew, verbatim:")
@@ -186,7 +242,11 @@ def main() -> int:
     print(f"Result: {passed} passed, {failed} failed "
           f"(recorded studio debt: {ceiling}, from {recorded_at})")
 
-    baseline_classes, non_gating, have_classes = load_class_baseline()
+    baseline_classes, non_gating, gating, have_classes = load_class_baseline()
+    # Assigned before the branch: the verdict below reads it unconditionally, and
+    # the `not have_classes` path used to reach that read with the name unbound —
+    # a NameError on exactly the studio this branch exists to keep working.
+    gating_growth = 0
 
     if not have_classes:
         # A baseline recorded before per-class tracking existed. Say so and fall
@@ -196,18 +256,22 @@ def main() -> int:
               "reports the total only.")
         print("       Add one with `--record` to get the itemized delta.")
     else:
-        gating_growth = report_itemized_delta(output, baseline_classes, non_gating)
+        gating_growth = report_itemized_delta(output, baseline_classes, non_gating,
+                                              gating)
         if gating_growth > 0:
             _v = debt_verdict(failed, ceiling, gating_growth)
             print(f"\nFAIL — {_v.reason}.")
             print("       The classes and the lines are printed above; no archaeology")
-            print("       needed. If the growth is deliberate, either pay it down or")
-            print(f"       re-record {BASELINE_PATH.name} with the reason.")
-            print("       If the class is one the principal does not gate on, add it")
-            print("       to `non_gating_classes` with the reason, per Mike's ruling")
-            print("       on inbox hygiene (2026-08-08).")
+            print("       needed. Every class that gates is named in `gating_classes`")
+            print(f"       in {BASELINE_PATH.name}, together with the irreversible harm")
+            print("       it prevents. If the growth above does not match that harm,")
+            print("       the gate is wrong and the entry should come off the list —")
+            print("       that question comes before 'can we turn it off'.")
             return 1
-        if non_gating:
+        if gating:
+            print(f"\n({len(gating)} class(es) gate, each naming its harm; every other "
+                  "class reports and never stops a build — per deb77758.)")
+        elif non_gating:
             print(f"\n({len(non_gating)} class(es) excused from gating by recorded "
                   "decision; growth in them is reported above, never fatal.)")
 
@@ -216,7 +280,6 @@ def main() -> int:
                            gating_growth=gating_growth)
     print(f"{'PASS' if verdict.ok else 'FAIL'} — {verdict.reason}.")
     return 0 if verdict.ok else 1
-    return 1
 
 
 def record_baseline() -> int:

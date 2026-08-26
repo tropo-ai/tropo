@@ -97,14 +97,231 @@ def _read_journal(path: Path) -> List[Dict[str, Any]]:
     return rows
 
 
+def _event_type(row) -> str:
+    """lib/release_closure.event_type — the one declared rule for reading an
+    event's name out of a row. Run JSONL spells it `event`; the publisher
+    mirrors the bus CloudEvent in verbatim, so `type` is equally real. This
+    file used to carry an `event:`-only copy, which meant three of its five
+    bound facts could never be observed on a real release: the publisher has
+    always written the mirrored row as `type:`.
+    """
+    try:
+        from lib.release_closure import event_type  # noqa: WPS433 — optional lib
+        return event_type(row)
+    except Exception:  # noqa: BLE001 — a missing lib narrows the read, never widens it
+        if not isinstance(row, dict):
+            return ""
+        return str(row.get("event") or row.get("type") or "")
+
+
+def _receipt_sha(data: Dict[str, Any]) -> str:
+    """The publication receipt hash, under either name the producers write.
+
+    `tropo-publish-release._published_event_data()` emits `receipt_sha256`.
+    Nothing in this Studio has ever written `publication_receipt_sha256` —
+    it appears only in this file's own reads and in its test fixtures. The
+    publication_receipt observer already accepted both; the other three did
+    not, which is sibling drift inside one file.
+    """
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get("publication_receipt_sha256") or data.get("receipt_sha256") or "")
+
+
 def _first(rows, event: str) -> Optional[Dict[str, Any]]:
     for row in rows:
-        if row.get("event") == event:
+        if _event_type(row) == event:
             return row
     return None
 
 
-def build_observers(run_dir: Path, bus_rows: List[Dict[str, Any]]) -> Dict[str, Callable]:
+def _real_fire_scorecard_path(run_dir: Path) -> Path:
+    """The producer's own filename, from the producer's own module.
+
+    Never a literal here: a second copy of a filename is how this fact came to
+    read `scorecard.json` while the writer wrote something else.
+    """
+    try:
+        from lib import release_metrics  # noqa: WPS433 — optional lib
+        return Path(release_metrics.scorecard_path(run_dir, release_metrics.REAL_FIRE))
+    except Exception:  # noqa: BLE001 — a missing lib narrows the read, never widens it
+        return run_dir / "one-prompt-real-fire-scorecard.json"
+
+
+def resolve_publication_receipt(
+    studio_root: Path, receipt_sha256: str
+) -> "tuple[bool, str]":
+    """THE one read path for the publication receipt. (Stream 1 AC4 / F10.)
+
+    The receipt is CONTENT-ADDRESSED: release_receipt.write_release_receipt()
+    names the file by the sha256 of its own canonical bytes, under
+    vault/events/release-receipts/. Resolving it by the sha the published event
+    already carries is strictly stronger than "a file exists in the run folder"
+    — it binds the artifact to the event rather than to a location.
+
+    Two traps, both named in the locked spec because both are easy to fall into:
+    resolve by `receipt_sha256` from the PUBLISHED EVENT, never the transaction
+    id (which carries the package sha); and verify by HASHING THE FILE BYTES,
+    because a content-addressed receipt cannot contain its own hash.
+
+    Returns (present, detail). Any other reader of this fact calls THIS.
+    """
+    if not receipt_sha256:
+        return False, "the run's published event names no receipt sha"
+    path = (Path(studio_root) / "vault" / "events" / "release-receipts"
+            / ("%s.json" % receipt_sha256))
+    if not path.is_file():
+        return False, "no receipt at %s" % path
+    actual = hashlib.sha256(path.read_bytes()).hexdigest()
+    if actual != receipt_sha256:
+        return False, (
+            "receipt at %s hashes to %s, not the %s its own name claims"
+            % (path, actual[:12], receipt_sha256[:12])
+        )
+    return True, ""
+
+
+#: The records a closure event names, when it does not carry `closed_uids`.
+#: The writer emits these five; the reader wanted a sixth name it never wrote.
+#: One declared source both sides consult, rather than a second key. (AC4.)
+CLOSED_RECORD_KEYS = (
+    "release_plan_uid",
+    "release_entry_uid",
+    "activation_root_uid",
+    "release_activation_uid",
+    "release_pipeline_run_uid",
+)
+
+
+def closed_record_uids(data: Mapping[str, Any]) -> List[str]:
+    """What a closure actually closed. `closed_uids` wins when present."""
+    if not isinstance(data, Mapping):
+        return []
+    declared = data.get("closed_uids")
+    if isinstance(declared, list) and declared:
+        return [str(u) for u in declared if u]
+    return [str(data[k]) for k in CLOSED_RECORD_KEYS if data.get(k)]
+
+
+#: Runs whose scorecard fact is exempt BY NAME, and the journal that records
+#: why. Metis G112 as release owner and spec locker, 2026-08-24T20:15:02Z
+#: (`scorecard_decision_recorded`), clarified 2026-08-25T12:23:22Z
+#: (`scorecard_decision_clarified`).
+#:
+#: THIS IS NOT A REMOVAL AND MUST NEVER BECOME ONE. `scorecard` stays in
+#: REQUIRED_FACTS. From v1.92 forward every run fired through REAL_FIRE must
+#: produce a card: v1.92 scores itself, and its card is part of the
+#: release-vs-release measurement. A global removal was explicitly refused.
+#:
+#: WHY 7ee91e0b IS EXEMPT RATHER THAN RECONSTRUCTED. Rebuilding v1.91's card
+#: needs `ORCHESTRATOR_STARTED_AT`, which was never recorded anywhere, and the
+#: ~20 refusals bound to class IDs, which exist only as prose in the retro.
+#: Passing `observed_refusals=[]` would assert zero refusals, which is false.
+#: Fabricating either input to obtain a green is the exact disease this cycle
+#: cures, so the release is honestly exempt instead of dishonestly complete.
+#: KEYED BY THE RUN'S MINTED ACTIVATION UID. Not the saga, and not the name.
+#:
+#: Mike, 2026-08-25: "should the gates always check UID not name? Once a UID is
+#: minted, it does not change." Yes — and the first fix here got it wrong twice
+#: over. Keying on the SAGA leaked to every re-run of it. Keying on the FOLDER
+#: NAME then traded one mutable claim for another: rename the directory and the
+#: exemption silently vanishes, and nothing stops a directory being created that
+#: wears the exempt name. `activation_uid` is minted, immutable, and distinct
+#: from the saga — which delivers the run-scoping the ruling required for free,
+#: because a re-run mints a new activation and cannot inherit this one.
+#:
+#: `run_folder_at_ruling` and `saga_at_ruling` are recorded as provenance only.
+#: They are never matched on. A field kept for reading and a field matched on
+#: are different things, and conflating them is how the name became the key.
+#:
+#: The first version keyed on the first 8-hex token scraped out of the folder
+#: NAME and never stat'd the directory, which made it SAGA-scoped when the
+#: ruling said RUN-scoped. Measured after an independent adversarial pass:
+#: `release-pipeline-7ee91e0b-2026-12-31`, `dev-pipeline-7ee91e0b-2026-08-24`
+#: and even `totally-unrelated-7ee91e0b-thing` all came back EXEMPT. Any re-run,
+#: resume or later run of saga 7ee91e0b — the saga the spec says is still open —
+#: would have inherited a permanent scorecard pass.
+#:
+#: Three negative controls were written for that exemption and all three passed.
+#: The one testing scope used `deadbeef`, a uid absent from the table entirely,
+#: so it could only ever prove the lookup works and never that the scope is
+#: narrow. A control that varies the wrong dimension is a control in name only.
+SCORECARD_EXEMPT_RUNS: Dict[str, Dict[str, str]] = {
+    "08121161": {
+        "run_folder_at_ruling": "release-pipeline-7ee91e0b-2026-08-23",
+        "saga_at_ruling": "release:7ee91e0b",
+        "journal": "vault/pipeline-runs/dev-pipeline-9ff56eec-2026-08-24/run.jsonl",
+        "decision_event": "scorecard_decision_recorded",
+        "reason": (
+            "v1.91 predates the REAL_FIRE wiring; its card cannot be "
+            "reconstructed without fabricating ORCHESTRATOR_STARTED_AT and the "
+            "refusal class IDs. Measurement preserved as prose in the retro."
+        ),
+    },
+}
+
+
+def scorecard_exemption(run_dir: Path) -> Optional[Dict[str, str]]:
+    """Is THIS run's scorecard exempt, and can the exemption prove its reason?
+
+    Fails closed on its own evidence. An exemption whose recorded decision
+    cannot be read is not an exemption — it is an assertion, and an assertion
+    that a fact may be skipped is precisely what this verifier exists to refuse.
+    So the journal is read and the decision event located before the exemption
+    is honoured, and the evidence sha is the hash of that decision row: the
+    exemption carries real evidence of a real decision, not a placeholder.
+    """
+    # Identity comes from the run's own journal, never from its path. A name is
+    # a claim; a minted uid is identity, and this exemption exists precisely
+    # because a claim was accepted where a measurement was required.
+    if not run_dir.is_dir() or not (run_dir / "run.jsonl").is_file():
+        return None
+    activation = ""
+    for row in _read_journal(run_dir / "run.jsonl"):
+        candidate = str((row.get("data") or {}).get("activation_uid") or "")
+        if candidate:
+            activation = candidate
+            break
+    entry = SCORECARD_EXEMPT_RUNS.get(activation)
+    if entry is None:
+        return None
+
+    root = _studio_root_for(str(run_dir))
+    journal = Path(root) / entry["journal"]
+    if not journal.is_file():
+        return None
+    for line in journal.read_text(errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if row.get("event") != entry["decision_event"]:
+            continue
+        if row.get("acceptance_criterion") != "AC4":
+            continue
+        return {
+            "evidence_sha256": hashlib.sha256(
+                json.dumps(row, sort_keys=True, separators=(",", ":")).encode(
+                    "utf-8"
+                )
+            ).hexdigest(),
+            "detail": "scorecard EXEMPT (not measured) for run %s by recorded "
+                      "decision (%s, %s): %s"
+            % (run_dir.name, entry["decision_event"], row.get("ts", ""),
+               entry["reason"]),
+        }
+    return None
+
+
+def build_observers(
+    run_dir: Path,
+    bus_rows: List[Dict[str, Any]],
+    version: str = "",
+    studio_root: Optional[Path] = None,
+) -> Dict[str, Callable]:
     """One observer per bound fact, reading world state rather than belief.
 
     The run journal is read here, but note WHAT is taken from it: the presence
@@ -115,36 +332,46 @@ def build_observers(run_dir: Path, bus_rows: List[Dict[str, Any]]) -> Dict[str, 
     rows = _read_journal(run_dir / "run.jsonl")
 
     def publication_receipt() -> FactObservation:
-        path = run_dir / "publication-receipt.json"
-        if not path.is_file():
-            return FactObservation(
-                "publication_receipt", False,
-                detail="no publication-receipt.json in the run folder",
-            )
-        try:
-            receipt = json.loads(path.read_text(encoding="utf-8"))
-        except ValueError as exc:
-            return FactObservation(
-                "publication_receipt", False, detail="receipt does not parse: %s" % exc
-            )
-        sha = receipt.get("publication_receipt_sha256") or receipt.get("receipt_sha256")
-        if not sha:
-            return FactObservation(
-                "publication_receipt", False,
-                detail="receipt carries no hash of itself",
-            )
+        # Resolved by the sha the run's own published event names, against the
+        # content-addressed store — NOT by a file in the run folder, which no
+        # producer has ever written. One read path: resolve_publication_receipt.
+        row = _first(rows, RUN_EVENT)
+        sha = _receipt_sha(row.get("data") or {}) if row else ""
+        root = studio_root or _studio_root_for(str(run_dir))
+        ok, detail = resolve_publication_receipt(root, sha)
+        if not ok:
+            return FactObservation("publication_receipt", False, detail=detail)
         return FactObservation("publication_receipt", True, evidence_sha256=str(sha))
 
     def bus_published_event() -> FactObservation:
-        matches = [r for r in bus_rows if r.get("type") == BUS_EVENT]
+        matches = [r for r in bus_rows if _event_type(r) == BUS_EVENT]
+        # The bus is append-only forever, so "exactly one published event" can
+        # only ever have meant "exactly one for THIS release". Unbound, the
+        # gate gets more wrong with every release shipped: v1.91 read `found 2`
+        # because v1.90's event was still on the same stream. Rows that declare
+        # a version are attributable and must match; rows that declare none
+        # cannot be assigned either way and are counted as before, because
+        # inventing an assignment would be the gate asserting what it did not
+        # observe. Real producer output always declares a version
+        # (tropo-publish-release._published_event_data), so this tightens the
+        # live path and leaves the version-less fixtures in the S3 AC5/AC6
+        # locked suites reading exactly as they did.
+        # (argus-a156, 2026-08-24 — retro 25c70440 §Actions 6: compare like
+        # with like.)
+        scoped = version or ""
+        if scoped:
+            matches = [
+                r for r in matches
+                if _normalise_version((r.get("data") or {}).get("version")) in ("", scoped)
+            ]
         if len(matches) != 1:
             return FactObservation(
                 "bus_published_event", False,
-                detail="expected exactly one %s on the bus, found %d"
-                % (BUS_EVENT, len(matches)),
+                detail="expected exactly one %s on the bus%s, found %d"
+                % (BUS_EVENT, (" for v%s" % scoped) if scoped else "", len(matches)),
             )
         data = matches[0].get("data") or {}
-        sha = data.get("publication_receipt_sha256")
+        sha = _receipt_sha(data)
         if not sha:
             return FactObservation(
                 "bus_published_event", False,
@@ -159,7 +386,7 @@ def build_observers(run_dir: Path, bus_rows: List[Dict[str, Any]]) -> Dict[str, 
                 "run_published_event", False,
                 detail="no %s row in the run journal" % RUN_EVENT,
             )
-        sha = (row.get("data") or {}).get("publication_receipt_sha256")
+        sha = _receipt_sha(row.get("data") or {})
         if not sha:
             return FactObservation(
                 "run_published_event", False,
@@ -174,13 +401,13 @@ def build_observers(run_dir: Path, bus_rows: List[Dict[str, Any]]) -> Dict[str, 
                 "closed_records", False, detail="no %s row in the run journal" % CLOSED_EVENT
             )
         data = row.get("data") or {}
-        closed = data.get("closed_uids")
+        closed = closed_record_uids(data)
         if not closed:
             return FactObservation(
                 "closed_records", False,
                 detail="closure names no records; an empty closure closes nothing",
             )
-        sha = data.get("publication_receipt_sha256")
+        sha = _receipt_sha(data)
         if not sha:
             return FactObservation(
                 "closed_records", False,
@@ -189,10 +416,21 @@ def build_observers(run_dir: Path, bus_rows: List[Dict[str, Any]]) -> Dict[str, 
         return FactObservation("closed_records", True, evidence_sha256=str(sha))
 
     def scorecard() -> FactObservation:
-        path = run_dir / "scorecard.json"
+        # The producer writes MODE-SPECIFIC names via lib/release_metrics
+        # (one-prompt-real-fire-scorecard.json). This reader wanted a third
+        # name, `scorecard.json`, that neither mode has ever written.
+        path = _real_fire_scorecard_path(run_dir)
         if not path.is_file():
+            exempt = scorecard_exemption(run_dir)
+            if exempt is not None:
+                return FactObservation(
+                    "scorecard", True,
+                    evidence_sha256=exempt["evidence_sha256"],
+                    detail=exempt["detail"],
+                )
             return FactObservation(
-                "scorecard", False, detail="no scorecard.json in the run folder"
+                "scorecard", False,
+                detail="no real-fire scorecard at %s" % path.name,
             )
         try:
             card = json.loads(path.read_text(encoding="utf-8"))
@@ -200,12 +438,17 @@ def build_observers(run_dir: Path, bus_rows: List[Dict[str, Any]]) -> Dict[str, 
             return FactObservation(
                 "scorecard", False, detail="scorecard does not parse: %s" % exc
             )
-        sha = card.get("scorecard_sha256")
-        if not sha:
+        # Hash the FILE BYTES. The old reader wanted a `scorecard_sha256` field
+        # INSIDE the card — a field no producer has ever written, and one a card
+        # cannot honestly contain, for the same reason the publication receipt
+        # cannot contain its own hash. Same trap, same cure.
+        if not card.get("mode") or not card.get("verdict"):
             return FactObservation(
-                "scorecard", False, detail="scorecard carries no hash of itself"
+                "scorecard", False,
+                detail="scorecard at %s declares no mode/verdict" % path.name,
             )
-        return FactObservation("scorecard", True, evidence_sha256=str(sha))
+        sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        return FactObservation("scorecard", True, evidence_sha256=sha)
 
     return {
         "publication_receipt": publication_receipt,
@@ -251,12 +494,24 @@ def _emit_completion_verified(
             return False
 
     facts = receipt.get("verified_facts") or {}
+
+    # AN EXEMPTED FACT IS NOT A MEASURED ONE, AND MUST NOT BE PUBLISHED AS ONE.
+    # `scorecard_sha256` means "the hash of the scorecard". For an exempted run
+    # the scorecard observation carries the hash of the GOVERNANCE DECISION ROW,
+    # and publishing that under this key tells every downstream consumer — the
+    # release-vs-release measurement included — that a card exists. It does not.
+    # That is the "assert a measurement it never took" defect the second
+    # post-lock amendment of 5b608d28 was made to cure, reappearing one level
+    # up. So the key goes null and the exemption is stated in its own field.
+    exempt = scorecard_exemption(run_dir)
     data = {
         "saga_id": identity["saga_id"],
         "pipeline_run_uid": identity["pipeline_run_uid"],
         "publication_receipt_sha256": facts.get("publication_receipt", ""),
         "closure_receipt_sha256": facts.get("closed_records", ""),
-        "scorecard_sha256": facts.get("scorecard", ""),
+        "scorecard_sha256": None if exempt else facts.get("scorecard", ""),
+        "scorecard_exempt": bool(exempt),
+        "scorecard_exemption_detail": exempt["detail"] if exempt else "",
         "composite_verifier_receipt_sha256": receipt.get("completion_receipt_sha256", ""),
     }
     with journal.open("a", encoding="utf-8") as handle:
@@ -291,14 +546,25 @@ def _normalise_version(value: Any) -> str:
 def _release_version_for(run_dir: Path, studio_root: Path) -> str:
     """Which version this run published — read from the run, never guessed.
 
-    Looked for, in order: the publication receipt in the run folder; any
-    journal row naming release_version/version; the release entry the
-    run_created row binds (its frontmatter release_version). Empty when none of
-    them say, and empty means "do not touch the marker" — silencing a nag for a
-    version this run cannot prove it verified is Argus F-07 with extra steps.
+    Looked for, in order: the content-addressed publication receipt the run's
+    published event names; any journal row naming release_version/version; the
+    release entry the run_created row binds (its frontmatter release_version).
+    Empty when none of them say, and empty means "do not touch the marker" —
+    silencing a nag for a version this run cannot prove it verified is Argus
+    F-07 with extra steps.
+
+    Stream 1 AC4 / F10: this used to read `run_dir/publication-receipt.json`
+    directly — a SECOND read path for the same fact, and a path no producer
+    writes. It now resolves the same way the observer does, so there is one
+    implementation of "where the publication receipt lives".
     """
-    receipt = run_dir / "publication-receipt.json"
-    if receipt.is_file():
+    rows = _read_journal(run_dir / "run.jsonl")
+    row = _first(rows, RUN_EVENT)
+    sha = _receipt_sha(row.get("data") or {}) if row else ""
+    ok, _detail = resolve_publication_receipt(studio_root, sha)
+    if ok:
+        receipt = (Path(studio_root) / "vault" / "events" / "release-receipts"
+                   / ("%s.json" % sha))
         try:
             version = _normalise_version(
                 (json.loads(receipt.read_text(encoding="utf-8")) or {}).get("version"))
@@ -494,8 +760,15 @@ def main(argv=None) -> int:
     parser.add_argument("--vault", default=".")
     parser.add_argument(
         "--bus-events",
-        help="JSONL of the global bus stream; omitted means the bus is unobserved, "
-             "which reads as absent rather than as fine",
+        help="JSONL of the global bus stream. Omitted, the bus is read from its "
+             "canonical home (vault/events/streams/*.jsonl). Use --no-bus to "
+             "deliberately leave it unobserved.",
+    )
+    parser.add_argument(
+        "--no-bus",
+        action="store_true",
+        help="do not observe the bus at all; it then reads as absent rather "
+             "than as fine",
     )
     parser.add_argument("--json", action="store_true")
     parser.add_argument(
@@ -533,9 +806,29 @@ def main(argv=None) -> int:
         print("[MISUSE] no such run directory: %s" % run_dir, file=sys.stderr)
         return EXIT_MISUSE
 
+    # THE OPERATOR PATH. Until 2026-08-25 an omitted --bus-events meant "the bus
+    # is unobserved", so the spec's own reference command —
+    #     tropo-verify-release-live.py --run-dir <the v1.91 run>
+    # — reported INCOMPLETE / event-mirror-pending and exited 1. Reaching exit 0
+    # required naming one specific file out of 266 streams, which the operator
+    # had to find by grepping. AC4's committed test bypassed that entirely by
+    # concatenating every stream in a helper of its own, so the test's "bus" was
+    # a shape neither a producer nor an operator ever supplies. Found by an
+    # independent adversarial pass.
+    #
+    # The bus is not an unknown location in this Studio; it lives at
+    # vault/events/streams/. Conflating "you did not tell me where the bus is"
+    # with "the bus is unobserved" was the defect. Not-observing stays
+    # available, but it is now something you ASK for.
     bus_rows: List[Dict[str, Any]] = []
-    if args.bus_events:
+    if args.no_bus:
+        pass
+    elif args.bus_events:
         bus_rows = _read_journal(Path(args.bus_events))
+    else:
+        streams = Path(args.vault).resolve() / "vault" / "events" / "streams"
+        for stream in sorted(streams.glob("*.jsonl")):
+            bus_rows.extend(_read_journal(stream))
 
     identity = _identity(run_dir)
     if not identity:
@@ -546,9 +839,15 @@ def main(argv=None) -> int:
         )
         return EXIT_MISUSE
 
+    studio_root = _studio_root_for(args.vault)
+
     try:
         verdict = verify_completion(
-            build_observers(run_dir, bus_rows),
+            build_observers(
+                run_dir, bus_rows,
+                _release_version_for(run_dir, studio_root),
+                studio_root,
+            ),
             saga_id=identity["saga_id"],
             pipeline_run_uid=identity["pipeline_run_uid"],
         )
@@ -557,7 +856,6 @@ def main(argv=None) -> int:
         return EXIT_MISUSE
 
     # S3 AC5 (176a8995): observe the public badge — or name why not.
-    studio_root = _studio_root_for(args.vault)
     candidates = site_endpoint_candidates(args.site_endpoint_url or "", run_dir, studio_root)
     if candidates["urls"]:
         site = observe_site_endpoint(candidates["urls"])

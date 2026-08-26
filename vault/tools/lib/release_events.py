@@ -369,6 +369,25 @@ class AuthorizationContext:
         }.get(key)
 
 
+#: The key the producer actually writes. `ignition.DeclarationSnapshot.as_dict()`
+#: emits `declared_steps`, and `load_snapshot()` returns it under the same name;
+#: the `steps` key appears ONLY inside the transient digest payload and never in
+#: a snapshot a reader receives. This reader was written against six plausible
+#: synonyms — uid / step_uid / node_uid / children / steps / nodes — and the one
+#: real key was not among them, so it returned an empty set on every real
+#: snapshot, silently, for dev and release runs alike. Named as a constant
+#: rather than added to the guess list, because the guess list is the defect:
+#: a reader should read what the writer declares, not enumerate what it might.
+#: (Found by talos-t50 2026-08-24 building 1a478c48 AC2, who ran it against a
+#: real snapshot rather than reading it, and asked before touching a file in
+#: another lane. Verified and fixed by argus-a156 the same hour.)
+SNAPSHOT_STEPS_KEY = "declared_steps"
+
+#: Legacy tolerance only. Retained so a snapshot written before the key was
+#: named still resolves; nothing in the current writer emits these.
+_LEGACY_STEP_LIST_KEYS = ("children", "steps", "nodes")
+
+
 def _snapshot_step_uids(snapshot: Any) -> set:
     """Every 8-hex step UID declared in the run's immutable snapshot."""
     found = set()
@@ -378,7 +397,13 @@ def _snapshot_step_uids(snapshot: Any) -> set:
             for key, value in node.items():
                 if key in ("uid", "step_uid", "node_uid") and isinstance(value, str):
                     found.add(value)
-                elif key in ("children", "steps", "nodes") and isinstance(value, list):
+                elif key == SNAPSHOT_STEPS_KEY and isinstance(value, list):
+                    for item in value:
+                        if isinstance(item, str):
+                            found.add(item)
+                        else:
+                            walk(item)
+                elif key in _LEGACY_STEP_LIST_KEYS and isinstance(value, list):
                     for item in value:
                         if isinstance(item, str):
                             found.add(item)

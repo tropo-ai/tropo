@@ -98,6 +98,16 @@ def _event_type(event) -> str:
     return str(event.get("event") or event.get("type") or "")
 
 
+#: The public name for the rule above. Both spellings are real and both are
+#: written today: the publisher mirrors the bus CloudEvent into the run journal
+#: verbatim (`type:`), while every other journal row is `event:`-shaped. Any
+#: reader of a run journal must consult THIS, not a private re-implementation —
+#: tropo-verify-release-live.py carried its own `event:`-only copy and could
+#: therefore never observe a published row that a real fire had written.
+#: (argus-a156, 2026-08-24, found closing the v1.91 saga.)
+event_type = _event_type
+
+
 def journal_path(vault_root: Path, release_run_uid: str) -> Path:
     return Path(vault_root) / CLOSE_JOURNAL_DIR / f"release-{release_run_uid}.json"
 

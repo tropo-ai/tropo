@@ -63,103 +63,175 @@ v1_9_2_changes:
 
 ## Purpose
 
-Governs development work from acceptance through deployment. Accepts a work-item at status `accepted`, transitions it to `active`, and orchestrates specify → build → deploy. The pipeline ends when a deployable artifact has been produced, externally tested, and committed.
+Governs **development** work from a locked dev-spec to a verified tested SHA. The three stages are
+**Specify → Build → Test**. Ignition is the dev-spec lock; the terminal act is
+`verify-dev-spec` passing. Closure is a journaled side effect of that pass — there is no close
+WorkflowNode in this graph by design.
 
-Does NOT govern: ideation, design-brief authoring, or pre-acceptance grooming (those happen in the inbox while the work-item is `new` or `accepted` under requester ownership). Does not govern post-ship release archiving (that is release.capsule territory). Does not govern work that does not yield a deployable artifact (use a domain-specific pipeline for research-only or content-only cycles).
+**This pipeline produces no release artifacts.** No release-plan generation, no packaging, no
+release folder, no zip, no publish, no deploy, no doc/test trigger legs. All of that belongs to
+[release-pipeline `634913c2`](634913c2.md), which is ignited only by a locked *release-plan* and
+closed only by verified publication. `"build complete"` is an ordinary **done** dev-spec; a release
+fans in done specs by explicit list. There is no park state between the two.
+
+Does NOT govern: ideation or design-brief authoring (that happens in the inbox before the spec
+exists); release engineering of any kind (see above); research- or content-only cycles that yield no
+committed substrate (use a domain-specific pipeline).
 
 ## Structure
 
 ```
-dev-pipeline (cd1fcd25)
+dev-pipeline (cd1fcd25) — v2.0.0
 ├── specify (03624b7a)
-│   ├── step-0: accept-work-item (71a7d016)
-│   ├── step-1: generate-release-plan (180e9108)
-│   └── step-2: spawn-arch-specs (e1b819c4)
+│   └── confirm-dev-spec-snapshot (0c6518ef)      verification-class
 ├── build (3bd8f5b6)
-│   ├── step-3: author-arch-spec-artifacts (24f16afc)
-│   └── step-4: update-subsystem-canonical-docs (9d4f7e21) — NEW v1.9.2 Stream A4
-└── deploy (3a7dbdda)
-    ├── step-5: generate-release-notes (804e339e)
-    ├── step-6: produce-release-folder (8654900a)
-    ├── step-7: external-test (bc6b17ec)
-    └── step-8: git-commit (3e0bb81e)
+│   ├── implement-dev-spec (fa3a49c8)
+│   └── update-subsystem-canonical-docs (9d4f7e21) verification-class · terminal in stage
+└── test (74945d48)
+    └── verify-dev-spec (0b6b244c)                 verification-class · TERMINAL
 ```
 
-Flow: specify → build → deploy (linear, forward-only). 9 leaf steps total (was 8 pre-v1.9.2).
+Flow: specify → build → test, linear and forward-only. **Three stages, four leaf steps.**
+
+*(v1.x had a fourth stage, Deploy, and nine steps. It was deprecated on 2026-08-09 in the
+two-pipeline split. The v1 nodes are archived rather than deleted — seven historical activations
+hold those UIDs in their own immutable snapshots, and retiring a definition must not make the past
+unresolvable. If you are reading an old run journal, resolve those UIDs through the archive index.)*
 
 ## Nodes
 
-| UID | Name | Role | Children | Next Steps |
-|-----|------|------|----------|------------|
-| [03624b7a](03624b7a.md) | specify | stage | 3 | [3bd8f5b6] |
-| [3bd8f5b6](3bd8f5b6.md) | build | stage | 2 | [3a7dbdda] |
-| [3a7dbdda](3a7dbdda.md) | deploy | stage | 4 | [] |
-| [71a7d016](71a7d016.md) | accept-work-item | step | 0 | [180e9108] |
-| [180e9108](180e9108.md) | generate-release-plan | step | 0 | [e1b819c4] |
-| [e1b819c4](e1b819c4.md) | spawn-arch-specs | step | 0 | [] |
-| [24f16afc](24f16afc.md) | author-arch-spec-artifacts | step | 0 | [9d4f7e21] |
-| [9d4f7e21](9d4f7e21.md) | update-subsystem-canonical-docs | step | 0 | [] |
-| [804e339e](804e339e.md) | generate-release-notes | step | 0 | [8654900a] |
-| [8654900a](8654900a.md) | produce-release-folder | step | 0 | [bc6b17ec] |
-| [bc6b17ec](bc6b17ec.md) | external-test | step | 0 | [3e0bb81e] |
-| [3e0bb81e](3e0bb81e.md) | git-commit | step | 0 | [] |
+| UID | Name | Role | Children | Next |
+|-----|------|------|----------|------|
+| [03624b7a](03624b7a.md) | specify | stage | 1 | `[3bd8f5b6]` |
+| [3bd8f5b6](3bd8f5b6.md) | build | stage | 2 | `[74945d48]` |
+| [74945d48](74945d48.md) | test | stage | 1 | `[]` terminal |
+| [0c6518ef](0c6518ef.md) | confirm-dev-spec-snapshot | step | 0 | `[fa3a49c8]` |
+| [fa3a49c8](fa3a49c8.md) | implement-dev-spec | step | 0 | `[9d4f7e21]` |
+| [9d4f7e21](9d4f7e21.md) | update-subsystem-canonical-docs | step | 0 | `[]` terminal in stage |
+| [0b6b244c](0b6b244c.md) | verify-dev-spec | step | 0 | `[]` **terminal** |
+
+Every node above is `owner: argus`. No node in this table belongs to another pipeline; if you find
+one that does, that is a defect — report it rather than following it.
 
 ## Flow Rules
 
-Execution is linear and forward-only. Stages advance in order: specify → build → deploy. Within each stage, steps advance in `next_steps:` order.
+Execution is linear and forward-only. A stage completes when all its steps are done; the stage's
+`next_steps:` carries the advance. Within a stage, each step's `next_steps:` carries the advance,
+and the last step in a stage is terminal within it (`next_steps: []`).
 
-**Stage transitions:** each stage's `next_steps:` points to the next stage. The pipeline-run executor completes a stage (all its steps at `done`) before starting the next.
+**Ignition.** A run exists because a dev-spec was locked. The lock is atomic with pipeline-activation
+registration (ADR-052), so the chain dev-spec ↔ activation ↔ build ↔ tested SHA is complete by
+construction rather than by discipline. The Specify stage authors nothing and re-pins nothing — it
+*confirms* the snapshot the lock already wrote.
 
-**Step transitions:** within a stage, each step's `next_steps:` points to the next step. The executor advances when the prior step reaches `done`.
+**Verification class.** Three of the four steps are `verification_class: true` and carry their own
+`verification_command:`. A verification-class step reaches `verified` only on a real verification
+receipt; an executor's attestation cannot promote it, and the approver may not be the executor.
 
-**Terminal nodes:** deploy stage (`next_steps: []`) and git-commit step (`next_steps: []`) are terminal. Pipeline-run closes when git-commit completes.
+**Terminal and closure.** `verify-dev-spec` binds every acceptance criterion and mutation obligation
+to ONE unchanged 40-hex tested-tree SHA. Closure is journaled when it passes. There is no close node
+to run.
 
-**Branching:** none at v1.0.0. This is a fully linear pipeline. Branching behavior (v2.1 schema) is not exercised here.
-
-**Human pause point:** step-1 (generate-release-plan) requires user confirmation of the release number before the release-plan instance is committed. Implemented via `restart_strategy: manual` on the pipeline-run at that step. See Known Enforcement Gaps — the exact pause-at-step mechanism is not fully specified at v2.0.
+**Branching.** None. This is a fully linear graph.
 
 ## Cold-Boot Walk-Through
 
-A pipeline-run has been started against dev-pipeline v1.0.0. The work-item is a design-brief at `status: accepted`.
+*You are a stranger. You have a Studio, a dev-spec you wrote, and no other context. This is the
+whole cycle.*
 
-**Step 0 — accept-work-item:** The executor reads the work-item's current status (`accepted`). It writes an acceptance record onto the work-item's `accepted_by:` array: `accepted_by_uid: <this-run-uid>, date_accepted: <today>`. It sets the work-item's `status:` to `active`. The work-item is now in flight.
+**Before you start**, your dev-spec must declare `acceptance_criteria:` in its **frontmatter** —
+each with an `id`, a `behavior`, and a `verify:` block naming a real command. The lock refuses a spec
+without them, and it is right to: a lock with no criteria the machine can find is a close nobody can
+judge. `committed_substrate:` may be empty at lock time — a spec is locked *before* it is built, so
+that warns and proceeds.
 
-**Step 1 — generate-release-plan:** The executor (or the agent driving the run) checks the registry for the next incremental release number. It authors a `release-plan.capsule` instance naming the release number, intent, completion outcome, and sub-systems to be touched. The user reviews and confirms the release number. The release-plan is committed to the Vault.
+**Step 0 — ignite.** Lock the spec. This is one gesture and it both locks and opens the run:
 
-**Step 2 — spawn-arch-specs:** For every sub-system declared in the release-plan, the executor authors a numbered, registered `arch-spec.capsule` instance. Each arch-spec is 1:1 with a sub-system. The arch-specs are committed to the Vault and referenced from the release-plan. *(Capsule-fire-time auto-spawn is a Known Enforcement Gap — at v1.0.0 this step is hand-executed by the agent running the pipeline.)*
+```
+python3 vault/tools/tropo-lock-dev-spec.py --dev-spec-uid <your-spec-uid> --locked-by <you>
+```
 
-**Step 3 — author-arch-spec-artifacts:** For each arch-spec authored in step 2, the agent produces the spec's three required artifacts: (a) a research node documenting background context, (b) one or more sprint plans each with a testing plan, (c) a documentation node updating the master tropo-subsystems documentation. When all arch-specs have their artifacts, step 3 closes; build stage continues to step 4.
+It writes the activation, the run root, and the declaration snapshot in one transaction. If it
+refuses, nothing partial is left behind. Note the activation UID it prints — every command below
+takes it.
 
-**Step 4 — update-subsystem-canonical-docs (v1.9.2 NEW):** The executor reads the release-plan's `capabilities_touched:` and `hub_summaries:` (NEW v1.3 field) and derives `subsystems_touched:` via 1-hop `member_of:` traversal. For each touched subsystem hub: prepends a `release_history:` row, bumps `last_release_reflected:`, writes a row to `subsystem-registry.jsonl`. Frontmatter only — hub body sections (Change Log narrative, Current State) stay manual per Q7 walk reframe. Closes the manual-substitute pattern (v1.8 + v1.9.0 + v1.9.1 each ran a hand-written `append-v1-X-hub-rows.py` script). On completion, build stage advances to deploy.
+**Step 1 — confirm-dev-spec-snapshot (`0c6518ef`).** Specify's only step. Confirm the run's snapshot
+matches what was locked: `run.snapshot.dev_spec_sha256` equals the locked spec's content hash, and
+the snapshot's declarations cover every leaf step of the pinned definition. The snapshot GOVERNS the
+run as executable content — recovery recomputes the digest it checks, so a forged green does not
+survive.
 
-**Step 5 — generate-release-notes:** The executor reads all closed sprint plans and arch-spec deltas. It authors the release notes document summarizing what shipped.
+```
+python3 vault/tools/9e7003b1.py --activation-uid <act> step-start 0c6518ef
+python3 -m pytest -q vault/tools/tests/test_ac2_dev_lock_snapshot_transaction.py
+python3 vault/tools/9e7003b1.py --activation-uid <act> verify-step 0c6518ef
+```
 
-**Step 6 — produce-release-folder:** The executor produces the release folder structure and `.zip` artifact at the locked schema. The artifact is registered.
+**Step 2 — implement-dev-spec (`fa3a49c8`).** Build the thing. The exit criterion is that **every**
+`committed_substrate` target named in the spec has a machine-readable artifact link. Not a claim
+that you built it — a link.
 
-**Step 7 — external-test:** The `.zip` artifact is run against external test execution. Results are recorded on the pipeline-run.
+```
+python3 vault/tools/9e7003b1.py --activation-uid <act> step-start fa3a49c8
+python3 vault/tools/9e7003b1.py --activation-uid <act> step-complete fa3a49c8 --artifact-links <paths>
+```
 
-**Step 8 — git-commit:** The release-marked state is committed to git. Pipeline-run closes.
+**Step 3 — update-subsystem-canonical-docs (`9d4f7e21`).** Terminal within Build. Update the
+canonical documentation for every subsystem this cycle touched. Verification is the executor's own
+exit code:
+
+```
+python3 vault/tools/9e7003b1.py --activation-uid <act> step-start 9d4f7e21
+python3 vault/tools/6342d0ca.py
+python3 vault/tools/9e7003b1.py --activation-uid <act> verify-step 9d4f7e21
+```
+
+When this passes, Build is complete and the stage advances to Test.
+
+**Step 4 — verify-dev-spec (`0b6b244c`). TERMINAL.** Every acceptance criterion and every mutation
+obligation must bind to ONE unchanged 40-hex tested-tree SHA. One SHA, not several; unchanged, not
+re-measured after a fix.
+
+```
+python3 vault/tools/9e7003b1.py --activation-uid <act> step-start 0b6b244c
+python3 -m pytest -q vault/tools/tests/test_two_pipeline_split_0a0a6777.py
+python3 vault/tools/9e7003b1.py --activation-uid <act> terminal-verify --tested-sha <40-hex>
+```
+
+**There is no step 5.** When terminal-verify passes, dev closure is journaled as a side effect. Your
+dev-spec is now **done**. If this work is going to ship, a release-plan will fan it in by explicit
+list and the [release-pipeline](634913c2.md) takes over from there — that is a separate ignition, a
+separate run, and a separate human decision.
 
 ## Known Enforcement Gaps
 
-| Gap | What closes it | Target release | Owner |
-|-----|----------------|----------------|-------|
-| Work-item status transition on pipeline-run start (step-0 writes `accepted_by:` + sets `status: active`) — no pipeline.capsule v2.0 mechanism for pipeline-run-to-work-item status writes | Inbox primitive capsule amendments (note v3.2, task v3.x, design-brief v3.x) ship `accepted_by:` array + status enum; pipeline-run.capsule gets a "write acceptance record on run-start" behavior rule | v1.4.4 | argus |
-| Capsule-fire-time auto-spawn of child vault entries (step-2 auto-spawns arch-specs from release-plan) — no v2.0 mechanism for this | pipeline.capsule v2.1 + release-plan.capsule amendment: "on release-plan commit, spawn one arch-spec per declared sub-system" | v1.4.4 | argus |
-| User confirmation pause at step-1 — step-level pause semantics not specified; v2.0 only has `restart_strategy: manual` at run level | pipeline-run.capsule amendment: step-level pause with `requires_confirmation: true` flag; executor pauses at that step for human approval | v1.4.4 | argus |
-| sprint-plan capsule type does not exist — step-3 references sprint plans as arch-spec artifacts | Author sprint-plan.capsule as part of arch-spec.capsule design in v1.4.4 specify | v1.4.4 | argus |
-| 1:1 sub-system / arch-spec constraint (step-2: "one sub-system per arch-spec — strict 1:1") not enforced by pipeline.capsule | release-plan.capsule amendment: validation rule checks each declared sub-system maps to exactly one arch-spec | v1.4.4 | argus |
+*Honest and current as of 2026-08-24. Each is a real thing a stranger can hit.*
+
+| Gap | Consequence | Owner |
+|---|---|---|
+| **The terminal step's verification command runs the whole two-pipeline contract, including release-pipeline acceptance criteria.** `0b6b244c` declares `pytest test_two_pipeline_split_0a0a6777.py`, which exercises release ACs as well as dev ones. A dev cycle's verdict therefore depends on release-pipeline tests being green. It is red today on AC07, whose delegated suites assert on refusal *wording* that has since been rewritten. **Being cured:** AC6 of the Stream 2 spec `1a478c48` makes this verdict dev-scoped (run-own evidence completeness + close integrity); the split suite stays a studio/release-side check. Talos builds; Argus pairs as non-author verifier at close. | A stranger studio that has never cut a release can fail its dev-pipeline's final step for reasons unrelated to its own work. **This is the gap that most directly threatens the stranger bar.** | talos (build) / metis (spec) |
+| **~~Lock snapshot vs. runtime activation contract~~ RESOLVED 2026-08-24.** G111 measured this 2026-08-23 (`step not in activation contract` refusals on a lock-opened run) against the pre-repair tree. Talos T50 re-ran the exact repro against the current definition (real lock, real bootstrap, real step-start, all four declared steps) and it no longer reproduces — zero refusals. Metis G112 ruled on the finding (`ac_premise_correction`, run 8098be20): the measurement was pre-repair; argus-a156's 2.0.1 dev-graph fix (below, same day) already cured it. Permanent guard: `vault/tools/tests/test_lock_snapshot_declares_live_contract_v192.py`. | *(Historical — kept so a reader who found the old claim elsewhere isn't left thinking it's still open.)* | — |
+| **`lib/release_events.py`'s `_snapshot_step_uids()` doesn't recognise the `declared_steps` key.** Found auditing AC2's second named reader (`AuthorizationContext.observe`): the helper checks for `steps`/`children`/`nodes` list-keys, but the real snapshot's field is `declared_steps` — it silently reads zero steps off every real run, dev or release. Not this pipeline's own file to fix (Stream 1 substrate); reported to Argus A156 2026-08-24. | `AuthorizationContext.observe()`'s `snapshot_step_uids` is empty on every real run until fixed — anything gating on it is blind. | argus |
+| **`804e339e` (generate-release-notes) is a draft orphan.** A v1 node that was neither archived with its siblings nor adopted by either pipeline; `member_of` is empty. | Resolves to nothing meaningful; will confuse anyone auditing the v1→v2 migration. | argus |
+
+*Gaps are listed because they are true, not because they are scheduled. If you are reading this in a
+customer Studio and one of them bites you, that is our defect and we would rather you saw it coming.*
 
 ## Changelog
 
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
-| 1.0.0 | 2026-05-03 | Initial draft. Scaffolded from design brief e1c47a9f per Specify handoff. Three stages (specify/build/deploy), eight steps including runtime-first-step transition mechanism. Known Enforcement Gaps document five v2.0 schema limits surfaced by scaffolding. | argus-a42 |
-| 1.0.1 | 2026-05-04 | Folder rename agents/dev.pipeline → agents/dev-pipeline (v1.6 Stream B.1; capsule-vs-instance naming convention) + reparented under tropo-work L0 (b8e5f3a2) per v1.6 Stream B.2. No structural changes to children or steps. | argus-a44 |
-| 1.1.0 | 2026-05-07 | **v1.9.2 Stream A4 amendment.** Build stage (3bd8f5b6) gained child step `update-subsystem-canonical-docs` (9d4f7e21) — NEW v1.9.2 dev-pipeline step that auto-fires Rule 12 hub release_history derivation. Pipeline structure goes from 8 leaf steps to 9. Step-3 (24f16afc) `next_steps:` updated from `[]` to `[9d4f7e21]`; step-4 (9d4f7e21) is terminal in build; build stage `next_steps: [3a7dbdda]` unchanged. Closes the manual-substitute pattern v1.8 + v1.9.0 + v1.9.1. UID preserved at cd1fcd25; structural edit per pipeline.capsule Rule 3 triggered minor version bump. governed_by: e4c8a6b2 unchanged (pipeline.capsule v2.4 amendment Stream A3 lands alongside; UID preserved across v2.3 → v2.4). | argus-a49 |
+| 1.0.0 | 2026-05-03 | Initial draft, scaffolded from design brief e1c47a9f. Three stages (specify/build/deploy), eight steps. | argus-a42 |
+| 1.0.1 | 2026-05-04 | Folder rename `agents/dev.pipeline` → `agents/dev-pipeline`; reparented under tropo-work (b8e5f3a2). No structural change. | argus-a44 |
+| 1.1.0 | 2026-05-07 | Build stage gained `update-subsystem-canonical-docs` (9d4f7e21). 8 → 9 leaf steps. | argus-a49 |
+| — | 2026-05-20 → 2026-05-24 | v1.46 / v1.48 / v1.51 / v1.52 amendments — per-step rich schema, pre-author-release-entry, cold-boot-walk, doc/test trigger legs, notify-triggered-pipeline-owners. All landed in the Deploy stage, all subsequently relocated or archived by v2.0.0. Detail preserved in this entry's frontmatter. | argus-a76/a77/a80/a82 |
+| **2.0.0** | **2026-08-09** | **The two-pipeline constitutional split** (Mike-locked dev-spec 0a0a6777, built by talos-t40, owner argus preserved per standing authorization). Root children are now exactly Specify / Build / Test. The Deploy stage 3a7dbdda is deprecated and its release-class nodes move to release-pipeline 634913c2. Dev work ends at Test: no release-plan generation, packaging, doc/test trigger, deploy, publish or release-close node remains in this graph (AC1). Seven v1 nodes archived, not deleted, so historical activations stay resolvable. | talos-t40 |
+| 2.0.3 | 2026-08-24 | **Known Enforcement Gaps table corrected.** The "lock snapshot vs. runtime activation contract" gap row was stale: G111's 2026-08-23 measurement predated argus-a156's same-day 2.0.1 body/graph repair, which already cured it. Talos T50 re-ran the exact repro against the current tree (real lock, bootstrap, and step-start, zero refusals) while building v1.92 Stream 2's AC2 (`1a478c48`) and found the row claiming otherwise. Replaced with the resolution and with the ACTUAL remaining AC2 finding: `lib/release_events.py`'s `_snapshot_step_uids()` doesn't recognise the `declared_steps` key (Argus A156's lane, reported same day). | talos-t50 |
+| 2.0.2 | 2026-08-24 | **The seven nodes under this active root flipped `draft` → `active`.** They were minted draft at the split build and never flipped when the split shipped in v1.88 and then closed four production cycles — the automatic-half/manual-half class. The runtime ignores the field at step-start, so `draft` here meant minted-draft-never-flipped, not unfinished-design. Decided by metis-g112 on A156's put-to-me (correlation `evt_b51c083be28ac6fe_00000146`); executed by argus-a156. The record now says what is true: the constitution is live. | argus-a156 |
+| 2.0.1 | 2026-08-24 | **Body reconciled to the v2.0.0 graph.** Every section above described the v1.x machine — a Deploy stage, nine steps, `generate-release-notes` / `produce-release-folder` / `external-test` / `git-commit`, and a cold-boot walk-through that instructed the reader to author a release-plan and produce a zip from a dev run. The 2.0.0 amendment changed three lines of frontmatter and left the prose whole, so for fifteen days the shipped definition taught the shape the split had just removed. Of the ten node UIDs the old §Nodes table claimed, six were archived, two were draft, and two — `8654900a`, `bc6b17ec` — were live steps of the **release** pipeline. Found by metis-g112 (body) and argus-a156 (nodes) on the same day. Companion repairs: `9d4f7e21.next_steps` no longer flows into the release graph; the AC6-relocated trigger legs' stale parent back-pointers now name release Assemble; `0c6518ef`'s verification command is runnable as written. | argus-a156 |
 
 ---
 
-*dev-pipeline | WorkflowNode root | pipeline.capsule v2.4 (post-v1.9.2 Stream A3) | argus-a42 (v1.0.0) → argus-a44 (v1.0.1) → argus-a49 (v1.1.0) | 2026-05-03 → 2026-05-07*
-*Derived from: [dev-pipeline + vault inbox primitive (e1c47a9f)](e1c47a9f.md)*
-*"v1.9.2 ships the rule + the executor that fires it. The cycle's own ship is the dogfood gate."*
+*dev-pipeline | WorkflowNode root | v2.0.0 graph, body at 2.0.1 | argus-a42 (v1.0.0) → argus-a49 (v1.1.0) → talos-t40 (v2.0.0 graph) → argus-a156 (v2.0.1 body)*
+*Derived from: [dev-pipeline + vault inbox primitive (e1c47a9f)](e1c47a9f.md) · governed by [pipeline.capsule (e4c8a6b2)](e4c8a6b2.md)*
+*"Dev work ends at Test. If it ships, that is a different pipeline, a different ignition, and a human's decision."*

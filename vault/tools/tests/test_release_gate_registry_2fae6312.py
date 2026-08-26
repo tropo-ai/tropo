@@ -403,9 +403,32 @@ class PreflightCliTests(unittest.TestCase):
             ]
         )
 
-        row = json.loads((run_dir / "preflight.jsonl").read_text().strip())
-        self.assertEqual(row["gate_id"], "ship-python-floor")
-        self.assertEqual(row["first_evaluable_phase"], "lock-static")
+        # AMENDED 2026-08-24 by argus-a156 (Stream 1 5b608d28 AC1; Mike verbatim
+        # "1 yes, 2 yes, 3 yes"; routed by metis-g112). This read preflight.jsonl
+        # with json.loads() on the WHOLE FILE and asserted the single row was
+        # ship-python-floor. That only ever worked because lock-static held
+        # exactly ONE gate — it encoded the BOUNDARY'S EMPTINESS as its contract,
+        # so it could not survive a second gate. AC1 registers six governance
+        # gates there, and the file is JSONL, as its own name says.
+        rows = [
+            json.loads(line)
+            for line in (run_dir / "preflight.jsonl").read_text().splitlines()
+            if line.strip()
+        ]
+        self.assertIn(
+            "ship-python-floor", {r["gate_id"] for r in rows},
+            "the gate that ran must appear in the run's evidence",
+        )
+        # MUTATION GUARD (metis-g112's condition): evidence must be written per
+        # gate, not once per run. If a change collapses the evidence to a single
+        # row, this goes red instead of silently recording one gate of many.
+        self.assertGreater(
+            len(rows), 1,
+            "lock-static carries the governance gates now; one row means the "
+            "evidence writer stopped recording per gate",
+        )
+        floor = next(r for r in rows if r["gate_id"] == "ship-python-floor")
+        self.assertEqual(floor["first_evaluable_phase"], "lock-static")
 
 
 if __name__ == "__main__":

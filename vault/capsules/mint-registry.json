@@ -373,6 +373,13 @@
       "type": "release-plan"
     },
     {
+      "capsule_path": "vault/capsules/tropo-release-profile.capsule.md",
+      "capsule_sha256": "1f6c1de0dc83989993f1e2e22f12208c27a4b882be78a6c2ce6d3a58868a33d5",
+      "capsule_version": "1.0",
+      "mint_mode": "disabled",
+      "type": "release-profile"
+    },
+    {
       "capsule_path": "vault/capsules/tropo-research.capsule.md",
       "capsule_sha256": "d01050ac08f8c032c93281bd6f1a6fcea174a5eea7e09813a5b8d85a60ea9197",
       "capsule_version": "1.0",

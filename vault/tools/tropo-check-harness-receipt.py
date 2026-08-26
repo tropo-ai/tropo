@@ -35,6 +35,24 @@ TOOLS = Path(__file__).resolve().parent
 HARNESS_AGENT_UID = "24b57c2a"
 HARNESS_AGENT_NAME = "sa.release-test-harness"
 
+#: The release-pipeline leaf this tool executes (v1.92 Stream 1, AC2).
+#: A DELIBERATE SUBTLETY, recorded because it reads wrong at a glance: a0f2bea8
+#: is bound tool-kind to the RECEIPT CHECK, not to the harness run. The harness
+#: itself is `sa.release-test-harness`, a session agent Mike activates, and the
+#: leaf is explicit that this node "checks that its evidence exists and
+#: resolves, and never executes it". The machine-performed part of this leaf is
+#: therefore the check, and that is what a runner can run unattended. The locked
+#: spec's own enumeration agrees: it names five agent-executed leaves and this
+#: is not among them.
+PIPELINE_BINDINGS = (
+    {
+        "step_uid": "a0f2bea8",
+        "kind": "tool",
+        "entry": "tropo-check-harness-receipt.py:main",
+        "description": "check the release harness receipt resolves for this activation",
+    },
+)
+
 EXIT_OK = 0
 EXIT_REFUSED = 1
 EXIT_USAGE = 2

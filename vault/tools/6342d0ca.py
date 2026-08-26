@@ -235,7 +235,9 @@ def resolve_uid_to_file(uid: str, vault_root: Path) -> Path | None:
     return None
 
 
-def derive_subsystems_from_capabilities(capabilities: list[str], vault_root: Path) -> set[str]:
+def derive_subsystems_from_capabilities(
+    capabilities: list[str], vault_root: Path, hubs_map: dict[str, str],
+) -> set[str]:
     """For each capability UID, read member_of: + subsystem_hub: → return set of canonical-hub UIDs.
 
     v1.51.0 amendment (vela-v51 2026-05-23): added `subsystem_hub:` field reading per A80's
@@ -245,6 +247,11 @@ def derive_subsystems_from_capabilities(capabilities: list[str], vault_root: Pat
     only 10 rows across 5 releases (was 72 rows across 29 releases before); v1.46.0 release
     entry 82e44710 hit R11 + R12 enforcement gate at v1.51 build because its capability
     member-of edges no longer resolved. Discipline: when changing a writer, audit ALL readers.
+
+    `hubs_map` is caller-resolved (cee5190f: keyed off the run's actual
+    --vault-root, not the module-import-time default) rather than read from
+    the module-level CANONICAL_HUBS global — a fixture run must see the
+    fixture's hubs, never the live studio's.
     """
     hubs: set[str] = set()
     for cap_uid in capabilities:
@@ -258,17 +265,17 @@ def derive_subsystems_from_capabilities(capabilities: list[str], vault_root: Pat
         member_of = cap_fm.get("member_of", [])
         if isinstance(member_of, list):
             for parent_uid in member_of:
-                if parent_uid in CANONICAL_HUBS:
+                if parent_uid in hubs_map:
                     hubs.add(parent_uid)
         # Read subsystem_hub: (v1.14 schema split — subsystem-hub edges live here post-2026-05-23)
         subsystem_hub = cap_fm.get("subsystem_hub", [])
         if isinstance(subsystem_hub, list):
             for parent_uid in subsystem_hub:
-                if parent_uid in CANONICAL_HUBS:
+                if parent_uid in hubs_map:
                     hubs.add(parent_uid)
         elif isinstance(subsystem_hub, str):
             # Defensive: single-string form (capsule v2.5 allows list OR scalar)
-            if subsystem_hub in CANONICAL_HUBS:
+            if subsystem_hub in hubs_map:
                 hubs.add(subsystem_hub)
     return hubs
 
@@ -333,42 +340,162 @@ def scan_shipped_releases(vault_root: Path) -> list[dict]:
     return releases
 
 
-def build_registry_rows(releases: list[dict], vault_root: Path) -> list[dict]:
-    """Derive subsystem rows for each release. Returns sorted list of row dicts."""
-    rows = []
+def load_existing_registry(registry_path: Path) -> dict[tuple, dict]:
+    """cee5190f AC1: read the current subsystem-registry.jsonl into a
+    (release_uid, subsystem_uid) -> row map. Absent file is legal (first
+    run) and returns an empty map. A malformed line is skipped rather than
+    fatal — the writer must not lose the rest of a mostly-good registry to
+    one bad line.
+    """
+    existing: dict[tuple, dict] = {}
+    if not registry_path.is_file():
+        return existing
+    try:
+        text = registry_path.read_text(encoding="utf-8")
+    except OSError:
+        return existing
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        existing[(row.get("release_uid"), row.get("subsystem_uid"))] = row
+    return existing
+
+
+def _load_published_at_by_version(vault_root: Path) -> dict[str, str]:
+    """cee5190f AC3: scan the event bus for tropo.release.published events,
+    keyed by stripped version ('1.90.0', never 'v1.90.0'). Reads
+    `data.published_at` — the event's payload — never the CloudEvents
+    envelope `time`, which records when the event was WRITTEN, not when
+    the release actually published (measured to differ: v1.90.0's row
+    inherited `created: 2026-08-21` from frontmatter while the real
+    publish was 2026-08-22T23:44Z).
+    """
+    events_dir = vault_root / "vault" / "events" / "streams"
+    by_version: dict[str, str] = {}
+    if not events_dir.is_dir():
+        return by_version
+    for stream_file in sorted(events_dir.glob("*.jsonl")):
+        try:
+            text = stream_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            if "tropo.release.published" not in line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("type") != "tropo.release.published":
+                continue
+            data = event.get("data") or {}
+            version = str(data.get("version") or "").lstrip("v").strip()
+            published_at = data.get("published_at")
+            if version and published_at:
+                by_version[version] = published_at
+    return by_version
+
+
+def build_registry_rows(
+    releases: list[dict],
+    vault_root: Path,
+    hubs_map: dict[str, str],
+    existing: dict[tuple, dict],
+    published_by_version: dict[str, str],
+) -> tuple[list[dict], list[str]]:
+    """Derive subsystem rows for each release.
+
+    AC1 — STABLE IDENTITY: an existing (release_uid, subsystem_uid) row is
+    carried forward BYTE-FOR-BYTE (the same dict; no re-mint, no field
+    recompute) regardless of whether this run's fresh derivation reproduces
+    it — an existing pair that no longer derives is preserved, never
+    dropped. Only a genuinely new pair mints a fresh registry_uid, routed
+    through the ADR-050 chokepoint. Running this twice in immediate
+    succession against its own output produces a zero diff.
+
+    AC2 — NO SILENT DROP: a shipped release whose fresh derivation reaches
+    zero hubs produces one named note (WARN-safe per deb77758: it records,
+    it never refuses); the run continues normally. This is independent of
+    whether rows for that release already exist from a prior run.
+
+    AC3 — SHIPPED_AT IS THE PUBLISH TIME: a NEW row's shipped_at resolves
+    from `published_by_version` (the bus), never from a frontmatter
+    fallback. Absent a published event for that version, the field is
+    null-honest with a named note — never fabricated. Existing rows'
+    shipped_at is untouched by AC1's preservation rule, even when a
+    published event now exists for a version that didn't have one before.
+
+    Returns (rows, notes) — notes are WARN-tier strings for the caller to
+    print; nothing in here refuses.
+    """
+    fresh_rows: list[dict] = []
+    notes: list[str] = []
+
     for rel in releases:
         if not rel["uid"]:
             continue
         version = rel["version"].lstrip("v").strip()
         if not version:
             continue
-        touched_hubs = derive_subsystems_from_capabilities(rel["capabilities_touched"], vault_root)
+        touched_hubs = derive_subsystems_from_capabilities(
+            rel["capabilities_touched"], vault_root, hubs_map
+        )
         derived_from = "capabilities_touched"
         # Fallback: if derivation produced zero hubs but release entry declared subsystems_touched,
         # use the declaration (v1.51.0 amendment per vela-v51 2026-05-23). Closes the gap where
         # capabilities are prose-named/L0-projects that don't resolve to canonical-hub edges.
         if not touched_hubs and rel.get("declared_subsystems"):
             for hub_uid in rel["declared_subsystems"]:
-                if hub_uid in CANONICAL_HUBS:
+                if hub_uid in hubs_map:
                     touched_hubs.add(hub_uid)
             if touched_hubs:
                 derived_from = "release-entry-subsystems_touched-fallback"
+
+        if not touched_hubs:
+            notes.append(
+                f"[WARN] {rel['uid']} (v{version}) — this release derives zero "
+                f"subsystem hubs; no NEW row minted for it (any pre-existing "
+                f"rows for it are still preserved, not dropped)"
+            )
+            continue
+
         for hub_uid in sorted(touched_hubs):
+            key = (rel["uid"], hub_uid)
+            if key in existing:
+                continue  # AC1: preserved verbatim via `existing`, below.
+            published_at = published_by_version.get(version)
+            if not published_at:
+                notes.append(
+                    f"[WARN] {rel['uid']} (v{version}) — no tropo.release.published "
+                    f"event on the bus for this version; shipped_at recorded null "
+                    f"(never fabricated from frontmatter)"
+                )
             summary = rel["hub_summaries"].get(hub_uid) if rel["hub_summaries"] else None
-            row = {
+            fresh_rows.append({
                 # 796d9330 (ADR-050) chokepoint: route through the canonical minter.
                 "registry_uid": _mint_mod_6342.mint(1)[0],
                 "release_uid": rel["uid"],
                 "release_version": version,
                 "subsystem_uid": hub_uid,
-                "subsystem_name": CANONICAL_HUBS[hub_uid],
+                "subsystem_name": hubs_map[hub_uid],
                 "summary": summary,
                 "derived_from": derived_from,
-                "shipped_at": rel["shipped_at"][:10] if rel["shipped_at"] else "",
-            }
-            rows.append(row)
-    rows.sort(key=lambda r: (r["shipped_at"], r["release_version"], r["subsystem_name"]))
-    return rows
+                "shipped_at": published_at,
+            })
+
+    all_rows = list(existing.values()) + fresh_rows
+    all_rows.sort(
+        key=lambda r: (r.get("shipped_at") or "", r.get("release_version") or "",
+                       r.get("subsystem_name") or "")
+    )
+    return all_rows, notes
 
 
 def main() -> int:
@@ -387,7 +514,15 @@ def main() -> int:
         print("derive-subsystem-registry: ERROR — no shipped releases found", file=sys.stderr)
         return 1
 
-    rows = build_registry_rows(releases, vault_root)
+    # cee5190f: hub discovery keys off the RESOLVED --vault-root, never the
+    # script-location default — the prior module-level CANONICAL_HUBS
+    # leaked the live studio's hub set into every fixture run regardless
+    # of --vault-root.
+    hubs_map = _discover_canonical_hubs(vault_root) or _CANONICAL_HUBS_FALLBACK
+    existing = load_existing_registry(registry_path)
+    published_by_version = _load_published_at_by_version(vault_root)
+
+    rows, notes = build_registry_rows(releases, vault_root, hubs_map, existing, published_by_version)
 
     try:
         registry_path.parent.mkdir(parents=True, exist_ok=True)
@@ -399,6 +534,8 @@ def main() -> int:
         return 2
 
     if not quiet:
+        for note in notes:
+            print(f"  {note}")
         print(f"  Scanned {len(releases)} shipped releases.")
         print(f"  Wrote {len(rows)} rows across {len(set(r['release_uid'] for r in rows))} releases.")
         print(f"  ✓ subsystem-registry.jsonl regenerated")

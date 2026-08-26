@@ -1,0 +1,191 @@
+{
+  "authority": "b1e78abb AC5, Metis G112 baseline ruling 2026-08-24",
+  "captured_at": "2026-08-24T21:44:39Z",
+  "contract": "known signatures WARN; new or changed signatures ERROR; shrink-only; a signature is keyed on the full unresolved-target set, so any edit to a baselined record (even a partial cure) requires a conscious re-freeze; 29506520 is deliberately excluded so it keeps ERRORing",
+  "row_count": 22,
+  "rows": [
+    {
+      "filename": "0caad12b.md",
+      "signature": "0caad12b|new-file:vault/tools/tests/test_provenance_before_close_0caad12b.py",
+      "uid": "0caad12b",
+      "unresolved_targets": [
+        "new-file:vault/tools/tests/test_provenance_before_close_0caad12b.py"
+      ]
+    },
+    {
+      "filename": "2cb346d6.md",
+      "signature": "2cb346d6|vault/tools/tests/test_release_saga.py",
+      "uid": "2cb346d6",
+      "unresolved_targets": [
+        "vault/tools/tests/test_release_saga.py"
+      ]
+    },
+    {
+      "filename": "3c13977e.md",
+      "signature": "3c13977e|planned identifier: /api/vaults, changeset ref-closure query, scope-vs-location lint, studio-health surface||planned identifier: draftstatus resolver (index scope \u2294 live job store) at vault/tools/lib/draft_status.py||planned identifier: publish_jobs store at .tropo/publish-journal/<vault_uid>.jsonl||planned: vault/files/<test-spec-uid> (paired test-spec \u2014 landing-agreement conformance test)",
+      "uid": "3c13977e",
+      "unresolved_targets": [
+        "planned identifier: /api/vaults, changeset ref-closure query, scope-vs-location lint, studio-health surface",
+        "planned identifier: draftStatus resolver (index scope \u2294 live job store) at vault/tools/lib/draft_status.py",
+        "planned identifier: publish_jobs store at .tropo/publish-journal/<vault_uid>.jsonl",
+        "planned: vault/files/<test-spec-uid> (paired test-spec \u2014 Landing-Agreement Conformance Test)"
+      ]
+    },
+    {
+      "filename": "43125c54.md",
+      "signature": "43125c54|releases/v1.86.0 (build folder + private zip via tropo-build-release.py)||vault/updates/ published manifest (supabase stable object)",
+      "uid": "43125c54",
+      "unresolved_targets": [
+        "releases/v1.86.0 (build folder + private zip via tropo-build-release.py)",
+        "vault/updates/ published manifest (Supabase stable object)"
+      ]
+    },
+    {
+      "filename": "4883fa94.md",
+      "signature": "4883fa94|new-file:vault/tools/tests/test_orient_cascade_phase1_4883fa94.py",
+      "uid": "4883fa94",
+      "unresolved_targets": [
+        "new-file:vault/tools/tests/test_orient_cascade_phase1_4883fa94.py"
+      ]
+    },
+    {
+      "filename": "54867cf8.md",
+      "signature": "54867cf8|vault/tools/tests/test_navblock_process_filter.py",
+      "uid": "54867cf8",
+      "unresolved_targets": [
+        "vault/tools/tests/test_navblock_process_filter.py"
+      ]
+    },
+    {
+      "filename": "5848a2b7.md",
+      "signature": "5848a2b7|vault/tools/6389dcd4.py",
+      "uid": "5848a2b7",
+      "unresolved_targets": [
+        "vault/tools/6389dcd4.py"
+      ]
+    },
+    {
+      "filename": "58e8b6cf.md",
+      "signature": "58e8b6cf|new-file:vault/files/45324ca6.md||new-file:vault/tools/tests/test_v187_legacy_convergence_58e8b6cf.py",
+      "uid": "58e8b6cf",
+      "unresolved_targets": [
+        "new-file:vault/files/45324ca6.md",
+        "new-file:vault/tools/tests/test_v187_legacy_convergence_58e8b6cf.py"
+      ]
+    },
+    {
+      "filename": "64bc80d8.md",
+      "signature": "64bc80d8|vault/tools/6389dcd4.py",
+      "uid": "64bc80d8",
+      "unresolved_targets": [
+        "vault/tools/6389dcd4.py"
+      ]
+    },
+    {
+      "filename": "6c538b6a.md",
+      "signature": "6c538b6a|new-file:vault/tools/tests/test_index_integrity_6c538b6a.py",
+      "uid": "6c538b6a",
+      "unresolved_targets": [
+        "new-file:vault/tools/tests/test_index_integrity_6c538b6a.py"
+      ]
+    },
+    {
+      "filename": "756eceab.md",
+      "signature": "756eceab|vault/tools/1a8be354.py",
+      "uid": "756eceab",
+      "unresolved_targets": [
+        "vault/tools/1a8be354.py"
+      ]
+    },
+    {
+      "filename": "9a640a8a.md",
+      "signature": "9a640a8a|new-file:vault/tools/tropo-close-dev.py",
+      "uid": "9a640a8a",
+      "unresolved_targets": [
+        "new-file:vault/tools/tropo-close-dev.py"
+      ]
+    },
+    {
+      "filename": "a54b9889.md",
+      "signature": "a54b9889|new-file:vault/tools/tests/test_release_capsule_fan_in_a54b9889.py",
+      "uid": "a54b9889",
+      "unresolved_targets": [
+        "new-file:vault/tools/tests/test_release_capsule_fan_in_a54b9889.py"
+      ]
+    },
+    {
+      "filename": "c24b4b8b.md",
+      "signature": "c24b4b8b|vault/tools/6389dcd4.py",
+      "uid": "c24b4b8b",
+      "unresolved_targets": [
+        "vault/tools/6389dcd4.py"
+      ]
+    },
+    {
+      "filename": "c392d833.md",
+      "signature": "c392d833|planned identifier: vault/tools/tests/test_pipeline_durable_closure.py",
+      "uid": "c392d833",
+      "unresolved_targets": [
+        "planned identifier: vault/tools/tests/test_pipeline_durable_closure.py"
+      ]
+    },
+    {
+      "filename": "c9b2ee8b.md",
+      "signature": "c9b2ee8b|vault/tools/6389dcd4.py",
+      "uid": "c9b2ee8b",
+      "unresolved_targets": [
+        "vault/tools/6389dcd4.py"
+      ]
+    },
+    {
+      "filename": "d317f532.md",
+      "signature": "d317f532|new-file:vault/skills/tropo-librarian.md||new-file:vault/tools/tests/test_librarian_l1_d317f532.py",
+      "uid": "d317f532",
+      "unresolved_targets": [
+        "new-file:vault/skills/tropo-librarian.md",
+        "new-file:vault/tools/tests/test_librarian_l1_d317f532.py"
+      ]
+    },
+    {
+      "filename": "dd570ea4.md",
+      "signature": "dd570ea4|vault/files/ (314 governed records)",
+      "uid": "dd570ea4",
+      "unresolved_targets": [
+        "vault/files/ (314 governed records)"
+      ]
+    },
+    {
+      "filename": "e52826c5.md",
+      "signature": "e52826c5|new-file:vault/templates/root-docs/agent-orientation.md",
+      "uid": "e52826c5",
+      "unresolved_targets": [
+        "new-file:vault/templates/root-docs/AGENT-ORIENTATION.md"
+      ]
+    },
+    {
+      "filename": "f47da329.md",
+      "signature": "f47da329|planned: vault/files/498e88fc.md (paired test-spec \u2014 app-ship scope-gate conformance)",
+      "uid": "f47da329",
+      "unresolved_targets": [
+        "planned: vault/files/498e88fc.md (paired test-spec \u2014 App-Ship Scope-Gate Conformance)"
+      ]
+    },
+    {
+      "filename": "fb8b3251.md",
+      "signature": "fb8b3251|vault/tools/6389dcd4.py",
+      "uid": "fb8b3251",
+      "unresolved_targets": [
+        "vault/tools/6389dcd4.py"
+      ]
+    },
+    {
+      "filename": "fe4c17e9.md",
+      "signature": "fe4c17e9|vault/tools/6389dcd4.py",
+      "uid": "fe4c17e9",
+      "unresolved_targets": [
+        "vault/tools/6389dcd4.py"
+      ]
+    }
+  ],
+  "schema_version": 1
+}

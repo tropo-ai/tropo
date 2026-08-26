@@ -353,21 +353,59 @@ def cmd_retire(args):
                 f"transfers/{gen}.md. Write the real letter and re-run.")
         dest = root / "agents" / args.agent / "transfers" / f"{gen}.md"
         dest.parent.mkdir(parents=True, exist_ok=True)
-        tmp = dest.with_suffix(".md.tmp")
-        tmp.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
-        try:
-            # link() fails if the name is taken. Reason 1: a letter is never
-            # overwritten, because it cannot be reconstructed. rename() would
-            # silently replace it.
-            os.link(tmp, dest)
-        except FileExistsError:
-            tmp.unlink(missing_ok=True)
-            raise SystemExit(
-                f"{dest} already exists and was not replaced. "
-                f"{gen}'s letter is already written; nothing was changed."
-            )
-        finally:
-            tmp.unlink(missing_ok=True)
+
+        # AC4 (b1e78abb, v1.92): a letter already authored IN PLACE at its
+        # own create-only destination is not a collision to refuse — it is
+        # the retirement's actual letter, and refusing it is the defect
+        # A154, A155 and T49 each hand-worked around. The occupied
+        # destination is accepted ONLY when it IS this source: identity by
+        # samefile() (the ordinary in-place case — one file, one inode) or
+        # by equal content (a defensive fallback if inode identity doesn't
+        # hold for some reason but the bytes are the same letter). A
+        # DIFFERENT source against an occupied destination still refuses
+        # unconditionally — this is idempotent-accept, never overwrite; the
+        # create-only guarantee (a letter can never be reconstructed) is
+        # untouched.
+        if dest.exists():
+            same = False
+            try:
+                same = os.path.samefile(src, dest)
+            except OSError:
+                same = False
+            if not same:
+                same = (
+                    dest.read_text(encoding="utf-8", errors="replace")
+                    == src.read_text(encoding="utf-8", errors="replace")
+                )
+            if not same:
+                raise SystemExit(
+                    f"{dest} already exists and was not replaced. "
+                    f"{gen}'s letter is already written; nothing was changed."
+                )
+            # Identity confirmed: dest already correctly holds this letter.
+            # Nothing to write — writing identical bytes over an existing
+            # create-only file would be a no-op at best and a needless
+            # mtime/inode churn at worst.
+        else:
+            tmp = dest.with_suffix(".md.tmp")
+            tmp.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+            try:
+                # link() fails if the name is taken. Reason 1: a letter is
+                # never overwritten, because it cannot be reconstructed.
+                # rename() would silently replace it.
+                os.link(tmp, dest)
+            except FileExistsError:
+                # A concurrent writer placed dest between our check above
+                # and this call — same refusal, not a crash. Idempotent-
+                # accept is handled by the branch above; a fresh race here
+                # is exactly the collision that guard exists to catch.
+                tmp.unlink(missing_ok=True)
+                raise SystemExit(
+                    f"{dest} already exists and was not replaced. "
+                    f"{gen}'s letter is already written; nothing was changed."
+                )
+            finally:
+                tmp.unlink(missing_ok=True)
         letter_ref = str(dest.relative_to(root))
 
     record = {"t": "retired", "gen": gen, "at": now()}

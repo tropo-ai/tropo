@@ -2,10 +2,10 @@
 uid: f6a967fd
 type: release
 agent: tropo
-title: Tropo Release Notes — v1.91.0
-description: Current Tropo release notes for delivery via Tropo's release-liaison role. Refreshed each release by the update pipeline. v1.91.0 makes the release build itself trustworthy: every declared release event has a writer, every gate refuses before the human says yes instead of after, and every acceptance criterion shipped here was verified by someone other than its author running the locked command.
-release_version: v1.91.0
-release_date: '2026-08-23'
+title: Tropo Release Notes — v1.92.0
+description: Current Tropo release notes for delivery via Tropo's release-liaison role. Refreshed each release by the update pipeline. v1.92.0 ships a dev-pipeline a stranger studio can actually start work with — the command that opens a cycle now travels in the box alongside mint, evidence and close, a newly-opened cycle declares the process that really runs, and a dev cycle can no longer fail over release machinery it has never used. Behind that: refusals must now name the irreversible harm they prevent or step aside, so the checks that stop a build are the ones guarding something that cannot be undone.
+release_version: v1.92.0
+release_date: '2026-08-26'
 last_delivered_version: null
 audience: Studio user (whoever opened this Studio)
 read_first_at: Group 2 boot (release-state awareness check)

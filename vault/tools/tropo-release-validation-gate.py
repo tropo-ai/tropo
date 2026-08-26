@@ -123,6 +123,27 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 RELEASE_PIPELINE_UID = "634913c2"
+
+#: The release-pipeline leaves this tool executes (v1.92 Stream 1, AC2).
+#: TWO leaves, ONE tool — the legitimate sharing AC2's behavior text names.
+#: They are not redundant: `capture` fixes the baseline at Assemble fan-in and
+#: `compare` re-runs it at Verify and requires no new debt, so the same tool
+#: answers two different questions at two different moments in the release.
+#: Both leaves declare these exact commands in their own `verification_command`.
+PIPELINE_BINDINGS = (
+    {
+        "step_uid": "f9365ede",
+        "kind": "tool",
+        "entry": "tropo-release-validation-gate.py:capture_baseline",
+        "description": "capture the validation baseline at release fan-in",
+    },
+    {
+        "step_uid": "4262d5fa",
+        "kind": "tool",
+        "entry": "tropo-release-validation-gate.py:compare_current",
+        "description": "re-run the full validator and compare against the baseline",
+    },
+)
 UID_RE = re.compile(r"^[0-9a-f]{8}$")
 ANSI_RE = re.compile(
     r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])"
@@ -727,6 +748,24 @@ def capture_baseline(
     return report
 
 
+# Sections whose reported/line counts are a function of wall-clock time elapsed
+# since baseline capture, not of anything the release build did. Comparing them
+# as same-activation baseline-vs-current is structurally invalid whenever the
+# two runs don't land on the exact same local calendar day — which a multi-hour
+# (or multi-agent-handoff) release cycle routinely does not. Confirmed live on
+# v1.92 (vela-v74, 2026-08-26): baseline captured 2026-08-26T02:26Z = 2026-08-25
+# local (EDT); full-release-validation ran 2026-08-26T11:xxZ = 2026-08-26 local
+# — a bare one-local-day shift in check_undispositioned_backlog's `date.today()`
+# stale_cutoff moved 2 pre-existing, untouched items across the 45-day line,
+# reported as a false "regression" (89->91) with zero release-content cause.
+# Exempted from the two count-comparison kinds only — new-failing-section and
+# new-specific-finding still apply, so a genuinely new defect in these sections
+# is still caught; only "the ambient count ticked because time passed" is not.
+TIME_DRIFT_EXEMPT_SECTIONS = frozenset({
+    "Undispositioned-Stale Backlog (ADR-047 C2; dev-spec 8dce9aec; ERROR ratchet v1.75; E5 grandfather)",
+})
+
+
 def compare_evidence(baseline: dict, current: dict) -> list[dict]:
     """Return only regressions; lower counts and removed signatures are safe."""
     regressions: list[dict] = []
@@ -764,6 +803,8 @@ def compare_evidence(baseline: dict, current: dict) -> list[dict]:
             ("FAIL", "failure_line_count", "reported_failure_count"),
             ("ERROR", "error_line_count", "reported_error_count"),
         ):
+            if section_name in TIME_DRIFT_EXEMPT_SECTIONS:
+                continue
             before_lines = int(before.get(line_key, 0))
             after_lines = int(after.get(line_key, 0))
             if after_lines > before_lines:

@@ -75,7 +75,7 @@ belt_example: "python3 vault/tools/tropo-mint-id.py --count 5 --kind file"
 # flat-8-hex shape as `--kind file`; it exists so callers can express INTENT and so the
 # vault/studio/event kinds have a coherent home when their consumers exist.
 #
-# FEDERATION EXTENSION POINT (Federation Foundation 7cac6473 / brainstorm a1230aff): a
+# FEDERATION EXTENSION POINT (brainstorm a1230aff): a
 # federated, multi-Studio mint must be PREFIX-AWARE (Studio-Prefixed UIDs) so two laptops
 # minting offline cannot collide. The `--prefix <studio>` SEAM IS IMPLEMENTED (S8, v1.80):
 # output is `<prefix>-<8hex>` per the decided `[studio]-[random]` shape (d89b5da3).
@@ -311,7 +311,7 @@ def mint_studio_identity(root: Path | None = None, minted_by: str = "tropo-mint-
         "(dev-spec [32067bea], Federation Phase A; composes [ADR-050](../../vault/files/cb0f8e46.md)).\n"
         "`mint_prefix` is stable once set and never silently regenerated; a team-segment\n"
         "mint reads it to produce `<mint_prefix>-<8hex>`. Private-segment mints stay bare.\n"
-        "`hq_registered: false` — HQ Studio Registration ([7cac6473]) is an optional later\n"
+        "`hq_registered: false` — HQ Studio Registration is an optional later\n"
         "overlay on top of this primitive, never a prerequisite.\n"
     )
     path.write_text(f"---\n{fm_text}---\n{body}", encoding="utf-8")

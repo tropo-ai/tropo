@@ -117,6 +117,21 @@ def _load_tropo_roots():
 
 
 tropo_roots = _load_tropo_roots()
+#: The release-pipeline leaf this tool executes (v1.92 Stream 1, AC2).
+#: 3dd817cb is the pipeline's TERMINAL step and was named in no tool at all —
+#: the one outward, irreversible act in the whole release had no declared
+#: performer anywhere in the runtime. `cmd_fire` is bound rather than
+#: `cmd_stage`: staging is private and repeatable, firing is the commit point,
+#: and the leaf's own text puts the public receipt at that boundary.
+PIPELINE_BINDINGS = (
+    {
+        "step_uid": "3dd817cb",
+        "kind": "tool",
+        "entry": "tropo-publish-release.py:cmd_fire",
+        "description": "publish the official release (the one outward act)",
+    },
+)
+
 CANONICAL_REPOSITORY = "tropo-ai/tropo"
 CANONICAL_GH_REPOSITORY = "github.com/tropo-ai/tropo"
 DEFAULT_REMOTE = "https://github.com/tropo-ai/tropo.git"
@@ -178,6 +193,9 @@ release_closure = _load_vault_lib("tropo_publish_release_closure", "release_clos
 # path, served endpoint) lives in release_site; the badge adapter reads it
 # from there rather than carrying a second copy.
 release_site = _load_vault_lib("tropo_publish_release_site", "release_site.py")
+# AC4: the canonical scorecard producer/reader contract. cmd_fire READS the
+# card this module names; it does not write one of its own.
+release_metrics = _load_vault_lib("tropo_publish_release_metrics", "release_metrics.py")
 
 _TROPO_SCRIPTS = tropo_roots.STUDIO_ROOT / ".tropo" / "scripts"
 if str(_TROPO_SCRIPTS) not in sys.path:
@@ -2863,23 +2881,102 @@ def cmd_fire(args) -> int:
               f"--receipt-sha256 {receipt_sha256} "
               f"--transaction-id {_ac7['transaction_id']}", file=sys.stderr)
 
-    # The real-fire scorecard, at the fixed path release_metrics names for
-    # this mode. Deliberately lean: the journal is the per-checkpoint record;
-    # the scorecard carries run identity and the receipt it closed over.
+    # THE SCORECARD IS READ HERE, NEVER WRITTEN HERE. v1.92 Stream 1 AC4.
+    #
+    # This wrote its own scorecard: a hand-built dict at
+    # _state_path(version).parent, under the same FILENAME the canonical
+    # producer uses but at a different LOCATION and in a different SHAPE. Against
+    # vault/schema/one-prompt-release-scorecard.schema.json (additionalProperties
+    # false) it was missing 8 of 10 required fields and carried 3 unknown keys,
+    # and it had no `verdict` — so the completion verifier, which reads
+    # release_metrics.scorecard_path(run_dir, REAL_FIRE), called the scorecard
+    # ABSENT even after a successful fire. Two producers, one filename, two
+    # locations, one reader.
+    #
+    # It mattered beyond tidiness: cmd_fire is what AC2 and AC5 bind to the
+    # terminal leaf 3dd817cb, so the release owner's ruling that the scorecard is
+    # REQUIRED from v1.92 forward was unsatisfiable through the bound path.
+    #
+    # And the divergence had a cause worth keeping: cmd_fire does not HAVE the
+    # measurement inputs. build_scorecard requires the orchestrator start stamp,
+    # the observed refusals and the baseline; the publisher knows none of them.
+    # A producer without the inputs cannot honestly build the artifact, which is
+    # exactly how the lean hand-built dict came to exist. So the orchestrator
+    # (tropo-release.py, which has them) writes it, and this reads it.
     import hashlib as _hashlib
-    scorecard_file = (
-        _state_path(version).parent / "one-prompt-real-fire-scorecard.json")
-    fire_scorecard = {
-        "saga_id": journal.saga_id, "run_uid": run_uid, "version": version,
-        "mode": "real",
-        "fired_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "receipt_sha256": receipt_sha256,
-    }
-    scorecard_file.write_text(
-        json.dumps(fire_scorecard, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8")
-    context["scorecard_sha"] = _hashlib.sha256(
-        scorecard_file.read_bytes()).hexdigest()
+    # The injected producer runs HERE — after the outward acts and verify-live
+    # have stamped this run's journal (so every measurement input is true), and
+    # before the read below that decides whether completion_verification can be
+    # observed. The orchestrator owns the inputs and builds the card; this call
+    # site owns only the timing. See tropo-release.py::_produce_scorecard for
+    # why the previous order (produce AFTER cmd_fire returned, gated on its exit
+    # code) could never converge.
+    _producer = getattr(args, "scorecard_producer", None)
+    if _producer is not None:
+        try:
+            _producer(version)
+        except Exception as _exc:  # noqa: BLE001
+            # A producer that raises must not take the release with it: the
+            # publish already happened. Record the absence honestly below.
+            print("  ⚠ scorecard producer raised (%s); recording the card absent"
+                  % _exc, file=sys.stderr)
+    _run_dir = _run_journal_folder(_ac7)
+    _canonical = (
+        release_metrics.scorecard_path(_run_dir, release_metrics.REAL_FIRE)
+        if _run_dir is not None else None
+    )
+    if _canonical is not None and _canonical.is_file():
+        # EXISTENCE IS NOT THE BAR — VALIDITY IS. This used to accept any file
+        # that happened to be at the path, so a scorecard naming no release,
+        # with null timestamps, failing its own schema, satisfied the completion
+        # act site and the fire reported LIVE. That is the false-success class
+        # wearing the costume of a measurement.
+        #
+        # Note what is deliberately NOT checked: `verdict`. A card reading
+        # verdict "fail" is a SUCCESSFUL measurement of an expensive release —
+        # too many principal gestures, or over the wall-clock target. Gating the
+        # fire on a passing verdict would conflate "did we publish correctly"
+        # with "was it cheap", and would make an honest expensive release
+        # unshippable. We require that the measurement was TAKEN and is
+        # well-formed, not that we liked the answer.
+        # (argus-a158, 2026-08-25.)
+        _findings: list[str] = []
+        try:
+            _card = json.loads(_canonical.read_text(encoding="utf-8"))
+            _schema = (tropo_roots.VAULT_DIR / "schema"
+                       / "one-prompt-release-scorecard.schema.json")
+            if _schema.is_file():
+                _findings = release_metrics.validate_scorecard(_card, _schema)
+            else:
+                _findings = ["schema not found at %s" % _schema]
+        except Exception as _exc:  # noqa: BLE001
+            _findings = ["scorecard unreadable: %s" % _exc]
+        if _findings:
+            context["scorecard_sha"] = None
+            context["scorecard_absent_reason"] = (
+                "real-fire scorecard at %s is INVALID (%d finding(s)): %s"
+                % (_canonical, len(_findings), "; ".join(_findings[:5]))
+            )
+            print("  ⚠ real-fire scorecard is invalid; recording completion "
+                  "unverified rather than accepting a malformed measurement:",
+                  file=sys.stderr)
+            for _f in _findings[:5]:
+                print("      - %s" % _f, file=sys.stderr)
+        else:
+            context["scorecard_sha"] = _hashlib.sha256(
+                _canonical.read_bytes()).hexdigest()
+            context["scorecard_path"] = str(_canonical)
+    else:
+        # Honestly absent beats fabricated. The completion verifier observes the
+        # world; a placeholder here would tell it a card exists.
+        context["scorecard_sha"] = None
+        context["scorecard_absent_reason"] = (
+            "no real-fire scorecard at %s — the orchestrator "
+            "(tropo-release.py) is its producer and did not write one for this "
+            "run" % (_canonical if _canonical is not None else "<run folder unresolved>")
+        )
+        print("  ⚠ no real-fire scorecard found at %s; recording it absent "
+              "rather than writing a placeholder" % _canonical, file=sys.stderr)
     wire_checkpoint(journal, "scorecard", context)
     wire_checkpoint(journal, "completion_verification", context)
 

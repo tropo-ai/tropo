@@ -10924,6 +10924,351 @@ def check_dev_spec_activation_coupling(vault: Path, customer_mode: bool = False)
 
 
 # ---------------------------------------------------------------------------
+# committed_substrate resolution at close (b1e78abb, v1.92) — the check that
+# would have caught 29506520 being marked done with four of its twelve
+# declared targets absent.
+# ---------------------------------------------------------------------------
+
+_PLANNED_IDENTIFIER_RE = re.compile(r'^[a-z][a-z0-9.-]*$')
+_ROOT_FILENAME_RE = re.compile(r'^[A-Za-z0-9._-]+\.[A-Za-z0-9]+$')
+
+
+def _parse_capsule_version(raw: Any) -> Optional[tuple[int, ...]]:
+    """Best-effort semver-ish parse (`'1.9'`, `'1.5.0'`) for the >= 1.5
+    comparison. Returns None on anything unparseable — treated as
+    pre-1.5 (grandfathered), the conservative direction: a spec whose own
+    version field is unreadable should not be newly ERROR-gated on it."""
+    if not isinstance(raw, str):
+        return None
+    m = re.match(r'^(\d+)\.(\d+)(?:\.(\d+))?$', raw.strip())
+    if not m:
+        return None
+    return tuple(int(g) for g in m.groups() if g is not None)
+
+
+def _classify_substrate_target(target: str) -> str:
+    """Spec-family substrate-ref classification, in the capsule's own
+    strict order (tropo-dev-spec.capsule.md v1.5 §Substrate Reference
+    Syntax): uid / path / planned / malformed."""
+    if UID_RE.match(target):
+        return 'uid'
+    if '/' in target or _ROOT_FILENAME_RE.match(target):
+        return 'path'
+    if _PLANNED_IDENTIFIER_RE.match(target):
+        return 'planned'
+    return 'malformed'
+
+
+def _scan_committed_substrate_at_done(vault: Path) -> tuple[list[dict], int]:
+    """Shared census for `check_committed_substrate_resolves_at_done` and
+    the debt-baseline writer, so both work from exactly the same scan of
+    the corpus. Returns (rows, dev_specs_checked_at_done); a row exists
+    only for a `status: done` dev-spec carrying at least one unresolved or
+    planned committed_substrate target.
+
+    Row shape: {'uid', 'filename', 'capsule_version_raw', 'unresolved',
+    'planned'}.
+    """
+    files_dir = vault / 'vault' / 'files'
+    if not files_dir.is_dir():
+        # Metis G112's hardening finding, non-author verification of AC5
+        # (2026-08-24): a wrong --vault-path silently returned zeros here,
+        # same false-green-via-absent-subject class already fixed once this
+        # cycle in the AC1 chain test (_require_index). Raise, don't return
+        # quietly — a caller that can't see vault/files/ cannot possibly
+        # have verified anything about extraction, and a silent PASS would
+        # be exactly that.
+        raise RuntimeError(
+            f"{files_dir} does not exist — cannot verify committed_"
+            "substrate resolution without it. Refusing rather than "
+            "reporting zero findings as if the corpus were clean."
+        )
+
+    uid_union = _index_union_uids(vault)
+    rows: list[dict] = []
+    checked = 0
+
+    for f in sorted(files_dir.glob('*.md')):
+        try:
+            text = f.read_text(errors='replace')
+        except Exception:
+            continue
+        fm_text = split_frontmatter(text)
+        if fm_text is None:
+            continue
+        try:
+            fm = fast_yaml.safe_load(fm_text)
+        except yaml.YAMLError:
+            continue
+        if not isinstance(fm, dict) or fm.get('type') != 'dev-spec':
+            continue
+        if fm.get('status') != 'done':
+            continue
+        checked += 1
+
+        uid = str(fm.get('uid') or f.stem)
+        substrate = fm.get('committed_substrate')
+        if not isinstance(substrate, list):
+            continue
+
+        unresolved: list[str] = []
+        planned: list[str] = []
+        for entry in substrate:
+            # Legacy (pre-v1.8) shape is a bare string; current shape is an
+            # object with a `target` key. Both are legal per the capsule's
+            # own documented compatibility clause.
+            target = entry.get('target') if isinstance(entry, dict) else entry
+            if not isinstance(target, str) or not target:
+                continue
+            kind = _classify_substrate_target(target)
+            if kind == 'uid':
+                if target not in uid_union:
+                    unresolved.append(target)
+            elif kind == 'path':
+                clean = target.rstrip('/')
+                p = vault / clean
+                exists = p.is_dir() if target.endswith('/') else p.is_file()
+                if not exists:
+                    unresolved.append(target)
+            elif kind == 'planned':
+                planned.append(target)
+            else:
+                # Malformed shape (matches none of the capsule's three
+                # classes) — same treatment as an unresolved hard target;
+                # a target that isn't even validly SHAPED cannot resolve.
+                unresolved.append(target)
+
+        if unresolved or planned:
+            rows.append({
+                'uid': uid,
+                'filename': f.name,
+                'capsule_version_raw': fm.get('capsule_version'),
+                'unresolved': unresolved,
+                'planned': planned,
+            })
+
+    return rows, checked
+
+
+COMMITTED_SUBSTRATE_DEBT_BASELINE_RELATIVE_PATH = '.tropo/committed-substrate-debt-baseline.json'
+
+
+def _committed_substrate_debt_signature(uid: str, unresolved: list) -> str:
+    """One dev-spec's baseline identity: the uid plus its exact unresolved-
+    target SET, not a single target. Keyed on the full set so any edit to
+    a baselined spec's committed_substrate — even a partial cure — changes
+    the signature and must ERROR until the baseline is consciously
+    re-written, rather than silently staying WARN over a still-broken
+    record. Mirrors `_enum_debt_signature`'s contract-coupling in spirit:
+    there the enum contract hash retires a row when the vocabulary widens;
+    here the target set itself is the thing that must stay unchanged.
+    """
+    return '{}|{}'.format(uid, '||'.join(sorted(t.strip().lower() for t in unresolved)))
+
+
+def load_committed_substrate_debt_baseline(vault: Path) -> dict:
+    """Read the measured committed_substrate debt baseline, or an empty
+    one when absent. Absent is legal and means no debt is excused: every
+    ERROR-tier finding stays ERROR.
+    """
+    path = vault / COMMITTED_SUBSTRATE_DEBT_BASELINE_RELATIVE_PATH
+    if not path.is_file():
+        return {'present': False, 'signatures': {}, 'header': {}}
+    try:
+        raw = json.loads(path.read_text(encoding='utf-8'))
+    except Exception as exc:
+        raise ValueError('{} is unreadable: {}'.format(
+            COMMITTED_SUBSTRATE_DEBT_BASELINE_RELATIVE_PATH, exc))
+    rows = raw.get('rows')
+    if not isinstance(rows, list):
+        raise ValueError('{} has no rows list'.format(
+            COMMITTED_SUBSTRATE_DEBT_BASELINE_RELATIVE_PATH))
+    signatures = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError('{} contains a malformed row'.format(
+                COMMITTED_SUBSTRATE_DEBT_BASELINE_RELATIVE_PATH))
+        signature = row.get('signature')
+        if not isinstance(signature, str) or not signature:
+            raise ValueError('{} contains a row with no signature'.format(
+                COMMITTED_SUBSTRATE_DEBT_BASELINE_RELATIVE_PATH))
+        signatures[signature] = row
+    header = {k: v for k, v in raw.items() if k != 'rows'}
+    return {'present': True, 'signatures': signatures, 'header': header}
+
+
+def collect_committed_substrate_debt_signatures(vault: Path) -> list:
+    """Every currently ERROR-eligible (uid, filename, unresolved-targets)
+    row, measured fresh — capsule_version >= 1.5 done specs with
+    unresolved targets, exactly what the check would ERROR on against an
+    empty baseline. Shared by the writer so a baseline can never be judged
+    against a census the check itself didn't run.
+    """
+    rows, _checked = _scan_committed_substrate_at_done(vault)
+    out = []
+    for row in rows:
+        if not row['unresolved']:
+            continue
+        cv = _parse_capsule_version(row['capsule_version_raw'])
+        if cv is None or cv < (1, 5):
+            continue
+        out.append((row['uid'], row['filename'], list(row['unresolved'])))
+    return out
+
+
+def write_committed_substrate_debt_baseline(vault: Path) -> tuple[list[str], int]:
+    """Capture or shrink the measured committed_substrate debt baseline.
+
+    First write captures the current ERROR-tier set. Later writes are
+    SHRINK-ONLY: a subset is legal — a cured record's signature simply
+    stops appearing in the live census and drops out — but growth
+    refuses. Because a signature is keyed on a spec's FULL unresolved-
+    target set, fixing only some of a baselined spec's targets produces a
+    NEW signature (not a subset of the old one), so a partial cure ERRORs
+    until this is re-run deliberately. Same shrink-only discipline as
+    `write_enum_debt_baseline`, on the same class of defect one level up
+    (b1e78abb AC5, Metis G112 baseline ruling 2026-08-24).
+    """
+    messages: list[str] = []
+    path = vault / COMMITTED_SUBSTRATE_DEBT_BASELINE_RELATIVE_PATH
+
+    rows = []
+    for uid, filename, unresolved in collect_committed_substrate_debt_signatures(vault):
+        rows.append({
+            'signature': _committed_substrate_debt_signature(uid, unresolved),
+            'uid': uid,
+            'filename': filename,
+            'unresolved_targets': sorted(unresolved),
+        })
+
+    unique = {row['signature']: row for row in rows}
+    new_signatures = set(unique)
+
+    existing = load_committed_substrate_debt_baseline(vault)
+    if existing['present']:
+        old_signatures = set(existing['signatures'])
+        grown = new_signatures - old_signatures
+        if grown:
+            messages.append(
+                '[FAIL] refusing to grow the committed-substrate debt '
+                'baseline by {} signature(s); a baseline that grows is an '
+                'amnesty'.format(len(grown))
+            )
+            for signature in sorted(grown)[:10]:
+                messages.append('  would add: {}'.format(signature))
+            return messages, 1
+
+    payload = {
+        'schema_version': 1,
+        'captured_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'authority': 'b1e78abb AC5, Metis G112 baseline ruling 2026-08-24',
+        'contract': 'known signatures WARN; new or changed signatures ERROR; '
+                    'shrink-only; a signature is keyed on the full '
+                    'unresolved-target set, so any edit to a baselined '
+                    'record (even a partial cure) requires a conscious '
+                    're-freeze; 29506520 is deliberately excluded so it '
+                    'keeps ERRORing',
+        'row_count': len(unique),
+        'rows': [unique[key] for key in sorted(unique)],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    messages.append('[PASS] wrote {} signature(s) to {}'.format(
+        len(unique), COMMITTED_SUBSTRATE_DEBT_BASELINE_RELATIVE_PATH))
+    return messages, 0
+
+
+def check_committed_substrate_resolves_at_done(
+    vault: Path, baseline: dict | None = None,
+) -> tuple[list[str], int, int]:
+    """b1e78abb AC5 — a dev-spec at `status: done` whose committed_substrate
+    names an unresolvable target is a finding naming EVERY unresolved
+    target, not the first.
+
+    Nothing verified this before (grepped every file in vault/tools/ and
+    vault/tools/lib/ for a committed_substrate read paired with an
+    existence check: zero hits). 29506520 shipped status:done with four of
+    twelve declared targets absent — the record said what would be built,
+    and nothing ever compared the field to the filesystem.
+
+    SCOPED, because the corpus is not clean (measured 2026-08-24: 120 done
+    specs, 71 carry at least one unresolvable target, many legal pre-v1.5
+    free-form refs whose substrate exists under a different convention):
+      - `capsule_version` >= 1.5 (the amendment that defined the strict
+        substrate-ref union) with an unresolved UID or path target: ERROR,
+        unless its signature is in the persisted `baseline` (Metis G112's
+        curated committed_substrate debt-baseline ruling, 2026-08-24) — a
+        known signature WARNs instead; a NEW or changed one (any edit to a
+        baselined spec's committed_substrate) still ERRORs.
+      - `capsule_version` < 1.5, or absent/unparseable: the SAME finding,
+        graded WARN instead — a named debt-baseline class, not silently
+        skipped and not newly ERROR-gated on a convention that postdates
+        the spec.
+      - An opaque planned identifier (capsule Reference Syntax class 3) is
+        legal AT DONE by design — it is a forward declaration, never an
+        ERROR and never skipped. Always WARN, regardless of capsule_version.
+
+    Target resolution: UID-shaped targets resolve against the current +
+    archive index union (`_index_union_uids`) — a UID in either surface
+    counts, since retirement/archival of the entry it names doesn't erase
+    the fact that it was built. Path-shaped targets resolve as
+    Studio-relative paths on disk (file, or directory when the target
+    carries a trailing `/`).
+
+    `baseline` is the dict `load_committed_substrate_debt_baseline` returns;
+    omitted or `None` behaves exactly as if no baseline existed — every
+    capsule_version >= 1.5 unresolved finding is ERROR.
+
+    Returns (findings, dev_specs_checked_at_done, error_count).
+    """
+    rows, checked = _scan_committed_substrate_at_done(vault)
+    known_signatures = (baseline or {}).get('signatures', {})
+    findings: list[str] = []
+    error_count = 0
+
+    for row in rows:
+        uid, fname = row['uid'], row['filename']
+
+        if row['planned']:
+            findings.append(
+                f"[WARN] {uid} ({fname}) — opaque planned identifier(s) at "
+                f"done, legal by capsule law (Reference Syntax class 3), "
+                f"never an ERROR: {', '.join(sorted(row['planned']))}"
+            )
+
+        if row['unresolved']:
+            cv = _parse_capsule_version(row['capsule_version_raw'])
+            grandfathered = cv is None or cv < (1, 5)
+            if grandfathered:
+                findings.append(
+                    f"[WARN] {uid} ({fname}) — unresolved committed_substrate "
+                    f"target(s), pre-1.5 debt-baseline class (capsule_version="
+                    f"{row['capsule_version_raw']!r}): "
+                    f"{', '.join(sorted(row['unresolved']))}"
+                )
+            else:
+                signature = _committed_substrate_debt_signature(uid, row['unresolved'])
+                if signature in known_signatures:
+                    findings.append(
+                        f"[WARN] {uid} ({fname}) — unresolved committed_substrate "
+                        f"target(s), known debt-baseline class (capsule_version="
+                        f"{row['capsule_version_raw']!r} >= 1.5; "
+                        f"{COMMITTED_SUBSTRATE_DEBT_BASELINE_RELATIVE_PATH} must "
+                        f"clear it): {', '.join(sorted(row['unresolved']))}"
+                    )
+                else:
+                    findings.append(
+                        f"[ERROR] {uid} ({fname}) — status:done but committed_"
+                        f"substrate names unresolvable target(s) "
+                        f"(capsule_version={row['capsule_version_raw']!r} >= 1.5): "
+                        f"{', '.join(sorted(row['unresolved']))}"
+                    )
+                    error_count += 1
+
+    return findings, checked, error_count
+
+
+# ---------------------------------------------------------------------------
 # Shard-index consistency (c6f6bea4, ADR-051 Fork 4) — the staleness guard.
 # ---------------------------------------------------------------------------
 
@@ -12713,6 +13058,12 @@ def main() -> int:
                         help='v1.89 bounded amendment: capture (or shrink) the measured '
                              'enum-debt baseline. Known signatures then WARN while any new or '
                              'changed signature ERRORs. Shrink-only: growth refuses.')
+    parser.add_argument('--write-committed-substrate-debt-baseline', action='store_true',
+                        dest='write_committed_substrate_debt_baseline',
+                        help='b1e78abb AC5, Metis G112 baseline ruling: capture (or shrink) the '
+                             'measured committed_substrate debt baseline. Known signatures then '
+                             'WARN while any new or changed signature ERRORs. Shrink-only: '
+                             'growth refuses.')
     parser.add_argument('--state-pairing-json', action='store_true',
                         dest='state_pairing_json',
                         help='v1.89 271d28d7 AC3: exclusive report mode. Emits one stable JSON '
@@ -12737,6 +13088,7 @@ def main() -> int:
             ('--state-pairing-json', args.state_pairing_json),
             ('--require-state-pairing-zero', args.require_state_pairing_zero),
             ('--write-enum-debt-baseline', args.write_enum_debt_baseline),
+            ('--write-committed-substrate-debt-baseline', args.write_committed_substrate_debt_baseline),
             ('--write-state-pairing-baseline', args.write_state_pairing_baseline),
         ) if on
     ]
@@ -12775,6 +13127,17 @@ def main() -> int:
             messages, code = write_enum_debt_baseline(vault)
         except Exception as exc:
             print('ERROR: enum-debt baseline capture failed: {}'.format(exc), file=sys.stderr)
+            return 2
+        for message in messages:
+            print(message)
+        return code
+
+    # --- b1e78abb AC5 / Metis G112 ruling: committed-substrate debt baseline capture (early return) ---
+    if args.write_committed_substrate_debt_baseline:
+        try:
+            messages, code = write_committed_substrate_debt_baseline(vault)
+        except Exception as exc:
+            print('ERROR: committed-substrate debt baseline capture failed: {}'.format(exc), file=sys.stderr)
             return 2
         for message in messages:
             print(message)
@@ -15459,6 +15822,40 @@ def main() -> int:
     except Exception as e:
         import traceback as _tb
         print(f'[FAIL] dev-spec-activation-coupling check CRASHED: {e}')
+        _tb.print_exc()
+        total_fails += 1
+
+    # --- b1e78abb AC5: committed_substrate resolves at done (capsule_version >= 1.5 ERROR; pre-1.5 named debt WARN; planned identifiers always WARN) ---
+    print('\n--- Committed-Substrate Resolution at Close (b1e78abb; capsule_version >= 1.5 ERROR, pre-1.5 debt-baseline WARN) ---')
+    try:
+        csr_baseline = load_committed_substrate_debt_baseline(vault)
+        csr_findings, csr_checked, csr_errors = check_committed_substrate_resolves_at_done(
+            vault, baseline=csr_baseline)
+        if not csr_findings:
+            print(f'[PASS] {csr_checked} done dev-spec(s) checked — every committed_substrate target resolves')
+            total_passes += 1
+        else:
+            severity_seen = 'ERROR' if csr_errors else 'WARN'
+            print(f'[{severity_seen}] {csr_checked} done dev-spec(s) checked; {len(csr_findings)} finding(s), {csr_errors} at ERROR')
+            for line in csr_findings[:25]:
+                print(f'  {line}')
+                if line.startswith('[ERROR]'):
+                    total_fails += 1
+                else:
+                    total_warnings += 1
+            if len(csr_findings) > 25:
+                extra = len(csr_findings) - 25
+                print(f'  ... and {extra} more')
+                # Findings beyond the print cap still count toward the same
+                # tally their own prefix implies, not a blanket assumption.
+                for line in csr_findings[25:]:
+                    if line.startswith('[ERROR]'):
+                        total_fails += 1
+                    else:
+                        total_warnings += 1
+    except Exception as e:
+        import traceback as _tb
+        print(f'[FAIL] committed-substrate-resolution check CRASHED: {e}')
         _tb.print_exc()
         total_fails += 1
 

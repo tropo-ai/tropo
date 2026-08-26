@@ -133,6 +133,7 @@ def _load_tropo_roots():
     roots_path = Path(__file__).resolve().with_name("lib") / "tropo_roots.py"
     spec = importlib.util.spec_from_file_location("_tropo_tools_roots", roots_path)
     if spec is None or spec.loader is None:
+        # refusal: misuse — could not load the tropo_roots helper
         raise ImportError("tropo_roots helper could not be loaded")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -173,6 +174,7 @@ _psx_spec = _psx_util.spec_from_file_location(
     Path(__file__).resolve().with_name("lib") / "package_state_exclusions.py",
 )
 if _psx_spec is None or _psx_spec.loader is None:
+    # refusal: misuse — could not load the package_state_exclusions helper
     raise ImportError("package_state_exclusions helper could not be loaded")
 package_state_exclusions = _psx_util.module_from_spec(_psx_spec)
 _psx_spec.loader.exec_module(package_state_exclusions)
@@ -189,6 +191,7 @@ def _load_vault_lib(module_name, file_name):
     spec = _psx_util.spec_from_file_location(
         module_name, Path(__file__).resolve().with_name("lib") / file_name)
     if spec is None or spec.loader is None:
+        # refusal: misuse — could not load a vault/tools/lib module
         raise ImportError(f"{file_name} could not be loaded")
     module = _psx_util.module_from_spec(spec)
     sys.modules[module_name] = module
@@ -203,8 +206,48 @@ def _load_vault_lib(module_name, file_name):
 BUILD_TOOL_UID = "a1b8c2d4"
 BUILD_TOOL_SOURCE = "/tools/build-release"
 
+#: The release-pipeline leaf this tool executes (v1.92 Stream 1, AC2).
+#: This declaration is the whole point of AC2 in one line. This file carries 28
+#: step functions in its own numbering (3a-3j, 8b, 9b-9d, 10_1, 10_2, 10b, 0_5,
+#: phase0) and referenced 634913c2 or any of its step uids ZERO times — the
+#: layer that DOES the release had no idea the pipeline governing it existed,
+#: and a human stood in that gap telling the runtime what had happened. One
+#: leaf, because the twenty-eight internal steps are this tool's business;
+#: `produce-release-folder` is what the PIPELINE asked for.
+PIPELINE_BINDINGS = (
+    {
+        "step_uid": "8654900a",
+        "kind": "tool",
+        "entry": "tropo-build-release.py:main",
+        "description": "produce the release folder and the .zip artifact",
+    },
+)
+
 release_package = _load_vault_lib("tropo_release_package", "release_package.py")
 release_legs = _load_vault_lib("tropo_release_legs", "release_legs.py")
+release_bindings = _load_vault_lib("tropo_release_bindings", "release_bindings.py")
+
+
+def _step_refusal_text(step_uid, message, harm=None):
+    """A refusal message that names the pipeline step it belongs to.
+
+    AC2's second half: "a refusal names the pipeline step it belongs to, not
+    only the script that raised it." `StepRefusal` was declared with the
+    contract and then wired to NOTHING — an independent adversarial pass
+    measured zero production call sites, so AC2's refusal test raised the class
+    inside its own body and asserted the string it had just constructed. Green
+    over an absent mechanism, in the tests written to prevent exactly that.
+
+    This renders through `StepRefusal` and hands the text to the exception type
+    the caller already raises. Composing rather than replacing is deliberate:
+    `PackageRefusal` is caught by name in `main`, and swapping the type to
+    satisfy a criterion would change control flow in the release build to make
+    a test pass.
+    """
+    names = release_bindings.leaf_names(tropo_roots.STUDIO_ROOT)
+    return release_bindings.StepRefusal(
+        step_uid, message, harm=harm, step_name=names.get(step_uid)
+    ).rendered()
 
 # ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -320,6 +363,7 @@ def step_0_5_publish_state_preflight():
             print('    Pass --offline to proceed anyway (recorded honestly as UNKNOWN).',
                   file=sys.stderr)
             _record_build_refusal('dependency-missing', 'environment', 'non-retryable')
+            # refusal: warn — unpriced: the --offline branch already proceeds recording UNKNOWN, and the zip is byte-identical either way
             sys.exit(2)
         print('  --offline: proceeding, publish_state recorded UNKNOWN.')
         return {"publish_state": "UNKNOWN", "reason": str(e)}
@@ -328,7 +372,11 @@ def step_0_5_publish_state_preflight():
     if status == "unknown_version":
         print('  ✗ Build REFUSED — .tropo/version.md is missing or unparseable.', file=sys.stderr)
         print('    This is never treated as drift — fix version.md, then re-run.', file=sys.stderr)
-        _record_build_refusal('dependency-missing', 'environment', 'non-retryable')
+        # AC3: this is unreadable INPUT, not a decision about the release, and
+        # the message one line up already says it is retryable. It recorded
+        # `refused`/`non-retryable` until 2026-08-25 — a verdict nobody reached.
+        _record_build_failure('dependency-missing', 'environment', 'retryable')
+        # refusal: misuse — .tropo/version.md is missing or unparseable — unreadable input, not a verdict
         sys.exit(2)
     if status == "unreachable":
         if not OFFLINE:
@@ -336,6 +384,7 @@ def step_0_5_publish_state_preflight():
                   f'{state.get("error", "")[:200]}', file=sys.stderr)
             print('    Pass --offline to proceed anyway (recorded honestly as UNKNOWN).',
                   file=sys.stderr)
+            # refusal: warn — unpriced: an unresolvable network read, and the adjacent --offline path already proceeds honestly
             sys.exit(2)
         print(f'  --offline: remote unreachable ({state.get("error", "")[:150]}), '
               f'proceeding with publish_state recorded UNKNOWN.')
@@ -344,6 +393,7 @@ def step_0_5_publish_state_preflight():
         print(f'  ✗ Build REFUSED — ANOMALY: published v{state.get("latest_published")} is AHEAD of '
               f'internal v{state.get("internal_version")}. Investigate before building over this.',
               file=sys.stderr)
+        # refusal: warn — unpriced: version status drift, byte-identical artifact; the outward harm is priced in tropo-publish-release.py
         sys.exit(1)
     if status == "internal_ahead":
         print(f'  ✓ internal v{state.get("internal_version")} ahead of published '
@@ -416,6 +466,7 @@ def bump_version(current, bump_type):
     elif bump_type == 'patch':
         return f'{major}.{minor}.{patch + 1}'
     else:
+        # refusal: misuse — bump_type is not one of release/feature/patch
         raise ValueError(f'Unknown bump type: {bump_type}')
 
 
@@ -529,6 +580,7 @@ def guard_overwrite(new_version, build_dir, testing_dir):
             print(f'    - If this is intended: re-run with --force flag', file=sys.stderr)
             print(f'    - If this is unexpected: inspect {target_dir} contents.', file=sys.stderr)
             print(f'      Move/archive before retrying.', file=sys.stderr)
+            # refusal: priced/deletion-of-governed-substrate — an unidentifiable existing release tree is handed to an unconditional rmtree, destroying content that lives outside git with no way to tell afterward what version was deleted
             sys.exit(2)
 
         if existing_version != new_version:
@@ -547,6 +599,7 @@ def guard_overwrite(new_version, build_dir, testing_dir):
             print(f'    - If you intentionally want to overwrite the existing {existing_version}', file=sys.stderr)
             print(f'      content with a {new_version} build: run with --force flag.', file=sys.stderr)
             print(f'    - If unsure: archive {target_dir} to a safe location before proceeding.', file=sys.stderr)
+            # refusal: priced/deletion-of-governed-substrate — a bump computed from a stale version.md would rmtree a different version's completed build and testing trees, which are outside version control and unrecoverable
             sys.exit(2)
         # version matches — content-mismatch check is too expensive for v0.1; deferred to v0.2.
         # The version-stamp match is sufficient defense for the V36 retrospective scenario.
@@ -802,12 +855,14 @@ def step_3h_stamp_briefing_notes(version):
     src = os.path.join(tropo_roots.STUDIO_ROOT, BRIEFING_NOTES_REL)
     label = f'v{version}'
     if not os.path.exists(src):
+        # refusal: misuse — the briefing-notes file this step was asked to stamp is not there
         raise SystemExit(
             f'  ✗ AC2: {BRIEFING_NOTES_REL} not found — it ships in the box, so the '
             f'release cannot be assembled without it.'
         )
     text = open(src, encoding='utf-8').read()
     if not text.startswith('---\n'):
+        # refusal: misuse — the briefing-notes file carries no frontmatter to stamp
         raise SystemExit(f'  ✗ AC2: {BRIEFING_NOTES_REL} has no frontmatter to stamp.')
     close = text.index('\n---', 4)
     fm, body = text[4:close], text[close + 4:]
@@ -815,6 +870,7 @@ def step_3h_stamp_briefing_notes(version):
     def _set(block, key, value):
         pattern = re.compile(rf'^{key}:.*$', re.MULTILINE)
         if not pattern.search(block):
+            # refusal: misuse — the frontmatter declares no key to substitute
             raise SystemExit(
                 f'  ✗ AC2: {BRIEFING_NOTES_REL} declares no `{key}:` field, so the '
                 f'build cannot stamp it to {label}.'
@@ -827,6 +883,7 @@ def step_3h_stamp_briefing_notes(version):
 
     description = re.search(r'^description:(.*)$', fm, re.MULTILINE)
     if description and label not in description.group(1):
+        # refusal: warn — unpriced: staleness in one shipped markdown field, fixable before egress, and the fire step re-verifies the sealed copy
         raise SystemExit(
             f'  ✗ AC2: {BRIEFING_NOTES_REL} description does not name {label}. The '
             f'version/date/title stamp is mechanical, but the description is authored '
@@ -864,6 +921,7 @@ def step_3g_write_update_source(build_dir):
     """
     manifest_url = _resolve_update_manifest_url()
     if not manifest_url:
+        # refusal: priced/false-success — every shipped box would carry no update address, and a missing address is indistinguishable from offline, so installed studios report nothing to update forever and can never receive the update that would give them one
         raise SystemExit(
             'REFUSED: cannot resolve the update manifest URL, so this box would '
             'ship with no update address — the exact defect found on the first '
@@ -933,6 +991,7 @@ def _reconcile_update_origins(env_base, tracked_base):
     a different route.
     """
     if env_base and tracked_base and env_base.rstrip('/') != tracked_base.rstrip('/'):
+        # refusal: priced/false-success — silently picking one of two disagreeing origins bakes a possibly-dead address into every box, producing studios that poll it, read the failure as offline, and stay permanently unreachable
         raise SystemExit(
             'REFUSED: update-source drift — the publish environment resolves '
             f'{env_base!r} but tracked publication evidence in '
@@ -1004,6 +1063,7 @@ def step_3f_remove_per_studio_boot_derivations(build_dir):
                 try:
                     row = json.loads(line)
                 except json.JSONDecodeError as exc:
+                    # refusal: misuse — a line of the built index is not valid JSON
                     raise SystemExit(
                         f'Cannot prune boot derivation row; invalid JSON at '
                         f'{surface}:{line_number}: {exc}'
@@ -1038,6 +1098,7 @@ def step_3f_remove_per_studio_boot_derivations(build_dir):
                 os.remove(target)
             removed += 1
         if os.path.lexists(target):
+            # refusal: misuse — post-condition assert on an operation that just reported success
             raise SystemExit(
                 f'Per-Studio boot derivation exclusion failed: {relative} remains in build'
             )
@@ -1058,6 +1119,7 @@ def step_phase0_bootstrap():
     # Basic integrity: at least one entry, at least one root (parent: null or empty)
     if not entries:
         print(f'  ✗ BOOTSTRAP HALT: no ship-artifact entries with member_of: [{manifest_root}]', file=sys.stderr)
+        # refusal: priced/false-success — with an empty entry set the walker copies nothing, so the build seals and green-lights a zip missing the entire ship-artifact corpus
         sys.exit(64)
     return entries
 
@@ -1321,6 +1383,7 @@ def step_3b_copy_vault_tools(build_dir):
     if not os.path.isdir(src_tools):
         print(f'  ✗ vault/tools/ not found at {src_tools} — scripting layer targets cannot ship',
               file=sys.stderr)
+        # refusal: priced/false-success — the box seals with .tropo/scripts shims present and every vault/tools forward target absent, so the scripting layer is dead on a stranger's first invocation
         sys.exit(1)
 
     if not DRY_RUN:
@@ -1358,6 +1421,7 @@ def step_3d_copy_vault_playbooks(build_dir):
     if not os.path.isdir(src_playbooks):
         print(f'  ✗ vault/playbooks/ not found at {src_playbooks} — playbook targets cannot ship',
               file=sys.stderr)
+        # refusal: priced/false-success — the box ships .tropo/playbooks thin-pointers with no targets behind them, so first-boot activation dead-ends in a customer studio while the verdict says complete
         sys.exit(1)
 
     if not DRY_RUN:
@@ -1402,6 +1466,7 @@ def step_3e_copy_vault_updates(build_dir):
     if not os.path.isdir(src_updates):
         print(f'  ✗ vault/updates/ not found at {src_updates} — update apply state machine cannot ship',
               file=sys.stderr)
+        # refusal: priced/false-success — the box ships without the update apply state machine the concierge references unconditionally, so a studio can download an update and has nothing to apply it with
         sys.exit(1)
 
     if not DRY_RUN:
@@ -1474,6 +1539,7 @@ def step_3c_assert_forward_targets(build_dir):
             print(f'    .tropo/scripts/{shim} → vault/tools/{uid}.py — MISSING', file=sys.stderr)
         print(f'    Ensure vault/tools/ ships every target referenced by .tropo/scripts/ shims.',
               file=sys.stderr)
+        # refusal: priced/false-success — the release seals with named, apparently-working shims whose targets are not in the box, so the failure surfaces only when a stranger runs the tool
         sys.exit(1)
 
     print(f'  Forward-target guard: {checked} shim→target pair(s) checked — all present')
@@ -1498,6 +1564,7 @@ def step_7_create_vault_skeleton(build_dir):
     vault_dst = os.path.join(build_dir, '.tropo-studio')
 
     if not os.path.exists(skeleton_src):
+        # refusal: priced/false-success — the box seals with no .tropo-studio tier, so a new user's first boot halts on missing Tier 2 files while the build reported a complete release
         raise SystemExit(
             f'.tropo-studio/ skeleton template not found at {skeleton_src}.\n'
             f'Expected location per Tropo-OS convention (vault/templates/.tropo-studio-skeleton/).\n'
@@ -1869,217 +1936,6 @@ def step_9c_generate_vendor_ref_manifest(build_dir, new_version):
     return len(vendor_refs)
 
 
-def _load_release_index_surfaces(build_dir):
-    module_path = (
-        Path(build_dir) / 'vault' / 'tools' / 'lib' / 'index_surfaces.py'
-    )
-    if not module_path.is_file():
-        raise SystemExit(
-            f'Shipped index surface library is missing: {module_path}'
-        )
-    module_name = (
-        '_tropo_release_index_surfaces_'
-        + hashlib.sha256(str(module_path).encode('utf-8')).hexdigest()[:12]
-    )
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    if spec is None or spec.loader is None:
-        raise SystemExit(f'Could not load shipped index surface library: {module_path}')
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    try:
-        spec.loader.exec_module(module)
-    except Exception:
-        sys.modules.pop(module_name, None)
-        raise
-    return module
-
-
-def _read_release_index_rows(path):
-    if not path.is_file():
-        return []
-    rows = []
-    for line_number, line in enumerate(
-        path.read_text(encoding='utf-8').splitlines(), start=1
-    ):
-        if not line.strip():
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise SystemExit(
-                f'Invalid release index JSON at {path}:{line_number}: {exc}'
-            ) from exc
-        if not isinstance(row, dict):
-            raise SystemExit(
-                f'Invalid release index row at {path}:{line_number}: expected object'
-            )
-        rows.append(row)
-    return rows
-
-
-def _release_index_source_inventory(build_dir, rows):
-    inventory = []
-    seen = set()
-    for row in rows:
-        uid = str(row.get('uid') or '')
-        relative = str(row.get('path') or (
-            f'vault/files/{uid}.md' if uid else ''
-        ))
-        if not relative or relative in seen:
-            raise SystemExit(
-                f'Release index row has no unique source path: uid={uid!r}, path={relative!r}'
-            )
-        source = Path(build_dir) / relative
-        if not source.is_file():
-            raise SystemExit(
-                f'Release index row {uid!r} has no shipped source file at {relative}'
-            )
-        if source.is_symlink():
-            mode = '120000'
-            raw = os.readlink(source).encode('utf-8')
-        else:
-            mode = '100755' if os.access(source, os.X_OK) else '100644'
-            raw = source.read_bytes()
-        inventory.append((relative, mode, hashlib.sha256(raw).hexdigest()))
-        seen.add(relative)
-    return inventory
-
-
-_GENESIS_SQLITE_SCRIPT = r"""
-import importlib.util
-import json
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1]).resolve()
-output = Path(sys.argv[2]).resolve()
-tools = root / "vault" / "tools"
-sys.path.insert(0, str(tools))
-module_path = tools / "tropo-rebuild-index.py"
-spec = importlib.util.spec_from_file_location(
-    "_tropo_release_genesis_rebuild", module_path
-)
-if spec is None or spec.loader is None:
-    raise RuntimeError(f"could not load {module_path}")
-module = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = module
-spec.loader.exec_module(module)
-
-rows = []
-for name in ("00-index.jsonl", "00-archive-index.jsonl"):
-    path = root / "vault" / name
-    if not path.is_file():
-        continue
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            rows.append(json.loads(line))
-raw = module.build_sqlite_index(
-    root, rows, True, defer_replace=True
-)
-if not raw:
-    raise RuntimeError("genesis SQLite builder returned no bytes")
-output.write_bytes(raw)
-"""
-
-
-def _build_release_genesis_sqlite_image(build_dir):
-    """Build the customer box's canonical SQLite union in a clean interpreter."""
-    fd, output_name = tempfile.mkstemp(
-        prefix='.tropo-release-genesis-', suffix='.sqlite'
-    )
-    os.close(fd)
-    output = Path(output_name)
-    try:
-        result = subprocess.run(
-            [
-                sys.executable,
-                '-c',
-                _GENESIS_SQLITE_SCRIPT,
-                str(Path(build_dir).resolve()),
-                str(output),
-            ],
-            capture_output=True,
-            text=True,
-            cwd=build_dir,
-            timeout=300,
-        )
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout or '').strip()
-            raise RuntimeError(
-                f'genesis SQLite builder failed (exit {result.returncode}): '
-                f'{detail[-1000:]}'
-            )
-        raw = output.read_bytes()
-        if not raw:
-            raise RuntimeError('genesis SQLite builder produced an empty image')
-        return raw
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise RuntimeError(f'genesis SQLite builder could not run: {exc}') from exc
-    finally:
-        output.unlink(missing_ok=True)
-
-
-def step_10_1_seal_release_index_pair(build_dir, floor_evidence_uid):
-    """Seal current + legitimately-empty archive surfaces as one trusted pair."""
-    if DRY_RUN:
-        print('Step 10.1 — [DRY-RUN] Would seal release index surface pair')
-        return
-    print('Step 10.1 — Seal release index surface pair:')
-    index_surfaces = _load_release_index_surfaces(build_dir)
-    vault_dir = Path(build_dir) / 'vault'
-    current_path = vault_dir / index_surfaces.CURRENT_INDEX_NAME
-    archive_path = vault_dir / index_surfaces.ARCHIVE_INDEX_NAME
-    current_rows = _read_release_index_rows(current_path)
-    archive_rows = _read_release_index_rows(archive_path)
-    if (
-        not isinstance(floor_evidence_uid, str)
-        or not re.fullmatch(r'[0-9a-f]{8}', floor_evidence_uid)
-    ):
-        print(
-            '  ✗ Build REFUSED — release index floor initialization requires '
-            'an 8-hex activation/evidence UID.'
-        )
-        raise SystemExit(1)
-    try:
-        inventory = _release_index_source_inventory(
-            build_dir, current_rows + archive_rows
-        )
-        proof = index_surfaces.prove_full_source_derivation(
-            current_rows,
-            archive_rows,
-            source_complete=True,
-            source_inventory=inventory,
-        )
-        sqlite_path = vault_dir / '00-index.sqlite'
-        sqlite_raw = _build_release_genesis_sqlite_image(build_dir)
-        index_surfaces.write_jsonl_pair_atomic(
-            (
-                (current_path, current_rows),
-                (archive_path, archive_rows),
-            ),
-            full_source_derivation_proof=proof,
-            surface_metadata_recovery_reason=(
-                'release-box full-source derivation after sanitization'
-            ),
-            governed_floor_recovery=index_surfaces.GovernedFloorRecovery(
-                current_protected_record_count=len(current_rows),
-                archive_protected_record_count=len(archive_rows),
-                evidence_uid=floor_evidence_uid,
-            ),
-            companion_replacements=((sqlite_path, sqlite_raw),),
-        )
-        # Prove both reads through the exact strict path customer-mode uses.
-        index_surfaces.read_jsonl_strict(current_path)
-        index_surfaces.read_jsonl_strict(archive_path)
-    except (index_surfaces.IndexSurfaceRefusal, RuntimeError) as exc:
-        print(f'  ✗ Build REFUSED — release index pair seal failed: {exc}')
-        raise SystemExit(1) from None
-    print(
-        f'  ✓ current={len(current_rows)} rows, archive={len(archive_rows)} rows; '
-        f'trusted floors initialized by {floor_evidence_uid}'
-    )
-
-
 
 def step_9d_emit_image_manifest(build_dir, new_version):
     """Step 9d (ea09fc6e): emit the shipped IMAGE MANIFEST.
@@ -2255,6 +2111,7 @@ def step_3j_copy_vault_schema(build_dir):
     as vault/tools/: per-file tagging re-opens the omission bug."""
     src_schema = os.path.join(tropo_roots.VAULT_DIR, 'schema')
     if not os.path.isdir(src_schema):
+        # refusal: misuse — the source vault/schema directory is absent; missing input, and step_10b re-checks the resulting box
         sys.exit(
             f'vault/schema/ not found at {src_schema} — the shipped '
             f'import-time contracts (tool-telemetry registry) cannot ship (F1)')
@@ -2326,6 +2183,7 @@ def step_10b_assert_shipped_tests_collect(build_dir):
             print(f'  ✗ shipped test module cannot COLLECT in-box: {fname}: {err}',
                   file=sys.stderr)
         names = ', '.join(f for f, _ in failures)
+        # refusal: priced/false-success — a box ships whose test modules cannot even be imported in-box, so the telemetry lane is dead while every tool that lazy-loads it takes its except branch and keeps reporting success
         sys.exit(
             f'shipped test module(s) cannot collect in-box: {names} — an '
             f'import-time dependency that ships missing must refuse the build, '
@@ -2435,6 +2293,7 @@ def step_10_sanitize_argo_identity(build_dir):
         print('  ✗ Build REFUSED — Argo-isms remain after genericization (fail-closed):')
         for f in findings:
             print(f'    - {f}')
+        # refusal: priced/outward-publication-and-egress — Argo's own internal identity strings freeze into the public template box and, once published, sit in every downloaded customer copy permanently, with nothing downstream re-checking for them
         sys.exit(1)
     print(f'  ✓ Build sanitized — genericized {sanitized} artifact file(s); no Argo-isms remain.')
 
@@ -2448,6 +2307,7 @@ def _normalize_walk_answer(raw):
         return '', 'yes'
     if value in ('n', 'no'):
         return 'n', 'no'
+    # refusal: misuse — the cold-walk answer is not one of y/yes/n/no
     raise ValueError(
         f"invalid cold-walk answer {raw!r}; expected y/yes/n/no"
     )
@@ -2501,6 +2361,7 @@ def step_10_6_cold_walk_gate(new_version, dist_dir, verdict_path, last_cw_path,
         print('  Cold-walk prompt answer: yes (source: EOF/interrupt default)')
     except ValueError as exc:
         print(f'  ✗ Build REFUSED — {exc}', file=sys.stderr)
+        # refusal: misuse — the cold-walk answer could not be parsed; argv and env validation
         raise SystemExit(2) from None
     elected = (answer in ('', 'y', 'yes'))
 
@@ -2510,6 +2371,7 @@ def step_10_6_cold_walk_gate(new_version, dist_dir, verdict_path, last_cw_path,
             '`skipped-by-mike`; answer yes/default headlessly or use a real TTY.',
             file=sys.stderr,
         )
+        # refusal: priced/false-success — a headless run writes a verdict saying skipped-by-mike, manufacturing a human waiver of the stranger walk that no human gave, and the publish stage reads that record to clear the ship
         raise SystemExit(2)
 
     now = _dt.now().strftime('%Y-%m-%dT%H:%M:%S')
@@ -2573,6 +2435,7 @@ def step_10_6_cold_walk_gate(new_version, dist_dir, verdict_path, last_cw_path,
         print(f'\n  ✗ Ship BLOCKED — cold-walk verdict is FAIL.', file=sys.stderr)
         print(f'    Verdict file: {verdict_path}', file=sys.stderr)
         print('    Fix the failures the walk surfaced, re-run the walk via Po, then re-ship.', file=sys.stderr)
+        # refusal: warn — unpriced: this file's own closing note says the cold-walk gate was always meant to be advisory-then-checked-downstream, and the sibling no-verdict branch already records and proceeds
         sys.exit(5)
 
     # overall is None or unknown (e.g. prior elected-pending or skipped-by-mike overridden)
@@ -2613,6 +2476,7 @@ def assert_shipped_surfaces(build_dir):
             print(f'      - {d}', file=sys.stderr)
         print('    A release that cannot produce its declared nav + workspace surfaces must NOT ship', file=sys.stderr)
         print('    (RT1/RT2, finding 1ee11d09). Fix the nav-regen step / ship-artifact manifest and re-build.', file=sys.stderr)
+        # refusal: warn — unpriced: a box missing declared surfaces is a reversible completeness defect that is visible to anyone who opens the box; nothing is believed green
         sys.exit(6)
     print('  ✓ Ship-surface guard: 00-tropo-nav + 5 workspace folders present in build.')
 
@@ -2655,6 +2519,7 @@ def assert_no_stale_system_dir(build_dir):
             print(f'      - {p}', file=sys.stderr)
         print('    Fix: confirm c5f8a193 + e7c2a851 are source_mode:skip; '
               'confirm a3d7b248 + b94e3d72 output_path is vault/tropo-vault-steward/; re-build.', file=sys.stderr)
+        # refusal: warn — unpriced: layout bookkeeping from the ADR-045 re-home collapsed into one exit code with a reversible completeness defect
         sys.exit(8)
     print('  ✓ One Home retirement guard: system/ absent from build; vault/updates/ present '
           '(system/ fully re-homed per ADR-045).')
@@ -2698,6 +2563,7 @@ def assert_mission_brief_slot(build_dir):
         print('    It is a Required:Yes boot read (99341618 Step 2.3 + cf8c3be9 Tier 2); a box '
               'without it breaks first boot for every customer agent. Check Step 7.1 and that '
               'Step 7 did not clobber it.', file=sys.stderr)
+        # refusal: warn — unpriced: a missing Required:Yes boot read fails loudly at first boot rather than being believed green, and is reversible by rebuild
         sys.exit(9)
 
     body = Path(slot).read_text(encoding='utf-8')
@@ -2718,6 +2584,7 @@ def assert_mission_brief_slot(build_dir):
         print('    Step 7.1 must source vault/templates/root-docs/mission-brief.template.md. '
               'Argo\'s real brief ships only as a labelled example, never in the boot slot '
               '(task 2ffda37e defect #1).', file=sys.stderr)
+        # refusal: priced/outward-publication-and-egress — Argo's real internal crew brief freezes into the boot slot every agent in every customer studio reads as its own mission, and publication of that content cannot be recalled
         sys.exit(9)
     print('  ✓ Mission-brief slot guard: .tropo-studio/mission-brief.md is the generic '
           '<FILL: …> template (no Argo-internal content).')
@@ -2758,6 +2625,7 @@ def stage6_package_authority(activation_uid):
     run_entry = runtime.read_vault_entry(identity.run_uid) or {}
     run_folder = str((run_entry.get("frontmatter") or {}).get("run_folder") or "")
     if not run_folder:
+        # refusal: priced/false-success — a package is built and its identity recorded without the release-leg wait ever being evaluated, so the candidate_built event asserts settled legs that nothing checked
         raise release_package.PackageRefusal(
             f"release run {identity.run_uid} declares no run_folder, so its "
             f"leg events cannot be read and the wait cannot be evaluated"
@@ -2785,19 +2653,27 @@ def _verify_fan_in_against_manifest(identity, runtime):
     plan = runtime.read_vault_entry(identity.plan_uid) or {}
     ref = str((plan.get("frontmatter") or {}).get("fan_in_manifest_ref") or "")
     if not ref:
-        raise release_package.PackageRefusal(
+        # refusal: priced/false-success — the fan-in membership digest is trusted with no manifest to check it against, so the box claims to contain the dev-spec set locked at fan-in while nothing proved that set has not moved
+        raise release_package.PackageRefusal(_step_refusal_text(
+            "f9365ede",
             f"release-plan {identity.plan_uid} names no fan_in_manifest_ref, "
-            f"so the digest it recorded cannot be checked against anything"
-        )
+            f"so the digest it recorded cannot be checked against anything",
+            harm="a package claiming a verified fan-in whose digest was never "
+                 "checked against anything",
+        ))
     path = Path(tropo_roots.STUDIO_ROOT) / ref
     if not path.is_file():
-        raise release_package.PackageRefusal(
+        # refusal: priced/false-success — the recorded fan-in digest is accepted as proof of package membership with its manifest missing entirely, so the package's contents rest on a number nothing can verify
+        raise release_package.PackageRefusal(_step_refusal_text(
+            "f9365ede",
             f"fan-in manifest for {identity.plan_uid} does not resolve at "
-            f"{path}; refusing rather than trusting a digest with no manifest"
-        )
+            f"{path}; refusing rather than trusting a digest with no manifest",
+            harm="package membership resting on a number nothing can verify",
+        ))
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
+        # refusal: misuse — the fan-in manifest does not parse; unreadable input
         raise release_package.PackageRefusal(
             f"fan-in manifest at {path} does not parse: {exc}"
         ) from exc
@@ -2840,11 +2716,65 @@ def stage6_freeze_package(identity, zip_file, new_version, actor='tropo-build-re
         print(f'  ✓ candidate already built at {package_sha256[:12]}… (idempotent retry)')
         return package_sha256
     if release_package.active_frozen_payload(events, identity.run_uid):
+        # refusal: priced/false-success — a second candidate is appended to a run that already carries a frozen package, so receipts bound to the old digest are read as attesting bytes they never touched
         raise release_package.PackageRefusal(
             f'cannot record a new candidate for run {identity.run_uid} while an '
             f'active package_frozen exists -- supersede first with '
             f'tropo-supersede-release-package.py (the v1.90 recovery, now '
             f'structural: bytes change, evidence does not transfer)')
+
+    # INVALIDATE THE SUPERSEDED CANDIDATE BEFORE APPENDING THE NEW ONE.
+    #
+    # Three cases were handled above and a fourth was not: an active candidate
+    # with a DIFFERENT sha and no frozen payload fell straight through to the
+    # append, putting two live candidate_built events in one run's stream.
+    # active_candidate() then refuses on replay — correctly, because receipts
+    # bind to a candidate digest and two live candidates make the evidence set
+    # ambiguous. The guard is right; this writer was wrong.
+    #
+    # It is self-compounding, which is what made it expensive: once two exist,
+    # the idempotency check at the top of this function is itself a call to
+    # active_candidate(), so the next build crashes before it can record its own
+    # candidate. Append-only plus strict-order replay means a later invalidation
+    # cannot repair it — the refusal fires earlier in the replay than the fix
+    # lands. Run 42261546 was made permanently unreadable on this axis that way.
+    #
+    # The cure needed no new vocabulary. candidate_invalidated_payload already
+    # existed, and its own docstring describes exactly this case: "retire a
+    # candidate whose bytes changed before freeze ... the cheap, private case",
+    # deliberately distinct from package_superseded which is reserved for an
+    # already-FROZEN package. The primitive was built and this caller never used
+    # it — the same writer-and-reader-never-introduced shape as the rest of this
+    # cycle's findings, at the level of a call that was never made.
+    #
+    # Found by vela-v74 while rebuilding after the profile lock; diagnosis
+    # reproduced live before this fix (argus-a158, 2026-08-26).
+    if existing:
+        _old_sha = str(existing.get("candidate_sha256") or "")
+        try:
+            _inval = runtime.make_event(
+                release_package.CANDIDATE_INVALIDATED_EVENT,
+                BUILD_TOOL_UID,
+                actor_label=BUILD_TOOL_SOURCE,
+                data=release_package.candidate_invalidated_payload(
+                    identity.run_uid, _old_sha,
+                    "bytes changed before freeze: rebuild produced "
+                    f"{package_sha256[:12]}, retiring {_old_sha[:12]}",
+                ),
+                trace_id=identity.run_uid,
+            )
+            runtime.append_event(
+                Path(tropo_roots.STUDIO_ROOT) / run_folder, _inval)
+        except Exception as exc:  # noqa: BLE001
+            # refusal: priced/false-success — appending a second live candidate would leave two active digests in one run's stream, so receipts bound to the first are read as attesting bytes they never covered
+            raise release_package.PackageRefusal(
+                f"could not invalidate superseded candidate {_old_sha[:12]} for "
+                f"run {identity.run_uid}: {exc}. Refusing rather than appending "
+                f"a second live candidate, which would make this run's evidence "
+                f"set permanently unreadable."
+            ) from exc
+        print(f'  ✓ candidate {_old_sha[:12]}… invalidated (bytes changed '
+              f'before freeze)')
 
     payload = release_package.candidate_built_payload(
         identity, Path(zip_file), package_sha256, version=new_version
@@ -2872,6 +2802,7 @@ def stage6_freeze_package(identity, zip_file, new_version, actor='tropo-build-re
         )
         runtime.append_event(Path(tropo_roots.STUDIO_ROOT) / run_folder, event)
     except Exception as exc:  # noqa: BLE001 -- a package with no identity cannot ship
+        # refusal: priced/unreconstructable-identity-or-lineage — a zip sits in dist with no candidate_built appended to the run's stream, leaving a permanent hole in that run's package lineage and no digest a receipt can bind to
         raise release_package.PackageRefusal(
             f"candidate_built could not be recorded for run {identity.run_uid}: "
             f"{exc}. A package whose identity was never recorded cannot be "
@@ -3000,12 +2931,20 @@ def _validator_tree_snapshot(root):
     return digest.hexdigest(), count
 
 
-def _write_build_provenance(new_version, enforcement_bypassed=False, _publish_state_provenance=None):
+def _write_build_provenance(new_version, enforcement_bypassed=False, _publish_state_provenance=None,
+                            studio_health_ran=True):
     """v1.91 S1 AC5: the build's permanent record carries its enforcement
     state. A bypassed build says so (v1.90 shipped bypassed with provenance
     identical to a clean build — the gap this closes); a clean build records
     skipped:false so a MISSING field is detectable drift, never ambiguous
-    silence."""
+    silence.
+
+    `studio_health_ran` closes the SAME gap one turn later. When the
+    source-studio checks moved off the release switch (2026-08-25), this record
+    would otherwise have said "enforcement gate ran" for a gate that did not run
+    — provenance identical to a build that actually gated, which is precisely
+    the defect the paragraph above describes. A record that cannot distinguish
+    "passed" from "not attempted" is not provenance."""
     if DRY_RUN:
         return
     _prov_dir = os.path.join(tropo_roots.RELEASES_DIR, f'v{new_version}')
@@ -3019,7 +2958,19 @@ def _write_build_provenance(new_version, enforcement_bypassed=False, _publish_st
             "env": 'TROPO_SKIP_ENFORCEMENT_GATE=1' if enforcement_bypassed else None,
             "note": ('TRUE-EMERGENCY use only (post-v1.50.0 ruling); a routine '
                      'ship invoking the bypass is a substrate-discipline '
-                     'violation') if enforcement_bypassed else 'enforcement gate ran',
+                     'violation') if enforcement_bypassed
+                    else ('enforcement gate ran' if studio_health_ran
+                          else 'enforcement gate NOT ATTEMPTED — source-studio '
+                               'health is off the release switch; this is not a '
+                               'pass'),
+        },
+        "studio_health_checks": {
+            "ran": bool(studio_health_ran),
+            "steps": ["step_0a_debt_ratchet", "step_1_capability_membership"],
+            "note": ('gated this build' if studio_health_ran
+                     else 'relocated off the release switch — they examine no '
+                          'byte that ships; run `npm test`, or set '
+                          'TROPO_BUILD_STUDIO_HEALTH=1'),
         },
     }
     if _publish_state_provenance:
@@ -3121,7 +3072,37 @@ def _run_post_rebuild_validation(attempt_id):
 
 #: AC9 pilot 2/3 (3f38521a): build pre-flight refusals record telemetry at
 #: the gate boundary, swallowed by contract — never affects the refusal.
+def _record_build_failure(reason_code, category, retryability):
+    """The build could not COMPLETE. Never a verdict on the release.
+
+    AC3 (5b608d28, v1.92 Stream 1). `_record_build_refusal` writes
+    `record_refused` — "execution never began", a determinate verdict that the
+    studio declined to build. An unreadable `.tropo/version.md` is not that: the
+    build began, ran its preflight, and hit input it could not parse. Recording
+    it as a refusal writes a decision nobody made into build provenance, and
+    stamps it `non-retryable` beside a message that says "fix version.md, then
+    re-run" — which is the definition of retryable.
+
+    The distinction is not invented here. `tool_telemetry` has carried
+    `record_failed` ("execution began and did not complete") beside
+    `record_refused` all along and this tool never called it, exactly as
+    `tropo-release-preflight.py` already separates exit 2 (a verdict) from exit
+    3 (the retryable operational class, "deliberately not 2").
+    """
+    _record_build_outcome(tool_telemetry_outcome="failed",
+                          reason_code=reason_code, category=category,
+                          retryability=retryability)
+
+
 def _record_build_refusal(reason_code, category, retryability):
+    """The studio DECLINED to build. A determinate verdict on the release."""
+    _record_build_outcome(tool_telemetry_outcome="refused",
+                          reason_code=reason_code, category=category,
+                          retryability=retryability)
+
+
+def _record_build_outcome(tool_telemetry_outcome, reason_code, category,
+                          retryability):
     try:
         import importlib.util as ilu
         from datetime import datetime, timezone
@@ -3131,7 +3112,12 @@ def _record_build_refusal(reason_code, category, retryability):
         telemetry = ilu.module_from_spec(spec)
         spec.loader.exec_module(telemetry)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-        telemetry.record_refused(
+        recorder = (
+            telemetry.record_failed
+            if tool_telemetry_outcome == "failed"
+            else telemetry.record_refused
+        )
+        recorder(
             tool_uid="a1b8c2d4",
             invocation_uid="build:%s" % stamp,
             operation_uid="build:%s" % stamp[:8],
@@ -3188,18 +3174,22 @@ def main():
         print('                     tropo-publish-release.py when ready to go live.')
         print('  --walk-answer y|n  Explicit cold-walk answer for headless builds; '
               f'env fallback: {WALK_ANSWER_ENV}. Non-interactive `no` refuses.')
+        # refusal: misuse — neither --bump nor --target was given; usage
         sys.exit(1)
 
     if bump_type and bump_type not in ('patch', 'feature', 'release'):
         print(f'Invalid bump type: {bump_type}. Must be patch, feature, or release.')
+        # refusal: misuse — bump type is not patch, feature or release
         sys.exit(1)
 
     if target_version and not re.match(r'^\d+\.\d+\.\d+$', target_version):
         print(f'Invalid --target version: {target_version}. Must match X.Y.Z (semver).')
+        # refusal: misuse — target version is not X.Y.Z semver
         sys.exit(1)
 
     if bump_type and target_version:
         print(f'ERROR: --bump and --target are mutually exclusive. Pick one.')
+        # refusal: misuse — --bump and --target are mutually exclusive
         sys.exit(1)
 
     print(f'=== Tropo-OS Build {"[DRY RUN]" if DRY_RUN else ""} ===\n')
@@ -3232,6 +3222,7 @@ def main():
               f'(S3 AC3, 176a8995). Nothing was built; no step ran.', file=sys.stderr)
         if not DRY_RUN:
             _record_build_refusal('gate-refused', 'policy-gate', 'retryable')
+        # refusal: warn — unpriced: the code's own rationale is cost rather than harm, and tropo-publish-release.py re-checks changelog equality at stage time
         sys.exit(1)
 
     # ── Pipeline Activation Key gate (dev-spec 2ffdd9d6) ──────────────────────
@@ -3256,14 +3247,26 @@ def main():
                   f'--activation-uid {activation_uid or "<uid>"} '
                   f'{"--bump " + bump_type if bump_type else "--target " + str(target_version)}')
             _record_build_refusal('gate-refused', 'policy-gate', 'retryable')
+            # refusal: priced/false-success — a package is produced for a run whose release legs are still open, so the box asserts a completed run and receipts bind to bytes containing work nobody closed or attested
             sys.exit(1)
-        except Exception as exc:  # noqa: BLE001 -- the wait refuses loudly, never warns
-            print(f'REFUSED: release legs are not settled for this package: {exc}')
-            print(f'  No package was produced. Settle or attest the open leg, '
-                  f'then re-run: python3 vault/tools/tropo-build-release.py '
+        except Exception as exc:  # noqa: BLE001 -- the wait fails loudly, never warns
+            # AC3, 2026-08-25. This handler CANNOT be the unsettled-legs case:
+            # the arm directly above already catches PackageRefusal, which is
+            # the type that carries that verdict. What reaches here is
+            # everything else — an ImportError out of _load_pipeline_runtime's
+            # exec_module, an AttributeError, a path error. It printed "release
+            # legs are not settled for this package" for all of them and
+            # recorded a `gate-refused` policy verdict, so a loader crash was
+            # written into build provenance as a governance decision about the
+            # release. Now it says what actually happened and records `failed`.
+            print(f'BUILD FAILED: the release-leg check could not complete: {exc}')
+            print(f'  No package was produced. This is a tool failure, not a '
+                  f'verdict on the release — the legs were never evaluated. '
+                  f'Re-run after correcting: python3 vault/tools/tropo-build-release.py '
                   f'--activation-uid {activation_uid or "<uid>"} '
                   f'{"--bump " + bump_type if bump_type else "--target " + str(target_version)}')
-            _record_build_refusal('gate-refused', 'policy-gate', 'retryable')
+            _record_build_failure('leg-check-unavailable', 'environment', 'retryable')
+            # refusal: misuse — the release-leg check could not complete; PackageRefusal is caught above, so this arm is never the verdict
             sys.exit(1)
 
     if not DRY_RUN:
@@ -3293,6 +3296,7 @@ def main():
                 print('    A release is produced through the pipeline runtime, which mints the key', file=sys.stderr)
                 print('    at the produce-release-folder gate. Drive the cycle via pipeline-runtime.py —', file=sys.stderr)
                 print('    do not invoke build-release standalone. (No key, no build.)', file=sys.stderr)
+                # refusal: priced/unreconstructable-identity-or-lineage — a box built by invoking this script standalone is indistinguishable from a pipeline-produced one and is believed to have passed activation and every pipeline gate that never ran
                 sys.exit(3)
 
     # ── Step 0.5 — Publish-state pre-flight (Release Coupling, fbe50871) ─────
@@ -3338,9 +3342,11 @@ def main():
         # MEASURED 24m22s on 2026-08-08 (4,900+ files, belt + three catalogs). 2400s gives
         # headroom without letting a genuine hang run unbounded. (metis-g105, v1.86 stage)
         print(f'  ✗ Substrate rebuild timed out after {STEP0_VAULT_REBUILD_TIMEOUT_S}s. Investigate vault size or rebuild regression.')
+        # refusal: misuse — the substrate rebuild timed out; operational and retryable
         sys.exit(2)
     except FileNotFoundError:
         print(f'  ✗ rebuild-vault.py not found at {rebuild_path}. v1.30.0 substrate missing.')
+        # refusal: misuse — rebuild-vault.py is not present to run
         sys.exit(2)
 
     if rebuild_result.returncode != 0:
@@ -3360,16 +3366,59 @@ def main():
         print('    TROPO_SKIP_ENFORCEMENT_GATE=1 (substrate quality is separate from')
         print('    capability-membership enforcement).')
         print('    The authoritative validator runs only after rebuild succeeds.')
+        # refusal: misuse — a prerequisite subprocess failed; the tool could not complete, and the harm it guards is index staleness
         sys.exit(1)
 
     summary = '\n'.join(rebuild_result.stdout.splitlines()[-10:])
     print('  ' + summary.replace('\n', '\n  '))
     print('  ✓ Vault rebuild PASS\n')
-    validation_receipt = _run_post_rebuild_validation(
-        validation_attempt_id
-    )
-    if not validation_receipt['clear']:
-        sys.exit(1)
+    # STEP 0a IS OFF THE RELEASE SWITCH (Mike-approved 2026-08-25, Metis G112
+    # release-owner ruling, Option B scoped).
+    #
+    # This is a debt ratchet over the SOURCE STUDIO. Measured before moving it:
+    # zero of its eighteen validator classes examine a byte that reaches a
+    # customer — the shipped package carries no vault/files, no index, no event
+    # log and no agent memory. Nine of the eighteen are pinned at a print cap and
+    # cannot register growth at all. Of 148 findings live at the time, ONE sat in
+    # a class that warrants stopping a ship. Its own refusal comment already
+    # admitted the mismatch ("the subject is a debt ratchet over the source
+    # studio rather than the shipped box"), and the suite's own docstring says
+    # "the word 'release' in that name is wrong ... has never looked at a release
+    # extract".
+    #
+    # It sat here because the build is the only thing anyone reliably runs, so it
+    # became the studio's health check and the release paid for it on every
+    # attempt — up to an 1,800s ceiling, and the reason an agent's memory file
+    # 663 bytes over a bound could stop a release whose total debt had gone DOWN.
+    # That is a scheduling failure wearing a governance costume.
+    #
+    # NOT DELETED, RELOCATED. The check keeps running, keeps its ratchet, and has
+    # an existing home that needs no new machinery: `npm test`. Opt in here with
+    # TROPO_BUILD_STUDIO_HEALTH=1 when you want the old behaviour.
+    _studio_health_on = os.environ.get('TROPO_BUILD_STUDIO_HEALTH') == '1'
+    if _studio_health_on:
+        validation_receipt = _run_post_rebuild_validation(
+            validation_attempt_id
+        )
+        if not validation_receipt['clear']:
+            # refusal: warn — unpriced: the subject is a debt ratchet over the source studio rather than the shipped box, and the receipt is already written and sealed before this fires
+            sys.exit(1)
+    else:
+        # `clear: null` and never `true` — a receipt that reports a clean result
+        # for a check nobody ran is the false-success class, and this file is
+        # read later as evidence.
+        validation_receipt = {
+            'clear': None,
+            'ran': False,
+            'reason': 'studio-health check is off the release switch; it '
+                      'examines no byte that ships. Run `npm test`, or set '
+                      'TROPO_BUILD_STUDIO_HEALTH=1 to gate the build on it.',
+            'attempt': validation_attempt_id,
+        }
+        print('Step 0a — studio debt ratchet: NOT RUN (source-studio health, not '
+              'package correctness).')
+        print('         It examines no byte that ships. Run it with `npm test`, '
+              'or set TROPO_BUILD_STUDIO_HEALTH=1 to gate the build on it again.')
 
     # Step 1 (was Step 0 pre-v1.41.0 Stream C — v1.10 Pure Enforcement gate — Argus A50 + Mike pair-design 2026-05-07):
     # Run validate-capability-membership.py in STRICT mode before building.
@@ -3392,8 +3441,28 @@ def main():
     # mid-ship. Routine ship invoking the bypass is a substrate-discipline
     # violation; should be surfaced to Mike as substrate-coherence finding.
     # See v1.50.0 priority elevation brief [08e4a7c2] for full pattern history.
+    # STEP 1 IS ALSO OFF THE RELEASE SWITCH, for the same measured reason and by
+    # the same authorization. It invokes the membership validator with NO scope
+    # flag, so it walks all 3,484 governed entries — 2,993 of which never ship.
+    # Contrast Step 1b immediately below, which passes `--extraction-scope ship`
+    # and therefore DOES examine the shipping set: 1b stays on the switch, and
+    # that distinction is the whole basis for moving this one and not that one.
+    #
+    # Same reunion as Step 0a: not deleted, relocated to `npm test`, opt back in
+    # with TROPO_BUILD_STUDIO_HEALTH=1.
+    #
+    # Note what this also retires: the TROPO_SKIP_ENFORCEMENT_GATE bypass was one
+    # of the sixteen unearned refusals, and its own refusal message printed its
+    # own override — a gate that documents its bypass is human-overridable by
+    # definition. It still works; it is simply no longer the only way past a
+    # check that was never about the package.
     _enforcement_bypassed = os.environ.get('TROPO_SKIP_ENFORCEMENT_GATE') == '1'
-    if not _enforcement_bypassed:
+    if not _studio_health_on:
+        print('Step 1 — capability-membership STRICT: NOT RUN (source-studio '
+              'health; scans 3,484 entries, 2,993 of which never ship).')
+        print('         Run it with `npm test`, or set '
+              'TROPO_BUILD_STUDIO_HEALTH=1 to gate the build on it again.')
+    elif not _enforcement_bypassed:
         print('Step 1 — v1.10 Pure Enforcement gate (validate-capability-membership.py STRICT mode):')
         # v1.56 Lane S captain-mode fix-on-see (Vela V54 2026-05-27):
         # validate-capability-membership.py migrated to vault/tools/tropo-validate-capability-membership.py;
@@ -3407,9 +3476,11 @@ def main():
             )
         except subprocess.TimeoutExpired:
             print('  ✗ Validator timed out after 600s. Investigate vault size or validator regression.')
+            # refusal: misuse — the capability-membership validator timed out; operational and retryable
             sys.exit(2)
         except FileNotFoundError:
             print(f'  ✗ Validator not found at {validator_path}. v1.10 substrate missing.')
+            # refusal: misuse — the capability-membership validator is not present to run
             sys.exit(2)
 
         if result.returncode != 0:
@@ -3420,6 +3491,7 @@ def main():
             print('    Fix the violations above (Rule 11 / Rule 12 / structural-consistency /')
             print('    Checks 19-23 / capability hub-membership) and re-run build.')
             print('    Bypass (emergency only): TROPO_SKIP_ENFORCEMENT_GATE=1 python3 ' + sys.argv[0] + ' ...')
+            # refusal: warn — unpriced: this refusal's own message documents its bypass, and a gate with a documented override is human-overridable by definition
             sys.exit(1)
         # Print just the summary tail on success
         summary = '\n'.join(result.stdout.splitlines()[-5:])
@@ -3480,6 +3552,7 @@ def main():
             print('    with Mike approval if the canonical L0 set has legitimately changed.')
             print('    NOTE: this check is NOT bypassable since v1.46.0.1 (Argus + Vela catch 2026-05-20).')
             print('    Substrate-fix scope: v1.14 schema split (v1.47.0 candidate per Captain\'s Read v2.0).')
+            # refusal: warn — unpriced: the surrounding code already warns and continues on every other outcome, and the documented remedy is a reconciliation rather than an irreversible harm
             sys.exit(1)
         else:
             print(f'  ⚠ L0 validator setup error (exit {l0_result.returncode}). Continuing build.')
@@ -3511,6 +3584,7 @@ def main():
                 print('\n  ✗ Build REFUSED — cascade pipelines not retired. '
                       'Close doc-pipeline + test-pipeline activations before ship-flip.')
                 print('    Bypass: unset DEV_SPEC_UID (disables this check; emergency only).')
+                # refusal: warn — unpriced: lifecycle status bookkeeping, skipped unless DEV_SPEC_UID is set, wrapped in a non-blocking except, and its own message advertises the bypass
                 sys.exit(1)
             else:
                 if _casc_findings:
@@ -3674,6 +3748,7 @@ def main():
     _mb_src = os.path.join(tropo_roots.VAULT_DIR, 'templates', 'root-docs', 'mission-brief.template.md')
     _mb_dst = os.path.join(build_dir, '.tropo-studio', 'mission-brief.md')
     if not os.path.exists(_mb_src):
+        # refusal: misuse — the source mission-brief template is absent; missing input, and assert_mission_brief_slot re-checks the box
         raise SystemExit(
             f'Mission-brief template not found at {_mb_src}.\n'
             f'The boot slot .tropo-studio/mission-brief.md is a Required:Yes read at Step 2.3 of the\n'
@@ -3691,7 +3766,8 @@ def main():
     # Step 8.1 — Record Step 0.5's publish-state pre-flight result into build provenance
     # (Release Coupling, fbe50871: "unreachable... recorded in build provenance as
     # publish_state UNKNOWN"). tropo-publish-release.py's STAGE step reads this.
-    _write_build_provenance(new_version, _enforcement_bypassed, _publish_state_provenance)
+    _write_build_provenance(new_version, _enforcement_bypassed, _publish_state_provenance,
+                            studio_health_ran=_studio_health_on)
 
     # Step 8b: Version stamping across stranger-facing files (v1.3.1 D1.1)
     step_8b_stamp_versions(build_dir, new_version)
@@ -3747,10 +3823,12 @@ def main():
                     print('\n  ✗ Build REFUSED — release failed its own test-harness regression.', file=sys.stderr)
                     print(f'    A release that cannot pass its own checks does not ship. See test-report.md in', file=sys.stderr)
                     print(f'    {build_dir} — fix the failures and re-run.', file=sys.stderr)
+                    # refusal: priced/false-success — the build prints green and freezes a package digest every downstream receipt binds to, for a box that just failed its own mechanical regression suite
                     sys.exit(4)
                 print('  ✓ Test-harness regression PASS\n')
             except subprocess.TimeoutExpired:
                 print('  ✗ Test-harness timed out after 120s. Investigate.', file=sys.stderr)
+                # refusal: misuse — the test-harness subprocess timed out; operational and retryable
                 sys.exit(4)
 
     # Step 10.5a — S2 (v1.80): Shipped self-test passes in the box.
@@ -3764,6 +3842,7 @@ def main():
         if not os.path.exists(_box_test):
             print(f'  ✗ Build REFUSED — tropo-test.py not found in built box at {_box_test}. '
                   f'The shipped test surface must be present in the box.', file=sys.stderr)
+            # refusal: warn — unpriced: a wholly missing entry point is loud rather than believed green, and is reversible by rebuild
             sys.exit(4)
         else:
             try:
@@ -3779,6 +3858,7 @@ def main():
                 if _tr.returncode >= 2:
                     print('\n  ✗ Build REFUSED — shipped self-test (tropo-test.py) FAILED (RED) in the built box.', file=sys.stderr)
                     print('    A release whose own test surface fails inside the box does not ship (S2).', file=sys.stderr)
+                    # refusal: priced/false-success — a box whose own shipped self-test reports real failures when run inside the box is frozen and green-lit, and every receipt afterwards attests those exact bytes as verified
                     sys.exit(4)
                 elif _tr.returncode == 1:
                     print('  ⚠ Shipped self-test in-box YELLOW (warnings present, 0 failures) — proceeding\n')
@@ -3786,6 +3866,7 @@ def main():
                     print('  ✓ Shipped self-test in-box PASS (GREEN)\n')
             except subprocess.TimeoutExpired:
                 print('  ✗ Shipped self-test timed out after 300s. Investigate.', file=sys.stderr)
+                # refusal: misuse — the shipped self-test subprocess timed out; operational and retryable
                 sys.exit(4)
 
         # Verify registry-row regeneration actually landed (read the box, not just check the call ran)
@@ -3798,6 +3879,7 @@ def main():
             if len(_rows) == 0:
                 print('\n  ✗ Build REFUSED — subsystem-registry.jsonl in built box has 0 rows. '
                       'Registry-row regeneration did not land; the box is incomplete (S2).', file=sys.stderr)
+                # refusal: warn — unpriced: registry-row content is substrate bookkeeping, and this file treats the strictly worse case of the registry being absent entirely as non-blocking four lines below
                 sys.exit(4)
             print(f'  ✓ subsystem-registry.jsonl: {len(_rows)} row(s) in box — regeneration confirmed')
         else:
@@ -3816,6 +3898,7 @@ def main():
         if not os.path.exists(_floor_test):
             print(f'  ✗ Build REFUSED — floor test not found at {_floor_test}. '
                   f'The covenant gate cannot be skipped by absence.', file=sys.stderr)
+            # refusal: priced/false-success — the covenant gate is silently disabled by the absence of its own test file, so the build reports the zero-user-churn covenant satisfied for an update path it never evaluated
             sys.exit(7)
 
         # Sub-step 1: gauntlet — plant a covenant violation, assert the gate catches it.
@@ -3829,6 +3912,7 @@ def main():
                   '(a planted violation was NOT detected). The gate is not trustworthy '
                   'as-is; fix vault/tools/tests/test_clean_update_floor.py before shipping.',
                   file=sys.stderr)
+            # refusal: priced/false-success — the covenant gate's PASS is trusted while the gate provably cannot see a violation placed directly in front of it, so a release that churns user files sails through a blind instrument
             sys.exit(7)
 
         # Sub-step 2: the real run — must show zero user-file churn against the current
@@ -3840,6 +3924,7 @@ def main():
             print('\n  ✗ Build REFUSED — THE FLOOR TEST failed: the update path would '
                   'touch user files. Fix the namespace predicate or the apply-update '
                   'playbook before shipping (ADR-049 covenant).', file=sys.stderr)
+            # refusal: priced/the-update-covenant — an OS update built from this box overwrites or moves files a customer authored in their own studio, destroying working-tree substrate the update path cannot restore
             sys.exit(7)
         print('  ✓ Covenant gate PASS — gauntlet caught the planted violation, real run shows zero churn.\n')
 

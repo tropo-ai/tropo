@@ -111,6 +111,23 @@ class TheRefusalContainsTheAnswer(unittest.TestCase):
                 (tests / name).write_text(
                     (HERE / name).read_text(encoding="utf-8"), encoding="utf-8"
                 )
+            # The gate imports `lib.debt_rule` — the ONE predicate that decides.
+            # Without it every run in here died at import and these four tests
+            # asserted against a ModuleNotFoundError traceback instead of the
+            # gate's report: four red tests that could not have gone green for
+            # the right reason, and could not have caught a behaviour change in
+            # the thing they exist to pin. (argus-a158, 2026-08-25, found while
+            # inverting the gating default — the tests covering that exact
+            # behaviour were the ones not running.)
+            lib_src = HERE.parent / "lib"
+            lib_dst = tools / "lib"
+            lib_dst.mkdir(parents=True, exist_ok=True)
+            for dep in ("__init__.py", "debt_rule.py"):
+                src = lib_src / dep
+                if src.exists():
+                    (lib_dst / dep).write_text(
+                        src.read_text(encoding="utf-8"), encoding="utf-8"
+                    )
             (tests / "studio-validator-debt-baseline.json").write_text(
                 json.dumps(baseline), encoding="utf-8"
             )
@@ -153,6 +170,70 @@ class TheRefusalContainsTheAnswer(unittest.TestCase):
         self.assertIn("Inbox Transition Protocol: 0 -> 2", text)
         self.assertIn("non-gating by recorded decision", text)
 
+    # --- the curated gate list (deb77758 applied to validator classes) --------
+    # Both directions, because a one-sided control here proves nothing: a gate
+    # that never fires passes the "does not block" half trivially.
+
+    def _curated_output(self, heading: str) -> str:
+        return (
+            f"--- {heading} ---\n"
+            "[ERROR] aaaa1111 — a finding\n"
+            "[ERROR] bbbb2222 — a second finding\n"
+            "Summary: 85 passed, 2 failed, 0 warnings, 0 normalizable\n"
+        )
+
+    def test_a_class_not_on_the_gate_list_reports_and_does_not_stop_the_build(self):
+        """The negative half: growth in an untriaged class must not refuse.
+
+        This is the case that stopped a release over 663 bytes in a private
+        agent memory file whose sibling records are tagged argo-private and
+        which no shipped box has ever contained.
+        """
+        baseline = {
+            "failed": 99,
+            "classes": {"Agent-Memory Surface Bound Gate": 0},
+            "gating_classes": {"UID Consistency": "identity that cannot be resolved"},
+        }
+        code, text = self._run_gate(
+            self._curated_output("Agent-Memory Surface Bound Gate"), baseline)
+        self.assertEqual(code, 0, text)
+        self.assertIn("Agent-Memory Surface Bound Gate: 0 -> 2", text)
+        # Reported, and named as untriaged — the answer to "nobody would notice".
+        self.assertIn("reporting-only", text)
+
+    def test_a_class_on_the_gate_list_still_stops_the_build(self):
+        """The positive half: the curated list must actually be able to refuse.
+
+        Without this, the inversion could have silently disabled gating
+        altogether and the test above would still be green.
+        """
+        baseline = {
+            "failed": 99,
+            "classes": {"UID Consistency": 0},
+            "gating_classes": {"UID Consistency": "identity that cannot be resolved"},
+        }
+        code, text = self._run_gate(self._curated_output("UID Consistency"), baseline)
+        self.assertEqual(code, 1, text)
+        self.assertIn("UID Consistency: 0 -> 2", text)
+        self.assertIn("GATING", text)
+        self.assertIn("identity that cannot be resolved", text)
+
+    def test_no_gate_list_preserves_the_previous_behaviour_exactly(self):
+        """A studio that has not re-recorded keeps the gate it had.
+
+        The inversion may not become a way for other studios' gates to stop
+        working the moment they pull this version.
+        """
+        baseline = {
+            "failed": 99,
+            "classes": {"UID Cross-References": 0},
+            "non_gating_classes": [],
+        }
+        code, text = self._run_gate(
+            self._curated_output("UID Cross-References"), baseline)
+        self.assertEqual(code, 1, text)
+        self.assertNotIn("reporting-only", text)
+
     def test_a_total_that_grows_with_no_gating_class_still_refuses(self) -> None:
         """No passing on a technicality.
 
@@ -167,7 +248,15 @@ class TheRefusalContainsTheAnswer(unittest.TestCase):
         self.assertIn("with no gating class grown", text)
         # The explanation wraps across lines, so match it whitespace-insensitively
         # rather than pinning the wrap point.
-        self.assertIn("per-class parse missed a finding shape", " ".join(text.split()))
+        #
+        # This assertion pinned "per-class parse missed a finding shape", which
+        # `lib.debt_rule.debt_verdict` has never emitted — it says "an
+        # unattributed shape". The wording drifted apart at some point and the
+        # test could not report it, because the import crash above meant this
+        # line was never reached. Pinned to the predicate's real words now; the
+        # assertion's intent (say WHY, don't just go green) is unchanged and the
+        # message still carries both halves.
+        self.assertIn("or an unattributed shape", " ".join(text.split()))
 
     def test_a_baseline_with_no_classes_still_gates_on_the_total(self) -> None:
         """The upgrade may not become a new way for the gate to break."""

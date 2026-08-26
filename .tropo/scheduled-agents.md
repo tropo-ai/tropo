@@ -41,7 +41,7 @@ Per v1.22.0 Stream 3 + activation.capsule v1.0.1: in-flight sa.\* dispatches sho
 
 ## Stale-sweep threshold
 
-Per v1.21.0 walk-lock (follow-up c) — Vela owns Tier 1 stale-sweep at **7-day threshold**: activations with `status: active` AND no `run.jsonl` events for ≥7 days flip to `status: stale` on her next boot. Sweep result surfaces in `channels/ops.md`.
+Per v1.21.0 walk-lock (follow-up c) — Vela owns Tier 1 stale-sweep at **7-day threshold**: activations with `status: active` AND no `run.jsonl` events for ≥7 days flip to `status: stale` on her next boot. Sweep result surfaces as a `tropo.broadcast.crew` event. (`channels/ops.md` retired at v1.61, Rule 13.)
 
 ## Substrate references
 
