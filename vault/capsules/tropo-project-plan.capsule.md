@@ -177,11 +177,11 @@ Core checks inherited: UID uniqueness, UID immutability, type immutability, owne
 
 ## 5. Composes-With
 
-- **[project.capsule (34e4cb0b)](project.capsule.md)** — project-plan scopes a project via `plan_for:`. Project's work happens under the plan's coordination.
-- **[release-plan.capsule (a3f1e7b2)](release-plan.capsule.md)** — sibling at release scope. Release-plan's `streams:` are projects; each stream project may carry a project-plan. Release-plan composes N project-plans via `composes_into:` pointers on each plan.
-- **[design-brief.capsule (de5181b0)](design-brief.capsule.md)** — upstream. Briefs inform plans via `derived_from:`; bidirectional pair with brief's `composes_into:`.
-- **[pipeline.capsule (e4c8a6b2)](pipeline.capsule.md)** — project-plans describe what a project will do as it walks a pipeline; plan may declare anticipated pipeline path.
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor for UID/owner/modified invariants.
+- **[project.capsule (34e4cb0b)](tropo-project.capsule.md)** — project-plan scopes a project via `plan_for:`. Project's work happens under the plan's coordination.
+- **[release-plan.capsule (a3f1e7b2)](tropo-release-plan.capsule.md)** — sibling at release scope. Release-plan's `streams:` are projects; each stream project may carry a project-plan. Release-plan composes N project-plans via `composes_into:` pointers on each plan.
+- **[design-brief.capsule (de5181b0)](tropo-design-brief.capsule.md)** — upstream. Briefs inform plans via `derived_from:`; bidirectional pair with brief's `composes_into:`.
+- **[pipeline.capsule (e4c8a6b2)](tropo-pipeline.capsule.md)** — project-plans describe what a project will do as it walks a pipeline; plan may declare anticipated pipeline path.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor for UID/owner/modified invariants.
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — this capsule's own governance.
 
 ### Tag Conventions

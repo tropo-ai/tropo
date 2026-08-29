@@ -177,6 +177,18 @@ PRE_OUTWARD_FIRE_ROSTER = (
      ("provider_reachability",),
      "the website badge's deploy remote (S3 AC4 adapter) answers a read-only "
      "`git ls-remote` without a prompt, so the badge push will not hang"),
+    # The eleventh gate, added 2026-08-26 by argus-a159 (Mike-approved) after an
+    # adversarial review of the v1.93 release runner. v1.92.0 is public with an
+    # open journal because the orchestrator step was skipped: no
+    # orchestrator_invoked event -> an invalid scorecard -> completion never
+    # observed -> "the release is public; the journal is not". Every gate in the
+    # chain behaved correctly and nothing noticed until AFTER the outward act,
+    # when the only remedy left is re-firing a live release. Knowable before
+    # anything runs, so it belongs here, where refusing is free.
+    ("fire-scorecard-inputs", "scorecard-inputs-missing",
+     ("fire_authorization",),
+     "the run journal carries tropo.release.orchestrator_invoked, so the "
+     "release scorecard can be valid and the saga can close after the fire"),
 )
 
 

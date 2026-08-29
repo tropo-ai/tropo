@@ -384,6 +384,18 @@ _ENGINE_EVENT_TYPES = frozenset({
     "skip_request", "skip_authorization",
     "verification_receipt", "verifier_findings",
     "step_criteria_amended", "status_changed",
+    # step_redeclare (9e7003b1.py) returns a wedged step to 'declared'. WITHOUT
+    # this entry, any legitimate use after the produce gate mints the key makes
+    # require_release_authorization refuse as "possible tampering" -- fail-closed
+    # by design, no override flag -- gating BOTH the build and the public ship,
+    # for the last six steps of the release. Found by an independent verifier
+    # (argus-a160's guardrail-4 pass, 2026-08-28) by mutating a REAL prior run:
+    # baseline AUTHORIZED, +step_started AUTHORIZED, +step_redeclared REFUSED.
+    # The action does not shift the fingerprint itself (_WORK_EVENTS covers only
+    # step_completed/verification_receipt), so the prefix hash is unaffected --
+    # the allowlist was the whole problem. Same class the v1.90 allowlist hit
+    # three times, per test_allowlist_derived_v191.py's own docstring.
+    "step_redeclared",
     "test_executed", "test_aggregate",
     "workflow_complete", "activation_superseded",
 })

@@ -74,7 +74,23 @@ PIPELINE_BINDINGS = (
     {
         "step_uid": FREEZE_STEP,
         "kind": "tool",
-        "entry": "tropo-freeze-release-candidate.py:decide",
+        # Amended 2026-08-27 with profile 6bf18510, Mike-authorized ("1. approved").
+        # THREE shapes have stood here. `:decide` named the PURE half, which
+        # computes and writes nothing — the v1.90.0 failure this tool's own
+        # comment describes. The bare command string that replaced it could not
+        # execute at all: no interpreter, not on PATH, and a static string
+        # cannot carry --run-dir/--candidate, which do not exist until a release
+        # is running. It failed with exit 127 one step before the fire.
+        #
+        # The placeholder language ({run_folder}/{candidate_path}) is NOT the
+        # cure: nothing substitutes it. 9e7003b1.py:2349 records that family
+        # reaching subprocess as a literal and breaking release run bd86ef44.
+        #
+        # So the declaration names the half that RECORDS, and the runner's
+        # adapter supplies the runtime arguments. Neither compensates for the
+        # other: a declaration cannot know a run folder, and an adapter must not
+        # be where we hide a wrong callable.
+        "entry": "tropo-freeze-release-candidate.py:main",
         "description": "freeze the candidate on evidence bound to its exact bytes",
     },
 )

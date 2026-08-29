@@ -93,12 +93,42 @@ class ReleaseProfile:
 
 
 def _parse_frontmatter(text: str) -> Optional[Dict[str, Any]]:
+    """Frontmatter as a mapping, or None. Never raises on a malformed file.
+
+    WARN-SAFE, DELIBERATELY, and it cost a release to learn why. This called
+    safe_load() bare, and iter_release_profile_uids() below runs it over EVERY
+    file in the governed entry store to find the handful carrying
+    `type: release-profile`. So ONE unparseable frontmatter anywhere in a
+    ~5,000-file vault crashed the whole release runner with a raw
+    yaml.parser.ParserError and no filename.
+
+    That is not hypothetical. An abandon-and-relock recovery wrote an
+    `abandon_reason:` whose single-quoted scalar contained a bare apostrophe —
+    which terminates the scalar early — into five governed records at once. All
+    five refused to parse, and the runner's `--execute` path could not enumerate
+    a single profile as a result.
+
+    Skipping silently would be worse than crashing — that is the shape this
+    Studio keeps finding. So it skips AND SAYS SO, naming the file, which is
+    exactly the warn-safe contract (deb77758): visible, stated in the record,
+    and the work proceeds. A profile that genuinely fails to parse still cannot
+    be loaded; it simply no longer takes every unrelated release with it.
+    (argus-a158, 2026-08-26.)
+    """
     if not text.startswith("---\n"):
         return None
     end = text.find("\n---", 4)
     if end == -1:
         return None
-    parsed = safe_load(text[4:end])
+    try:
+        parsed = safe_load(text[4:end])
+    except Exception as exc:  # noqa: BLE001 — one bad file must not stop a release
+        print(
+            "[WARN] release-profile scan skipped a file with unparseable "
+            "frontmatter: %s" % str(exc).splitlines()[0],
+            file=sys.stderr,
+        )
+        return None
     return dict(parsed) if isinstance(parsed, Mapping) else None
 
 

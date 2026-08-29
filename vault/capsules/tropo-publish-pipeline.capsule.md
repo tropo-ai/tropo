@@ -408,8 +408,8 @@ Both consumers add their own output formatting (validator: `[WARN]/[FAIL]` text 
 - **[c5a7e391 v0.4 §3.6](../../vault/files/c5a7e391.md)** — universal workflow pattern + class-core/workflow distinction
 - **[c5a7e391 §3.5 Cleanup Rules Schema](../../vault/files/c5a7e391.md)** — cleanup_rules field schema (six sub-fields)
 - **[c5a7e391 §4.5 Asset-Handling Architecture](../../vault/files/c5a7e391.md)** — `!asset:` sentinel for binary references in vault markdown
-- **[ship-artifact.capsule v1.4](ship-artifact.capsule.md)** — §Publish-Act + Check 27 (publication_state pipeline-write derives from sentinel)
-- **[ship-artifact.capsule v1.4 §External-Work](ship-artifact.capsule.md)** — external-work/ staging architecture (output directory shape)
+- **[ship-artifact.capsule v1.4](tropo-ship-artifact.capsule.md)** — §Publish-Act + Check 27 (publication_state pipeline-write derives from sentinel)
+- **[ship-artifact.capsule v1.4 §External-Work](tropo-ship-artifact.capsule.md)** — external-work/ staging architecture (output directory shape)
 - **[Tropo Website Content Structure (4a99638d)](../../vault/files/4a99638d.md)** — web target manifest root example
 - **[lib/ship_extract/](../../.tropo/scripts/lib/ship_extract/)** — shared extraction engine used by publish.py class core
 - **[publish-to-web (f1b4c8d2)](../../vault/files/f1b4c8d2.md)** — operational example pipeline definition (web target)
@@ -470,13 +470,13 @@ When authoring a NEW publish.pipeline.md (separate concern from publishing an ex
 
 ## §12. Provenance
 
-Full per-version provenance (v1.0 + v1.1 authoring records) extracted to the [history companion (78c51bdf)](publish.pipeline.history.md). Current + previous version provenance: the `v1_3_amendment_note` + `v1_2_amendment_note` frontmatter fields.
+Full per-version provenance (v1.0 + v1.1 authoring records) extracted to the [history companion (78c51bdf)](tropo-publish-pipeline.history.md). Current + previous version provenance: the `v1_3_amendment_note` + `v1_2_amendment_note` frontmatter fields.
 
 ---
 
 ## §13. Implementation Status
 
-The v1.1-era per-component shipped/deferred snapshot (frozen as of v1.49.0.2) is preserved in the [history companion (78c51bdf)](publish.pipeline.history.md). Current operational truth: query the vault index for the `implements_in_code:` paths in this capsule's frontmatter; the §7 validator checks fire at every rebuild. The deferred-arc items live at [c5a7e391 §13.4 + §13.6](../../vault/files/c5a7e391.md).
+The v1.1-era per-component shipped/deferred snapshot (frozen as of v1.49.0.2) is preserved in the [history companion (78c51bdf)](tropo-publish-pipeline.history.md). Current operational truth: query the vault index for the `implements_in_code:` paths in this capsule's frontmatter; the §7 validator checks fire at every rebuild. The deferred-arc items live at [c5a7e391 §13.4 + §13.6](../../vault/files/c5a7e391.md).
 
 ---
 
@@ -495,7 +495,7 @@ The package step of the publish.pipeline class (workflow Step 2 of [c5a7e391](..
   /versions                                        ← prior dated sets archived here as units
 ```
 
-`<medium>` examples: `web`, `print`. `<section>` examples: `agentic-builders`, `news`, `<day-job-project>`. `<article-slug>` is the published slug. Folder convention governed by [numeric-folder-prefix.capsule v1.0 (61f650aa)](numeric-folder-prefix.capsule.md) + folder-scoped [02-outbox/AGENTS.md](../../02-outbox/AGENTS.md).
+`<medium>` examples: `web`, `print`. `<section>` examples: `agentic-builders`, `news`, `<day-job-project>`. `<article-slug>` is the published slug. Folder convention governed by [numeric-folder-prefix.capsule v1.0 (61f650aa)](tropo-numeric-folder-prefix.capsule.md) + folder-scoped [02-outbox/AGENTS.md](../../02-outbox/AGENTS.md).
 
 ### §14.2 Dated-Filename Model (Decision 1)
 
@@ -609,7 +609,7 @@ Design step closes when:
 
 - User signals design complete (verbatim direction OR explicit close gesture)
 - `<article-slug>/03-design/` contains the assets the format step needs (or is intentionally empty if the article needs no per-article design substrate beyond inherited cascade)
-- Voice review completed per [doc-spec.capsule v1.0 §Voice Review Definition](doc-spec.capsule.md) + [voice-review.skill (811856a5)](../skills/voice-review.skill.md) three-layer contract (tone + lore + stranger-encounter test)
+- Voice review completed per [doc-spec.capsule v1.0 §Voice Review Definition](tropo-doc-spec.capsule.md) + [voice-review.skill (811856a5)](../skills/tropo-voice-review.md) three-layer contract (tone + lore + stranger-encounter test)
 
 State handed to format step: dated source + populated 03-design/ + applicable brand cascade + selected target template per pipeline def.
 
@@ -759,7 +759,7 @@ publish-pipeline ships the initial implementation; cross-class generalization is
 
 ### §17.5 What This Resolves
 
-Rigor becomes a typed activation parameter rather than a fixed engine property — strict IS the heavy path, express IS the lightweight path, standard IS the hybrid; the discipline is structurally enforced at the mode the calling agent chose. *(Design history — the v1.49 lightweight-vs-heavy tension + the G58 skipped-step failure mode — in the [history companion (78c51bdf)](publish.pipeline.history.md).)*
+Rigor becomes a typed activation parameter rather than a fixed engine property — strict IS the heavy path, express IS the lightweight path, standard IS the hybrid; the discipline is structurally enforced at the mode the calling agent chose. *(Design history — the v1.49 lightweight-vs-heavy tension + the G58 skipped-step failure mode — in the [history companion (78c51bdf)](tropo-publish-pipeline.history.md).)*
 
 ---
 
@@ -840,5 +840,5 @@ For v1 implementation, sub_system + sub_sub_system are EXPLICIT wrapper frontmat
 
 ---
 
-*publish.pipeline.capsule v1.3 | UID `7e3a91c8` | v1.3 amendment Metis G60 2026-05-24 (activation modes §17 + multi-target §18) | full version history at the [history companion (78c51bdf)](publish.pipeline.history.md) | Companion to c5a7e391 + ship-artifact.capsule + numeric-folder-prefix.capsule + doc-spec.capsule + 5a89297a working-copy spec*
+*publish.pipeline.capsule v1.3 | UID `7e3a91c8` | v1.3 amendment Metis G60 2026-05-24 (activation modes §17 + multi-target §18) | full version history at the [history companion (78c51bdf)](tropo-publish-pipeline.history.md) | Companion to c5a7e391 + ship-artifact.capsule + numeric-folder-prefix.capsule + doc-spec.capsule + 5a89297a working-copy spec*
 *"The class codifies what the workflow describes. Three stages observable. Targets extend. Activation modes parameterize rigor. Humans verify."*

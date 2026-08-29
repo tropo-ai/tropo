@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.93.0] - 2026-08-27
+
+One question, one member, one number. v1.92 proved the gates and moved the cost to the operator's
+keyboard: roughly twenty manual commands, four live repairs to the release machinery mid-flight,
+and six events written by hand. This release asks whether releasing actually got cheaper, and a
+larger release would have made the answer unmeasurable.
+
+### Added
+- **One command now drives a release.** The release runner walks the declared step sequence, does
+  every automatic step, and stops at the first thing needing a person — printing the exact command
+  that satisfies it. Run it again and it continues from where it stopped, skipping what is already
+  recorded done. It had been declared since the previous version and had never executed a single
+  step: it called every step with no arguments while every real step takes some, and it halted
+  permanently at the first human gate, so it could never reach the second slot of a twelve-step
+  release.
+- **The step that silently broke the last release cannot be skipped.** v1.92 went public with its
+  own journal still open, because one step was missed: the moment that records who started the
+  release. Without it the scorecard is invalid, so completion is never verified. Two independent
+  mechanisms now refuse that — the runner will not reach the publish step without it, and the
+  release's own preflight carries a gate that refuses for the same reason before the public act
+  rather than after, when the only remedy left is re-firing a live release.
+- **A release can measure what it cost.** The scorecard is produced with the principal's gestures
+  read from the events that actually record them, and refuses to be written at all when a required
+  moment is missing — an absent measurement is honest where a malformed one is not. What it does
+  not yet do is judge: the card's verdict field cannot pass by a known, recorded mechanism
+  (openly deferred to the next version), so the cost numbers are real while the verdict line
+  stays silent.
+- **Shipped instructions are checked against the shipped box.** A new tool reads a release archive
+  directly and reports every path an instruction file tells a reader to open that the box does not
+  contain, distinguishing genuine dead ends from retirement notices and files built at first boot.
+
+### Changed
+- **The retired channel model is out of the live playbooks.** Coordination has run on the typed
+  event log since v1.61, but ten shipped playbooks still instructed readers to write into channel
+  files that no longer exist — including the team-setup path, which taught new users to *build*
+  them. A customer's concierge followed those instructions and recommended the retired model,
+  correctly quoting our own documentation.
+- **Boot-time claims about work state read the source, not a projection.** An agent reported two
+  maintenance jobs as days overdue when both had already run on another machine — the truth was in
+  its own message queue while the check read a machine-local index that never sees another machine.
+  State is now read from the entry itself or corroborated against the event log.
+- **The release's own tooling names are declared once.** The runner had grown its own idea of what
+  the release tools are called, alongside the declaration that already held them.
+
+### Fixed
+- **The public version badge is verified at the address that actually serves it.** Every release
+  checked a URL that has never existed, so the check could only ever fail; the correct address was
+  declared in a constant the same code already imported.
+- **The freeze step records the freeze.** Its declaration named the half of the tool that decides
+  and writes nothing, so nothing was ever frozen while the step reported success.
+- **A step that refuses is no longer reported as a step that succeeded.** The runner treated any
+  return as success, and the real steps signal refusal by returning rather than raising.
+- **An abandoned release run can no longer be walked as a live one.**
+
 ## [1.92.0] - 2026-08-25
 
 The release stopped being an adjudication and became a build again. Three goals only: rebuild the

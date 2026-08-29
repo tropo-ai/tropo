@@ -33,7 +33,7 @@ capsule_version: '2.5'
 
 **Entry** — A single governed file in the Vault. Has a UID, a type, a status, an owner. Conforms to a capsule definition. Every task, decision, spec, document, and project is an entry.
 
-**Capsule Definition** — The schema for a type of vault entry. Lives at `.tropo/capsules/<type>.capsule.md`. Defines required frontmatter, a state machine, validation rules, and governance rules. Locked once stable. Examples: `task`, `project`, `decision`, `document`, `kb-article`, `playbook`.
+**Capsule Definition** — The schema for a type of vault entry. Lives at `vault/capsules/tropo-<type>.capsule.md`. Defines required frontmatter, a state machine, validation rules, and governance rules. Locked once stable. Examples: `task`, `project`, `decision`, `document`, `kb-article`, `playbook`.
 
 **KB Article** — A typed governed primitive (`type: kb-article`) that teaches agents how a Tropo primitive works or how a concept composes. Lives in `vault/files/<uid>.md` and is discoverable via subsystem hub member lists (primary: [Tropo Documentation (`f87e33f0`)](f87e33f0.md)). *Migrated from `.tropo/kb/` at v1.19.0 per Universal Storage Convergence Lock A.* Governed by [kb-article.capsule (`4cb20382`)](4cb20382.md); extends `document`. Categories: `how-to` / `reference` / `concept` / `glossary` / `decision-support`. A capsule declares a type's schema; a kb-article teaches the type's use.
 
@@ -45,7 +45,7 @@ capsule_version: '2.5'
 
 **Operating Agreement** — The vault's constitution. Defines who has authority, how decisions are made, and what boundaries exist. Every agent operates under it.
 
-**Channel** — A shared file where agents log activity and coordinate. `channels/ops.md` is the system-wide operations log. Working channels (e.g., `channels/metis-vela.md`) are for bilateral coordination.
+**Channel** — A user-facing surface in `channels/` that the crew maintains for the human reader. Crew coordination itself runs on the typed event log (`vault/events/00-events.jsonl`, via emit-event / query-events), not on audit-trail files in `channels/`.
 
 **Board** — A synthesized view of an agent's active work. Generated from vault data, not maintained by hand. Shows priorities, blockers, and state. Lives in `boards/`.
 
@@ -91,7 +91,7 @@ capsule_version: '2.5'
 
 **UID** — An 8-character hex unique identifier assigned to every vault entry and every registered agent. Used for cross-referencing, tracking, and identity. Never reused, never changes.
 
-**Registry topology** — Tropo uses matched primitives per domain rather than one universal UID registry. Work artifacts and runtime callables (sa.\*/skills/tools) are indexed at `vault/00-index.jsonl`, with the generated `.tropo/tool-catalog.md`, `.tropo/skill-catalog.md`, and `.tropo/sa-agent-catalog.md` as the quick-scan surfaces. Agent identity is at `.tropo-studio/registries/agent-registry.yaml`. Kernel content (capsules / playbooks / skills) is discoverable via folder listing — filenames are addresses (`task.capsule.md` IS the type "task"). When referencing files across documents, use UIDs — they survive renames and moves. See [Registry Topology Consolidation](../../vault/files/adac1f10.md).
+**Registry topology** — Tropo uses matched primitives per domain rather than one universal UID registry. Work artifacts and runtime callables (sa.\*/skills/tools) are indexed at `vault/00-index.jsonl`, with the generated `.tropo/tool-catalog.md`, `.tropo/skill-catalog.md`, and `.tropo/sa-agent-catalog.md` as the quick-scan surfaces. Agent identity is at `.tropo-studio/registries/agent-registry.yaml`. Kernel content (capsules / playbooks / skills) is discoverable via folder listing — filenames are addresses (`tropo-task.capsule.md` IS the type "task"). When referencing files across documents, use UIDs — they survive renames and moves. See [Registry Topology Consolidation](../../vault/files/adac1f10.md).
 
 **Kernel** — The `.tropo/` folder. Contains framework primitives — capsule definitions, action templates, kernel playbooks, skills, and schemas. Receives updates from the Tropo update pipeline. Read from it, don't modify it casually. *(KB articles, formerly at `.tropo/kb/`, migrated to `vault/files/` at v1.19.0 per Universal Storage Convergence Lock A.)*
 

@@ -35,8 +35,8 @@ subsystem_hub:
 |---|---|
 | Governed by | [capsule-definition meta (222873b9)](../../vault/files/222873b9.md) |
 | Extends | `core` |
-| Composes with | [project.capsule (34e4cb0b)](project.capsule.md); [release.capsule (b19e8d43)](release.capsule.md) Rule 11/12 (subsystem-registry-specific consumer) |
-| Pattern family | [project.capsule (34e4cb0b)](project.capsule.md) |
+| Composes with | [project.capsule (34e4cb0b)](tropo-project.capsule.md); [release.capsule (b19e8d43)](tropo-release.capsule.md) Rule 11/12 (subsystem-registry-specific consumer) |
+| Pattern family | [project.capsule (34e4cb0b)](tropo-project.capsule.md) |
 | Member of | [Tropo Governance (8dd772a0)](../../vault/files/8dd772a0.md); [Registries hub (7e93ed75)](../../vault/files/7e93ed75.md) |
 
 ---

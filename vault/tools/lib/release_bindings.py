@@ -61,6 +61,7 @@ __all__ = [
     "collect",
     "for_step",
     "EXAMPLE_DECLARATION",
+    "OPERATOR_TOOLING",
     "JUDGMENT_LEG_BINDINGS",
     "PIPELINE_ROOT_UID",
     "DECLARATION_ATTR",
@@ -622,6 +623,50 @@ JUDGMENT_LEG_BINDINGS: Tuple[Dict[str, Any], ...] = (
 #: is the release-pipeline's own terminal step, which today is named in no tool
 #: at all. `entry` is the callable a runner would invoke; `description` is what
 #: it prints to whoever is standing there.
+#: THE PRODUCT'S OPERATOR TOOLING, declared here because this module is the
+#: bindings declaration and is allowed to know what is being shipped.
+#:
+#: The cold runner is not. `test_release_profile_seam_v192` asserts that
+#: tropo-release-run.py names no product literal at all — "the machine does not
+#: know what it is shipping" — and argus-a159 broke that guard by hardcoding
+#: eleven tool names and commands into the runner while building the v1.93
+#: release driver (05de711d). The runner carried ZERO such literals before that
+#: work and the guard was green; it was reported to him as a pre-existing red
+#: and it was not.
+#:
+#: The names live here and the runner reads them, which also removes the second
+#: source of truth: the runner had its own idea of what the release tools are
+#: called, alongside the profile that declares them.
+OPERATOR_TOOLING: Dict[str, str] = {
+    # module the runner loads to read a run's recorded moments + identity
+    "orchestrator_module": "tropo-release.py",
+    # what an operator runs to perform the orchestrator step
+    "orchestrator_command": "python3 vault/tools/tropo-release.py --release-plan-uid %s",
+    # what an operator runs for the one irreversible outward act
+    "publish_command": "python3 vault/tools/tropo-publish-release.py fire",
+    # argv[0] the build step's main() expects to see
+    "build_argv0": "tropo-build-release.py",
+    # the enforced path for recording that a human gate was satisfied
+    "signoff_command": ("python3 vault/tools/9e7003b1.py --activation-uid %s "
+                        "resume --confirmation-granted-by <principal>"),
+    # THE AUTHORITATIVE subsystem registry. Declared here, and read by the
+    # runner's release-history adapter, because this module is allowed to know
+    # what is being shipped and tropo-release-run.py is not
+    # (test_release_profile_seam_v192).
+    #
+    # It is declared at all because the step's own script DEFAULTS to
+    # `<studio-root>/subsystem-registry.jsonl` — a path that has never been
+    # authoritative. That default has already fired once: the repo-root file
+    # holds exactly ONE orphaned row, v1.54.0, written 2026-05-26 by
+    # argus-a84, while the real store carries 146. One release's registry row
+    # went to the wrong file and nobody noticed for three months. The build
+    # reads the authoritative store, so a row written to the stub is simply
+    # absent from the box with nothing failing loudly.
+    # (argus-a160, 2026-08-27, found by driving v1.93's release-history step.)
+    "subsystem_registry_path": ".tropo-studio/registries/subsystem-registry.jsonl",
+}
+
+
 EXAMPLE_DECLARATION: Tuple[Dict[str, Any], ...] = (
     {
         "step_uid": "3dd817cb",

@@ -52,8 +52,8 @@ subsystem_hub:
 | Governed by | [capsule-definition meta (222873b9)](../../vault/files/222873b9.md) |
 | Aligned with | [Playbook Spec v2.2 (e6d373bc)](../../vault/files/e6d373bc.md) |
 | Extends | `core` |
-| Pattern exemplar | [document.capsule (d0c00001)](document.capsule.md) |
-| Composes with | [pipeline.capsule (e4c8a6b2)](pipeline.capsule.md) (subtype) |
+| Pattern exemplar | [document.capsule (d0c00001)](tropo-document.capsule.md) |
+| Composes with | [pipeline.capsule (e4c8a6b2)](tropo-pipeline.capsule.md) (subtype) |
 
 ---
 
@@ -65,7 +65,7 @@ Playbook entries follow single-file truth at **`vault/playbooks/<uid>.md`** — 
 
 **Subdirectory flattening:** pre-v1.69 subdirectory semantics move to frontmatter — `concierge-paths/` members declare `concierge_path: true`; `pipelines/` members are the existing pipeline subtype. Directories are not governance; fields are (flat-vault doctrine). `migrations/` content (3 v030-era + 2 general) takes per-file **archive disposition** — historical record, not live fleet.
 
-**Deprecation:** new playbooks authored at v2.6+ go straight to `vault/playbooks/<uid>.md`. After v1.69 S2, `.tropo/playbooks/` contains ONLY the two kernel thin-pointers.
+**Deprecation:** new playbooks authored at v2.6+ go straight to `vault/playbooks/<uid>.md`. After v1.69 S2, `.tropo/playbooks/` contains no canonical playbook bodies — the migrated playbooks (including the `concierge-paths/` and `pipelines/` members) remain there as thin pointers to their vault canonicals, the two kernel boot-contract pointers additionally carry the inline degraded floor, and `migrations/` plus the not-yet-canonicalized `test-harness.playbook.md` still ship in place.
 
 ---
 
@@ -75,7 +75,7 @@ A playbook is a governed orchestration document. It coordinates humans, agents, 
 
 This capsule is the minimum governance contract every playbook in the vault must satisfy. It declares the body-section floor (5 required), the state machine (`draft → active → superseded → archived`), the validation rules (21 checks across structural + behavioral + composition concerns), and the subtypes (pipeline, concierge-paths, test-harness). The full orchestration semantics — Four-tier binding, run folders, thread.md, verification receipts, portability — are specified in [Playbook Specification v2.2 (e6d373bc)](../../vault/files/e6d373bc.md). This capsule is the machine-checkable contract; the spec is the human-readable architecture.
 
-**Before authoring a playbook:** check `.tropo/playbooks/` for live playbooks with matching `domain:` or `trigger:` — duplicate triggers create library drift. If an existing playbook is close but not right, supersede it rather than parallel-author.
+**Before authoring a playbook:** check `vault/playbooks/` (the canonical home; `.tropo/playbooks/` holds only thin pointers) for live playbooks with matching `domain:` or `trigger:` — duplicate triggers create library drift. If an existing playbook is close but not right, supersede it rather than parallel-author.
 
 ---
 
@@ -281,20 +281,20 @@ Core checks inherited: UID uniqueness, UID immutability, type immutability, owne
 
 ### Extends
 
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor (UID immutability, owner semantics, frontmatter invariants).
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor (UID immutability, owner semantics, frontmatter invariants).
 
 ### Pattern Exemplar
 
-- **[document.capsule (d0c00001)](document.capsule.md)** — playbook is patterned on document per v3 Decision 3; adds Groups-or-Steps body-shape + 5-required-floor + declared-verification + executable-content discipline.
+- **[document.capsule (d0c00001)](tropo-document.capsule.md)** — playbook is patterned on document per v3 Decision 3; adds Groups-or-Steps body-shape + 5-required-floor + declared-verification + executable-content discipline.
 
 ### Composes With
 
-- **[pipeline.capsule v1.0 (e4c8a6b2)](pipeline.capsule.md)** — subtype. Pipelines are playbooks satisfying pipeline.capsule's three-condition check. Both capsules govern; pipeline.capsule adds requirements; never removes this floor.
+- **[pipeline.capsule v1.0 (e4c8a6b2)](tropo-pipeline.capsule.md)** — subtype. Pipelines are playbooks satisfying pipeline.capsule's three-condition check. Both capsules govern; pipeline.capsule adds requirements; never removes this floor.
 - **[Playbook Specification v2.2 (e6d373bc)](../../vault/files/e6d373bc.md)** — aligned-with. This capsule is the machine-checkable contract; the spec is the human-readable architecture covering binding layers, run folders, thread.md, verification receipts, portability rules.
-- **[subsystem-hub.capsule v1.5 (8a4e21c5)](subsystem-hub.capsule.md)** — pattern precedent for capsule shape (v1.5 taxonomy: Required / Optional / Beyond-Contract body sections; v1.4 dropped the EXPECTED-IF-PRESENT category as part of contract simplification).
-- **[project-plan.capsule v1.0 (f7b9c4a2)](project-plan.capsule.md)** — sibling. Project-plans scope projects; playbooks orchestrate processes. A project-plan may invoke a playbook (via `calls:`).
-- **[release-plan.capsule v1.0 (a3f1e7b2)](release-plan.capsule.md)** — sibling at release scope. A release-plan coordinates streams; stream work executes through playbooks.
-- **[release.capsule v2.0 (b19e8d43)](release.capsule.md)** — pattern precedent for UID-preserving supersession.
+- **[subsystem-hub.capsule v1.5 (8a4e21c5)](tropo-subsystem-hub.capsule.md)** — pattern precedent for capsule shape (v1.5 taxonomy: Required / Optional / Beyond-Contract body sections; v1.4 dropped the EXPECTED-IF-PRESENT category as part of contract simplification).
+- **[project-plan.capsule v1.0 (f7b9c4a2)](tropo-project-plan.capsule.md)** — sibling. Project-plans scope projects; playbooks orchestrate processes. A project-plan may invoke a playbook (via `calls:`).
+- **[release-plan.capsule v1.0 (a3f1e7b2)](tropo-release-plan.capsule.md)** — sibling at release scope. A release-plan coordinates streams; stream work executes through playbooks.
+- **[release.capsule v2.0 (b19e8d43)](tropo-release.capsule.md)** — pattern precedent for UID-preserving supersession.
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — governs this capsule.
 
 ### Subtypes
@@ -308,7 +308,7 @@ Playbooks support a subtyping pattern. Subtype declares additional requirements 
 
 *Cardinality clarification:* "shape" requires ≥ 2 cross-validating fields (one field is always field; two-or-more cross-validating is shape).
 
-#### Pipeline (governed by [pipeline.capsule (e4c8a6b2)](pipeline.capsule.md))
+#### Pipeline (governed by [pipeline.capsule (e4c8a6b2)](tropo-pipeline.capsule.md))
 
 Three-condition identification per pipeline.capsule §Scope (canonical): (1) filename `.tropo/playbooks/pipelines/<name>.pipeline.md`, (2) `tags:` includes `pipeline`, (3) frontmatter (`stages`, `positions`, `artifact_types`, `forward_only: true`) declared. Pipeline body-section set substitutes for this floor; both capsules' frontmatter + rules apply additively.
 
@@ -316,9 +316,9 @@ Three-condition identification per pipeline.capsule §Scope (canonical): (1) fil
 
 Two-condition identification: (1) filename `.tropo/playbooks/concierge-paths/<name>.playbook.md`, (2) `tags:` includes `concierge-paths`.
 
-**Additional Required Body Section — `## Post-Outcome Handoff`.** Section MUST address: (a) **Bounce intents** — which user intents route back to concierge after completion; MUST cite [executive-activation.template §Routing](../templates/executive-activation.template.md) as **canonical source** for the bounce-intent set (re-stating inline without canonical reference creates parity drift). (b) **Inline intents** — which intents stay with the spawned agent. (c) **Enforcement mechanism** — typically [create-executive-agent.skill (c7ea9e01)](../skills/tropo-create-executive-agent.md) baking canonical `## Routing` section into the spawned agent's activation file.
+**Additional Required Body Section — `## Post-Outcome Handoff`.** Section MUST address: (a) **Bounce intents** — which user intents route back to concierge after completion; MUST cite [executive-activation.template §Routing](../templates/tropo-executive-activation.template.md) as **canonical source** for the bounce-intent set (re-stating inline without canonical reference creates parity drift). (b) **Inline intents** — which intents stay with the spawned agent. (c) **Enforcement mechanism** — typically [create-executive-agent.skill (c7ea9e01)](../skills/tropo-create-executive-agent.md) baking canonical `## Routing` section into the spawned agent's activation file.
 
-Worked example: [start-a-project.playbook v1.1 (`57a87001`)](../playbooks/concierge-paths/start-a-project.playbook.md).
+Worked example: [start-a-project.playbook v1.1 (`57a87001`)](../../.tropo/playbooks/concierge-paths/start-a-project.playbook.md).
 
 #### Test-Harness (in-capsule subtype)
 
@@ -357,4 +357,4 @@ Authored in future releases as patterns emerge. Any new subtype: declares `exten
 
 ---
 
-*playbook capsule definition | UID `e7b3c509` | v2.5 | history at [1b834ed6](playbook.history.md)*
+*playbook capsule definition | UID `e7b3c509` | v2.5 | history at [1b834ed6](tropo-playbook.history.md)*

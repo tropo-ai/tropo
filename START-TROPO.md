@@ -1,7 +1,3 @@
----
-
----
-
 # Welcome to Tropo
 
 **You're looking at a Tropo Studio — a way to run real work with AI agents using nothing but markdown files in this folder.**
@@ -28,6 +24,31 @@ Release packages omit machine-local derived indexes so the same zip is portable 
 Linux, and Windows. This command derives your local index and navigation from the shipped source
 files. It is normal first-time setup, not a repair.
 
+**Expect a large block of `[WARN] mentions parser: dead link to <uid>` lines — roughly 1,200 of
+them on a fresh box.** Nothing is wrong. Those warnings report prose mentions of Tropo's own
+internal UIDs that were not part of the shipped set. They are informational, the command still
+completes, and your index is written correctly. Look at the end of the output instead: a
+successful run prints `Wrote vault/00-index.jsonl`, `Wrote vault/00-index.sqlite`, and `Wrote
+vault/00-project-tree.jsonl`, and finishes with `✓ rehydrate.py succeeded` and `✓ mint registry
+generated`. If you see those, setup worked.
+
+## Checking your Studio's health (optional)
+
+If you want to confirm the Studio is structurally sound, run the validator **with `--customer`**:
+
+```bash
+python3 vault/tools/tropo-validate.py --customer
+```
+
+**Always pass `--customer`.** The flagless form additionally runs vendor-development checks that
+do not apply to your Studio — it treats Tropo's own internal cross-references, which by design
+were never shipped to you, as failures. On a pristine box the flagless form reports 30 failures
+and `--customer` reports 0; both are looking at the same, healthy Studio. Genuine problems inside
+your box still fail loudly under `--customer`, so nothing real is hidden.
+
+Run this only after the index rebuild above. Before the index exists there is nothing to validate
+against, and the validator will report failures for that reason alone.
+
 ## How to activate (under a minute)
 
 1. **Open your AI tool with this folder as its working directory:**
@@ -53,6 +74,19 @@ For deeper technical questions:
 - [How Tropo Work Works](vault/files/2d4f8c91.md) — the work-management surface
 - [Engineer FAQ](vault/files/8c4e1b73.md) — five technical questions answered
 - [Enterprise FAQ](vault/files/b6a3f582.md) — governance, audit, compliance, multi-team scale
+
+## Two files in this folder that are ours, not yours
+
+Two files at the Studio root are build records from the release that produced this package,
+not part of your own work. You do not need to read either one to use your Studio. Leave them in
+place — Tropo's own tooling refers to them.
+
+- **`MANIFEST.md`** — the packing slip: every file we shipped, with a fingerprint for each. This
+  is what the update guarantee in `README.md` refers to when it says an update may only touch
+  files on that list.
+- **`test-report.md`** — the result of the mechanical release checks that ran against this package
+  before it shipped. It describes *our* build, not the health of *your* Studio. For your Studio,
+  run the validator above.
 
 ## What this is NOT for
 

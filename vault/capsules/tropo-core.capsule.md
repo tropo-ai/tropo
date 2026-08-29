@@ -161,13 +161,13 @@ The `title:` field carries the entry's **human-readable display-name**. It is th
 
 `title:` is distinct from `name:` (which is the structured machine-name; used by tooling, registries, agent slugs). Both fields may be present; `name:` is structured (e.g., `vela-v45`, `tropo-os-release`), `title:` is readable (e.g., `"Vela V45 — Activation Entry"`, `"Tropo-OS v1.27.0 — Dev-Pipeline Enforcement Hardening"`).
 
-When an entry is referenced from another entry's rendered Navigation block, the display surface is `title:`. If `title:` is absent, the renderer falls back to `name:`, then to the bare UID — both of which fail the [HUMAN-NAVIGATION.md (57a9c11f)](../HUMAN-NAVIGATION.md) primitive's readable-name-first contract. Authors MUST populate `title:` for every governed entry.
+When an entry is referenced from another entry's rendered Navigation block, the display surface is `title:`. If `title:` is absent, the renderer falls back to `name:`, then to the bare UID — both of which fail the [HUMAN-NAVIGATION.md (57a9c11f)](../../.tropo/HUMAN-NAVIGATION.md) primitive's readable-name-first contract. Authors MUST populate `title:` for every governed entry.
 
 ## Navigation Block Render Obligation (v1.2 amendment 2026-05-15)
 
-Every governed vault entry's rendered body MUST contain a sentinel-wrapped Navigation block at the top, immediately after the H1 title. The block is authored by [`.tropo/scripts/generate-relations-header.py`](../scripts/generate-relations-header.py) during the canonical render pass (Step 4/4 of `rebuild-vault.py`). Agents do not hand-author the block; the renderer produces it from frontmatter + graph state.
+Every governed vault entry's rendered body MUST contain a sentinel-wrapped Navigation block at the top, immediately after the H1 title. The block is authored by [`.tropo-studio/scripts/generate-relations-header.py`](../../.tropo-studio/scripts/generate-relations-header.py) during the canonical render pass (Step 4/4 of `rebuild-vault.py`). Agents do not hand-author the block; the renderer produces it from frontmatter + graph state.
 
-The block carries five sections per [HUMAN-NAVIGATION.md (57a9c11f)](../HUMAN-NAVIGATION.md): 📍 Path / 🔗 Self / ↓ Children / ↔ Siblings / 📥 Cited by. Sentinels (`<!-- nav-block:start --> ... <!-- nav-block:end -->`) make the block idempotently replaceable.
+The block carries five sections per [HUMAN-NAVIGATION.md (57a9c11f)](../../.tropo/HUMAN-NAVIGATION.md): 📍 Path / 🔗 Self / ↓ Children / ↔ Siblings / 📥 Cited by. Sentinels (`<!-- nav-block:start --> ... <!-- nav-block:end -->`) make the block idempotently replaceable.
 
 **Skip-class:** entries without an H1 title (pre-frontmatter legacy, README-class meta-files) skip Navigation block rendering by design. The validator (Check 9 below) honors this skip-class.
 

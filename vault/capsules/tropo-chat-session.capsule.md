@@ -34,7 +34,7 @@ aligned_with:
 
 # chat-session — Capsule Definition v1.0 (DRAFT)
 
-*Authored Argus A95 2026-06-03 per [ADR-043 (63dbc524)](../../vault/files/63dbc524.md) D1. `status: draft` — the shape Metis (product) and Argus (architecture) aligned on; ships when Studio Consolidation Phase 2 builds, then locks. Models its GOVERNANCE WEIGHT on [note.capsule (7c47429a)](note.capsule.md) (lightweight, capture-not-request) but carries its own first-class structure.*
+*Authored Argus A95 2026-06-03 per [ADR-043 (63dbc524)](../../vault/files/63dbc524.md) D1. `status: draft` — the shape Metis (product) and Argus (architecture) aligned on; ships when Studio Consolidation Phase 2 builds, then locks. Models its GOVERNANCE WEIGHT on [note.capsule (7c47429a)](tropo-note.capsule.md) (lightweight, capture-not-request) but carries its own first-class structure.*
 
 ---
 
@@ -50,7 +50,7 @@ A chat-session is the **revisitable research-writing thread** — the conversati
 |-------|------|-----------|
 | `member_of` | array of UIDs | The project (and/or hub) this research thread belongs to. A chat-session is always scoped to at least one project. |
 
-**Required core fields (inherited from `core.capsule`):** `uid`, `type` (= `"chat-session"`), `title`, `created`, `modified`, `state` (= `active` at open). See [core.capsule (ee814120)](core.capsule.md).
+**Required core fields (inherited from `core.capsule`):** `uid`, `type` (= `"chat-session"`), `title`, `created`, `modified`, `state` (= `active` at open). See [core.capsule (ee814120)](tropo-core.capsule.md).
 
 ## 3. Optional Frontmatter
 
@@ -100,8 +100,8 @@ The **artifact** is the primary governed deliverable of research-writing; the ch
 ## 9. Composition
 
 - **[ADR-043 (63dbc524)](../../vault/files/63dbc524.md)** D1 — the decision that mandates this type; D2 (direct vault reads) means surfaces read these entries via the index directly; D4 (write-through) means a new session is index-discoverable immediately.
-- **[note.capsule (7c47429a)](note.capsule.md)** — governance-weight model (lightweight, capture-not-request, optional status).
-- **[project.capsule (...)](project.capsule.md)** — `member_of` target; the project owns its research threads.
+- **[note.capsule (7c47429a)](tropo-note.capsule.md)** — governance-weight model (lightweight, capture-not-request, optional status).
+- **[project.capsule (...)](tropo-project.capsule.md)** — `member_of` target; the project owns its research threads.
 - **The artifact type** — `produced_artifacts` target; the primary deliverable (§6).
 - **status-is-the-arbiter doctrine** (Metis G66 / Mike) — structured status + member_of, never tags-as-state.
 

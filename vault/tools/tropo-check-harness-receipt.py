@@ -94,11 +94,28 @@ def find_harness_receipt(events, release_run_uid: str, candidate_sha256: str) ->
             f"it has not run, and this gate will not run it."
         )
     if len(candidates) > 1:
-        raise HarnessEvidenceRefusal(
-            f"{len(candidates)} release-harness receipts on run "
-            f"{release_run_uid}; exactly one is legal and two means one of "
-            f"them is unaccounted for"
-        )
+        # v1.92 addendum (vela-v74, 2026-08-26, Mike-directed "most lightweight
+        # fix"), matching lib/release_verify.py:resolve_receipt_set's identical
+        # rule for the four-instrument freeze check: a later receipt may
+        # self-certify why two exist via supersedes_duplicate_receipt:true +
+        # a non-empty duplicate_reason — additive, outside the closed receipt
+        # schema, same shape as candidate_invalidated_payload's already-solved
+        # pattern for the candidate axis. Without that declaration, refuse
+        # exactly as before; ambiguity here is never about WHICH BYTES (every
+        # candidate already names the identical frozen sha, keyed above), only
+        # about which EVENT is authoritative. A proper explicit retraction
+        # event is the permanent fix and stays deferred to v1.93.
+        latest = candidates[-1]
+        if not (latest.get("supersedes_duplicate_receipt")
+                and str(latest.get("duplicate_reason") or "").strip()):
+            raise HarnessEvidenceRefusal(
+                f"{len(candidates)} release-harness receipts on run "
+                f"{release_run_uid}; exactly one is legal and two means one of "
+                f"them is unaccounted for. (The later receipt may declare "
+                f"supersedes_duplicate_receipt:true + duplicate_reason to "
+                f"self-certify why two exist.)"
+            )
+        candidates = [latest]
 
     receipt = release_verify.validate_receipt(candidates[0])
     if receipt.release_run_uid != release_run_uid:

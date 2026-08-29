@@ -51,8 +51,8 @@ subsystem_hub:
 | Relation | Target |
 |---|---|
 | Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](../../vault/files/222873b9.md) |
-| Aligned with | [arch-spec.capsule (a7f2e9c4)](arch-spec.capsule.md) |
-| Pattern family | [arch-spec.capsule (a7f2e9c4)](arch-spec.capsule.md) |
+| Aligned with | [arch-spec.capsule (a7f2e9c4)](tropo-arch-spec.capsule.md) |
+| Pattern family | [arch-spec.capsule (a7f2e9c4)](tropo-arch-spec.capsule.md) |
 | Extends | `core` |
 
 *A design specification — an architectural document that defines how something works. Goes through draft, gets locked, may eventually be superseded.*
@@ -144,7 +144,7 @@ Extends `core`. Inherits all core rules.
 - `vault/00-index.jsonl` — grep `type: design-brief` for briefs upstream of this spec
 - `vault/00-index.jsonl` — verify cross-references resolve (`refs:`, `consistent_with:`, `supersedes:` UIDs)
 - Reference instances: [Playbook Executor State Machines (12d8918c)](../../vault/files/12d8918c.md) (`stage: done`, locked); [Tropo Work Architecture v0.3 (2d016ecf)](../../vault/files/2d016ecf.md); [Playbook → Task Integration Spec (468783eb)](../../vault/files/468783eb.md)
-- Sibling capsule for heavier specs: [arch-spec.capsule v2.1 (a7f2e9c4)](arch-spec.capsule.md) — when the spec needs 5 REQUIRED body sections + non-empty `derived_from:`, prefer arch-spec
+- Sibling capsule for heavier specs: [arch-spec.capsule v2.1 (a7f2e9c4)](tropo-arch-spec.capsule.md) — when the spec needs 5 REQUIRED body sections + non-empty `derived_from:`, prefer arch-spec
 
 **Skills:**
 - `author-design-spec.skill.md` *(forthcoming v1.5)* — scaffold the spec body with §How to Validate as the lock prerequisite (Rule 4)
@@ -180,9 +180,9 @@ Extends `core`. Inherits all core rules.
 - [Playbook → Task Integration Spec (468783eb)](../../vault/files/468783eb.md) — playbook-step-to-task-creation specification; cross-cuts playbook + task capsules
 
 **Go next:**
-- Heavier sibling → [arch-spec.capsule v2.1 (a7f2e9c4)](arch-spec.capsule.md) — when 5 REQUIRED body sections + locked-contract discipline are needed
-- Lighter sibling upstream → [design-brief.capsule (de5181b0)](design-brief.capsule.md) — briefs precede specs; specs formalize what briefs explore
-- Plan integration → [project-plan.capsule v1.1 (f7b9c4a2)](project-plan.capsule.md) — plans `derived_from:` design-briefs (and may reference specs in dependencies)
+- Heavier sibling → [arch-spec.capsule v2.1 (a7f2e9c4)](tropo-arch-spec.capsule.md) — when 5 REQUIRED body sections + locked-contract discipline are needed
+- Lighter sibling upstream → [design-brief.capsule (de5181b0)](tropo-design-brief.capsule.md) — briefs precede specs; specs formalize what briefs explore
+- Plan integration → [project-plan.capsule v1.1 (f7b9c4a2)](tropo-project-plan.capsule.md) — plans `derived_from:` design-briefs (and may reference specs in dependencies)
 - Folder governance → `design/AGENTS.md` — governs the `design/` folder where specs may also live (Rule 10 cited above)
 - Governance meta → [capsule-definition (222873b9)](../../vault/files/222873b9.md)
 

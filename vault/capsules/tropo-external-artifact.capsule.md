@@ -63,10 +63,10 @@ subsystem_hub:
 
 | Relation | Target |
 |---|---|
-| Governed by | [Vault Schema v2 — Architecture Specification (222873b9)](222873b9.md) |
-| Aligned with | [Import Primitive — Architecture Specification (2b49ba79)](2b49ba79.md) |
-| Member of | [v1.25.0 — Stream A: Capsules (c512438b)](c512438b.md) |
-| Member of | [Tropo Governance (8dd772a0)](8dd772a0.md) |
+| Governed by | [Vault Schema v2 — Architecture Specification (222873b9)](../files/222873b9.md) |
+| Aligned with | [Import Primitive — Architecture Specification (2b49ba79)](../files/2b49ba79.md) |
+| Member of | [v1.25.0 — Stream A: Capsules (c512438b)](../files/c512438b.md) |
+| Member of | [Tropo Governance (8dd772a0)](../files/8dd772a0.md) |
 
 *An `external-artifact` entry is a sidecar — a markdown+YAML file that carries Tropo's metadata for a user file imported into the Studio. Sidecars live at `<folder>/.tropo-studio/<filename>.tropo.md`. They are the canonical truth for imported user content per OS Invariant #8 (sidecar-as-truth); vault projections are derived from them.*
 
@@ -190,7 +190,7 @@ Core checks inherited from core.capsule v1.1. In addition:
 17. **[enforced at index derivation; v1.4]** The folder-mount registry and exact no-follow regular-file bytes consumed for mounted FTS/edges are transaction-bound manifest inputs under portable names. Incremental and removal writes compare current mounted virtuals with the trusted pre-transaction manifest and refuse changes outside every mount rederived by that transaction. Concurrent registry/source changes, symlinks, special files, path swaps, and over-4-MiB bodies fail closed without a partial index write or stale certification.
 18. **[enforced at index derivation; v1.4]** Mounted source reads and aliases require a canonical derived `external-artifact` projection bound to one same-UID authoritative sidecar in a registered adopted mount, with sidecar location/source path and projection mount-relative path consistent. Unverified rows contribute no body or outgoing edge and emit a named provenance observation. Removing a mounted projection captures its mount from the pre-removal union and atomically rederives every surviving same-mount row, FTS body, edge, and observation under the same index seal.
 
-**Validator functions implementing these checks** ship in v1.25.0 Stream E ([cd63ff4e](cd63ff4e.md)): `check_external_artifact_typing()`, `check_sidecar_source_pairing()`, `check_uid_stability_across_tier()`. **v1.28.0 Stream D adds** `check_original_styles_structure()` per check 12.
+**Validator functions implementing these checks** ship in v1.25.0 Stream E ([cd63ff4e](../files/cd63ff4e.md)): `check_external_artifact_typing()`, `check_sidecar_source_pairing()`, `check_uid_stability_across_tier()`. **v1.28.0 Stream D adds** `check_original_styles_structure()` per check 12.
 
 ---
 
@@ -227,9 +227,9 @@ UID is stable across all transitions. `governance:` carries the tier; `status:` 
 
 ## Relationship to Other Capsules
 
-- **[core.capsule v1.1 (ee814120)](ee814120.md)** — inherited floor. UID/owner/title/status/created/modified invariants.
-- **[project.capsule v2.4 (34e4cb0b)](34e4cb0b.md)** — `member_of:` resolves to project instances (folder-projects per the import primitive's folder-as-project mapping).
-- **[reconcile-report.capsule v1.0 (013b7b6e)](013b7b6e.md)** — sibling. sa.reconciler reports actions on external-artifact instances using this report schema.
+- **[core.capsule v1.1 (ee814120)](tropo-core.capsule.md)** — inherited floor. UID/owner/title/status/created/modified invariants.
+- **[project.capsule v2.4 (34e4cb0b)](tropo-project.capsule.md)** — `member_of:` resolves to project instances (folder-projects per the import primitive's folder-as-project mapping).
+- **[reconcile-report.capsule v1.0 (013b7b6e)](tropo-reconcile-report.capsule.md)** — sibling. sa.reconciler reports actions on external-artifact instances using this report schema.
 - **[tool.capsule]** — `import-walker.py` (the tool that authors and modifies external-artifact instances) is a tool.capsule instance.
 - **[agent.capsule]** — `sa.reconciler` (the agent that orchestrates reconciliation) is an agent.capsule instance.
 - **[playbook.capsule]** — `reconcile-imports.playbook` (sa.reconciler's playbook) is a playbook.capsule instance.
@@ -293,10 +293,10 @@ Extends `core`. Inherits UID immutability, type immutability, owner/created/modi
 
 **Go next:**
 
-- Need to understand the reconciler that operates on these? → [sa.reconciler agent (e4af1001)](e4af1001.md) + [reconcile-imports.playbook (4a2f6dbd)](4a2f6dbd.md)
-- Need to understand the report sa.reconciler produces? → [reconcile-report.capsule v1.0 (013b7b6e)](013b7b6e.md)
+- Need to understand the reconciler that operates on these? → [sa.reconciler agent (e4af1001)](../files/e4af1001.md) + [reconcile-imports.playbook (4a2f6dbd)](../playbooks/4a2f6dbd.md)
+- Need to understand the report sa.reconciler produces? → [reconcile-report.capsule v1.0 (013b7b6e)](tropo-reconcile-report.capsule.md)
 - Need the OS-tier invariant? → OS Invariant #8 in TROPO-CONTROL.md (added v1.25.0 Stream D)
-- Need the architectural reasoning? → [Import Primitive Architecture Specification v1.0 (2b49ba79)](2b49ba79.md)
+- Need the architectural reasoning? → [Import Primitive Architecture Specification v1.0 (2b49ba79)](../files/2b49ba79.md)
 
 ---
 
@@ -344,7 +344,7 @@ Vault projection at `vault/files/<<MINT:uid>>.md` (Tier 1) or `vault/files/<<MIN
 |---|---|---|---|
 | 1.4 | 2026-08-02 | **Mounted-content Phase 2.** Availability-gated source-body FTS from authoritative mount metadata; exact empty-body fail-closed behavior; same-mount wikilink aliases with unique-edge/missing-or-ambiguous-observation outcomes; template/body-shape-only projection exemption. Preserves the v1.3 derived-stub contract and user-lock provenance unchanged. | cursor-phase2 |
 | 1.3 | 2026-08-02 | **Mounted-content Phase 1 additive foundation.** Adds derived projection metadata `availability` + `projection_authority`; temporary source loss retains stable UIDs while removing stale source-derived edges; full deterministic regeneration replaces partial repair; orphan sidecars are named nonzero residuals. Existing sidecars remain authoritative. Explicit unmount is unchanged. Documents the no-source-body-index precondition and defers self-describing Markdown, folder notes, wikilinks, body FTS, and mount/import semantics. | cursor-phase1 |
-| 1.0 | 2026-05-13 | **LOCKED.** Initial definition. Authored in v1.25.0 Stream A per locked arch-spec [2b49ba79](2b49ba79.md) §C.1 + §3.6. Required + optional frontmatter; minimal body convention; 8 governance rules; 11 validation checks (10 enforced + 1 honor-system; three implemented in v1.25.0 Stream E); tier-aware state machine with UID stability across promotion/extraction; Studio shop-signage per agent-read-not-human-read pedagogy. Three-instrument verification: Argus build (this pass) + Stream G gauntlet pending. | argus-a60 |
+| 1.0 | 2026-05-13 | **LOCKED.** Initial definition. Authored in v1.25.0 Stream A per locked arch-spec [2b49ba79](../files/2b49ba79.md) §C.1 + §3.6. Required + optional frontmatter; minimal body convention; 8 governance rules; 11 validation checks (10 enforced + 1 honor-system; three implemented in v1.25.0 Stream E); tier-aware state machine with UID stability across promotion/extraction; Studio shop-signage per agent-read-not-human-read pedagogy. Three-instrument verification: Argus build (this pass) + Stream G gauntlet pending. | argus-a60 |
 | 1.1 | 2026-05-14 | **LOCKED amendment.** Additive: new optional `original_styles:` frontmatter field for `.docx` style-extraction-at-import. Schema mirrors arch-spec §3.4 `extracted_styles` structure. Authored in v1.28.0 Stream A per locked arch-spec [5a89297a v0.5](../../vault/files/5a89297a.md) §3.5.5 Amendment 2 + §3.11 item 3. Populated by `import-walker.py create-sidecar` (v1.28.0 amended) via shared library function `extract_office_styles()` at `.tropo/scripts/office_styles.py` (v1.28.0 NEW; also used by `tropo-register-template.py` + `tropo-backfill-styles.py`). Added Validation Check 12 (`check_original_styles_structure`, WARN severity; opportunistic field; implemented at v1.28.0 Stream D). Naming asymmetry with `docx-template.extracted_styles:` is intentional, semantics-driven (preservation context vs template context — closes pre-lock gauntlet RC-2 per arch-spec v0.5 walk Mike-A62 2026-05-14). No breaking changes; pre-v1.1 instances remain valid (field is optional). | argus-a62 |
 | 1.2 | 2026-07-13 | **Governed Autonomy S2** ([bba40cd7](../../vault/files/bba40cd7.md)) — NEW §Template leg per the Template-Leg Contract v1.0 ([b933eafb](../../vault/files/b933eafb.md)). `mint file --type external-artifact` stamps a manual/edge-case scaffold at `governance: tier-1-sidecar`, `status: active` — the primary creation path remains `import-walker.py`. Additive; no schema/enum/state-machine change. | talos-t29 |
 

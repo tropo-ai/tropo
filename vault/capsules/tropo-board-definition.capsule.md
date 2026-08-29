@@ -31,7 +31,7 @@ supersedes: b0a4dde7
 | Governed by | [Board System Reconciliation — Unified Capsule Design (74fd9b61)](../../vault/files/74fd9b61.md) |
 | Aligned with | [ADR-035 — Declared-Presence Validation Rule (a7c4e5b2)](../../vault/files/a7c4e5b2.md) |
 | Extends | `core` |
-| Supersedes | [board-def.capsule (b0a4dde7)](board-def.capsule.md) |
+| Supersedes | board-def.capsule (b0a4dde7, retired — file no longer exists) |
 
 *A template declaring what a board shows — scope, recursion, sections with prose queries, render format. Stable, long-lived artifact in the Vault. Regenerations read the definition but do not create new definition entries.*
 
@@ -41,9 +41,9 @@ supersedes: b0a4dde7
 
 A `board-definition` is a governed template for rendering boards. It names the target scope (project, team, collection, query), the recursion semantics, and an ordered list of sections — each a prose query against the Vault rendered in a declared format.
 
-The kernel ships one default board-definition: **`project-board`** (UID [c72f1a85](../seed/vault/project-board.board-definition.md)). Projects inherit it as their status board when they declare no `status_board:`. Agents and humans can author additional board-definitions (custom status boards, grooming boards, sprint boards, portfolio boards) and projects declare which they use via named fields on the project frontmatter.
+The kernel ships one default board-definition: **`project-board`** (UID [c72f1a85](../../.tropo/seed/vault/project-board.board-definition.md)). Projects inherit it as their status board when they declare no `status_board:`. Agents and humans can author additional board-definitions (custom status boards, grooming boards, sprint boards, portfolio boards) and projects declare which they use via named fields on the project frontmatter.
 
-This capsule supersedes [board-def.capsule (b0a4dde7)](board-def.capsule.md) (dead schema — zero live instances) and takes over the "template" half of the pre-v0.3 [board.capsule (00ac0959)](board.capsule.md) (whose rendered-view half is now governed by [board-snapshot.capsule (b5a7c391)](board-snapshot.capsule.md)).
+This capsule supersedes board-def.capsule (b0a4dde7, retired — file no longer exists) (dead schema — zero live instances) and takes over the "template" half of the pre-v0.3 board.capsule (00ac0959, retired — file no longer exists) (whose rendered-view half is now governed by [board-snapshot.capsule (b5a7c391)](tropo-board-snapshot.capsule.md)).
 
 ---
 
@@ -143,21 +143,21 @@ draft → active → superseded
 
 | Skill | When |
 |---|---|
-| [regenerate-board.skill](../skills/regenerate-board.skill.md) | The renderer. Reads a definition + queries the Vault; produces a current rendered view |
-| [create-snapshot.skill (d847e2b3)](../skills/create-snapshot.skill.md) | Creates a [board-snapshot](board-snapshot.capsule.md) from this definition at a specific moment |
+| [regenerate-board.skill](../skills/tropo-regenerate-board.md) | The renderer. Reads a definition + queries the Vault; produces a current rendered view |
+| [create-snapshot.skill (d847e2b3)](../skills/tropo-create-snapshot.md) | Creates a [board-snapshot](tropo-board-snapshot.capsule.md) from this definition at a specific moment |
 
 ### Procedures
 
-- **Authoring a custom definition.** (1) Generate a UID via `openssl rand -hex 4` (or any random-hex source). (2) Author at `vault/files/<uid>.md` with `type: board-definition`, `state: draft` (the lifecycle field is `state:` per §State Machine — not `stage:`). (3) Set `name:` (lowercase-hyphens), `intent:` (status / grooming / sprint / portfolio / custom — match the project's named-field binding: `status_board:` ↔ `intent: status`, `grooming_board:` ↔ `intent: grooming`, etc.; `custom` is for definitions not bound by a named field), `scope:` (project / owner / team / collection / query). (4) Author the `sections:` array — each section is `{title, query, render, columns?, sort?, group_by?, limit?, null_result?}`. Use only the prose-query vocabulary declared in [§7.2 of the design spec (74fd9b61)](../../vault/files/74fd9b61.md). The kernel seed at [project-board (c72f1a85)](../seed/ledger/project-board.board-definition.md) is the canonical reference shape — copy from it. (5) Verify (cold-boot test optional for custom; required for kernel seeds). (6) Flip `state: draft → active`.
+- **Authoring a custom definition.** (1) Generate a UID via `openssl rand -hex 4` (or any random-hex source). (2) Author at `vault/files/<uid>.md` with `type: board-definition`, `state: draft` (the lifecycle field is `state:` per §State Machine — not `stage:`). (3) Set `name:` (lowercase-hyphens), `intent:` (status / grooming / sprint / portfolio / custom — match the project's named-field binding: `status_board:` ↔ `intent: status`, `grooming_board:` ↔ `intent: grooming`, etc.; `custom` is for definitions not bound by a named field), `scope:` (project / owner / team / collection / query). (4) Author the `sections:` array — each section is `{title, query, render, columns?, sort?, group_by?, limit?, null_result?}`. Use only the prose-query vocabulary declared in [§7.2 of the design spec (74fd9b61)](../../vault/files/74fd9b61.md). The kernel seed at [project-board (c72f1a85)](../../.tropo/seed/vault/project-board.board-definition.md) is the canonical reference shape — copy from it. (5) Verify (cold-boot test optional for custom; required for kernel seeds). (6) Flip `state: draft → active`.
 - **Authoring a kernel seed.** Same as custom + set `default_for: <type>` and `author: tropo`. Kernel seeds live under `.tropo/seed/vault/`. Only one seed per `(name, default_for)` may be active at a time.
-- **Binding to a project.** Edit the project's frontmatter to declare a named-field reference: `status_board: <board-definition uid>`, `grooming_board:`, `sprint_board:`, `portfolio_board:`. See [project.capsule §Optional Frontmatter](project.capsule.md) for the full list of named fields. Without a named field, projects fall back to the kernel `project-board` default.
-- **Decide whether to snapshot.** A regeneration produces a current view; a snapshot freezes one render in time. Take a snapshot when the moment matters (pre-ship, stage-close, pre-change checkpoint) — invoke [create-snapshot.skill (d847e2b3)](../skills/create-snapshot.skill.md). Otherwise let regenerations stay ephemeral. See sibling [board-snapshot.capsule (b5a7c391)](board-snapshot.capsule.md) for the snapshot-side discipline.
+- **Binding to a project.** Edit the project's frontmatter to declare a named-field reference: `status_board: <board-definition uid>`, `grooming_board:`, `sprint_board:`, `portfolio_board:`. See [project.capsule §Optional Frontmatter](tropo-project.capsule.md) for the full list of named fields. Without a named field, projects fall back to the kernel `project-board` default.
+- **Decide whether to snapshot.** A regeneration produces a current view; a snapshot freezes one render in time. Take a snapshot when the moment matters (pre-ship, stage-close, pre-change checkpoint) — invoke [create-snapshot.skill (d847e2b3)](../skills/tropo-create-snapshot.md). Otherwise let regenerations stay ephemeral. See sibling [board-snapshot.capsule (b5a7c391)](tropo-board-snapshot.capsule.md) for the snapshot-side discipline.
 - **Superseding a definition.** Author the successor with `supersedes: <prior-uid>`. Flip the prior's `state: active → superseded`. Existing snapshots retain pointers to the superseded version — they're historical truths.
 
 ### Rules at a glance
 
 1. **Definitions are read-only at rendering time.** The renderer reads; never modifies.
-2. **Body is human prose, not rendered data.** The body documents the template's purpose. The render lives in [board-snapshot](board-snapshot.capsule.md) bodies, not here.
+2. **Body is human prose, not rendered data.** The body documents the template's purpose. The render lives in [board-snapshot](tropo-board-snapshot.capsule.md) bodies, not here.
 3. **Name uniqueness for kernel defaults.** Two active definitions with the same `(name, default_for)` triple cause a fail-loud halt at lookup time.
 4. **Custom names can repeat across definitions.** Two projects may each have a `sprint-board` definition; uniqueness is UID-based, not name-based.
 5. **Section queries must use only declared vocabulary.** Per [§7.2 of the design spec (74fd9b61)](../../vault/files/74fd9b61.md). Unknown query terms are a validation error, not a render error.
@@ -173,13 +173,13 @@ draft → active → superseded
 
 ### Worked examples
 
-- **[project-board kernel seed (c72f1a85)](../seed/vault/project-board.board-definition.md)** — the canonical kernel default that ships with Tropo-OS. Every project without a `status_board:` named-field reference inherits this. Read it as the reference shape for any new board-definition.
+- **[project-board kernel seed (c72f1a85)](../../.tropo/seed/vault/project-board.board-definition.md)** — the canonical kernel default that ships with Tropo-OS. Every project without a `status_board:` named-field reference inherits this. Read it as the reference shape for any new board-definition.
 
 ### Go next
 
-- **Pair capsule:** [board-snapshot.capsule (b5a7c391)](board-snapshot.capsule.md) — the frozen render produced from this template at a moment in time.
-- **Renderer:** [regenerate-board.skill](../skills/regenerate-board.skill.md).
-- **Project binding:** [project.capsule v2.3+ (34e4cb0b)](project.capsule.md) §Optional Frontmatter for the named-field references.
+- **Pair capsule:** [board-snapshot.capsule (b5a7c391)](tropo-board-snapshot.capsule.md) — the frozen render produced from this template at a moment in time.
+- **Renderer:** [regenerate-board.skill](../skills/tropo-regenerate-board.md).
+- **Project binding:** [project.capsule v2.3+ (34e4cb0b)](tropo-project.capsule.md) §Optional Frontmatter for the named-field references.
 - **Design spec:** [Board System Reconciliation v0.3 (74fd9b61)](../../vault/files/74fd9b61.md) §7.2 for the section-query vocabulary; §6.2 for default-lookup semantics.
 
 ---
@@ -205,13 +205,13 @@ sprint_board: <board-definition uid> # optional
 portfolio_board: <board-definition uid> # optional
 ```
 
-See [project.capsule v2.1 (34e4cb0b)](project.capsule.md) §Optional Frontmatter for the full named-field list. Additional named fields require a capsule update (capsule is the schema, governance through convention).
+See [project.capsule v2.1 (34e4cb0b)](tropo-project.capsule.md) §Optional Frontmatter for the full named-field list. Additional named fields require a capsule update (capsule is the schema, governance through convention).
 
 ---
 
 ## Example — Kernel Default
 
-See [`project-board` kernel seed (c72f1a85)](../seed/vault/project-board.board-definition.md) for the shipped default. That file is the canonical example of a valid board-definition.
+See [`project-board` kernel seed (c72f1a85)](../../.tropo/seed/vault/project-board.board-definition.md) for the shipped default. That file is the canonical example of a valid board-definition.
 
 ---
 
@@ -222,7 +222,7 @@ Extends `core`. Inherits all core rules (uid, type, state, schema_version, prove
 ---
 
 *board-definition Capsule Definition | v1.1 | argus-a38 | 2026-04-28 (Stream 3 D3.2 — §Studio + composes_with sibling); v1.0 lock 2026-04-20 by Argus A29 preserved in git history*
-*Supersedes [board-def (b0a4dde7)](board-def.capsule.md). Pairs with [board-snapshot (b5a7c391)](board-snapshot.capsule.md).*
+*Supersedes board-def (b0a4dde7, retired). Pairs with [board-snapshot (b5a7c391)](tropo-board-snapshot.capsule.md).*
 *"The template lives. The render is ephemeral. The snapshot is the record."*
 
 ---

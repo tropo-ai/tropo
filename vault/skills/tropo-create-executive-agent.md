@@ -92,7 +92,7 @@ These rules are the covenant. Every agent creation satisfies them.
 4. Every agent file MUST have a `uid:` in frontmatter (8-char hex, generated with `openssl rand -hex 4` or equivalent).
 5. Every agent file MUST have the `owner:` field set to the founder's name.
 6. Every agent MUST have a `workspace/` folder created inside its agent folder at `agents/<name>/workspace/`.
-7. Every agent MUST have a `memory.md` file created from `vault/templates/tropo-memory.template.md`.
+7. Every agent MUST have its curated memory surface at `agents/<name>/.tropo-capsule/memory/agent-memory.md`, created from `vault/templates/tropo-memory.template.md`. **That exact path is what the boot playbook reads** (99341618 line 102, the v3.0 single-surface boot-read). A file at `agents/<name>/memory.md` is an ORPHAN: nothing reads it, boot silently creates an empty surface instead, and the concierge's promise that the agent will remember you becomes false with no error anywhere. Found by the v1.93 cold-boot walk; one persona named that promise as his whole reason for choosing Tropo.
 8. Every agent MUST have a `sessions.md` file created from `vault/templates/tropo-sessions.template.md`.
 9. Every agent MUST be registered in `.tropo-studio/registries/agent-registry.yaml`.
 10. Every agent creation MUST be logged to the crew event log via `tropo-emit-event.py --type tropo.broadcast.crew` (`channels/ops.md` was retired v1.61 — the event log is the crew-communication surface).
@@ -159,7 +159,7 @@ Path: `agents/<name>/<name>-briefing.md`. Copy from `vault/templates/tropo-execu
 - What the agent owns (scope, deliverables)
 - Tiered reading (what to read at boot vs on-demand)
 - Working protocol (how the agent approaches work)
-- Memory protocol (how the agent maintains `memory.md`)
+- Memory protocol (how the agent maintains `.tropo-capsule/memory/agent-memory.md`)
 - Transparency protocol (how the agent reports progress)
 - Child protocol (whether the agent may spawn sub-agents; default no for end-user agents)
 - Platform capabilities (Claude Code, Cursor, Codex — whatever the founder uses)
@@ -171,9 +171,9 @@ Path: `agents/<name>/<name>-activation.md`. Copy from `vault/templates/tropo-exe
 - Frontmatter: `uid:` (this file's **own** UID from step 3 — never the charter's; three governed files carry three distinct UIDs or the first index rebuild aborts on collision), pointer to charter, pointer to boot playbook
 - Body: §Who You Are + §How to Boot + **§Routing** (concierge-bounce rules — present in the template by default per [playbook.capsule v2.3 §Subtypes §Concierge-Paths (`e7b3c509`)](../capsules/playbook.capsule.md)). The §Routing section is verbatim from the template; replace `[Founder Name]` placeholders, do not edit the bounce rules themselves. The bounce rules are the structural enforcement of D4.9 — they keep system primitives (projects / agents / teams / updates) under canonical playbook governance instead of drifting into agent-inline handling.
 
-### 8. Create memory.md (Rule 7)
+### 8. Create the memory surface (Rule 7)
 
-Path: `agents/<name>/memory.md`. Copy from `vault/templates/tropo-memory.template.md`. Populate:
+Path: `agents/<name>/.tropo-capsule/memory/agent-memory.md` — **write where boot reads**. Create the `.tropo-capsule/memory/` directory if absent. Copy from `vault/templates/tropo-memory.template.md`. Populate:
 - `owner:` — founder's name
 - Status Board → "First session pending"
 
@@ -191,13 +191,14 @@ Path: `agents/<name>/sessions.md`. Copy from `vault/templates/tropo-sessions.tem
 
 ### 11. Register in the vault registry (Rule 9)
 
-Add an entry under the `user_agents:` map in `.tropo-studio/registries/agent-registry.yaml`. The registry is a **map keyed by messaging UID** (use the charter UID from step 3; do not reuse it in another file) — the value is an indented block:
+Add an entry under the **top-level `agents:` map** in `.tropo-studio/registries/agent-registry.yaml`. The registry is a **map keyed by messaging UID** (use the charter UID from step 3; do not reuse it in another file) — the value is an indented block:
 ```yaml
-user_agents:
+agents:
   <uid-from-step-3>:
-    class: personal            # end-user founder agent (crew/personal/worker/service)
-    name: "<Agent Name>"
-    type: executive
+    type: agent                # REQUIRED for author provenance — not `executive`
+    name: <name>               # the agent SLUG, lowercase, matching agents/<name>/
+    generation-prefix: G       # must match this agent's lineage; `born` issues G1 by default
+    class: personal            # crew / personal / worker / service
     purpose: "<role (human-readable)>"
     status: active
     path: agents/<name>/<name>-activation.md
@@ -205,7 +206,20 @@ user_agents:
     commissioned: <today>
 ```
 
-One entry per agent (the agent is one entity across its three files — do not add separate rows for the briefing/activation). Check existing `user_agents:` entries for the exact field set your Studio uses.
+**Use `agents:`, not `user_agents:`.** Four shipped tools read this registry and all four consult
+`agents:` — `tropo-mint-id.py` REQUIRES it and raises without it, while `tropo-check-events.py`
+and `tropo-emit-event.py` read either. Registering under `user_agents:` therefore *appears* to
+work (the boot drain clears) while typed minting silently records no author provenance at all —
+the gate fails open. The v1.93 cold-boot walk found exactly that split: one persona rated it
+cycle-blocking and two rated it friction, purely because of which tool each ran next.
+
+**`type: agent`, and `name:` is the lowercase slug.** `type: executive` does not satisfy the mint
+tool's provenance lookup; neither does a capitalised display name. `generation-prefix` must match
+what `tropo-lineage.py born` actually wrote to `agents/<name>/lineage.jsonl` — the lineage is the
+truth and `born` never reads this registry.
+
+One entry per agent (the agent is one entity across its three files — do not add separate rows for
+the briefing/activation).
 
 ### 12. Refresh the vault index (Rule 11)
 
@@ -235,7 +249,7 @@ After creating the agent, before reporting success, verify:
 3. `agents/<name>/<name>-charter.md`, `<name>-briefing.md`, `<name>-activation.md` all exist
 4. Charter, briefing, and activation carry three distinct `uid:` values, and their pointer fields resolve to one another
 5. Every file has `owner: <founder-name>` in frontmatter
-6. `agents/<name>/memory.md` exists with `owner:` populated
+6. `agents/<name>/.tropo-capsule/memory/agent-memory.md` exists with `owner:` populated — verify at THAT path, not `agents/<name>/memory.md`
 7. `agents/<name>/sessions.md` exists with agent name
 8. `agents/<name>/AGENTS.md` and `agents/<name>/CAPSULE.md` exist
 9. `.tropo-studio/registries/agent-registry.yaml` has at least one entry for this agent
@@ -251,7 +265,7 @@ If any check fails, halt and report the specific check number to the calling pla
 ## Success
 
 - Three-file agent exists at `agents/<name>/` with valid charter, briefing, activation
-- Workspace, memory.md, sessions.md, AGENTS.md, CAPSULE.md all present
+- Workspace, `.tropo-capsule/memory/agent-memory.md`, sessions.md, AGENTS.md, CAPSULE.md all present
 - Registered in agent-registry.yaml; present in vault/00-index.jsonl; creation event emitted to the crew log
 - All 13 validation checks pass (see §Validation Checks above)
 - Every one of the 10 agent-creation Rules (3–12) is satisfied
@@ -276,7 +290,9 @@ The templates referenced above (`executive-charter.template.md`, `executive-brie
 
 3. **Charter frontmatter paths — `generation_log`, `briefing_package`, `living_transfer`.** These point to crew-infrastructure paths (generation-log.md, briefing-package/ folder, transfers/living-transfer.md). End-user agents typically don't need generation tracking or briefing packages. For end-user agents, these fields MAY be left at template defaults (paths that would be valid if ever created) or set to `null` — the agent does not use them at boot and the paths resolve on-demand if the founder ever creates them. A v1.4 template amendment will split end-user vs crew templates; v1.3 uses this adaptation note.
 
-4. **Briefing template — "Files you maintain."** The briefing template lists crew-oriented files (`[agent]-status.md`, `generation-log.md`, `transfers/living-transfer.md`, `boards/board-*/current.md`). For end-user agents, adapt to the founder's actual files — typically just `agents/[name]/memory.md` + `agents/[name]/sessions.md` + `agents/[name]/workspace/`.
+4. **Briefing template — "Files you maintain."** The briefing template lists crew-oriented files (`[agent]-status.md`, `generation-log.md`, `transfers/living-transfer.md`, `boards/board-*/current.md`). For end-user agents, adapt to the founder's actual files — `agents/[name]/.tropo-capsule/memory/agent-memory.md` + `agents/[name]/sessions.md` + `agents/[name]/workspace/`.
+
+   **The memory path here is the same one as Step 7 and it is not negotiable.** Never write `agents/[name]/memory.md` into a briefing. That path is an ORPHAN — boot reads `.tropo-capsule/memory/agent-memory.md` and nothing else, so a briefing naming the orphan tells the agent to maintain a file its own boot will never open. *(This line said `agents/[name]/memory.md` through v1.93 — 130 lines below the Step 7 rule that forbids it. A founder following it literally produced a briefing instructing the agent to maintain a file that does not exist. Caught by the v1.93 two-session boot experiment, which measured the live consequence: the three facts survived because the agent duplicated them, but the priorities and open blockers written only to the orphan were lost between sessions.)*
 
 **Why these adaptations exist.** The three-file pattern (charter + briefing + activation) is correct for end-user agents. The template CONTENT at v1.3 is crew-oriented because the templates predate end-user-specific needs. v1.3 ships the skill + adaptation notes; v1.4 or later splits the templates into end-user-specific variants. This gap is tracked in §Known Gaps below.
 

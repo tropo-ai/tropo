@@ -63,7 +63,7 @@ subsystem_hub:
 | Aligned with | [v1.26.0 design brief (802ee860)](../../vault/files/802ee860.md) |
 | Aligned with | [ADR-020 — Curator Protocol (5c0d3e1a)](../../vault/files/5c0d3e1a.md) |
 | Aligned with | [ADR-021 — Historian Protocol (6d1e4f2b)](../../vault/files/6d1e4f2b.md) |
-| Pattern exemplar | [note.capsule (7c47429a)](note.capsule.md) |
+| Pattern exemplar | [note.capsule (7c47429a)](tropo-note.capsule.md) |
 | Extends | `core` |
 
 *A memory entry — a discrete unit of preserved context (insight, learning, observation, pin, reference) carried across sessions. Memory entries compose the v3 memory substrate: written by agents during work, scored and groomed by sa.memory-curator, retrieved at runtime via grep + frontmatter sort.*
@@ -138,7 +138,7 @@ agent-memory.md
 | `scope` | enum | One of: `agent` / `studio` / `doctrine`. See §Scope below. Legacy `vault`/`project` are migration aliases only. |
 | `context` | string | One-line situating context. ≤ 120 chars. The "what we were doing when this surfaced" — per Anthropic Sept 2024 contextual retrieval pattern (49% retrieval-quality improvement; pure prompting pattern, no infra). |
 
-**Required core fields (inherited from `core.capsule`):** `uid`, `type` (= `"memory"`), `created`, `modified`, `state` (= `active` at capture). See [core.capsule (ee814120)](core.capsule.md) for full core inheritance.
+**Required core fields (inherited from `core.capsule`):** `uid`, `type` (= `"memory"`), `created`, `modified`, `state` (= `active` at capture). See [core.capsule (ee814120)](tropo-core.capsule.md) for full core inheritance.
 
 **Body:** markdown content after the closing frontmatter fence. Author-mutable. Curator never mutates an entry body (see §Governance Contract). `body:` is **not** a frontmatter field — v1.4's template followed stale Lifecycle Examples and is superseded by this rule.
 

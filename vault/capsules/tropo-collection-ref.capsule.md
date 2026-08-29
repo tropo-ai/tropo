@@ -40,7 +40,7 @@ subsystem_hub:
 |---|---|
 | Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](../../vault/files/222873b9.md) |
 | Aligned with | [Tropo Work v3 — Architecture Specification (8b3f1d92)](../../vault/files/8b3f1d92.md) |
-| Pattern exemplar | [document.capsule (d0c00001)](document.capsule.md) |
+| Pattern exemplar | [document.capsule (d0c00001)](tropo-document.capsule.md) |
 | Extends | `core` |
 
 *A pointer entry that registers a collection in the Vault. The actual collection file lives in `collections/`; this entry tells the Vault that the collection exists.*
@@ -138,12 +138,12 @@ Extends `core`. Inherits all core rules.
 
 **Worked examples:**
 - [417898d0](../../vault/files/417898d0.md) — "All Decisions" collection-ref; every ADR in number order with supersession chains visible (Vela-owned, primary governance index)
-- [ffc87c04](../../vault/files/ffc87c04.md) — v0.3 Compliance project primary-members collection-ref; scoped to one project's member roster (Metis-owned)
+- `ffc87c04` (pruned from the vault; no longer resolvable) — v0.3 Compliance project primary-members collection-ref; scoped to one project's member roster (Metis-owned)
 
 **Go next:**
 - Actual collections live under → `collections/` (outside the Vault, human-organized hierarchy)
-- Collections commonly enumerate projects → [project.capsule v2.3 (34e4cb0b)](project.capsule.md)
-- Collections may enumerate decisions → [decision.capsule (179d74e9)](decision.capsule.md)
+- Collections commonly enumerate projects → [project.capsule v2.3 (34e4cb0b)](tropo-project.capsule.md)
+- Collections may enumerate decisions → [decision.capsule (179d74e9)](tropo-decision.capsule.md)
 - Governance meta → [capsule-definition (222873b9)](../../vault/files/222873b9.md)
 
 ---

@@ -51,7 +51,7 @@ subsystem_hub:
 |---|---|
 | Governed by | [capsule-definition meta (222873b9)](../../vault/files/222873b9.md) |
 | Aligned with | [sa/CAPSULE.md (e863a1e0)](../../vault/files/e863a1e0.md) (universal commissioning protocol) |
-| Composes with | [session-agent.capsule (b4e2a718)](session-agent.capsule.md) (governs sa.\* activation files) |
+| Composes with | [session-agent.capsule (b4e2a718)](tropo-session-agent.capsule.md) (governs sa.\* activation files) |
 | Extends | `core` |
 
 ---
@@ -60,7 +60,7 @@ subsystem_hub:
 
 An activation-log record (`agents/sa/<name>/activation-log/<NNN>-*.md`) is the per-spawn record of a sa.\* commission — both the live IPC channel during the spawn AND the permanent historical record after termination. This capsule governs the shape of every record: required frontmatter, body conventions, state machine, validation checks.
 
-Sibling to [session-agent.capsule (b4e2a718)](session-agent.capsule.md) (governs the activation FILE) and complementary to [sa/CAPSULE.md (e863a1e0)](../../vault/files/e863a1e0.md) (governs the commissioning PROTOCOL). This capsule governs the per-commission RECORD shape.
+Sibling to [session-agent.capsule (b4e2a718)](tropo-session-agent.capsule.md) (governs the activation FILE) and complementary to [sa/CAPSULE.md (e863a1e0)](../../vault/files/e863a1e0.md) (governs the commissioning PROTOCOL). This capsule governs the per-commission RECORD shape.
 
 Failure mode prevented: heterogeneous record shapes that cannot be cited cross-document (V36's records had YAML frontmatter; A39's didn't; the `verification_artifacts:` array in release.capsule can't resolve UIDs that don't exist).
 
@@ -130,7 +130,7 @@ Activation-log records live at `agents/sa/<name>/activation-log/<NNN>-*.md` and 
 
 The capsule names extensions used by major sa.\* families. Per-agent activation files declare which extensions a record of that class MUST include.
 
-**Forward-pointer to v1.3 amendment:** machine-checkable per-agent contracts will be declared in [session-agent.capsule v1.3](session-agent.capsule.md) via a new `record_extensions:` frontmatter slot — sibling amendment filed at [task `168fb3f8`](../../vault/files/168fb3f8.md). Until v1.3 lands, per-agent contracts are documented as prose in the agent's body §Output Format.
+**Forward-pointer to v1.3 amendment:** machine-checkable per-agent contracts will be declared in [session-agent.capsule v1.3](tropo-session-agent.capsule.md) via a new `record_extensions:` frontmatter slot — sibling amendment filed at [task `168fb3f8`](../../vault/files/168fb3f8.md). Until v1.3 lands, per-agent contracts are documented as prose in the agent's body §Output Format.
 
 **Walker family** (sa.first-use-walker, sa.pipeline-walker, forthcoming `sa.user-error-walker`):
 - `build_under_test` — release version frozen at dispatch
@@ -175,7 +175,7 @@ Records inherit body shape from [sa/CAPSULE.md §Record File Format (e863a1e0)](
 
 **Handle format:** `<NNN>` 3-digit zero-padded sequential; AI dispatchers use `<role>-<gen>` (e.g., `argus-a41`); humans use bare short-handle (e.g., `mike`); ops-fleet uses bare role (`fleet-ops`); no spaces; no full role titles.
 
-**Bootstrapping case** for brand-new sa.\* classes: full detail in [history §Bootstrapping Case](activation-log.history.md). Key rule — record 001 stays bootstrap-shaped even after activation file lands; subsequent records (002+) carry full per-agent contract.
+**Bootstrapping case** for brand-new sa.\* classes: full detail in [history §Bootstrapping Case](tropo-activation-log.history.md). Key rule — record 001 stays bootstrap-shaped even after activation file lands; subsequent records (002+) carry full per-agent contract.
 
 ---
 
@@ -212,7 +212,7 @@ dispatched ──→ complete                  (agent writes [DONE] cleanly)
 6. **Verdict format authority is per-agent.** The `verdict` field's allowed values are declared by the per-agent activation file's §Output Format. This capsule does NOT enumerate a universal verdict enum.
 7. **Cross-record citation uses UID.** When citing another record (e.g., walker 003's `prior_record:` pointing at walker 002), use UID — not NNN. NNNs are unique per agent, not globally.
 8. **Dispatcher allowlist/blocklist enforcement is per-agent.** Some agent classes carry `spawnable_by:` allowlists + `spawn_blocklist:` denylists in activation file frontmatter. When dispatch refused per those rules, record's `status: blocked` + `blocked_reason: dispatcher-not-allowed`.
-9. **Verdict transcription is universal.** Frontmatter `verdict:` MUST appear verbatim in the `[DONE]` block body (or spawner-authored salvage block). Generalizes [dispatch-walker.playbook v0.2 Rule 7](../playbooks/dispatch-walker.playbook.md) to all sa.\* classes. Check 21.
+9. **Verdict transcription is universal.** Frontmatter `verdict:` MUST appear verbatim in the `[DONE]` block body (or spawner-authored salvage block). Generalizes [dispatch-walker.playbook v0.2 Rule 7](../playbooks/7579f894.md) to all sa.\* classes. Check 21.
 10. **Cross-class record linkage uses `relationships:`, not `prior_record:`.** Regression chains via `prior_record:` are within-class only (Check 20). Cross-class connections (e.g., walker citing peer cold-boot in parallel BATCH) MUST use `relationships:` with explicit `kind:` (e.g., `parallel-to`, `informs`, `succeeds-in-different-class`).
 11. **Frontmatter is authoritative on body-disagreement.** When Check 5/6/13 detect frontmatter-vs-body disagreement on `status: dispatched`, frontmatter is canonical + spawner syncs body. For terminal-status records, spawner's sync is part of lock-in — Check 23 violation at terminal means spawner failed to sync. **Cross-rule precedence:** Rule 11 governs frontmatter-vs-body for `commissioned_by` / `commissioned_at` / H1 (Checks 5/6/13). Rule 9 (verdict transcription) is hard fail outside Rule 11's scope.
 12. **Records flagged `verdict_inference_uncertain: true` are NOT cite-eligible until closed.** Backfilled record carrying the flag MUST NOT be cited from `release.capsule.verification_artifacts:` arrays or referenced by active `prior_record:` chains. Closure protocol: (a) verdict recovered via manual review (remove flag; add `verdict_resolved_by:` + `verdict_resolved_at:`) OR (b) reclassify to `status: blocked` + `blocked_reason: verdict_unrecoverable`. Check 24.
@@ -248,7 +248,7 @@ dispatched ──→ complete                  (agent writes [DONE] cleanly)
 
 v1.0+ enforces nominal consistency for honest authors via Checks 1-24 + Rules 1-12. **v1.0 detects only consistent forgery** — cross-field self-consistency. Substantive provenance (proof that `commissioned_by:` reflects actual harness identity) requires out-of-band anchor (e.g., dispatch-time provenance crumb in `dispatches.jsonl`, or harness-identity attestation). v1.1+ concern.
 
-Full limitations + companion-limitations detail in [history §Limitations](activation-log.history.md).
+Full limitations + companion-limitations detail in [history §Limitations](tropo-activation-log.history.md).
 
 ---
 
@@ -260,16 +260,16 @@ Full limitations + companion-limitations detail in [history §Limitations](activ
 
 ### Composes With
 
-- **[session-agent.capsule (b4e2a718)](session-agent.capsule.md)** — sibling. Session-agent.capsule governs the sa.\* activation FILE; this capsule governs the per-commission RECORD. The two compose: activation file declares per-agent contract; records satisfy the contract.
+- **[session-agent.capsule (b4e2a718)](tropo-session-agent.capsule.md)** — sibling. Session-agent.capsule governs the sa.\* activation FILE; this capsule governs the per-commission RECORD. The two compose: activation file declares per-agent contract; records satisfy the contract.
 - **[sa/CAPSULE.md (e863a1e0)](../../vault/files/e863a1e0.md)** — universal commissioning protocol. Governs the 6-step ceremony + spawn modes + prose record body format. This capsule formalizes structural requirements that sa/CAPSULE.md leaves as prose convention.
-- **[release.capsule v3.1 (b19e8d43)](release.capsule.md)** — `verification_artifacts:` array cites this capsule's records by UID. Rule 12 + Check 24 cite-eligibility gate ensures cited records carry verdict integrity.
-- **[playbook.capsule v2.5 (e7b3c509)](playbook.capsule.md) §Test-Harness subtype** — playbooks that dispatch sa.\* reference activation-log records as their evidence section.
-- **[dispatch-walker.playbook v0.2 (`7579f894`)](../playbooks/dispatch-walker.playbook.md)** — Rule 7 (verdict literal-copy) generalizes universally to all sa.\* via this capsule's Rule 9 + Check 21.
+- **[release.capsule v3.1 (b19e8d43)](tropo-release.capsule.md)** — `verification_artifacts:` array cites this capsule's records by UID. Rule 12 + Check 24 cite-eligibility gate ensures cited records carry verdict integrity.
+- **[playbook.capsule v2.5 (e7b3c509)](tropo-playbook.capsule.md) §Test-Harness subtype** — playbooks that dispatch sa.\* reference activation-log records as their evidence section.
+- **[dispatch-walker.playbook v0.2 (`7579f894`)](../playbooks/7579f894.md)** — Rule 7 (verdict literal-copy) generalizes universally to all sa.\* via this capsule's Rule 9 + Check 21.
 
 ### Subsumes
 
-- [sa.first-use-walker/00-README.md](../../agents/sa/sa.first-use-walker/activation-log/00-README.md) — walker-family supplement
-- [sa.pipeline-walker/FORMAT.md](../../agents/sa/sa.pipeline-walker/activation-log/FORMAT.md) — pipeline-walker-family supplement; per-agent §Output Format authority preserved
+- `sa.first-use-walker/activation-log/00-README.md` — walker-family supplement (file no longer present in the log)
+- `sa.pipeline-walker/activation-log/FORMAT.md` — pipeline-walker-family supplement (agent and file no longer present); per-agent §Output Format authority preserved
 
 ### Triggers sibling amendments
 
@@ -278,4 +278,4 @@ Full limitations + companion-limitations detail in [history §Limitations](activ
 
 ---
 
-*activation-log capsule definition | UID `8406c4f8` | v1.1 | history at [2207c655](activation-log.history.md)*
+*activation-log capsule definition | UID `8406c4f8` | v1.1 | history at [2207c655](tropo-activation-log.history.md)*

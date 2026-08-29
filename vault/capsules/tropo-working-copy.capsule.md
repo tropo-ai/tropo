@@ -44,13 +44,13 @@ subsystem_hub:
 
 | Relation | Target |
 |---|---|
-| Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](222873b9.md) |
-| Aligned with | [Working-Copy Primitive Architecture Spec (5a89297a)](5a89297a.md) |
-| Aligned with | [Import Primitive Architecture Spec (2b49ba79)](2b49ba79.md) |
-| Aligned with | [external-artifact.capsule v1.0 (eedd7034)](eedd7034.md) |
-| Pattern exemplar | [external-artifact.capsule (eedd7034)](eedd7034.md) |
-| Member of | [v1.26.0 — Stream A: Working-Copy Capsule Definition (9b70a355)](9b70a355.md) |
-| Member of | [Tropo Governance (8dd772a0)](8dd772a0.md) |
+| Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](../files/222873b9.md) |
+| Aligned with | [Working-Copy Primitive Architecture Spec (5a89297a)](../files/5a89297a.md) |
+| Aligned with | [Import Primitive Architecture Spec (2b49ba79)](../files/2b49ba79.md) |
+| Aligned with | [external-artifact.capsule v1.0 (eedd7034)](tropo-external-artifact.capsule.md) |
+| Pattern exemplar | [external-artifact.capsule (eedd7034)](tropo-external-artifact.capsule.md) |
+| Member of | [v1.26.0 — Stream A: Working-Copy Capsule Definition (9b70a355)](../files/9b70a355.md) |
+| Member of | [Tropo Governance (8dd772a0)](../files/8dd772a0.md) |
 
 *A `working-copy` entry is a vault-resident markdown file derived from an `external-artifact` projection by extracting the content of the source binary. It is the agent's canonical editing medium for the imported content. Sources stay where they are; the working-copy is what agents read + edit; the export gesture (v1.27.0) regenerates a deliverable binary from the working-copy + a chosen template.*
 
@@ -70,7 +70,7 @@ The `working-copy` capsule closes that gap. `tropo-extract.py` (Stream B) reads 
 
 ## Required Frontmatter (in addition to core)
 
-Inherited from [`core.capsule`](core.capsule.md): `uid`, `type` (= `"working-copy"`), `created`, `modified`, `state` (= `active` at authoring).
+Inherited from [`core.capsule`](tropo-core.capsule.md): `uid`, `type` (= `"working-copy"`), `created`, `modified`, `state` (= `active` at authoring).
 
 Working-copy-specific required fields:
 
@@ -133,7 +133,7 @@ The validator does NOT enforce body section presence on working-copy instances; 
 
 ## Validation Checks (run at check-in)
 
-Per [arch-spec 5a89297a §3.10](5a89297a.md) — the Stream D validator extensions land these:
+Per [arch-spec 5a89297a §3.10](../files/5a89297a.md) — the Stream D validator extensions land these:
 
 1. **Working-copy schema check** — for each `type: working-copy` entry: `derived_from:` non-empty AND single-element AND resolves to `type: external-artifact`; `source_hash_at_extraction:` non-empty; `last_source_hash_seen:` non-empty; `hash_function:` one of the valid values (`stable-id`, `content-aware`, `sha256`). Severity: **ERROR**.
 
@@ -207,7 +207,7 @@ The capsule is intentionally narrow: it formalizes the markdown working-copy as 
 
 | Version | Date | Change | Author |
 |---|---|---|---|
-| 1.0 | 2026-05-13 | **LOCKED.** Initial capsule authored in v1.26.0 Stream A per [arch-spec 5a89297a §3.1 + §3.11](5a89297a.md). Schema: 9 required frontmatter fields (beyond core) + 7 optional; 2-state lifecycle (active/archived); 5 validation checks (schema, lineage, sidecar-equivalence, index-sync, one-per-projection); 7 governance rules. Pattern-exemplar [external-artifact.capsule (eedd7034)](eedd7034.md). UID pre-minted at arch-spec v0.3 lock; file authored at cycle execution. | argus-a61 |
+| 1.0 | 2026-05-13 | **LOCKED.** Initial capsule authored in v1.26.0 Stream A per [arch-spec 5a89297a §3.1 + §3.11](../files/5a89297a.md). Schema: 9 required frontmatter fields (beyond core) + 7 optional; 2-state lifecycle (active/archived); 5 validation checks (schema, lineage, sidecar-equivalence, index-sync, one-per-projection); 7 governance rules. Pattern-exemplar [external-artifact.capsule (eedd7034)](tropo-external-artifact.capsule.md). UID pre-minted at arch-spec v0.3 lock; file authored at cycle execution. | argus-a61 |
 
 ---
 

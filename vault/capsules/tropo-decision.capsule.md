@@ -58,7 +58,7 @@ subsystem_hub:
 |---|---|
 | Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](../../vault/files/222873b9.md) |
 | Aligned with | [Tropo Work v3 — Architecture Specification (8b3f1d92)](../../vault/files/8b3f1d92.md) |
-| Pattern exemplar | [document.capsule (d0c00001)](document.capsule.md) |
+| Pattern exemplar | [document.capsule (d0c00001)](tropo-document.capsule.md) |
 | Extends | `core` |
 
 *An architectural or strategic decision. Once accepted, decisions are immutable. They may be superseded by a newer decision but never edited in place.*

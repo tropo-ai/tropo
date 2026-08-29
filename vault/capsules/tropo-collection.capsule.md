@@ -36,10 +36,10 @@ pattern_family: c01ec700
 | Relation | Target |
 |---|---|
 | Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](../../vault/files/222873b9.md) |
-| Aligned with | [collection-ref.capsule (c01ec700)](collection-ref.capsule.md) |
-| Pattern family | [collection-ref.capsule (c01ec700)](collection-ref.capsule.md) |
+| Aligned with | [collection-ref.capsule (c01ec700)](tropo-collection-ref.capsule.md) |
+| Pattern family | [collection-ref.capsule (c01ec700)](tropo-collection-ref.capsule.md) |
 | Extends | `core` |
-| Composes with | [collection-ref.capsule (c01ec700)](collection-ref.capsule.md) |
+| Composes with | [collection-ref.capsule (c01ec700)](tropo-collection-ref.capsule.md) |
 
 *A membership roster — a maintained list of vault entries that share a common context. Different from `collection-ref` (a pointer) — this is the actual manifest.*
 
@@ -108,9 +108,9 @@ Collections are almost always `stage: build` — they are living rosters. A coll
 - Reference instances: [`collections/subsystem-hubs.collection.md`](../../collections/subsystem-hubs.collection.md), [`collections/master/all-active-tasks.collection.md`](../../collections/master/all-active-tasks.collection.md), [`collections/master/all-design-specs.collection.md`](../../collections/master/all-design-specs.collection.md), [`collections/master/all-decisions.collection.md`](../../collections/master/all-decisions.collection.md), [`collections/master/all-boards.collection.md`](../../collections/master/all-boards.collection.md)
 
 **Skills:**
-- `register-collection.skill.md` *(forthcoming v1.5)* — author manifest at `collections/<path>/<name>.collection.md` FIRST, then create paired collection-ref vault entry at `vault/files/<uid>.md` with the SAME UID (per [collection-ref.capsule v3.0 Rule 2 (c01ec700)](collection-ref.capsule.md))
+- `register-collection.skill.md` *(forthcoming v1.5)* — author manifest at `collections/<path>/<name>.collection.md` FIRST, then create paired collection-ref vault entry at `vault/files/<uid>.md` with the SAME UID (per [collection-ref.capsule v3.0 Rule 2 (c01ec700)](tropo-collection-ref.capsule.md))
 - `audit-collection-membership.skill.md` *(forthcoming v1.5)* — verify `filter:` matches actual membership; flag drift between declared filter + maintained roster
-- Existing live action: [`create-collection.action.md`](../../.tropo/actions/create-collection.action.md) — atomic two-file write (manifest + ledger ref), per [action.capsule v1.1 (9b7f5e34)](action.capsule.md)
+- Existing live action: [`create-collection.action.md`](../actions/tropo-create-collection.md) — atomic two-file write (manifest + ledger ref), per [action.capsule v1.1 (9b7f5e34)](tropo-action.capsule.md)
 
 **Procedures:**
 - **Author a collection** — capture: choose a filter (e.g., `"type: task AND stage: active"`); author the manifest at `collections/<scope>/<name>.collection.md` with REQUIRED frontmatter (`title`, `description`, `owner`, `stage: build`, `state: active`, `member_of`, `filter`); author the paired collection-ref at `vault/files/<uid>.md` with the SAME UID (per collection-ref capsule Rule 2)
@@ -140,15 +140,15 @@ Collections are almost always `stage: build` — they are living rosters. A coll
 - **Stale `collection_path:` on the paired ref** — collection-ref Rule 1 / orphan repair; if the manifest moves, update the ref or archive
 
 **Worked examples:**
-- [Subsystem Hubs — Active Roster (4c1f8a26)](../../collections/subsystem-hubs.collection.md) — manual collection, hierarchical render; the live hub roster referenced by [subsystem-hub.capsule v1.3 (8a4e21c5)](subsystem-hub.capsule.md). Path moved from `collections/master/` to `collections/` in v1.7 Stream A2 (2026-05-05) per v1.3 cite alignment; UID preserved.
+- [Subsystem Hubs — Active Roster (4c1f8a26)](../../collections/subsystem-hubs.collection.md) — manual collection, hierarchical render; the live hub roster referenced by [subsystem-hub.capsule v1.3 (8a4e21c5)](tropo-subsystem-hub.capsule.md). Path moved from `collections/master/` to `collections/` in v1.7 Stream A2 (2026-05-05) per v1.3 cite alignment; UID preserved.
 - [All Active Tasks (Ledger) (7b92c4e1)](../../collections/master/all-active-tasks.collection.md) — `filter: "type: task AND state: active"`; canonical task roster
 - [All Design Specs (Ledger) (a4d8f3b2)](../../collections/master/all-design-specs.collection.md) — vault-wide design-spec inventory
 - Folder hierarchies under `collections/projects/` — per-project rosters demonstrating scope-narrowed `filter:` strings + `member_of:` to specific projects
 
 **Go next:**
-- Paired pointer capsule → [collection-ref.capsule v3.0 (c01ec700)](collection-ref.capsule.md) — UID-matched vault entry; Rule 2 enforces same-UID-two-homes
-- Atomic creation action → [`create-collection.action.md`](../../.tropo/actions/create-collection.action.md) — two-file write per [action.capsule v1.1 (9b7f5e34)](action.capsule.md)
-- Project scope (the parent) → [project.capsule v2.1 (34e4cb0b)](project.capsule.md)
+- Paired pointer capsule → [collection-ref.capsule v3.0 (c01ec700)](tropo-collection-ref.capsule.md) — UID-matched vault entry; Rule 2 enforces same-UID-two-homes
+- Atomic creation action → [`create-collection.action.md`](../actions/tropo-create-collection.md) — two-file write per [action.capsule v1.1 (9b7f5e34)](tropo-action.capsule.md)
+- Project scope (the parent) → [project.capsule v2.1 (34e4cb0b)](tropo-project.capsule.md)
 - Live master rosters → [`collections/master/`](../../collections/master/)
 - Live project rosters → [`collections/projects/`](../../collections/projects/)
 - Folder governance → `collections/AGENTS.md`

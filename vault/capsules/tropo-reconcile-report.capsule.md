@@ -41,10 +41,10 @@ subsystem_hub:
 
 | Relation | Target |
 |---|---|
-| Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](222873b9.md) |
-| Aligned with | [Import Primitive — Architecture Specification (2b49ba79)](2b49ba79.md) |
-| Member of | [v1.25.0 — Stream A: Capsules (c512438b)](c512438b.md) |
-| Member of | [Tropo Governance (8dd772a0)](8dd772a0.md) |
+| Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](../files/222873b9.md) |
+| Aligned with | [Import Primitive — Architecture Specification (2b49ba79)](../files/2b49ba79.md) |
+| Member of | [v1.25.0 — Stream A: Capsules (c512438b)](../files/c512438b.md) |
+| Member of | [Tropo Governance (8dd772a0)](../files/8dd772a0.md) |
 
 *A `reconcile-report` entry is the structured output sa.reconciler hands its commissioning executive at the end of every reconciliation pass. It's persona-agnostic: any executive (Argus, Vela, Cowork concierge, future agents) can consume the same report shape and compose user-facing voice in its own persona. Reports are append-only artifacts; immutable once handed off; archivable on rotation.*
 
@@ -56,7 +56,7 @@ The `reconcile-report` capsule is the contract between sa.reconciler and the exe
 
 Persona-agnostic structure matters. If sa.reconciler wrote narrative prose ("I noticed you moved Q3 Strategy..."), that narrative would either (a) flatten the executive's voice when surfaced to the user verbatim, or (b) be discarded when the executive rewrites for its persona. Pure-structured output keeps each agent focused on what it's actually good at — sa.reconciler does data; executive does voice.
 
-**Before creating a reconcile-report instance:** authorship is exclusively sa.reconciler's. No other agent writes reconcile-report entries. The capsule defines the contract; sa.reconciler's playbook ([reconcile-imports.playbook](4a2f6dbd.md)) produces the instances.
+**Before creating a reconcile-report instance:** authorship is exclusively sa.reconciler's. No other agent writes reconcile-report entries. The capsule defines the contract; sa.reconciler's playbook ([reconcile-imports.playbook](../playbooks/4a2f6dbd.md)) produces the instances.
 
 **Failure mode prevented:** ambiguous reconciler output where executive can't mechanically triage routine-vs-judgment-vs-blocking findings, leading to either (a) every event surfaced to user (naggy) or (b) silent application of judgment-class events (substrate drift). Structured categorization with confidence levels + explicit "blocking requires user resolution" semantics prevents both failure modes.
 
@@ -185,8 +185,8 @@ archived (state: archived; historical record preserved)
 
 ## Relationship to Other Capsules
 
-- **[core.capsule v1.1 (ee814120)](ee814120.md)** — inherited floor.
-- **[external-artifact.capsule v1.0 (eedd7034)](eedd7034.md)** — reports describe actions on external-artifact instances.
+- **[core.capsule v1.1 (ee814120)](tropo-core.capsule.md)** — inherited floor.
+- **[external-artifact.capsule v1.0 (eedd7034)](tropo-external-artifact.capsule.md)** — reports describe actions on external-artifact instances.
 - **[agent.capsule]** — sa.reconciler (the agent that authors reconcile-report instances) is an agent.capsule instance.
 - **[playbook.capsule]** — reconcile-imports.playbook (sa.reconciler's playbook; ships in v1.25.0 Stream C) governs what events appear in the report and how they're categorized.
 - **[task.capsule]** — blocking events surfaced to the user MAY spawn task entries for user follow-up; convention TBD in v1.X.
@@ -241,10 +241,10 @@ Extends `core`. Inherits UID/owner/title/status/created/modified invariants. Add
 
 **Go next:**
 
-- Need to understand the agent that authors these? → [sa.reconciler agent (e4af1001)](e4af1001.md)
-- Need to understand the playbook that drives the categorization? → [reconcile-imports.playbook (4a2f6dbd)](4a2f6dbd.md)
-- Need to understand the entries reports describe actions on? → [external-artifact.capsule v1.0 (eedd7034)](eedd7034.md)
-- Need the architectural reasoning? → [Import Primitive Architecture Specification v1.0 (2b49ba79)](2b49ba79.md) §A.4 + §C.7
+- Need to understand the agent that authors these? → [sa.reconciler agent (e4af1001)](../files/e4af1001.md)
+- Need to understand the playbook that drives the categorization? → [reconcile-imports.playbook (4a2f6dbd)](../playbooks/4a2f6dbd.md)
+- Need to understand the entries reports describe actions on? → [external-artifact.capsule v1.0 (eedd7034)](tropo-external-artifact.capsule.md)
+- Need the architectural reasoning? → [Import Primitive Architecture Specification v1.0 (2b49ba79)](../files/2b49ba79.md) §A.4 + §C.7
 
 ---
 
@@ -252,7 +252,7 @@ Extends `core`. Inherits UID/owner/title/status/created/modified invariants. Add
 
 | Version | Date | Change | Author |
 |---|---|---|---|
-| 1.0 | 2026-05-13 | **LOCKED.** Initial definition. Authored in v1.25.0 Stream A per locked arch-spec [2b49ba79](2b49ba79.md) §C.7 + §A.4. Required + optional frontmatter; four required body sections (Routine / Pattern-matched / Judgment / Blocking); 7 governance rules; 11 validation checks (8 enforced + 3 honor-system); state machine; Studio shop-signage. Three-instrument verification: Argus build (this pass) + Stream G gauntlet pending. | argus-a60 |
+| 1.0 | 2026-05-13 | **LOCKED.** Initial definition. Authored in v1.25.0 Stream A per locked arch-spec [2b49ba79](../files/2b49ba79.md) §C.7 + §A.4. Required + optional frontmatter; four required body sections (Routine / Pattern-matched / Judgment / Blocking); 7 governance rules; 11 validation checks (8 enforced + 3 honor-system); state machine; Studio shop-signage. Three-instrument verification: Argus build (this pass) + Stream G gauntlet pending. | argus-a60 |
 
 ---
 

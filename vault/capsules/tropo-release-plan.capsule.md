@@ -245,14 +245,14 @@ The valid subsystem hub set referenced in Check 20 is the dynamic hub set derive
 
 ## 5. Composes-With
 
-- **[release.capsule (b19e8d43)](release.capsule.md)** — atomic-triangle partner. release-plan plans; release records. 1:1 link via `shipped_release:`. At ship, release derives `subsystems_touched:` from this plan's `capabilities_touched:` via 1-hop `subsystem_hub:` graph traversal (v1.5 member_of DISAMBIGUATE).
-- **[build.capsule (b3d7e5a1)](build.capsule.md)** — upstream of the release. Atomic-triangle: `release-plan.shipped_release` ↔ `build.composes_into` ↔ `release.derived_from`.
-- **[project.capsule (34e4cb0b)](project.capsule.md)** — streams are projects with `tags: [stream]`; each stream project may carry a `project-plan` coordinating its deliverables.
-- **[task.capsule (3289712a)](task.capsule.md)** — gates are tasks with `tags: [decision]`; ship_criteria are tasks whose `status: done` collectively signal ship.
-- **[subsystem-hub.capsule (8a4e21c5)](subsystem-hub.capsule.md)** — release_history rows on each touched hub are derived from this plan's `capabilities_touched:` (computed `subsystems_touched:`) + `hub_summaries:` at ship via dev-pipeline step `update-subsystem-canonical-docs`.
-- **[pipeline.capsule (5a8f3b2c)](pipeline.capsule.md)** — the dev-pipeline cycle executes against this capsule; step `update-subsystem-canonical-docs` consumes `hub_summaries:` at ship.
-- **[design-spec.capsule](design-spec.capsule.md)** / **[arch-spec.capsule (a7f2e9c4)](arch-spec.capsule.md)** — the locked architectural foundation `basis_spec:` resolves to.
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor for UID/owner/modified invariants; core's `status:` carries the lifecycle enum directly (the prior `stage:`-as-lifecycle convention is reconciled to `status:`).
+- **[release.capsule (b19e8d43)](tropo-release.capsule.md)** — atomic-triangle partner. release-plan plans; release records. 1:1 link via `shipped_release:`. At ship, release derives `subsystems_touched:` from this plan's `capabilities_touched:` via 1-hop `subsystem_hub:` graph traversal (v1.5 member_of DISAMBIGUATE).
+- **[build.capsule (b3d7e5a1)](tropo-build.capsule.md)** — upstream of the release. Atomic-triangle: `release-plan.shipped_release` ↔ `build.composes_into` ↔ `release.derived_from`.
+- **[project.capsule (34e4cb0b)](tropo-project.capsule.md)** — streams are projects with `tags: [stream]`; each stream project may carry a `project-plan` coordinating its deliverables.
+- **[task.capsule (3289712a)](tropo-task.capsule.md)** — gates are tasks with `tags: [decision]`; ship_criteria are tasks whose `status: done` collectively signal ship.
+- **[subsystem-hub.capsule (8a4e21c5)](tropo-subsystem-hub.capsule.md)** — release_history rows on each touched hub are derived from this plan's `capabilities_touched:` (computed `subsystems_touched:`) + `hub_summaries:` at ship via dev-pipeline step `update-subsystem-canonical-docs`.
+- **[pipeline.capsule (5a8f3b2c)](tropo-pipeline.capsule.md)** — the dev-pipeline cycle executes against this capsule; step `update-subsystem-canonical-docs` consumes `hub_summaries:` at ship.
+- **[design-spec.capsule](tropo-design-spec.capsule.md)** / **[arch-spec.capsule (a7f2e9c4)](tropo-arch-spec.capsule.md)** — the locked architectural foundation `basis_spec:` resolves to.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor for UID/owner/modified invariants; core's `status:` carries the lifecycle enum directly (the prior `stage:`-as-lifecycle convention is reconciled to `status:`).
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — this capsule's own governance.
 
 ### Tag Conventions
@@ -268,9 +268,9 @@ A `project` tagged `stream` is still a project; a `task` tagged `decision` is st
 
 ### History
 
-Detailed v1.1 + v1.2 + v1.3 amendment-block prose at the top of the original v1.3 body, the migration policy paragraphs per version, the Known Enforcement Gaps table, the original Resolutions section (Argus A28 v1.0 review), the Argus Review Amendments section (v1.0 lock), the full §Studio — Shop Signage authoring procedure (human-facing quick-ref preserved per Mike-A55 *"capsules are agent-read, not human-read"* directive), the Relationship-to-release comparison table, the Extension-from-core and Inheritance sections, and the full changelog are preserved in the companion [release-plan.history.md (3ef45183)](release-plan.history.md) governed by `capsule-history.capsule` (5ec083a3).
+Detailed v1.1 + v1.2 + v1.3 amendment-block prose at the top of the original v1.3 body, the migration policy paragraphs per version, the Known Enforcement Gaps table, the original Resolutions section (Argus A28 v1.0 review), the Argus Review Amendments section (v1.0 lock), the full §Studio — Shop Signage authoring procedure (human-facing quick-ref preserved per Mike-A55 *"capsules are agent-read, not human-read"* directive), the Relationship-to-release comparison table, the Extension-from-core and Inheritance sections, and the full changelog are preserved in the companion [release-plan.history.md (3ef45183)](tropo-release-plan.history.md) governed by `capsule-history.capsule` (5ec083a3).
 
 ---
 
-*release-plan capsule definition | LOCKED v1.4 | history at [release-plan.history.md](release-plan.history.md) | v1.4 body refactor 2026-05-11 by Argus A56 (v1.19.0 Stream C — 5-section pedagogy pattern; agent-read-not-human-read per Mike-A55 v1.18.0 walk Q3). Prior v1.0–v1.3 locks preserved in history.*
+*release-plan capsule definition | LOCKED v1.4 | history at [release-plan.history.md](tropo-release-plan.history.md) | v1.4 body refactor 2026-05-11 by Argus A56 (v1.19.0 Stream C — 5-section pedagogy pattern; agent-read-not-human-read per Mike-A55 v1.18.0 walk Q3). Prior v1.0–v1.3 locks preserved in history.*
 *"The plan coordinates; the release records. Capabilities are the typed unit. Subsystems derive. Per-hub summaries authored at lock; the executor reads them at ship."*

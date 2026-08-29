@@ -25,20 +25,20 @@ subsystem_hub:
 
 # First Vault Setup — SUPERSEDED v4.0
 
-> ⚠️ **This playbook was superseded on 2026-04-21.** The monolithic 4-path first-vault-setup flow has been decomposed into the [`.tropo/playbooks/concierge-paths/`](concierge-paths/) library — 5 outcome-specific playbooks routed via LLM-native intent interpretation in [the concierge v1.2.0](../concierge/activate.md). Use the library, not this file.
+> ⚠️ **This playbook was superseded on 2026-04-21.** The monolithic 4-path first-vault-setup flow has been decomposed into the [`.tropo/playbooks/concierge-paths/`](../../.tropo/playbooks/concierge-paths/) library — 4 outcome-specific playbooks (a 5th, tour-tropo, was absorbed into the welcome playbook at v1.17.0) routed via LLM-native intent interpretation in [the concierge v1.2.0](../../.tropo/concierge/activate.md). Use the library, not this file.
 >
 > **Where v4.0 content lives now:**
-> - v4.0 Path 1 (Quick Start) + Path 2 (Project Setup) → [`concierge-paths/start-a-project.playbook.md`](concierge-paths/start-a-project.playbook.md)
-> - v4.0 Path 1 (agent-creation portion without project) → [`concierge-paths/create-an-agent.playbook.md`](concierge-paths/create-an-agent.playbook.md)
-> - v4.0 Path 3 (Company Setup, renamed "Set Up My Team") → [`concierge-paths/set-up-my-team.playbook.md`](concierge-paths/set-up-my-team.playbook.md)
-> - v4.0 Path 4 (Learn First, restructured as outcome+routing) → [`concierge-paths/tour-tropo.playbook.md`](concierge-paths/tour-tropo.playbook.md)
-> - NEW outcome (no v4.0 precedent): [`concierge-paths/evaluate-tropo.playbook.md`](concierge-paths/evaluate-tropo.playbook.md) — architect/skeptic path. v1.3 added this outcome to dogfood the three-instrument verification discipline as a live demonstration; v4.0 lacked a dedicated evaluation flow for technical audiences.
+> - v4.0 Path 1 (Quick Start) + Path 2 (Project Setup) → [`concierge-paths/start-a-project.playbook.md`](../../.tropo/playbooks/concierge-paths/start-a-project.playbook.md)
+> - v4.0 Path 1 (agent-creation portion without project) → [`concierge-paths/create-an-agent.playbook.md`](../../.tropo/playbooks/concierge-paths/create-an-agent.playbook.md)
+> - v4.0 Path 3 (Company Setup, renamed "Set Up My Team") → [`concierge-paths/set-up-my-team.playbook.md`](../../.tropo/playbooks/concierge-paths/set-up-my-team.playbook.md)
+> - v4.0 Path 4 (Learn First) → absorbed into Phase 2 of the [welcome playbook (`e98420c3`)](../files/e98420c3.md) at v1.17.0; the standalone `tour-tropo.playbook.md` no longer ships
+> - NEW outcome (no v4.0 precedent): [`concierge-paths/evaluate-tropo.playbook.md`](../../.tropo/playbooks/concierge-paths/evaluate-tropo.playbook.md) — architect/skeptic path. v1.3 added this outcome to dogfood the three-instrument verification discipline as a live demonstration; v4.0 lacked a dedicated evaluation flow for technical audiences.
 >
 > **The 13 Rules of agent creation** are now codified once in [`create-executive-agent.skill (c7ea9e01)`](../skills/tropo-create-executive-agent.md) — the shared skill called by every concierge-paths outcome playbook that creates an agent. Do not re-implement them.
 >
-> **Why the split?** v4.0 combined 4 internal paths with significant branching logic into one ~450-line file. Each outcome is independently cold-boot-testable, independently versionable, and independently maintainable in the new library. Adding new outcomes is additive — drop a file into `concierge-paths/`, update the concierge's library map in [activate.md §Section 1.3](../concierge/activate.md), route to it. The concierge v1.2.0 routes via LLM-native intent interpretation, not menu selection.
+> **Why the split?** v4.0 combined 4 internal paths with significant branching logic into one ~450-line file. Each outcome is independently cold-boot-testable, independently versionable, and independently maintainable in the new library. Adding new outcomes is additive — drop a file into `concierge-paths/`, update the concierge's library map in [activate.md §Section 1.3](../../.tropo/concierge/activate.md), route to it. The concierge v1.2.0 routes via LLM-native intent interpretation, not menu selection.
 >
-> **v4.0 body preserved below** for legacy comparison and for any residual process context the library playbooks may reference. Do NOT execute this file. If you are a concierge reading this file to run onboarding: stop, route back to [the concierge v1.2.0](../concierge/activate.md) intent router, and use the matched concierge-paths playbook instead.
+> **v4.0 body preserved below** for legacy comparison and for any residual process context the library playbooks may reference. Do NOT execute this file. If you are a concierge reading this file to run onboarding: stop, route back to [the concierge v1.2.0](../../.tropo/concierge/activate.md) intent router, and use the matched concierge-paths playbook instead.
 >
 > Superseded by v1.3 Stream B Foundation project plan D9 deliverable. Argus A31, 2026-04-21.
 

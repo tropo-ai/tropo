@@ -17,7 +17,8 @@ path: DASHBOARD.md
 ---
 
 <!-- EXECUTIVE DASHBOARD TEMPLATE
- Tropo-OS | Ships in every vault at DASHBOARD.md
+ Tropo-OS | Fill this in at DASHBOARD.md (vault root) when a Studio wants one.
+ A Studio does not ship a DASHBOARD.md — this template is the starting point.
 
  This is a hybrid document: some sections are generated from source data,
  others are curated by a crew member (the owner). The source annotation
@@ -39,7 +40,8 @@ path: DASHBOARD.md
  4. What's blocked (what can't move?)
  5. Everything else (orientation, not urgency)
 
- The template ships in the product. Every vault gets a DASHBOARD.md.
+ The template ships in the product; the dashboard itself is opt-in —
+ copy this file to DASHBOARD.md at vault root to start one.
  Small vaults: the human curates all sections manually.
  Scaled vaults: a generator refreshes the generated sections; the
  strategist curates the rest.

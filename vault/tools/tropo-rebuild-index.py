@@ -6922,6 +6922,127 @@ def _replacement_drops_only_mounted_rows(
     return True
 
 
+GENESIS_VAULT_ENTITY_UID = '7c3a8e91'
+GENESIS_INBOX_PROJECT_UID = '2d5f9b04'
+# entity.capsule Rule 1 REQUIRES a principal, and Rule 2 requires it to resolve to a
+# subtype: person entity. 4b6e2c8a ("Vault Owner") is extraction_scope: ship, so it is
+# present in every box — a genesis entity naming a principal the Studio does not have
+# would fail validation on the customer's first run. Found by the build's own in-box
+# self-test refusing my first genesis pair: 102 passed / 2 failed, 'principal is missing'.
+GENESIS_PRINCIPAL_UID = '4b6e2c8a'
+
+
+def _mint_genesis_pair(vault_root: Path) -> list[dict[str, Any]]:
+    """Create this Studio's vault-entity and its inbox project, in place.
+
+    Returns the freshly-parsed records so the CALLING rebuild indexes them in
+    the same pass (see the call site for why that ordering is load-bearing).
+
+    Deliberately writes NO `extraction_scope:`. That absence is the whole
+    point: the gardener derives segment from scope, `ship` means segment 'os',
+    and an 'os' anchor cannot ground the 'private' records a Studio's own work
+    lands in. Unscoped, both halves land 'private' natively and anchor their
+    own Studio. This is the one place where writing less is the fix.
+
+    Never overwrites: any half already on disk is left exactly as it is, so a
+    Studio that has edited or deliberately removed one is not second-guessed.
+    """
+    files_dir = vault_root / 'vault' / 'files'
+    today = _dt.date.today().isoformat()
+    made: list[dict[str, Any]] = []
+
+    entity_path = files_dir / f'{GENESIS_VAULT_ENTITY_UID}.md'
+    inbox_path = files_dir / f'{GENESIS_INBOX_PROJECT_UID}.md'
+
+    if not inbox_path.exists():
+        inbox_path.write_text(
+            f"""---
+uid: {GENESIS_INBOX_PROJECT_UID}
+type: project
+title: 01-studio-inbox
+description: >-
+  Catch-all project for captured-but-unfiled work in this Studio. Every
+  work-item without an explicit project routes here; refile to real projects as
+  context emerges. Created automatically at this Studio's first index build.
+owner: {GENESIS_VAULT_ENTITY_UID}
+state: active
+status: active
+lifecycle: standing
+member_of: []
+slug: 01-studio-inbox
+created: '{today}'
+created_by: genesis-bootstrap
+modified: '{today}'
+modified_by: genesis-bootstrap
+schema_version: 2
+---
+
+# 01-studio-inbox
+
+Work lands here when it has no better home yet. That is a feature: nothing is
+lost because you had not decided where it belongs.
+
+*Created by the genesis bootstrap at this Studio's first index build. It carries
+no `extraction_scope:` on purpose — that absence is what makes it belong to
+YOUR vault rather than to the OS layer, which is what lets your own work ground
+against it.*
+""",
+            encoding='utf-8',
+        )
+        rec = process_file(inbox_path)
+        if rec is not None:
+            rec['path'] = str(inbox_path.relative_to(vault_root))
+            made.append(rec)
+
+    if not entity_path.exists():
+        entity_path.write_text(
+            f"""---
+uid: {GENESIS_VAULT_ENTITY_UID}
+type: entity
+subtype: vault-entity
+title: Your Tropo Vault
+name: your-vault
+state: active
+status: active
+principal: {GENESIS_PRINCIPAL_UID}
+owner: {GENESIS_PRINCIPAL_UID}
+inbox_project: {GENESIS_INBOX_PROJECT_UID}
+created: '{today}'
+created_by: genesis-bootstrap
+modified: '{today}'
+modified_by: genesis-bootstrap
+schema_version: 2
+---
+
+# Your Tropo Vault
+
+The vault-entity for this Studio. It is what your work belongs TO: every
+work-item grounds, directly or through a project, in this record.
+
+*Created by the genesis bootstrap at this Studio's first index build, rather
+than shipped in the box, and deliberately carrying no `extraction_scope:`.
+A shipped vault-entity is stamped as OS-layer content, and OS-layer content
+cannot anchor the records you create — which is the defect this bootstrap
+exists to remove. Minted here, it belongs to you.*
+
+*`inbox_project:` is read by the mint tool to ground new work. If you repoint
+it, point it at a LIVE `type: project` in this Studio.*
+""",
+            encoding='utf-8',
+        )
+        rec = process_file(entity_path)
+        if rec is not None:
+            rec['path'] = str(entity_path.relative_to(vault_root))
+            made.append(rec)
+
+    if made:
+        print(
+            f'[GENESIS] minted this Studio\'s vault-entity + inbox project '
+            f'({len(made)} record(s)) — your work can now ground here.'
+        )
+    return made
+
+
 def rebuild_index(
     vault_root: Path,
     apply_writes: bool,
@@ -7053,6 +7174,40 @@ def rebuild_index(
         else:
             rec['path'] = str(f.relative_to(vault_root))  # v1.69 path-provenance
             records.append(rec)
+
+    # ── GENESIS BOOTSTRAP (v1.93, argus-a161; metis-g113/g114 ruled Option 1) ──
+    # A Studio cannot ground its own work until a vault-entity exists to anchor
+    # it. The box deliberately ships NEITHER half of the pair, because a shipped
+    # record carries extraction_scope: ship, which makes it segment 'os' in the
+    # customer's Studio while everything they create lands in 'private' -- so a
+    # shipped pair can never anchor a customer's own records. Minting the pair
+    # HERE runs the derivation in the customer's own context, where it lands
+    # 'private' natively and grounds by construction.
+    #
+    # WHY IN THE SCAN, NOT AS A TAIL STEP: the pair must be visible to the SAME
+    # rebuild that creates it. A tail-step bootstrap leaves it unindexed until
+    # the NEXT rebuild, and the D7 check early-returns with zero findings when
+    # no vault-entity is present -- so the first validate would report a PASS it
+    # produced by seeing nothing. That is passing by blindness, which the
+    # release owner ruled dead on arrival. Appending to `records` here means
+    # this same pass indexes them.
+    #
+    # IDEMPOTENT ON RECORD PRESENCE, never on a flag or an index file: a Studio
+    # that already has a vault-entity is left completely alone, and deleting
+    # the index does not resurrect a pair the user deliberately removed.
+    # CANONICAL UIDs, metis-g114-ruled under Mike's D1 lock (existing IDs
+    # untouched; cross-studio references qualify at compose, so the same local
+    # uid in two Studios is the same-role-different-studio pattern, not a
+    # collision). Canonical reuse also keeps every shipped prose reference to
+    # these two UIDs true, which matters because this became the
+    # samples-and-examples release: a box teaching by broken references is the
+    # one outcome that cannot ship.
+    if apply_writes and not any(
+        r.get('type') == 'entity' and r.get('subtype') == 'vault-entity'
+        for r in records
+    ):
+        for genesis_rec in _mint_genesis_pair(vault_root):
+            records.append(genesis_rec)
 
     # Source 2: Studio-root *.md with uid: frontmatter (v1.15.1 Stream G)
     studio_root_records = collect_studio_root_records(

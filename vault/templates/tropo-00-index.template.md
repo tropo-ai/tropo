@@ -11,4 +11,4 @@ curator: null
 
 ---
 
-[Catalog of folder contents. See `design/standards/index-standard.md` for format options by content type.]
+[Catalog of folder contents. Match the format to what the folder holds — a table for typed files, a list for prose.]

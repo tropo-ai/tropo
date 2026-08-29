@@ -658,7 +658,231 @@ def _registered_agent_generation(
         )
         if match:
             return slug, f"{prefix}{match.group(1)}"
+
+        # THE LINEAGE IS THE SECOND AND AUTHORITATIVE ATTEMPT. The registry
+        # prefix above is a hint; when it disagrees with what `born` actually
+        # wrote, the birth record wins. Without this, an agent registered with
+        # any prefix `born` does not issue could never mint -- and `born`
+        # defaults to 'G' without ever consulting the registry.
+        for gen in _lineage_generations(root, slug):
+            if lowered == f"{slug}-{gen}".casefold():
+                return slug, gen
     return None
+
+
+def _current_index_rows(root: Path) -> list[dict]:
+    """Every row of the CURRENT index. Archive is deliberately excluded: an
+    archived record must never become a live grounding target."""
+    rel = Path("vault/00-index.jsonl")
+    path = root / rel
+    if not path.exists() and not path.is_symlink():
+        return []
+    try:
+        path = template_leg._strict_regular_file(root, rel, "vault index")
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError, template_leg.TemplateLegError):
+        return []
+    rows: list[dict] = []
+    for raw in lines:
+        if not raw.strip():
+            continue
+        try:
+            row = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
+_TERMINAL_GROUNDING_STATES = {"archived", "retired", "deprecated", "cancelled"}
+
+
+def _resolve_inbox_project(root: Path) -> tuple[str | None, str | None]:
+    """Resolve the default `member_of` grounding from the live vault-entity's
+    declared `inbox_project`. Returns (uid, refusal_reason); exactly one is set.
+
+    WHY THIS EXISTS (v1.93, argus-a161, metis-ruled). The four mintable
+    templates each hardcoded a grounding UID. A hardcoded UID is derived data
+    stored in a file: correct in the studio it was written for and wrong
+    everywhere else. In a customer's box it named a project in a vault-node
+    their records can never belong to, so the box's own mint emitted work its
+    own validator rejected. The vault-entity already DECLARES its inbox project
+    -- `inbox_project:` -- and until this function nothing read that field.
+    This is its first reader.
+
+    EVERY REFUSAL BELOW MUST NAME A REMEDY THAT ACTUALLY CLEARS. That is a
+    release-owner acceptance criterion, not a style note: the walk's first
+    cycle-blocker was a refusal whose prescribed remedy could not clear it, and
+    it was ruled that it "does not get a sibling"."""
+    rows = _current_index_rows(root)
+    if not rows:
+        return None, (
+            "the current index is missing or empty, so no vault-entity can be "
+            "resolved -- run `python3 vault/tools/tropo-rebuild-index.py --apply`, "
+            "which builds the index and, in a fresh Studio, mints your vault-entity "
+            "and its inbox project."
+        )
+
+    entities = [
+        r for r in rows
+        if r.get("type") == "entity"
+        and r.get("subtype") == "vault-entity"
+        and str(r.get("state") or "active").lower() not in _TERMINAL_GROUNDING_STATES
+    ]
+    if not entities:
+        return None, (
+            "no live vault-entity exists in this Studio, so there is nothing to "
+            "ground new work in -- run `python3 vault/tools/tropo-rebuild-index.py "
+            "--apply`, which mints one in a fresh Studio."
+        )
+
+    # DETERMINISTIC PICK (metis-g114-endorsed). A Studio may carry the SHIPPED
+    # template vault-entity (extraction_scope: ship) alongside its own. The
+    # Studio's own entity is the grounding authority; the shipped one is a
+    # sample. Prefer non-ship; fall back to the whole set; tie-break by uid so
+    # the answer never depends on index ordering. If still ambiguous, REFUSE --
+    # guessing which vault a record belongs to is exactly the class of silent
+    # wrongness this cure exists to remove.
+    own = [r for r in entities if str(r.get("extraction_scope") or "") != "ship"]
+    candidates = own or entities
+    candidates = sorted(candidates, key=lambda r: str(r.get("uid") or ""))
+    if len(candidates) > 1:
+        names = ", ".join(str(r.get("uid")) for r in candidates)
+        return None, (
+            f"this Studio has {len(candidates)} live vault-entities ({names}) and "
+            f"no single grounding authority, so the owning vault is ambiguous -- "
+            f"pass the project explicitly by editing `member_of` in the minted "
+            f"file, or retire the vault-entities you no longer use so exactly one "
+            f"remains."
+        )
+
+    entity = candidates[0]
+    inbox = entity.get("inbox_project")
+    if not inbox:
+        return None, (
+            f"vault-entity {entity.get('uid')} declares no `inbox_project:`, so "
+            f"there is no default grounding to fall back to -- add "
+            f"`inbox_project: <project-uid>` to vault/files/{entity.get('uid')}.md "
+            f"naming a live `type: project` in this Studio, then re-run."
+        )
+
+    inbox = str(inbox)
+    by_uid = {str(r.get("uid")): r for r in rows if r.get("uid")}
+    target = by_uid.get(inbox)
+    if target is None:
+        return None, (
+            f"vault-entity {entity.get('uid')} declares `inbox_project: {inbox}`, "
+            f"but that UID is not in the current index -- it was archived or "
+            f"removed. Repoint `inbox_project:` in "
+            f"vault/files/{entity.get('uid')}.md at a live `type: project`, then "
+            f"re-run. (This exact defect was live in the Studio itself and "
+            f"was found by the first reader of the field.)"
+        )
+    if target.get("type") != "project":
+        return None, (
+            f"vault-entity {entity.get('uid')} declares `inbox_project: {inbox}`, "
+            f"but that record is `type: {target.get('type')}`, not a project -- "
+            f"repoint `inbox_project:` at a live `type: project`, then re-run."
+        )
+    if str(target.get("state") or "active").lower() in _TERMINAL_GROUNDING_STATES:
+        return None, (
+            f"vault-entity {entity.get('uid')} declares `inbox_project: {inbox}`, "
+            f"but that project is `state: {target.get('state')}` -- terminal "
+            f"records cannot ground live work. Repoint `inbox_project:` in "
+            f"vault/files/{entity.get('uid')}.md at a live project, then re-run."
+        )
+    return inbox, None
+
+
+_MEMBER_OF_LINE = re.compile(
+    r'^(?P<indent>\s*-\s*)(?P<quote>["\']?)(?P<uid>[0-9a-f]{8})(?P=quote)(?P<rest>.*)$'
+)
+
+
+def _ground_member_of(root: Path, instance_text: str) -> str:
+    """Replace a stamped instance's PRIMARY `member_of` grounding when the
+    template's declared default does not resolve live in THIS Studio.
+
+    THE RULE, one sentence, applied identically to all four mintable templates:
+    KEEP the template's declared default if it resolves to a live project HERE;
+    otherwise fall back to the vault-entity's own `inbox_project`.
+
+    Why not simply force every type to the inbox: the defaults do not all mean
+    the same thing. task / note / design-brief default to the Studio inbox --
+    an explicit D7 fallback. dev-spec defaults to the dev-pipeline root, which
+    is a real semantic home, not a fallback. Flattening dev-specs into the
+    inbox would fix a customer's grounding by corrupting our own taxonomy. The
+    keep-if-live rule preserves every template's meaning in the Studio it was
+    written for and still cures the box a stranger downloads, where none of
+    those vendor UIDs exist.
+
+    Refusal, not silent success: if the default is dead AND no inbox can be
+    resolved, RAISE. A mint that quietly grounds work somewhere unverified is
+    the silent-wrong-success class this release exists to close."""
+    rows = _current_index_rows(root)
+    if not rows:
+        # NO INDEX, SO NOTHING IS KNOWN. This function's job is to correct a
+        # grounding it can prove wrong; with no index it can prove nothing, and
+        # a refusal here would be an assertion about a Studio it cannot see.
+        # Pass through untouched and let the pre-existing union-surface refusal
+        # (which names `rebuild-index --apply`) own the uninitialised case.
+        # Found by running the shipped suites: refusing here broke 6 tests whose
+        # fixtures legitimately mint before an index exists.
+        return instance_text
+
+    lines = instance_text.splitlines(keepends=True)
+    try:
+        start = next(
+            i for i, ln in enumerate(lines) if ln.rstrip("\n") == "member_of:"
+        )
+    except StopIteration:
+        return instance_text  # type carries no member_of; nothing to ground
+
+    for offset in range(start + 1, len(lines)):
+        match = _MEMBER_OF_LINE.match(lines[offset].rstrip("\n"))
+        if not match:
+            break  # first non-entry line ends the sequence
+        declared = match.group("uid")
+
+        by_uid = {str(r.get("uid")): r for r in rows if r.get("uid")}
+        target = by_uid.get(declared)
+        live_here = (
+            target is not None
+            and target.get("type") == "project"
+            and str(target.get("state") or "active").lower()
+            not in _TERMINAL_GROUNDING_STATES
+        )
+        if live_here:
+            return instance_text  # the declared default is correct HERE
+
+        resolved, refusal = _resolve_inbox_project(root)
+        if resolved is None:
+            # WARN, NEVER BLOCK. This function's contract is to IMPROVE a
+            # grounding it can prove wrong; it is not a gate. With no
+            # resolvable replacement the honest act is to leave the template's
+            # own declared default exactly as shipped -- which is today's
+            # behaviour, so this can never be a regression -- and say loudly
+            # why. Nothing is blinded: the D7 check still evaluates the result
+            # on its own terms once federation re-arms it.
+            # Learned by running the shipped suites rather than reasoning: a
+            # hard refusal here blocked minting in every Studio that has an
+            # index but no vault-entity yet, which is a legitimate early state.
+            print(
+                f"WARNING: this record keeps its template's default member_of "
+                f"{declared}, which is NOT a live project in this Studio, "
+                f"because no fallback could be resolved -- {refusal}",
+                file=sys.stderr,
+            )
+            return instance_text
+        lines[offset] = (
+            f'{match.group("indent")}"{resolved}"'
+            f'  # grounded at mint from the vault-entity\'s inbox_project'
+            f' (template default {declared} is not live in this Studio)\n'
+        )
+        return "".join(lines)
+
+    return instance_text
 
 
 def _indexed_activation_row(root: Path, activation_uid: str) -> dict:
@@ -739,10 +963,105 @@ def _lineage_records_birth(root: Path, agent: str, generation: str) -> bool:
         if (
             isinstance(row, dict)
             and row.get("t") == "born"
-            and str(row.get("gen") or "") == generation
+            and str(row.get("gen") or "").casefold() == generation.casefold()
         ):
             return True
     return False
+
+
+def _lineage_generations(root: Path, agent: str) -> list[str]:
+    """Every generation label this agent's lineage actually records a birth for.
+
+    THE BIRTH RECORD IS THE TRUTH. `tropo-lineage.py born` writes this file and
+    NEVER READS THE REGISTRY -- it defaults to prefix 'G' (its own --prefix
+    default) regardless of what the registry says. So the registry's
+    `generation-prefix` is display metadata, not the source of a generation
+    label, and deriving the expected label from it produced two unreconciled
+    writers feeding one exact-equality reader.
+
+    Failure shape that ruling killed (v1.93 cold-boot walk, Alex Chen persona):
+    the mint refuses with "no birth recorded ... be born with tropo-lineage.py
+    born"; `born` exits 0 and writes G1; the mint throws the IDENTICAL error.
+    The remedy the error prescribes does not clear the error. Scope was every
+    agent whose registry row carries a non-G prefix -- this studio ships S, J
+    and V today. The walker escaped only by reading this file's source.
+
+    Metis-g113 ruled the cure at the READER rather than at either writer:
+    resolve the label from the lineage, and let the registry describe rather
+    than decide.
+    """
+    rel = Path("agents") / agent / "lineage.jsonl"
+    try:
+        path = template_leg._strict_regular_file(root, rel, "agent lineage")
+        raw = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError, template_leg.TemplateLegError):
+        return []
+    out: list[str] = []
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("t") == "born":
+            gen = str(row.get("gen") or "").strip()
+            if gen:
+                out.append(gen)
+    return out
+
+
+def _lineage_retired_generations(root: Path, agent: str) -> set[str]:
+    """Casefolded generation labels this agent's lineage records a RETIREMENT for.
+
+    NEVER POINT A USER AT A DEAD AGENT. The cure hint added alongside
+    `_lineage_generations` read only `born` rows, so on a drifted agent whose
+    newest generation had already been retired the refusal said "author as
+    cosmo-C11" -- and following the tool's own advice minted a governed file
+    attributed to a retired agent at exit 0. `tropo-lineage.py retire` writes
+    `{"t": "retired", "gen": ...}`; a generation is dead once such a row
+    exists, so the hint must consult these rows before it names anything.
+    """
+    rel = Path("agents") / agent / "lineage.jsonl"
+    try:
+        path = template_leg._strict_regular_file(root, rel, "agent lineage")
+        raw = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError, template_leg.TemplateLegError):
+        return set()
+    out: set[str] = set()
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("t") == "retired":
+            gen = str(row.get("gen") or "").strip()
+            if gen:
+                out.add(gen.casefold())
+    return out
+
+
+_GENERATION_LABEL = re.compile(r"([A-Za-z]+)(\d+)")
+
+
+def _generation_sort_key(generation: str) -> tuple[int, str, int, str]:
+    """Order generation labels by their NUMBER, not by their spelling.
+
+    Plain `sorted()` put C10 and C11 ahead of C2, so the hint enumerated
+    "C10, C11, C2 ... C9" and named C9 as the newest. Generation labels are an
+    alpha prefix (A/G/V/T/O/C/S/J today) plus an integer, so split them and
+    compare the integer as an integer. Labels that do not parse -- hand-edited
+    or pre-lineage rows; `born` itself only ever writes prefix+integer -- sort
+    FIRST, stably, rather than crashing the refusal that is trying to help. They
+    sort first and not last so that the hint's "newest" pick (the last element)
+    is always a well-formed generation when the lineage records any.
+    """
+    match = _GENERATION_LABEL.fullmatch(generation.strip())
+    if match is None:
+        return (0, "", 0, generation.casefold())
+    return (1, match.group(1).casefold(), int(match.group(2)), generation.casefold())
 
 
 def _resolve_activation_provenance(
@@ -758,11 +1077,52 @@ def _resolve_activation_provenance(
         # any legacy caller keep working exactly as before.
         if _lineage_records_birth(root, agent, generation):
             return None
+        # NAME THE TRUTH, NOT A REMEDY THAT DOES NOT CLEAR THE ERROR. This
+        # refusal used to say only "be born with tropo-lineage.py born" -- and
+        # `born` exits 0, writes its own generation, and the mint then throws
+        # the IDENTICAL error, because the label was built from the registry's
+        # generation-prefix while `born` never reads the registry. A cold-boot
+        # walker burned twenty minutes in that loop and escaped only by reading
+        # this file's source. The lineage knows the answer; say it.
+        # A RETIRED GENERATION IS NOT A REMEDY. Name only generations that are
+        # both recorded born and not since retired, ordered by their number
+        # (C2 < C9 < C10), so the hint can never send a user to author as a
+        # dead agent and can never call C9 the newest of eleven.
+        _recorded = _lineage_generations(root, agent)
+        _retired = _lineage_retired_generations(root, agent)
+        _live = sorted(
+            {g for g in _recorded if g.casefold() not in _retired},
+            key=_generation_sort_key,
+        )
+        _born_command = (
+            f"`python3 vault/tools/tropo-lineage.py born --agent {agent} "
+            f"--by <principal> --model <sleeve>`"
+        )
+        if _live:
+            _hint = (
+                f"this agent's lineage records live generation(s) "
+                f"{', '.join(_live)} -- author as {agent}-{_live[-1]}. The "
+                f"registry's generation-prefix is display metadata; "
+                f"`tropo-lineage.py born` never reads it, so the lineage is "
+                f"the truth."
+            )
+        elif _recorded:
+            _hint = (
+                f"every generation in agents/{agent}/lineage.jsonl has been "
+                f"retired, so there is no live generation to author as -- run "
+                f"{_born_command}, then author with the generation it prints."
+            )
+        else:
+            _hint = (
+                f"agents/{agent}/lineage.jsonl records no birth at all -- run "
+                f"{_born_command}, then author with the "
+                f"generation it prints."
+            )
         raise ValueError(
-            f"author {author!r} is a registered agent-generation label with no "
-            f"birth recorded in agents/{agent}/lineage.jsonl; be born with "
-            "`tropo-lineage.py born`, or provide --activation-uid or "
-            "TROPO_ACTIVATION_UID for a pre-lineage generation"
+            f"author {author!r} is a registered agent-generation label with "
+            f"no birth recorded in agents/{agent}/lineage.jsonl. {_hint} "
+            "(Or provide --activation-uid / TROPO_ACTIVATION_UID for a "
+            "pre-lineage generation.)"
         )
     if not _HEX8.fullmatch(activation_uid):
         raise ValueError("activation provenance UID must be exactly 8 lowercase hex")
@@ -966,6 +1326,7 @@ def mint_file(
         author=author,
         activation_uid=provenance_uid,
     )
+    instance_text = _ground_member_of(root, instance_text)
     _validate_stamped_instance(
         instance_text,
         uid=uid,

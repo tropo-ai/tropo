@@ -43,9 +43,9 @@ tags:
 |---|---|
 | Governed by | [capsule-definition meta (222873b9)](../../vault/files/222873b9.md) |
 | Aligned with | [Board Reconciliation v0.3 (74fd9b61)](../../vault/files/74fd9b61.md) (cross-capsule consistency) |
-| Pattern family | [project.capsule (34e4cb0b)](project.capsule.md) |
+| Pattern family | [project.capsule (34e4cb0b)](tropo-project.capsule.md) |
 | Extends | `core` |
-| Composes with | [project.capsule (34e4cb0b)](project.capsule.md); [release.capsule (b19e8d43)](release.capsule.md); [release-plan.capsule (a3f1e7b2)](release-plan.capsule.md) |
+| Composes with | [project.capsule (34e4cb0b)](tropo-project.capsule.md); [release.capsule (b19e8d43)](tropo-release.capsule.md); [release-plan.capsule (a3f1e7b2)](tropo-release-plan.capsule.md) |
 
 ---
 
@@ -116,7 +116,7 @@ The two-subsection structure replaces v1.5's free-form prose pattern. **Why stru
 
 **3. `## Current State`** — Narrative summary of what's shipped, in-progress, planned **as of `last_release_reflected:`**. The answer to "where is this subsystem TODAY" — 3-6 sentences (~150-300 words). Updated at every ship per §4 Hub Update Discipline.
 
-**4. `## Change Log`** — Append-only log of release impacts. Each entry per the canonical format (full example in [history file](subsystem-hub.history.md)). MUST exist even for brand-new hubs (acceptable initial body: `*(no changes yet — first entry on next release)*`). Complementary to `release_history:` frontmatter (prose record vs structured record).
+**4. `## Change Log`** — Append-only log of release impacts. Each entry per the canonical format (full example in [history file](tropo-subsystem-hub.history.md)). MUST exist even for brand-new hubs (acceptable initial body: `*(no changes yet — first entry on next release)*`). Complementary to `release_history:` frontmatter (prose record vs structured record).
 
 **Change Log Entry Format** (per entry):
 
@@ -130,7 +130,7 @@ The two-subsection structure replaces v1.5's free-form prose pattern. **Why stru
 **Next:** <optional — what's queued for next release.>
 ```
 
-Worked example in [history file](subsystem-hub.history.md).
+Worked example in [history file](tropo-subsystem-hub.history.md).
 
 ### Optional Body Sections
 
@@ -149,7 +149,7 @@ A hub may add any sections beyond REQUIRED + OPTIONAL without validation impact.
 
 Propose via pair channel → crew decision → author hub stub at `vault/files/<uid>.md` meeting Scope + REQUIRED frontmatter + 4 REQUIRED body sections → register in [`collections/subsystem-hubs.collection.md`](../../collections/subsystem-hubs.collection.md) + `vault/00-index.jsonl` + cascade index → first Change Log + `release_history` + registry row on next release ship.
 
-Full protocol detail in [history file §Adding a New Subsystem](subsystem-hub.history.md).
+Full protocol detail in [history file §Adding a New Subsystem](tropo-subsystem-hub.history.md).
 
 ### Bootstrapping (Fresh Vaults)
 
@@ -165,7 +165,7 @@ active → archived (only on explicit subsystem retirement via ADR)
 
 Hubs do not have `draft` or `superseded` states for the hub artifact itself. A hub is live from creation (REQUIRED-section-compliant). Content evolves continuously via Change Log entries + `release_history:` appends + optional section growth; the hub itself stays `active` indefinitely.
 
-Archival applies only when a subsystem is explicitly retired or merged. Migration Window protocol (subsystem_name uniqueness during merger): see [history file §Migration Window](subsystem-hub.history.md). Validator's uniqueness check (v1.10) ignores hubs with `state: archived` or `superseded_by:` set.
+Archival applies only when a subsystem is explicitly retired or merged. Migration Window protocol (subsystem_name uniqueness during merger): see [history file §Migration Window](tropo-subsystem-hub.history.md). Validator's uniqueness check (v1.10) ignores hubs with `state: archived` or `superseded_by:` set.
 
 ---
 
@@ -223,7 +223,7 @@ Validator exits 0 on clean; 1 on any ERROR. WARNINGs do not affect exit code.
 
 ### Pending Sub-Requirements (active deferred work)
 
-Per [playbook.capsule v2.5 §Pending Sub-Requirements pattern](playbook.capsule.md), v1.4+ declares active sub-requirements:
+Per [playbook.capsule v2.5 §Pending Sub-Requirements pattern](tropo-playbook.capsule.md), v1.4+ declares active sub-requirements:
 
 | Sub-requirement | Triggering | Land-at version |
 |---|---|---|
@@ -246,10 +246,10 @@ Per [playbook.capsule v2.5 §Pending Sub-Requirements pattern](playbook.capsule.
 
 ### Composes With
 
-- **[release-plan.capsule (a3f1e7b2)](release-plan.capsule.md)** — `sub_systems:` field declaring touched subsystems; capabilities_touched is the typed authoring surface; subsystem hub membership is the rollup.
-- **[release.capsule (b19e8d43)](release.capsule.md)** — v3.3 soft-gated enforcement rule (release blocks ship without registry entry per touched subsystem); v3.4 Rule 12 derivation discipline (release_history rows derived from capabilities_touched via 1-hop graph traversal). `release_history:` on this capsule is the per-hub record bidirectional with the registry's vault-wide cross-cut.
-- **[collection.capsule (c04e7a91)](collection.capsule.md)** — [`collections/subsystem-hubs.collection.md`](../../collections/subsystem-hubs.collection.md) is the live roster.
-- **[playbook.capsule v2.5 (e7b3c509)](playbook.capsule.md)** — pattern precedent for §Pending Sub-Requirements + capsule-history extraction (this capsule follows the same pattern).
+- **[release-plan.capsule (a3f1e7b2)](tropo-release-plan.capsule.md)** — `sub_systems:` field declaring touched subsystems; capabilities_touched is the typed authoring surface; subsystem hub membership is the rollup.
+- **[release.capsule (b19e8d43)](tropo-release.capsule.md)** — v3.3 soft-gated enforcement rule (release blocks ship without registry entry per touched subsystem); v3.4 Rule 12 derivation discipline (release_history rows derived from capabilities_touched via 1-hop graph traversal). `release_history:` on this capsule is the per-hub record bidirectional with the registry's vault-wide cross-cut.
+- **[collection.capsule (c04e7a91)](tropo-collection.capsule.md)** — [`collections/subsystem-hubs.collection.md`](../../collections/subsystem-hubs.collection.md) is the live roster.
+- **[playbook.capsule v2.5 (e7b3c509)](tropo-playbook.capsule.md)** — pattern precedent for §Pending Sub-Requirements + capsule-history extraction (this capsule follows the same pattern).
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — governs this capsule.
 
 ### Anticipates
@@ -307,4 +307,4 @@ The v1.6 strengthening is structural shape. Prose quality + cross-tier coherence
 
 ---
 
-*subsystem-hub capsule definition | UID `8a4e21c5` | v1.6 (schema strengthening Argus A81 2026-05-24; D1 implementation + §6 worked-example narrative Orpheus O11 2026-05-25) | history at [17867222](subsystem-hub.history.md)*
+*subsystem-hub capsule definition | UID `8a4e21c5` | v1.6 (schema strengthening Argus A81 2026-05-24; D1 implementation + §6 worked-example narrative Orpheus O11 2026-05-25) | history at [17867222](tropo-subsystem-hub.history.md)*

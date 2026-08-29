@@ -367,7 +367,7 @@ Publish-act = all three coherent: article `status: locked` (editorially ready) A
 
 ### Migration
 
-The v1.4 article-backfill migration approach (identify → assess editorial state → backfill `subtype: article`) is preserved in the [history companion (437e8944)](ship-artifact.history.md) §v1.69 additions. Check 25's WARN window covers un-migrated articles.
+The v1.4 article-backfill migration approach (identify → assess editorial state → backfill `subtype: article`) is preserved in the [history companion (437e8944)](tropo-ship-artifact.history.md) §v1.69 additions. Check 25's WARN window covers un-migrated articles.
 
 ---
 
@@ -704,27 +704,27 @@ Check 24 (added v1.3) was immediate-ERROR (no migration window) because legacy e
 
 ## 5. Composes-With
 
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor (UID immutability, type immutability, owner/created/modified invariants).
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor (UID immutability, type immutability, owner/created/modified invariants).
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — governs this capsule.
-- **[document.capsule (d0c00001)](document.capsule.md)** — pattern exemplar per v3 Decision 3. ship-artifact patterns on document with additional discipline: graph-shape enforcement (parent + children + acyclicity), path resolution at lock time, source_mode enum + behavior contracts, cleanup_rules + marker handling, build-time integration. **(v1.4)** Article subtype (`subtype: article`) extends document.capsule; ship-artifact wrappers pointing at article entries inherit editorial-state gating per Rule 13 + Check 26.
-- **[build.capsule (b3d7e5a1)](build.capsule.md)** — sibling at build/release infrastructure layer. Builds package versioned software; ship-artifacts declare what goes INTO a build's output.
-- **[release.capsule (b19e8d43)](release.capsule.md)** — sibling at build/release infrastructure layer. Releases record what shipped; ship-artifacts declare what's shippable.
-- **[release-plan.capsule (a3f1e7b2)](release-plan.capsule.md)** — coordination precedent. A release-plan coordinates a release; ship-artifacts coordinate the manifest within that release's build.
-- **[playbook.capsule (e7b3c509)](playbook.capsule.md)** — pattern precedent for §Studio + Relations Header convention.
-- **[project-plan.capsule (f7b9c4a2)](project-plan.capsule.md)** — governs [Stream 2 D2.1 project-plan (4e5a2011)](../../vault/files/4e5a2011.md), the project-plan delivering this capsule's v1.0-v1.1.
-- **[pipeline.capsule (e4c8a6b2)](pipeline.capsule.md)** + **[pipeline-run.capsule](pipeline-run.capsule.md)** — **(v1.4 NEW)** the pipeline substrate that executes publish-act + retract-act. Publish-act is a pipeline event; pipeline-run.capsule records what fired; ship-artifact.capsule v1.4 defines what gets written to wrapper substrate at sub-gate-3 completion.
+- **[document.capsule (d0c00001)](tropo-document.capsule.md)** — pattern exemplar per v3 Decision 3. ship-artifact patterns on document with additional discipline: graph-shape enforcement (parent + children + acyclicity), path resolution at lock time, source_mode enum + behavior contracts, cleanup_rules + marker handling, build-time integration. **(v1.4)** Article subtype (`subtype: article`) extends document.capsule; ship-artifact wrappers pointing at article entries inherit editorial-state gating per Rule 13 + Check 26.
+- **[build.capsule (b3d7e5a1)](tropo-build.capsule.md)** — sibling at build/release infrastructure layer. Builds package versioned software; ship-artifacts declare what goes INTO a build's output.
+- **[release.capsule (b19e8d43)](tropo-release.capsule.md)** — sibling at build/release infrastructure layer. Releases record what shipped; ship-artifacts declare what's shippable.
+- **[release-plan.capsule (a3f1e7b2)](tropo-release-plan.capsule.md)** — coordination precedent. A release-plan coordinates a release; ship-artifacts coordinate the manifest within that release's build.
+- **[playbook.capsule (e7b3c509)](tropo-playbook.capsule.md)** — pattern precedent for §Studio + Relations Header convention.
+- **[project-plan.capsule (f7b9c4a2)](tropo-project-plan.capsule.md)** — governs [Stream 2 D2.1 project-plan (4e5a2011)](../../vault/files/4e5a2011.md), the project-plan delivering this capsule's v1.0-v1.1.
+- **[pipeline.capsule (e4c8a6b2)](tropo-pipeline.capsule.md)** + **[pipeline-run.capsule](tropo-pipeline-run.capsule.md)** — **(v1.4 NEW)** the pipeline substrate that executes publish-act + retract-act. Publish-act is a pipeline event; pipeline-run.capsule records what fired; ship-artifact.capsule v1.4 defines what gets written to wrapper substrate at sub-gate-3 completion.
 - **[Build-Release Pipeline arch-spec (747c33c9)](../../vault/files/747c33c9.md)** — validator + build implementation spec; capsule version-drift policy per §3.4.
 - **[Tropo Release Structure project (b2e7d4a9)](../../vault/files/b2e7d4a9.md)** — the manifest-root project for `target: [release]` entries (keyed under `manifest_root_uid.release:`).
 - **[Tropo Website Content Structure project (4a99638d)](../../vault/files/4a99638d.md)** — the manifest-root project for `target: [web]` entries (keyed under `manifest_root_uid.web:`).
 - **[Tropo Extraction-and-Publish Pipeline brief (c5a7e391)](../../vault/files/c5a7e391.md)** — the universal extraction-and-publish pattern this capsule's v1.4 sections substrate-support.
 - **[Web v1 Release Plan (b8f5d293)](../../vault/files/b8f5d293.md)** — Cycle A/B/C sequencer for the web target.
-- **[v1.46.0 Cycle A Design-Spec (6a8d3f17)](../../vault/files/6a8d3f17.md)** — direct source for the v1.3 → v1.4 amendment. *(Cycle provenance, incl. the v1.47→v1.48 renumbering story, in the [history companion (437e8944)](ship-artifact.history.md).)*
+- **[v1.46.0 Cycle A Design-Spec (6a8d3f17)](../../vault/files/6a8d3f17.md)** — direct source for the v1.3 → v1.4 amendment. *(Cycle provenance, incl. the v1.47→v1.48 renumbering story, in the [history companion (437e8944)](tropo-ship-artifact.history.md).)*
 
 ### History
 
-The v1.0/v1.1/v1.1.1-v1.1.4 amendment-block opener prose, the §Conscious Trade-offs section (5 entries), the §Known Enforcement Gaps table, the §Studio — Shop Signage human-facing quick-ref, the Relationship-to-Other-Capsules narrative, the Inheritance section, the v1.2 body-refactor entry, the v1.3 multi-target extraction migration entry, and the full changelog are preserved in the companion [ship-artifact.history.md (437e8944)](ship-artifact.history.md) governed by `capsule-history.capsule` (5ec083a3). The v1.4 amendment narrative lands there alongside the v1.3 migration entry.
+The v1.0/v1.1/v1.1.1-v1.1.4 amendment-block opener prose, the §Conscious Trade-offs section (5 entries), the §Known Enforcement Gaps table, the §Studio — Shop Signage human-facing quick-ref, the Relationship-to-Other-Capsules narrative, the Inheritance section, the v1.2 body-refactor entry, the v1.3 multi-target extraction migration entry, and the full changelog are preserved in the companion [ship-artifact.history.md (437e8944)](tropo-ship-artifact.history.md) governed by `capsule-history.capsule` (5ec083a3). The v1.4 amendment narrative lands there alongside the v1.3 migration entry.
 
 ---
 
-*ship-artifact capsule definition | DRAFT v1.4 (status: draft pending cycle close lock) | UID `eeb59ddf` | full version history at [ship-artifact.history.md (437e8944)](ship-artifact.history.md)*
+*ship-artifact capsule definition | DRAFT v1.4 (status: draft pending cycle close lock) | UID `eeb59ddf` | full version history at [ship-artifact.history.md (437e8944)](tropo-ship-artifact.history.md)*
 *"One declaration per shippable artifact. Canonical source in argo. Default doesn't-ship. The graph is the manifest. Editorial state on the source; target membership on the wrapper; publication state pipeline-written at the act."*

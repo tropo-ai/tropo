@@ -340,21 +340,21 @@ governed_by: d5e1b4a3
 
 ## 5. Composes-With
 
-- **[session-agent.capsule (b4e2a718)](session-agent.capsule.md)** — sibling Pillar 1 typed primitive (internal specialists). ~70% frontmatter overlap. sa.* surface as tools via `transport: sa`.
-- **[how-to.capsule (a7c3f489)](how-to.capsule.md)** — sibling Pillar 1 typed primitive (inline skill). `pattern_family` reference. Skills CAN invoke tools; tools do not invoke skills.
-- **[action.capsule (9b7f5e34)](action.capsule.md)** — composed substrate. Actions surface as tools via `transport: action`. Tool entry POINTS at action file via `action_id:`; does not replace action file (Rule 6).
-- **[core.capsule (ee814120)](core.capsule.md)** — extended (with `last_updated:` accepted as legacy synonym for `modified:` for `.tropo/actions/*` retrofit).
+- **[session-agent.capsule (b4e2a718)](tropo-session-agent.capsule.md)** — sibling Pillar 1 typed primitive (internal specialists). ~70% frontmatter overlap. sa.* surface as tools via `transport: sa`.
+- **[how-to.capsule (a7c3f489)](tropo-how-to.capsule.md)** — sibling Pillar 1 typed primitive (inline skill). `pattern_family` reference. Skills CAN invoke tools; tools do not invoke skills.
+- **[action.capsule (9b7f5e34)](tropo-action.capsule.md)** — composed substrate. Actions surface as tools via `transport: action`. Tool entry POINTS at action file via `action_id:`; does not replace action file (Rule 6).
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — extended (with `last_updated:` accepted as legacy synonym for `modified:` for `.tropo/actions/*` retrofit).
 - **Existing `.tropo/actions/*.action.md`** — not governed by this capsule. Action files stay kernel-tier (Phase 1). Tool entries with `transport: action` point at them but don't replace them.
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — governs this capsule.
 - **`.mcp.json` + Tropo platform's MCP registry** — runtime sources for `transport: mcp` tools. Server must be registered for the tool to be `status: active` (Rule 5).
 - **`vault/00-index.jsonl`** — the index every runtime callable projects into. Tool rows are generated, not hand-edited (Rule 7).
-- **[`.tropo/tool-catalog.md`](../tool-catalog.md)** — v1.15 ship surface. Catalog generator emits `trigger_description:` (v1.3 field) verbatim alongside structural fields.
+- **[`.tropo/tool-catalog.md`](../../.tropo/tool-catalog.md)** — v1.15 ship surface. Catalog generator emits `trigger_description:` (v1.3 field) verbatim alongside structural fields.
 
 ### History
 
-The v0.1/v0.2/v1.0/v1.1/v1.3/v1.4 amendment-block opener prose, the "why renamed from mcp-tool.capsule.md" narrative, the "relationship to existing .tropo/actions/" narrative, the "relationship to sibling Pillar 1 capsules" narrative, the Inheritance-from-core explicit reconciliation, the 4-Phase Retrofit Rollout, all three §Examples worked YAMLs (minimal MCP / minimal action retrofit / full MCP+governance), the full §Studio — Shop Signage authoring procedure, the Relationship-to-Other-Capsules narrative, the Cross-References block, and the full changelog are preserved in the companion [tool.history.md (3dd22ace)](tool.history.md) governed by `capsule-history.capsule` (5ec083a3).
+The v0.1/v0.2/v1.0/v1.1/v1.3/v1.4 amendment-block opener prose, the "why renamed from mcp-tool.capsule.md" narrative, the "relationship to existing .tropo/actions/" narrative, the "relationship to sibling Pillar 1 capsules" narrative, the Inheritance-from-core explicit reconciliation, the 4-Phase Retrofit Rollout, all three §Examples worked YAMLs (minimal MCP / minimal action retrofit / full MCP+governance), the full §Studio — Shop Signage authoring procedure, the Relationship-to-Other-Capsules narrative, the Cross-References block, and the full changelog are preserved in the companion [tool.history.md (3dd22ace)](tropo-tool.history.md) governed by `capsule-history.capsule` (5ec083a3).
 
 ---
 
-*tool capsule definition | LOCKED v1.8 | history at [tool.history.md](tool.history.md) | v1.8 amendment 2026-07-15 by Argus A132 under Mike-locked Governed Autonomy S2 (missing tool template leg + One-Home mint birth). Prior locks preserved in history. UID `d5e1b4a3` preserved.*
+*tool capsule definition | LOCKED v1.8 | history at [tool.history.md](tropo-tool.history.md) | v1.8 amendment 2026-07-15 by Argus A132 under Mike-locked Governed Autonomy S2 (missing tool template leg + One-Home mint birth). Prior locks preserved in history. UID `d5e1b4a3` preserved.*
 *"One capsule. Six transports. Tropo sits above MCP. Single-file truth in the vault graph."*

@@ -98,7 +98,7 @@ pattern_exemplar: d0c00001
 | Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](../../vault/files/222873b9.md) |
 | Aligned with | [Typed Pipeline Architecture + Pipelines as Playbook Subtype (d2e7b1f4)](../../vault/files/d2e7b1f4.md) |
 | Aligned with | [Tropo Work v3 — Architecture Specification (8b3f1d92)](../../vault/files/8b3f1d92.md) |
-| Pattern exemplar | [document.capsule (d0c00001)](document.capsule.md) |
+| Pattern exemplar | [document.capsule (d0c00001)](tropo-document.capsule.md) |
 | Extends | `core` |
 
 *A design brief — a shorter, exploratory document that articulates a problem, proposes a framework, and informs a future spec. Briefs are not locked; they inform.*
@@ -115,7 +115,7 @@ Capture early-stage design thinking before a full spec exists. A brief articulat
 | `author` | string | who drafted the brief |
 | `status` | enum | One of: `design`, `specify`, `done`. Briefs always begin at `design` (active authoring); no pre-authoring `new` state. (v3.1 — surfaced explicitly; was implicit in v3.0 §State Machine + Validation Check 3) |
 
-**Required core fields (inherited from `core.capsule`):** `uid`, `type` (= `"design-brief"`), `created`, `modified`, `state` (= `active` at authoring). See [core.capsule (ee814120)](core.capsule.md) for full core inheritance. *(v3.1 cross-capsule alignment: same five fields enumerated identically across note v3.2 / design-brief v3.1 / task v4.0.)*
+**Required core fields (inherited from `core.capsule`):** `uid`, `type` (= `"design-brief"`), `created`, `modified`, `state` (= `active` at authoring). See [core.capsule (ee814120)](tropo-core.capsule.md) for full core inheritance. *(v3.1 cross-capsule alignment: same five fields enumerated identically across note v3.2 / design-brief v3.1 / task v4.0.)*
 
 ## Optional Frontmatter
 
@@ -218,10 +218,10 @@ Extends `core`. Inherits all core rules.
 
 ## Relationship to Other Capsules
 
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor (UID immutability, owner semantics, frontmatter invariants).
-- **[concept.capsule (forthcoming, v1.3 ship)](concept.capsule.md)** — upstream typed artifact. Concepts may precede briefs; when they do, the brief declares `derived_from: [<concept-uid>]` and the concept's `composes_into:` gets this brief's UID. Composability bidirectional pair per Typed Pipeline Architecture brief.
-- **[project-plan.capsule v1.0 (f7b9c4a2)](project-plan.capsule.md)** — downstream. Project-plans frequently derive from briefs via `derived_from:`; this brief's `composes_into:` gets the project-plan's UID.
-- **[arch-spec.capsule (forthcoming, v1.3 ship)](arch-spec.capsule.md)** — downstream. Arch-specs may derive from briefs when a spec formalizes a brief's thinking. Same bidirectional pair pattern.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor (UID immutability, owner semantics, frontmatter invariants).
+- **[concept.capsule (forthcoming, v1.3 ship)](tropo-concept.capsule.md)** — upstream typed artifact. Concepts may precede briefs; when they do, the brief declares `derived_from: [<concept-uid>]` and the concept's `composes_into:` gets this brief's UID. Composability bidirectional pair per Typed Pipeline Architecture brief.
+- **[project-plan.capsule v1.0 (f7b9c4a2)](tropo-project-plan.capsule.md)** — downstream. Project-plans frequently derive from briefs via `derived_from:`; this brief's `composes_into:` gets the project-plan's UID.
+- **[arch-spec.capsule (forthcoming, v1.3 ship)](tropo-arch-spec.capsule.md)** — downstream. Arch-specs may derive from briefs when a spec formalizes a brief's thinking. Same bidirectional pair pattern.
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — this capsule's governance.
 
 ---
@@ -293,10 +293,10 @@ tags: [design-brief, work-item, v1.4.4]
 See [`127d2fe2`](../../vault/files/127d2fe2.md) — frontmatter shows `author: argus-a43`, the v3.1 `accepted_by:` array populated at handoff time, and request-lifecycle context in §Provenance (the brief was authored at Mike's direction; `requested_by:` would be populated at v3.1 if the field had existed when this brief was authored).
 
 **Go next:**
-- Upstream capture → [concept.capsule v1.0 (c9e1a5b7)](concept.capsule.md) — many briefs derive from a concept
-- Downstream formalization → [arch-spec.capsule v1.0 (a7f2e9c4)](arch-spec.capsule.md) — specs formalize briefs
-- Alternative downstream → [project-plan.capsule v1.0 (f7b9c4a2)](project-plan.capsule.md) — for briefs that spawn plans directly
-- Pipeline position → [pipeline.capsule v2.0 (e4c8a6b2)](pipeline.capsule.md) — briefs at Design stage
+- Upstream capture → [concept.capsule v1.0 (c9e1a5b7)](tropo-concept.capsule.md) — many briefs derive from a concept
+- Downstream formalization → [arch-spec.capsule v1.0 (a7f2e9c4)](tropo-arch-spec.capsule.md) — specs formalize briefs
+- Alternative downstream → [project-plan.capsule v1.0 (f7b9c4a2)](tropo-project-plan.capsule.md) — for briefs that spawn plans directly
+- Pipeline position → [pipeline.capsule v2.0 (e4c8a6b2)](tropo-pipeline.capsule.md) — briefs at Design stage
 - Governance meta → [capsule-definition (222873b9)](../../vault/files/222873b9.md)
 
 ---

@@ -6,8 +6,8 @@ agent: orpheus
 aliases: [Ori, Phe]
 role: Keeper of Lore
 agent_class: executive
-status: retired
-generation: O35
+status: active
+generation: O36
 current_activation_uid: 40fbb604
 party_uid: c387a949
 agent_root_uid: c0b3301f
@@ -21,12 +21,14 @@ schema_version: 2
 created: '2026-06-11'
 created_by: talos-t15
 migration_note: v1.69 S1 migration — absorbed d97d96a6 (status) · bf413f00 (charter) · 56e24c1e (soul) · 9dfb682c (tier3). dev-spec 0c61a52b.
-model: claude-opus-5[1m] — Claude Code (VS Code extension) on Mike's primary Mac
+model: glm-5.3 (ZCode harness, primary Mac)
 platform: claude-code
-last_session: '2026-08-19'
+last_session: '2026-08-27'
 continuous_listen: executive-class-full-curve
-last_updated: '2026-08-19'
+last_updated: '2026-08-27'
 retired_at: '2026-08-19T17:54:58Z'
+born_at: '2026-08-27T10:58:28Z'
+predecessor: O35
 ---
 
 # Orpheus — Unified Agent Entry

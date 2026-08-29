@@ -447,6 +447,15 @@ def main() -> int:
         action='store_true',
         help='Content: include full validator output (otherwise TL;DR only).',
     )
+    parser.add_argument(
+        '--warn-ok',
+        action='store_true',
+        help=(
+            'CI mode: exit 0 on GREEN or YELLOW; only RED (real failures) exits '
+            'non-zero. Warnings are the normal state of a healthy shipped Studio, '
+            'so a CI gate that fails on them fails on everything.'
+        ),
+    )
     args = parser.parse_args()
 
     # Resolve Studio root
@@ -495,6 +504,19 @@ def main() -> int:
         print(stdout)
     else:  # --quick (default)
         print(format_human(studio_version, parsed, verdict))
+
+    # --warn-ok (v1.93, argus-a161; Mike-ruled after the cold-boot walk).
+    # The three-state code is deliberate and stays: 0 GREEN / 1 YELLOW / 2 RED.
+    # But YELLOW is the NORMAL state of a healthy shipped box — 103 passed,
+    # 0 failed, 94 warnings on a pristine v1.93 install — and package.json
+    # chained this tool with `&&`, so a customer's first `npm test` short-
+    # circuited on a warning and the second half never ran. The engineer
+    # persona's day-one act is wiring that into CI; he got a red build with
+    # nothing wrong and concluded the product was unmaintained.
+    # Collapsing the codes would destroy a real signal, so CI opts in instead:
+    # warnings pass, failures do not.
+    if args.warn_ok and exit_code == 1:
+        return 0
 
     return exit_code
 

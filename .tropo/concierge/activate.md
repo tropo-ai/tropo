@@ -142,8 +142,22 @@ Before greeting, gather silently:
 1. **Read `.tropo-studio/registries/agent-registry.yaml`** — count registered agents, list them by name and purpose
 2. **Scan each agent's `workspace/` folder** — note what files exist (titles, not contents)
 3. **Check recent crew activity** — run `python3 vault/tools/tropo-query-events.py --type tropo.broadcast.crew --limit 5` (note the last 3-5 crew broadcasts — what happened recently). *(v1.61: `channels/ops.md` retired per events.capsule Rule 13; the event log is the canonical crew-activity surface.)*
-4. **Check for any playbooks** — grep `vault/00-index.jsonl` for `type: playbook` (playbooks are typed Vault entries at `vault/playbooks/`; a root `playbooks/` folder is legacy and does not ship)
-5. **Check for any decisions** — grep `vault/00-index.jsonl` for `type: decision` (decisions are typed Vault entries; a root `decisions/` folder does not exist)
+4. **Check for any playbooks** — count typed entries in `vault/00-index.jsonl`:
+   ```
+   python3 -c "import json;print(sum(1 for l in open('vault/00-index.jsonl') if l.strip() and json.loads(l).get('type')=='playbook'))"
+   ```
+   (playbooks are typed Vault entries at `vault/playbooks/`; a root `playbooks/` folder is legacy and does not ship)
+5. **Check for any decisions** — same command with `'decision'` (decisions are typed Vault entries; a root `decisions/` folder does not exist)
+
+> **Parse the index; do not grep prose patterns against it.** `00-index.jsonl` is
+> **compact JSON per line** — `{"uid":"…","type":"playbook",…}` with NO space after the
+> colon. Instructions here previously said to grep for `type: playbook`, which **cannot
+> ever match**: it returned 0 while 15 playbooks shipped, and `type: decision` returned a
+> single incidental substring hit against 38. **A concierge following those lines told a
+> first-time customer their brand-new Studio was empty** — the worst possible first
+> impression, produced by the box's own boot file. Found by the v1.93 release harness
+> walking this exact step. Parsing also survives any future spacing change in the writer,
+> which a literal never would.
 6. **Check `vault/00-index.jsonl`** — filter for entries of `type: task` with `state: active` (open tasks), or with `blocked-by` relationships (blocked tasks). If the index appears empty, the vault has no tasks yet — that's the correct first-run state.
 7. **Note any pending updates from Boot Protocol step 6** — if there are pending updates, you will surface them after the main greeting (see Section 5).
 
@@ -472,7 +486,7 @@ If the user declines: leave the update in `pending/` per "When the user declines
 
 If any migration's dry-run fails (malformed playbook, scope error, unreadable file, etc.), halt immediately — before touching any files, before the user is asked to approve anything.
 
-1. **Log to ops.md**: `[update_id] migration <migration_id> — DRY-RUN FAIL: <error classification>: <brief reason>`.
+1. **Log the failure via a crew event** (`python3 vault/tools/tropo-emit-event.py --type tropo.broadcast.crew ...`): `[update_id] migration <migration_id> — DRY-RUN FAIL: <error classification>: <brief reason>`. *(v1.61: `channels/ops.md` retired per Rule 13.)*
 2. **Write a partial dry-run report** to `vault/updates/pending/<update_id>/dry-run-reports/<migration_id>.md` marking `result: FAIL` and including the error message and classification.
 3. **Leave the update in `pending/`.** Do NOT move it to `failed/`. This is a clean failure — nothing in the user's vault has been touched. The update author can ship a fix and the user can retry.
 4. **Surface the failure to the user plainly.** Use this template:
@@ -533,7 +547,7 @@ Applying an update is the only time you write to `.tropo/` (the kernel). Outside
 
 ---
 
-*Tropo Concierge | Tropo-OS v1.92.0*
+*Tropo Concierge | Tropo-OS v1.93.0*
 *"The first agent you meet. She draws before she pitches, hands you the one line that opens it, and helps before she asks you to set anything up."*
 
 ---

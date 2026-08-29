@@ -32,8 +32,8 @@ Mike is waiting. Do the work first.
 ## [OPTIONAL: HARD BEHAVIORAL RULES — for agents with strong pre-execution constraints]
 
 <!--
-Add 2-3 agent-specific behavioral rules that override everything else.
-See argus-activation.md for the pattern (investigate before design, pause before implement).
+Add 2-3 agent-specific behavioral rules that override everything else
+(e.g. investigate before design, pause before implement).
 Remove this section if not needed.
 -->
 
@@ -65,26 +65,21 @@ Append: `{"event": "milestone_fired", "milestone": "Ready to Verify", "group": "
 **Milestone:** Identity Clear
 **On gate failure: HALT. Emit a `tropo.broadcast.crew` event with `category: ops` naming the violation (`channels/ops.md` retired per Rule 13; the event log is canonical). Wait for Mike.**
 
-### Step 1.1 — Read status card
+### Step 1.1 — Record your birth in the lineage
 
-Path: `agents/[agent-name]/[agent-name]-status.md`
+```
+python3 vault/tools/tropo-lineage.py born --agent [agent-name] --by <principal> --model <sleeve> --prefix [gen-prefix]
+```
 
-**HARD GATE (ADR-016):** Status cards may contain narrative suffixes. Match on substring:
-- If `status:` contains `ACTIVE` *without* `INACTIVE` — HALT. Emit a `tropo.broadcast.crew` event with `category: ops` naming the violation (`channels/ops.md` retired per Rule 13; the event log is canonical). Two active generations is a governance violation.
-- If `status:` contains `INACTIVE`, `RETIRING`, `RETIRED`, or `on-hold` — proceed.
-- If ambiguous — flag to Mike before proceeding.
+It prints the generation you are: `agents/[agent-name]/lineage.jsonl` issues it, and it is the only birth authority. Read the `notes` it returns:
 
-### Step 1.2 — Read generation log (tail-read only)
+- An unretired predecessor is a fact to surface, not a gate — `born` records it and does not block.
+- A generation mismatch cannot occur, because the lineage file issues the number. Never derive your generation from a status card, a hand-maintained generation log, or this file's frontmatter.
+- If a note makes substrate work unsafe — for example a genuinely concurrent session writing the same files — state the conflict and coordinate. Your existence is already recorded and is never revoked.
 
-Path: `agents/[agent-name]/[agent-name]-generation-log.md`
+### Steps 1.2–1.3 — Retired
 
-**Read only the last row.** Confirm your generation = last entry + 1.
-
-**HARD GATE (ADR-028):** If mismatch — HALT. Flag to Mike.
-
-### Step 1.3 — Open your generation log row
-
-Add row at the top of the log. Close predecessor's row (add retire date if blank).
+The status-card gate and the generation-log row write are historical (boot playbook Steps 1.2–1.3). Retain the numbering for Tier-3 compatibility; perform no work.
 
 ### Step 1.4 — Write milestone
 
@@ -124,8 +119,7 @@ Read critically. Is your boot experience consistent with these principles?
 
 ### Step 2.3 — Vault root
 
-Path: `settings/env.md`
-Vault root: `<your vault's absolute filesystem path — detect at boot per settings/env.md>`
+Resolve vault root from your own location: this activation file sits at `<vault-root>/agents/[agent-name]/[agent-name]-activation.md`, so vault root is two levels up. Fallback: the directory containing `.tropo/boot-config.md`. (Boot playbook Step 0.0. There is no `settings/env.md` — an agent that anchors on anything else gets 404s that look like "file missing" but are "path wrong".)
 
 ### Step 2.4 — Mission brief
 
@@ -133,9 +127,9 @@ Path: `.tropo-studio/mission-brief.md`
 
 ### Step 2.5 — Briefing
 
-Primary: `agents/[agent-name]/transfers/living-transfer.md`
+Primary: your predecessor's letter at `agents/[agent-name]/transfers/<predecessor-generation>.md` — one file per generation, create-only.
 
-Fallback: `agents/[agent-name]/briefing-package/00-index.md` — **only** if `for_successor:` matches your generation.
+Fallback: if that file does not exist, read the Handoff section of `agents/[agent-name]/.tropo-capsule/memory/agent-memory.md` — that is where pre-cutover letters live. The shared `transfers/living-transfer.md` surface is retired (boot playbook Step 2.4); do not read or require it.
 
 ### Step 2.6 — Agent memory activation (v3 protocol)
 
@@ -155,11 +149,7 @@ Read top-of-mind entries. Read only pinned (CRITICAL) entries in full. Skip the 
 
 Always: `vault/00-project-tree.jsonl` — project hierarchy backbone.
 
-Load the cascade for your session domain:
-- Strategy / product / pipeline: `vault/00-cascade-020274e0.jsonl`
-- Launch / GTM: `vault/00-cascade-a1d8be6e.jsonl`
-- Technical Library / docs: `vault/00-cascade-8d664afa.jsonl`
-- If briefing names explicit P0 items: skip cascade; transfer context is sufficient.
+If this Studio keeps domain cascade shards (`vault/00-cascade-<uid>.jsonl`), load the one matching your session domain and name it here when you fill the template. **A fresh Studio ships none** — in that case load only `vault/00-project-tree.jsonl` and move on. If the transfer names explicit P0 items: skip the cascade; transfer context is sufficient.
 
 ### Step 2.9 — [OPTIONAL: Commission session agents]
 
@@ -185,26 +175,24 @@ Append: `{"event": "milestone_fired", "milestone": "Context Loaded", "group": "G
 ### Step 3.1 — Crew brief (skip Announcements section)
 
 Path: `00-crew-brief.md`
-Read "Today's Priorities" and crew directory. Skip "Announcements" — living transfer covers it.
+Read "Today's Priorities" and crew directory. Skip "Announcements" — the predecessor letter covers it.
+
+**Skip this step if `00-crew-brief.md` is absent — that is a fresh Studio, not a fault** (boot playbook Step 3.1). The file does not ship; it appears once the Studio has crew. Do not hand-author one.
 
 ### Step 3.2 — Event-log scan at boot
 
 **Drain the event log** (`channels/*` retired per Rule 13; the event log is the canonical coordination surface):
-- `query-events --party <agent-uid> --update-cursor` — messages and broadcasts directed at you since your last cursor
-- `query-events --type tropo.broadcast.crew` — recent crew-wide broadcasts (ops, retirements, flashes)
+- `python3 vault/tools/tropo-check-events.py --as [agent-name]` — the canonical drain: messages and broadcasts directed at you since your last cursor
+- `python3 vault/tools/tropo-query-events.py --type tropo.broadcast.crew` — recent crew-wide broadcasts (ops, retirements, flashes)
 <!--
 Optionally narrow the broadcast query by category/severity relevant to this agent.
 -->
 
 ### Step 3.3 — Predecessor transfer confirmation
 
-<!--
-If this agent uses briefing-packages (not living-transfers) per Step 2(c), replace this step's body with a briefing-package variant: confirm the briefing for your generation exists, and handle the "no briefing" case by proceeding with channels + status card, noting it in the startup signal. See talos-activation.md for the pattern.
--->
+Confirm your predecessor's letter at `agents/[agent-name]/transfers/<predecessor-generation>.md` was read in Step 2.5.
 
-Confirm `agents/[agent-name]/transfers/living-transfer.md` is marked FINAL or RETIRING.
-
-**First-generation clause:** If no predecessor living-transfer exists (first generation of this agent, or lineage gap), note it in your startup signal and proceed — do not HALT.
+**First-generation clause:** If no predecessor letter exists (first generation of this agent, or lineage gap), note it in your startup signal and proceed — do not HALT.
 
 **Mid-state clause:** If the transfer exists but is neither FINAL nor RETIRING (e.g., still marked IN-PROGRESS by a prior generation that did not retire cleanly): flag to Mike.
 
@@ -268,7 +256,7 @@ Append: `{"event": "milestone_fired", "milestone": "[Agent Name] Active", "group
 
 **Owns:** `agents/[agent-name]/`, [any other owned paths]
 
-**Writes:** [list channels and vault paths]
+**Writes:** [list the vault paths this agent writes]
 
 ---
 
@@ -278,13 +266,13 @@ When Mike signals the session is ending, retire via `.tropo/playbooks/agent-reti
 
 **Never ask Mike if the session is ending. Wait to be told.**
 
-Before retiring, write the channel flags section in the living transfer — list which channels have active items so the successor doesn't read everything cold.
+Before retiring, write your successor's letter — name the open items and where they live, so the successor does not have to read everything cold.
 
 ---
 
 ## How to use this template
 
-**Before you start:** Skim the agent-configurator capsule definition at `vault/capsules/tropo-agent-configurator.capsule.md` (UID 3210818a). It is the governance spec this template fulfills. Skim existing configurators at `agents/vela/vela-activation.md`, `agents/metis/metis-activation.md`, `agents/argus/argus-activation.md` for working examples across different lineages.
+**Before you start:** Read the agent-configurator capsule definition at `vault/capsules/tropo-agent-configurator.capsule.md` (UID 3210818a). It is the governance spec this template fulfills — including its §Required Structure, which this template's Groups 0–5 body predates. The Argo crew configurators (`agents/vela/…`, `agents/metis/…`, `agents/argus/…`) are NOT part of a shipped Studio; the only activation file that ships as an example is `agents/example/example-activation.md`, and it is the end-user three-file pattern, not this one.
 
 ### Step 1 — Copy the template
 
@@ -296,16 +284,16 @@ A cold-boot test proved that agents are not interchangeable. Make these four dec
 
 | Choice | Options | How to decide |
 |--------|---------|---------------|
-| **a. Hard Behavioral Rules block** (pre-Group 0) | Keep / remove | Keep if the agent has 2-3 failure modes that must pre-empt everything (see argus-activation.md for the pattern). Remove if the agent has no such constraints. |
+| **a. Hard Behavioral Rules block** (pre-Group 0) | Keep / remove | Keep if the agent has 2-3 failure modes that must pre-empt everything. Remove if the agent has no such constraints. |
 | **b. Soul source** (Step 2.0) | Dedicated soul letter / soul block inside charter / soul inline in this file | Dedicated letter = most executives (Vela, Metis). Charter with `soul:` block = Orpheus pattern. Inline in activation = Talos pattern (when old soul file is being superseded). |
-| **c. Transfer model** (Steps 2.5, 3.3, retirement) | Living-transfer / briefing-package | Living-transfer = executives with continuous lineage (Vela, Metis, Argus, Orpheus). Briefing-package = swarm/infrequent agents (Talos). Reference the `T{N-1}-to-T{N}-briefing.md` pattern for briefings. |
+| **c. Predecessor letter** (Steps 2.5, 3.3, retirement) | No choice — one canonical model | Since the 2026-08-04 cutover there is one handoff home: the per-generation letter at `agents/[agent-name]/transfers/<predecessor-generation>.md`, create-only, with the Handoff section of `agent-memory.md` as the pre-cutover fallback. The old living-transfer / briefing-package split is retired (boot playbook Step 2.4). Nothing to decide here — leave Steps 2.5 and 3.3 as written. |
 | **d. Session agents** (Step 2.9) | Keep / remove | Keep if this agent should commission sa.* agents at boot (e.g., sa.metis-nav). Remove if not — and renumber the milestone-write step from 2.10 to 2.9 in both the heading AND any cross-references. |
 
 ### Step 3 — Create pre-requisite files
 
 If you chose "dedicated soul letter" in (b), create `agents/[agent-name]/[agent-name]-soul.md` before filling the path in Step 2.0. Do not leave a dangling path.
 
-If this is a first-generation agent with no predecessor, note it — Step 3.3 will handle the missing living-transfer case without HALTing.
+If this is a first-generation agent with no predecessor, note it — Step 3.3 will handle the missing predecessor letter without HALTing.
 
 ### Step 4 — Replace ALL placeholders (exhaustive list)
 
@@ -326,7 +314,7 @@ Search for every `[` character in the file. The complete placeholder list:
 - `[gen-prefix]` / `[Gen]` → **same letter, two casings.** Lowercase for file paths and run.jsonl generation tokens (e.g., `s`, `o`, `t`). Uppercase for the startup signal and status card display (e.g., `S`, `O`, `T`). Fill both consistently with the agent's single-letter prefix.
 - `[N]` → the current generation number as an integer (1 for first generation)
 - `[any other owned paths]` → agent's write-owned folders beyond `agents/[agent-name]/`
-- `[list channels and vault paths]` → explicit channel paths this agent writes
+- `[list the vault paths this agent writes]` → explicit vault paths this agent writes (channel files were retired at v1.61 — there are none to list)
 - `[Insert the one question...]` → the self-diagnostic question unique to this role (Group 4)
 
 **Optional-section headings** (if you chose to KEEP these sections in Step 2):
@@ -340,33 +328,61 @@ If you chose to REMOVE these sections, delete the entire block including the hea
 ### Step 5 — Fill structural content
 
 - **Step 2.8** cascade selection: keep only the cascade(s) this agent actually loads. Prune the rest. If none of the listed cascades matches this agent's domain, note it in the startup signal and load only `vault/00-project-tree.jsonl`.
-- **Step 3.2** channels: replace the `<!-- List this agent's primary channels -->` block with the agent's real channel paths.
-- **Step 4** self-diagnostic: write the one question this agent must ask itself at every boot. Name the failure mode. See existing configurators for examples.
+- **Step 3.2** event drain: keep the `check-events` drain as written; optionally narrow the broadcast query by the categories this agent actually cares about. There are no channel paths to fill in — channel files were retired at v1.61.
+- **Step 4** self-diagnostic: write the one question this agent must ask itself at every boot. Name the failure mode.
 - **Write scope section**: list owned paths and write paths explicitly.
-- **If you chose "briefing-package" transfer model in Step 2(c):** rewrite Step 2.5 body to reference the briefing filename pattern `[gen-prefix]{N-1}-to-[gen-prefix]{N}-briefing.md` (e.g., `T2-to-T3-briefing.md`), and rewrite Step 3.3 body with the Talos-style no-briefing clause (proceed with the event-log scan + status card, do not HALT). Reference `agents/talos/talos-activation.md` for the exact wording.
 
 ### Step 6 — Assign UID and register
 
 Run `openssl rand -hex 4` (already done in Step 4 frontmatter).
 
-Register the agent in `.tropo-studio/registries/agent-registry.yaml` per the matched-primitives topology — agent identity + class records are governance-as-data. Example entry:
+Register the agent under the **top-level `agents:` map** in `.tropo-studio/registries/agent-registry.yaml` per the matched-primitives topology — agent identity + class records are governance-as-data. The map is keyed by the agent's UID; the value is an indented block:
 ```yaml
- <uid>:
- path: agents/<agent-name>/<agent-name>-activation.md
- title: "<Agent Name> Activation — agent-configurator v1.0"
- type: agent-configurator
- created: <YYYY-MM-DD>
- created_by: <argus-aN>
- status: active
+agents:
+  <uid>:
+    type: agent                # REQUIRED for author provenance — not `agent-configurator`
+    name: <agent-name>         # the lowercase SLUG, matching agents/<agent-name>/
+    generation-prefix: [Gen]   # REQUIRED — the same letter you filled in Step 4
+    class: crew                # crew / personal / worker / service
+    role: "<Agent Role Title>"
+    status: active
+    path: agents/<agent-name>/<agent-name>-activation.md
+    activation-file: agents/<agent-name>/<agent-name>-activation.md
+    created: <YYYY-MM-DD>
+    created_by: <argus-aN>
 ```
 
-If unsure of the current schema, open the registry and copy the format from the most recent entry.
+**`type: agent`, `name:`, and `generation-prefix:` are load-bearing — a row missing any one of them fails open.** `tropo-mint-id.py` resolves author provenance by scanning this map for a row with `type: agent`, then matching `<name>-<generation-prefix><N>` against the `--author` label. A row typed anything else, or missing `name:` or `generation-prefix:`, is skipped entirely: the author is treated as unregistered free text, the provenance gate never engages, and typed minting **silently succeeds with no author provenance at all** — for an agent that was never born. That is the failure this step exists to prevent, and it is silent by construction. `name:` must be the lowercase slug (a capitalised display name does not match), and `generation-prefix` must match what `tropo-lineage.py born` actually wrote to `agents/<agent-name>/lineage.jsonl` — the lineage is the truth, and `born` never reads this registry.
+
+One entry per agent — the agent is one entity across its three files; do not add separate rows for the soul letter or the activation.
+
+If unsure of the current schema, open the registry and copy the format from a row that already carries `type: agent` and a `generation-prefix:`. Do not copy a `session-agent` row — those carry neither, and a fresh Studio skeleton ships only those.
+
+### Step 6.5 — Give the agent a lineage (`born`) — REQUIRED, and the first mint fails without it
+
+Registering the agent does not bring it into existence. **The lineage file does.** Run:
+
+```
+python3 vault/tools/tropo-lineage.py born --agent <agent-name> --by <principal> --model <sleeve> --prefix <Gen>
+```
+
+It prints `{"generation": "<Gen>1", ...}`. That generation is the one to author as.
+
+**Why this step is not optional, measured rather than asserted.** Once Step 6's row is correct, `tropo-mint-id.py` recognises `<agent-name>-<Gen>1` as a registered agent-generation label and checks the lineage for a birth. With no lineage the first mint REFUSES:
+
+> `author '<agent>-<Gen>1' is a registered agent-generation label with no birth recorded in agents/<agent>/lineage.jsonl … run 'python3 vault/tools/tropo-lineage.py born …', then author with the generation it prints.`
+
+That refusal is correct and its remedy clears — verified end to end: run `born`, re-run the identical mint, it succeeds. **It is a dead end only if this step is missing, which is exactly what it was before v1.93.** Registration made the gate engage and nothing told you to feed it.
+
+**What Step 6 + this step actually buy you, stated precisely so nobody tests the wrong thing:** they do NOT make `created_by_activation_uid` non-null — that field needs `--activation-uid` / `TROPO_ACTIVATION_UID` and stays null either way. What changes is the GATE: with a correct row and a lineage, an unborn or mislabelled author is refused loudly; with the old fieldless row it minted silently as unregistered free text. **The observable is the refusal, never the frontmatter field** — a test asserting only on that field is blind and will pass over the defect.
 
 ### Step 7 — Cold-boot verification
 
 Leave `cold_boot_verified: false` until you request a formal test.
 
-**How to request a cold-boot test:** create a new record file at `agents/sa/sa.cold-boot/activation-log/NNN-<requester>-record.md` (use the next sequential number). Add one or more `[PENDING]` items using this format:
+**`sa.cold-boot` is Argo crew infrastructure and does not ship in a Studio.** The shipped session-agent roster is `.tropo/sa-agent-catalog.md` (three agents; no cold-boot walker), and `agents/sa/sa.cold-boot/` does not exist in a shipped box. The dispatch protocol below is the Argo-internal one, kept here because the dispatch playbook at `vault/playbooks/a5fb24a6.md` still drives it. In a Studio without that agent, either leave `cold_boot_verified: false` or have a human walk the file cold and record the result.
+
+**How to request a cold-boot test (Argo):** create a new record file at `agents/sa/sa.cold-boot/activation-log/NNN-<requester>-record.md` (use the next sequential number). Add one or more `[PENDING]` items using this format:
 
 ```
 ---
@@ -402,5 +418,5 @@ Before attaching this configurator to a live boot:
 ---
 
 *Agent-Configurator Template | Argus A27 | April 18, 2026*
-*Template cold-boot verified: PASS on record [027](../../agents/sa/sa.cold-boot/activation-log/027-argus-a27-record.md) (stranger-usability verification for first-generation agent creation).*
+*Template cold-boot verified: PASS on Argo record 027, argus-a27 (stranger-usability verification for first-generation agent creation). That activation-log record is Argo-internal and does not ship.*
 *"Soul first. Then go to work."*

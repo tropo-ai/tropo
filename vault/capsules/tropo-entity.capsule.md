@@ -173,20 +173,20 @@ Subtype capsules MUST NOT:
 
 ## Relationship to Other Capsules
 
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor.
-- **[agent.capsule (forthcoming D1.1)](agent.capsule.md)** — subtype extension; replaces ad-hoc `agents/<name>/` patterns.
-- **[team.capsule (forthcoming D1.1)](team.capsule.md)** — subtype extension; replaces v0.3 `team` primitive.
-- **[vault.capsule (forthcoming D1.1)](vault.capsule.md)** — subtype extension; exactly one instance per vault.
-- **[task.capsule v3.0 (forthcoming D1.2)](task.capsule.md)** — WorkItem's `requested_by:`, `requested_of:`, `owner:` all reference entity UIDs.
-- **[pipeline-run.capsule (forthcoming D1.1)](pipeline-run.capsule.md)** — `owner:` and `principal:` on runs reference entity UIDs.
-- **[project.capsule v2.3 (forthcoming D1.2)](project.capsule.md)** — `owner:` on projects references entity UIDs; vault-entity-owned projects enforce D7 (every work-item has a vault-entity-project home).
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor.
+- **[agent.capsule (forthcoming D1.1)](tropo-agent.capsule.md)** — subtype extension; replaces ad-hoc `agents/<name>/` patterns.
+- **[team.capsule (forthcoming D1.1)](tropo-team.capsule.md)** — subtype extension; replaces v0.3 `team` primitive.
+- **[vault.capsule (forthcoming D1.1)](tropo-vault.capsule.md)** — subtype extension; exactly one instance per vault.
+- **[task.capsule v3.0 (forthcoming D1.2)](tropo-task.capsule.md)** — WorkItem's `requested_by:`, `requested_of:`, `owner:` all reference entity UIDs.
+- **[pipeline-run.capsule (forthcoming D1.1)](tropo-pipeline-run.capsule.md)** — `owner:` and `principal:` on runs reference entity UIDs.
+- **[project.capsule v2.3 (forthcoming D1.2)](tropo-project.capsule.md)** — `owner:` on projects references entity UIDs; vault-entity-owned projects enforce D7 (every work-item has a vault-entity-project home).
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — governs this capsule.
 
 ---
 
 ## Extension from core
 
-*Where this capsule specializes the [core.capsule (ee814120)](core.capsule.md) floor.* entity.capsule v1.0 extends core per capsule-inheritance convention: **`title:` used as-is per core** (≤ 100 chars); **uses `state:` as the lifecycle enum** instead of core's `status:` (entities use `state: active/archived` because the entity-lifecycle surface is simpler than status-machine primitives; the subtype capsule may add a richer lifecycle field if warranted — e.g., `agent.capsule` extends `state` with dormant/retired sub-states); **`name:` is a new specialization field** distinct from core's `title:` (name is the short identifier; title is the human-readable descriptor). Honest typed-capsule specialization per the pattern.
+*Where this capsule specializes the [core.capsule (ee814120)](tropo-core.capsule.md) floor.* entity.capsule v1.0 extends core per capsule-inheritance convention: **`title:` used as-is per core** (≤ 100 chars); **uses `state:` as the lifecycle enum** instead of core's `status:` (entities use `state: active/archived` because the entity-lifecycle surface is simpler than status-machine primitives; the subtype capsule may add a richer lifecycle field if warranted — e.g., `agent.capsule` extends `state` with dormant/retired sub-states); **`name:` is a new specialization field** distinct from core's `title:` (name is the short identifier; title is the human-readable descriptor). Honest typed-capsule specialization per the pattern.
 
 ---
 
@@ -234,11 +234,11 @@ Subtype capsules MUST NOT:
 - Argo-crew team entity *(authored at v1.4 migration)* — composite with agent members + Mike principal
 
 **Go next:**
-- Specializing to an AI agent? → [agent.capsule (2f8b4e3d)](agent.capsule.md)
-- Composite of entities? → [team.capsule (3c9a7b1e)](team.capsule.md)
-- Vault-top entity? → [vault.capsule (4d6e2f9a)](vault.capsule.md)
-- Entity authoring work-items? → [task.capsule v3.0 (3289712a)](task.capsule.md) — `requested_by:`, `requested_of:`, `owner:`, `verifier:` all reference entity UIDs
-- Entity invoking a pipeline-run? → [pipeline-run.capsule (5a8f3b2c)](pipeline-run.capsule.md)
+- Specializing to an AI agent? → [agent.capsule (2f8b4e3d)](tropo-agent.capsule.md)
+- Composite of entities? → [team.capsule (3c9a7b1e)](tropo-team.capsule.md)
+- Vault-top entity? → [vault.capsule (4d6e2f9a)](tropo-vault.capsule.md)
+- Entity authoring work-items? → [task.capsule v3.0 (3289712a)](tropo-task.capsule.md) — `requested_by:`, `requested_of:`, `owner:`, `verifier:` all reference entity UIDs
+- Entity invoking a pipeline-run? → [pipeline-run.capsule (5a8f3b2c)](tropo-pipeline-run.capsule.md)
 
 ---
 

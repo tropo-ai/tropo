@@ -52,9 +52,9 @@ tags:
 
 ## 1. Intent
 
-A loop-run is a single execution instance of a [loop (1248583d)](loop.capsule.md) — the agent-decided-iteration toward a frozen goal, bounded by brakes. It pins the loop version at start, records each **iteration** as a `run.jsonl` event, and terminates when the verifier confirms the goal (`complete`) OR a brake trips (`killed`) OR an operator cancels (`cancelled`). The loop is the template; the loop-run is the instance — the Airflow DAG/DAG-Run separation, rendered for loops.
+A loop-run is a single execution instance of a [loop (1248583d)](tropo-loop.capsule.md) — the agent-decided-iteration toward a frozen goal, bounded by brakes. It pins the loop version at start, records each **iteration** as a `run.jsonl` event, and terminates when the verifier confirms the goal (`complete`) OR a brake trips (`killed`) OR an operator cancels (`cancelled`). The loop is the template; the loop-run is the instance — the Airflow DAG/DAG-Run separation, rendered for loops.
 
-A loop-run is the **structural sibling of [pipeline-run (5a8f3b2c)](pipeline-run.capsule.md)** and REUSES its machinery: the run-folder files (`definition.md` / `context.md` / `thread.md` / `run.jsonl` / `run.state.json` / `artifacts/`), the structured `verification_receipt` event, the OTel GenAI attributes, and the append-only discipline. The differences are loop-specific: a loop records **iterations** (data-dependent, agent-decided) rather than fixed steps; it carries **brake-state**; it can be **killed** by a brake mid-run; and its verifier **loops back** (fail → another iteration) instead of advancing a DAG.
+A loop-run is the **structural sibling of [pipeline-run (5a8f3b2c)](tropo-pipeline-run.capsule.md)** and REUSES its machinery: the run-folder files (`definition.md` / `context.md` / `thread.md` / `run.jsonl` / `run.state.json` / `artifacts/`), the structured `verification_receipt` event, the OTel GenAI attributes, and the append-only discipline. The differences are loop-specific: a loop records **iterations** (data-dependent, agent-decided) rather than fixed steps; it carries **brake-state**; it can be **killed** by a brake mid-run; and its verifier **loops back** (fail → another iteration) instead of advancing a DAG.
 
 **The load-bearing honesty (dev-spec §Q1): the brake-state recorded here is COOPERATIVE/legibility ONLY — never the enforcement input.** The agent self-reports its iteration count + spend into the loop-run; the *enforcers* (the metering gateway for spend; the launchd watchdog reading the file's `ctime` + harness OTEL for clock/iterations) read **ground-truth the agent cannot forge**. Forging the loop-run counters changes nothing the enforcers read; the validator audits the over-run after the fact.
 
@@ -91,7 +91,7 @@ Written to `run.state.json` + as `iteration_completed` event data. The agent's s
 
 ### Required run-folder files
 
-Same set as [pipeline-run §Required Files](pipeline-run.capsule.md): `definition.md` · `context.md` · `thread.md` · `run.jsonl` · `run.state.json` · `artifacts/`. Seed `run.jsonl` with `run_created` then `loop_contract_locked`.
+Same set as [pipeline-run §Required Files](tropo-pipeline-run.capsule.md): `definition.md` · `context.md` · `thread.md` · `run.jsonl` · `run.state.json` · `artifacts/`. Seed `run.jsonl` with `run_created` then `loop_contract_locked`.
 
 ### run.jsonl Event Schema
 
@@ -103,12 +103,12 @@ One JSON object per line, append-only (per pipeline-run §run.jsonl). Loop-speci
 | `loop_contract_locked` | The immutable contract at start (the loop's goal/verifier/brakes/policy pinned). | goal (frozen exit_criteria + authored_by), verifier, brakes, policy, consequence |
 | `iteration_started` | One per iteration. | iteration_n, decision (the agent's chosen next action toward the goal) |
 | `iteration_completed` | Iteration done. | iteration_n, action_taken, artifact_links, cooperative brake-state snapshot |
-| `verification_receipt` | The verifier checks the GOAL after an iteration (REUSES [pipeline-run §verification_receipt](pipeline-run.capsule.md) structured format). `verdict: pass` ⇒ goal met ⇒ `complete`; `verdict: fail` ⇒ loop back (another iteration). | verdict, per_criterion (each goal exit_criterion), verifier_role_resolved |
+| `verification_receipt` | The verifier checks the GOAL after an iteration (REUSES [pipeline-run §verification_receipt](tropo-pipeline-run.capsule.md) structured format). `verdict: pass` ⇒ goal met ⇒ `complete`; `verdict: fail` ⇒ loop back (another iteration). | verdict, per_criterion (each goal exit_criterion), verifier_role_resolved |
 | `brake_tripped` | **(NEW)** Written by the watchdog/gateway (NOT the agent) when a GROUND-TRUTH brake trips. Terminal → `killed`. | brake (max_iterations\|max_budget_usd\|no_progress\|max_wall_clock\|tool_timeout), ground_truth_value, enforcer (gateway\|watchdog), source (ctime\|OTEL\|gateway-429) |
 | `goal_met` | The verifier's pass on the full goal. → `complete`. | final_verification_receipt_ref |
 | `workflow_complete` | Closure. | terminal_state (complete\|killed\|cancelled) |
 
-OTel GenAI attributes (`gen_ai.usage.*` etc.) per [pipeline-run §OTel](pipeline-run.capsule.md) — and the `claude_code.cost.usage` / `token.usage` metrics are the watchdog's independent spend ground-truth.
+OTel GenAI attributes (`gen_ai.usage.*` etc.) per [pipeline-run §OTel](tropo-pipeline-run.capsule.md) — and the `claude_code.cost.usage` / `token.usage` metrics are the watchdog's independent spend ground-truth.
 
 ---
 
@@ -162,10 +162,10 @@ Core checks inherited.
 
 ## 5. Composes-With
 
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor.
-- **[loop.capsule (1248583d)](loop.capsule.md)** — the template type loop-runs execute; pinned via `loop_version:` at start. The loop-run reads the loop's `goal`/`verifier`/`brakes`/`policy`/`consequence`.
-- **[pipeline-run.capsule (5a8f3b2c)](pipeline-run.capsule.md)** — structural template (`modeled_on`). Reuses the run-folder files, the structured `verification_receipt`, OTel GenAI attributes, the append-only discipline. The loop-run forks + specializes for iterations + brakes + the `killed` state.
-- **brakes circuit-breaker ([1edbee15](../../vault/files/1edbee15.md))** — the enforcer that authors `brake_tripped` events from ground-truth (metering gateway + launchd watchdog). Talos-built.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor.
+- **[loop.capsule (1248583d)](tropo-loop.capsule.md)** — the template type loop-runs execute; pinned via `loop_version:` at start. The loop-run reads the loop's `goal`/`verifier`/`brakes`/`policy`/`consequence`.
+- **[pipeline-run.capsule (5a8f3b2c)](tropo-pipeline-run.capsule.md)** — structural template (`modeled_on`). Reuses the run-folder files, the structured `verification_receipt`, OTel GenAI attributes, the append-only discipline. The loop-run forks + specializes for iterations + brakes + the `killed` state.
+- **brakes circuit-breaker ([1edbee15](../tools/1edbee15.py))** — the enforcer that authors `brake_tripped` events from ground-truth (metering gateway + launchd watchdog). Talos-built.
 - **[dev-spec 9da979b2](../../vault/files/9da979b2.md)** — the design this capsule realizes.
 
 ---

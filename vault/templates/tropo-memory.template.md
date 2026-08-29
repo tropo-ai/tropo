@@ -1,6 +1,11 @@
 ---
 type: memory
+agent: "[agent-slug]"
 owner: "[agent-name]"
+generation: "[your generation, e.g. G1 — the value tropo-lineage.py born returned]"
+last_curated: "[YYYY-MM-DD]"
+curated_by: "[agent-slug]-[generation]"
+spec_version: "3.0"
 last_updated: "[YYYY-MM-DD]"
 update_cadence: continuous
 ---
@@ -8,6 +13,13 @@ update_cadence: continuous
 # [Agent Name] — Memory
 
 *One file. Two sections. Updated continuously.*
+
+> **Do not delete the frontmatter keys above.** Boot reads `last_curated` and
+> `generation` at playbook Step 2.5 to decide whether your memory needs a
+> curator pass. A surface missing them is not "clean" — the staleness gate
+> silently becomes **not computable**, which reads exactly like passing. This
+> template shipped without those five keys through v1.93; the file landed at
+> the right path with the wrong shape, and the gate could not run on it.
 
 ---
 

@@ -26,11 +26,11 @@ directives_folder: "agents/directors/d.[domain-name]/directives/"
 
 fleet:
  - agent: "[standing-agent-1]"
- path: "agents/operations/[agent-1]/activate.md"
- status: active
+   path: "agents/operations/[agent-1]/activate.md"
+   status: active
  - agent: "[standing-agent-2]"
- path: "agents/operations/[agent-2]/activate.md"
- status: pending
+   path: "agents/operations/[agent-2]/activate.md"
+   status: pending
 ---
 
 # d.[domain-name] — Director Charter

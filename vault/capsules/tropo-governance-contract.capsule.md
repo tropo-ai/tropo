@@ -41,7 +41,7 @@ subsystem_hub:
 
 A `governance-contract` is the typed primitive that declares folder-level governance: who owns the folder, who may write, who may read, what the folder is for, and what operating rules govern artifacts within. It is the typed replacement for the per-folder `.tropo-studio/CAPSULE.md` pattern that preceded the graph-based vault — same job, but now a UID-addressable vault entry rather than a fixed-path markdown file.
 
-Folder-level governance is needed when a folder holds **heterogeneous content** — content whose individual files don't share a single per-file type contract that covers everything the folder needs to enforce. Examples: `agents/` (per-agent identity stacks with runtime state), `channels/` (markdown communication files), `library/` (reference material). For folders whose content is fully type-governed — `vault/files/` (every file is a typed governed primitive), `vault/capsules/`, `.tropo/playbooks/`, `.tropo/skills/` — per-file type contracts handle governance and **no governance-contract is needed**. File-level type governance and folder-level governance compose; neither subsumes the other.
+Folder-level governance is needed when a folder holds **heterogeneous content** — content whose individual files don't share a single per-file type contract that covers everything the folder needs to enforce. Examples: `agents/` (per-agent identity stacks with runtime state), `channels/` (markdown communication files), `library/` (reference material). For folders whose content is fully type-governed — `vault/files/` (every file is a typed governed primitive), `vault/capsules/`, `vault/playbooks/`, `vault/skills/` — per-file type contracts handle governance and **no governance-contract is needed**. File-level type governance and folder-level governance compose; neither subsumes the other.
 
 The AGENTS.md file at the folder root remains in place as the commercial-agent compatibility bridge (an external convention honored by Claude Code, Cursor, Aider, and similar tools when they enter a folder); the governance-contract is the canonical source-of-truth that AGENTS.md routes to.
 
@@ -96,7 +96,7 @@ The `folder_type:` field names the folder's structural role. Recognized values:
 | `registry` | Folder is a registry of entries — agents, channels, sessions | `agents/`, `channels/` |
 | `content` | Folder holds reference content | `library/` |
 | `ledger` | Folder IS the governed vault (the typed-primitive store) | `vault/` |
-| `kernel` | Folder is part of the Tropo-OS kernel | `.tropo/`, `vault/capsules/`, `.tropo/playbooks/`, `.tropo/skills/` |
+| `kernel` | Folder is part of the Tropo-OS kernel | `.tropo/`, `vault/capsules/`, `vault/playbooks/`, `vault/skills/` |
 | `studio-metadata` | Folder is Studio operational metadata | `.tropo-studio/`, `.tropo-studio/registries/`, `.tropo-studio/scripts/` |
 | `runtime` | Folder holds runtime state | `playbook-runs/`, agent workspace folders |
 | `archive` | Folder holds frozen historical content | `recycle/`, `archive/` |
@@ -166,13 +166,13 @@ Core checks inherited: UID uniqueness, UID immutability, type immutability, owne
 
 ## 5. Composes-With
 
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor for UID/owner/modified invariants.
-- **[subsystem-hub.capsule (8a4e21c5)](subsystem-hub.capsule.md)** — parent governance. Every governance-contract instance declares `subsystem_hub:` including at least one subsystem hub UID (v1.1 member_of DISAMBIGUATE — moved from `member_of:`).
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor for UID/owner/modified invariants.
+- **[subsystem-hub.capsule (8a4e21c5)](tropo-subsystem-hub.capsule.md)** — parent governance. Every governance-contract instance declares `subsystem_hub:` including at least one subsystem hub UID (v1.1 member_of DISAMBIGUATE — moved from `member_of:`).
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — this capsule's own governance.
-- **[playbook.capsule v2.5 (e7b3c509)](playbook.capsule.md)** — `pattern_exemplar`. The 5-section pedagogy structure is patterned on playbook v2.5 (and v1.18.0 kb-article + activation-log + subsystem-hub refactors).
+- **[playbook.capsule v2.5 (e7b3c509)](tropo-playbook.capsule.md)** — `pattern_exemplar`. The 5-section pedagogy structure is patterned on playbook v2.5 (and v1.18.0 kb-article + activation-log + subsystem-hub refactors).
 - **AGENTS.md (commercial-agent bridge)** — non-typed external compatibility surface. Uniform across folders; routes commercial agents to the governance-contract instance for the folder. Stays in place when a governance-contract is authored; the two compose (AGENTS.md is the discovery surface; governance-contract is the typed source-of-truth).
 - **Per-folder `.tropo-studio/CAPSULE.md`** — pre-v1.20.0 substrate. Stream D migrates content to governance-contract instances; per-folder CAPSULE.md becomes thin pointer or retires for type-governed folders.
-- **[SELF-HEALING.md (db0fd9b1)](../../vault/files/db0fd9b1.md)** — Path 1/Path 2 discipline applies during governance-contract authoring and migration: trivial fixes in place; substantive design issues filed as tracked work-items.
+- **[SELF-HEALING.md (db0fd9b1)](../../.tropo/SELF-HEALING.md)** — Path 1/Path 2 discipline applies during governance-contract authoring and migration: trivial fixes in place; substantive design issues filed as tracked work-items.
 
 ### Composition with AGENTS.md (commercial-agent bridge)
 
@@ -190,7 +190,7 @@ This folder is part of a Tropo Studio. Before operating, read:
 Do not modify this file. It is maintained by Tropo through the update pipeline.
 ```
 
-For folders whose content is fully type-governed (vault/files/, vault/capsules/, .tropo/playbooks/, .tropo/skills/), AGENTS.md routes to the type contracts rather than a governance-contract instance — no folder-level contract exists or is needed.
+For folders whose content is fully type-governed (vault/files/, vault/capsules/, vault/playbooks/, vault/skills/), AGENTS.md routes to the type contracts rather than a governance-contract instance — no folder-level contract exists or is needed.
 
 ### Composition with per-file type contracts
 

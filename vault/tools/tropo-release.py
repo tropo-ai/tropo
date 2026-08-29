@@ -677,6 +677,47 @@ def _parse_ts(value: Optional[str]):
         return None
 
 
+#: The timestamps a scorecard is MALFORMED without — i.e. the ones the schema
+#: declares non-nullable. `primary_live_at` and `all_targets_live_at` are
+#: declared ["string", "null"] and are legitimately absent on a card written
+#: before the outward act completes.
+_REQUIRED_CARD_STAMPS = ("scope_locked_at", "orchestrator_started_at")
+
+
+def _human_gesture_moments(run_dir: Path, identity: Dict[str, str]) -> Dict[str, Optional[str]]:
+    """When each PRINCIPAL input actually happened, per the declared mapping.
+
+    Reads lib/release_events.HUMAN_INPUT_EVENTS — the one place this Studio
+    declares which event records which human gesture — and finds each of those
+    events in this run's journal. Never infers a human moment from a machine
+    one: an absent gesture stays absent rather than borrowing a nearby
+    timestamp, because a scorecard that invents a gesture is worse than one
+    that reports none.
+    """
+    try:
+        from lib.release_events import HUMAN_INPUT_EVENTS  # noqa: WPS433
+    except Exception:  # noqa: BLE001 — a missing lib must not take the release
+        HUMAN_INPUT_EVENTS = {
+            "release_scope_locked": "tropo.release.scope_locked",
+            "release_orchestrator_invoked": "tropo.release.orchestrator_invoked",
+            "release_fire_authorized": "tropo.release.fire_authorized",
+        }
+    wanted = {event: name for name, event in HUMAN_INPUT_EVENTS.items()}
+    found: Dict[str, Optional[str]] = {name: None for name in HUMAN_INPUT_EVENTS}
+    path = run_dir / "run.jsonl"
+    if not path.is_file():
+        return found
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        name = wanted.get(str(row.get("event") or row.get("type") or ""))
+        if name and not found[name]:
+            found[name] = row.get("ts") or row.get("time")
+    return found
+
+
 def _write_real_fire_scorecard(
     identity: Dict[str, str], run_dir: Path, vault: Path, version: str
 ) -> None:
@@ -690,14 +731,24 @@ def _write_real_fire_scorecard(
     """
     try:
         stamps = _journal_timestamps(run_dir, identity, vault)
+        # D-10 (adversarial review, 2026-08-26): the third pairing used to read
+        # `primary_live_at`, which is fed by tropo.release.published — a moment
+        # the MACHINE produces. On the real v1.92 run the principal's
+        # authorization is at 20:12:36Z and `published` is at 20:13:51Z, so the
+        # instrument built to keep this Studio honest about human gestures would
+        # have timestamped the human's gesture 75 seconds late, at a machine
+        # moment. Worse: in any run where fire_authorized is absent but
+        # published is present, it would report a gesture the principal never
+        # made — the exact forgery the runner's orchestrator gate refuses to
+        # commit, committed one file away.
+        #
+        # The mapping from human input to event is DECLARED, once, in
+        # lib/release_events.HUMAN_INPUT_EVENTS. This hand-rolled its own third
+        # pairing instead of reading it. Read the declaration.
         gestures = [
-            {"input": name, "at": stamps[key]}
-            for name, key in (
-                ("release_scope_locked", "scope_locked_at"),
-                ("release_orchestrator_invoked", "orchestrator_started_at"),
-                ("release_fire_authorized", "primary_live_at"),
-            )
-            if stamps[key]
+            {"input": name, "at": at}
+            for name, at in _human_gesture_moments(run_dir, identity).items()
+            if at
         ]
         scorecard = metrics.build_scorecard(
             mode=metrics.REAL_FIRE,
@@ -720,6 +771,28 @@ def _write_real_fire_scorecard(
             baseline=metrics.load_refusal_baseline(vault),
             refusal_coverage=REFUSAL_TELEMETRY_COVERAGE,
         )
+        # AC5 (05de711d): a card missing a REQUIRED stamp is not a measurement,
+        # it is a malformed file at the path a reader checks. Writing it anyway
+        # is how v1.92 got a scorecard that failed its own schema on
+        # orchestrator_started_at and was then correctly recorded ABSENT by the
+        # publisher's validity gate — two steps to reach "nothing", with a
+        # misleading file on disk in between. Refuse, and name the stamp.
+        #
+        # NOT gated on `verdict`. A card reading verdict "fail" is a SUCCESSFUL
+        # measurement of an expensive release; gating on it would conflate "did
+        # we measure" with "did we like the answer".
+        # D-11: the required set is READ FROM THE SCHEMA'S OWN NULLABILITY, not
+        # chosen here. My first version also required `primary_live_at`, which
+        # the schema explicitly permits to be null — so the guard refused to
+        # write cards the schema would have accepted. Only the two non-nullable
+        # stamps make a card malformed by their absence.
+        missing_stamps = [k for k in _REQUIRED_CARD_STAMPS if not stamps.get(k)]
+        if missing_stamps:
+            print("  ! real-fire scorecard NOT written — no %s in this run's "
+                  "journal. The measurement would be malformed, and an absent "
+                  "card is honest where a malformed one is not."
+                  % ", ".join(missing_stamps), file=sys.stderr)
+            return
         target = metrics.scorecard_path(run_dir, metrics.REAL_FIRE)
         target.write_text(
             json.dumps(scorecard, indent=2, sort_keys=True) + "\n", encoding="utf-8"

@@ -38,7 +38,7 @@ subsystem_hub:
 
 # Clean-Update Floor Test
 
-*The Gate 2 acceptance proof (dev-spec [fc4874f4](fc4874f4.md), acceptance criterion 9). "A gate that cannot fail when it should is not a gate."*
+*The Gate 2 acceptance proof (dev-spec [fc4874f4](../files/fc4874f4.md), acceptance criterion 9). "A gate that cannot fail when it should is not a gate."*
 
 ## Intent
 

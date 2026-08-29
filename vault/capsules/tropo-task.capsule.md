@@ -373,11 +373,11 @@ Core checks inherited: UID uniqueness + immutability, type immutability, owner/c
 
 ## 5. Composes-With
 
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor (UID immutability, type immutability, owner/created/modified invariants).
-- **[entity.capsule (1e9c3f7a)](entity.capsule.md)** — `requested_by:`, `requested_of:`, `owner:`, `verifier:`, `approver:`, `informs:` all reference entity UIDs.
-- **[project.capsule (34e4cb0b)](project.capsule.md)** — `member_of:` points at projects; D7 invariant requires at least one vault-entity-owned project.
-- **[pipeline-run.capsule (5a8f3b2c)](pipeline-run.capsule.md)** — pipeline-runs may have tasks as members; pipeline-runs carry pipeline-position, tasks do not.
-- **[note.capsule (db3a8e51)](note.capsule.md)**, **[design-brief.capsule (de5181b0)](design-brief.capsule.md)**, **[decision.capsule](decision.capsule.md)** — sibling typed-artifact capsules sharing universal work-item primitives (`status:`, `accepted_by:`, `processor:`). The v1.4.4 sibling-cascade aligned note v3.2 + design-brief v3.1 + task v4.0 with textually identical work-item primitives.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor (UID immutability, type immutability, owner/created/modified invariants).
+- **[entity.capsule (1e9c3f7a)](tropo-entity.capsule.md)** — `requested_by:`, `requested_of:`, `owner:`, `verifier:`, `approver:`, `informs:` all reference entity UIDs.
+- **[project.capsule (34e4cb0b)](tropo-project.capsule.md)** — `member_of:` points at projects; D7 invariant requires at least one vault-entity-owned project.
+- **[pipeline-run.capsule (5a8f3b2c)](tropo-pipeline-run.capsule.md)** — pipeline-runs may have tasks as members; pipeline-runs carry pipeline-position, tasks do not.
+- **[note.capsule (db3a8e51)](tropo-note.capsule.md)**, **[design-brief.capsule (de5181b0)](tropo-design-brief.capsule.md)**, **[decision.capsule](tropo-decision.capsule.md)** — sibling typed-artifact capsules sharing universal work-item primitives (`status:`, `accepted_by:`, `processor:`). The v1.4.4 sibling-cascade aligned note v3.2 + design-brief v3.1 + task v4.0 with textually identical work-item primitives.
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — governs this capsule.
 
 ## §Template (v4.7 — companion scaffold; contract at [b933eafb](../../vault/files/b933eafb.md))
@@ -392,9 +392,9 @@ method. Rationale is optional; close-only fields are not scaffolded.
 
 ### History
 
-The v3.0/v4.0/v4.0.1 amendment-block opener prose, Migration Notes v3.0 → v4.0 (status enum mapping, owner field migration, new v4.0 fields default, migration script), Migration Notes v2.0 → v3.0 (historical lineage), Inheritance + sibling-cascade narrative, Relationship-to-Other-Capsules narrative, Extension from core, §Studio — Shop Signage authoring procedure (human-facing quick-ref with tools, skills, procedures, pitfalls, worked examples, argo-reference examples), and full changelog (v1.0 through v4.1) are preserved in the companion [task.history.md (e71e654b)](task.history.md) governed by `capsule-history.capsule` (5ec083a3). v4.4's embedded template addition and v4.7's companion-template replacement are recorded in capsule history.
+The v3.0/v4.0/v4.0.1 amendment-block opener prose, Migration Notes v3.0 → v4.0 (status enum mapping, owner field migration, new v4.0 fields default, migration script), Migration Notes v2.0 → v3.0 (historical lineage), Inheritance + sibling-cascade narrative, Relationship-to-Other-Capsules narrative, Extension from core, §Studio — Shop Signage authoring procedure (human-facing quick-ref with tools, skills, procedures, pitfalls, worked examples, argo-reference examples), and full changelog (v1.0 through v4.1) are preserved in the companion [task.history.md (e71e654b)](tropo-task.history.md) governed by `capsule-history.capsule` (5ec083a3). v4.4's embedded template addition and v4.7's companion-template replacement are recorded in capsule history.
 
 ---
 
-*task capsule definition | LOCKED v4.7 | companion-template amendment 2026-08-03 by Argus A144 under Mike's typed-mint approval | history at [task.history.md](task.history.md) | UID 3289712a*
+*task capsule definition | LOCKED v4.7 | companion-template amendment 2026-08-03 by Argus A144 under Mike's typed-mint approval | history at [task.history.md](tropo-task.history.md) | UID 3289712a*
 *"Status is the work. Position is the run. Acceptors are the agreement. Processors are the drivers. Owner is accountable. Verifier checks the work. Approver signs off on the ship."*

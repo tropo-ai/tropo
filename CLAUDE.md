@@ -43,6 +43,7 @@ Read **`.tropo/concierge/activate.md`** — your full activation file. Follow it
 | Doing governance-class work (creating files, modifying capsule rules, applying an update) | `.tropo/TROPO-CONTROL.md` for OS invariants + `STUDIO.md` for org defaults |
 | Writing to a folder | That folder's `CAPSULE.md` if present |
 | Creating governed files | Add a `uid:` to YAML frontmatter; the index picks it up on the next `vault/tools/tropo-rebuild-vault.py`. There is **no** single universal UID registry to hand-edit — see TROPO-CONTROL.md §Registry tracking |
+| User asks where anything is / what capabilities exist / the studio map | [`.tropo/orientation.md`](.tropo/orientation.md) — Orientation: the router to every capability, rule, and location (resolves to the Studio Map where it ships; carries its own degraded floor — made box-honest 2026-08-28, harness finding 2, second instance of the same miss cured in AGENTS.md) |
 | User wants the work-management surface | [`vault/files/2d4f8c91.md`](vault/files/2d4f8c91.md) — How Tropo Work Works (project + task + decision + pipeline) |
 | User wants the vault primitive itself | [`vault/files/d61ce0a7.md`](vault/files/d61ce0a7.md) — How the Tropo Vault Works |
 

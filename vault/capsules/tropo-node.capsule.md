@@ -175,8 +175,8 @@ Core checks inherited.
 
 ## 10. Composes-With
 
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor.
-- **[entity.capsule (1e9c3f7a, LOCKED)](entity.capsule.md)** — the **actor** primitive; `node` is its deliberate counterpart (§2). They share `person`/`organization`-shaped concepts but differ in kind: entities *act*, nodes are *tracked*. Untouched by this capsule.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor.
+- **[entity.capsule (1e9c3f7a, LOCKED)](tropo-entity.capsule.md)** — the **actor** primitive; `node` is its deliberate counterpart (§2). They share `person`/`organization`-shaped concepts but differ in kind: entities *act*, nodes are *tracked*. Untouched by this capsule.
 - **`render-entity-map.py`** (`.tropo-studio/scripts/`) — the publish-gated renderer that projects the **public** subset to the market map; the §4 cardinal rule is enforced here + at the validator.
 - **A forthcoming `add-node` / `add-edge` skill** — the one-gesture creation path the ergonomic constraint (§6) requires.
 

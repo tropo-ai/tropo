@@ -42,7 +42,7 @@ subsystem_hub:
 
 A how-to is an inline behavior bundle — markdown-native skill that an agent reads and executes in its own context. Loads, follows steps, confirms post-conditions.
 
-Tropo skills are the markdown-native behavior bundles agents read and execute inline (as distinct from session-agents, which are callable specialists). Today they exist as 14 files at `.tropo/skills/` with two naming dialects and a shared body convention (preamble + Steps + Success post-conditions).
+Tropo skills are the markdown-native behavior bundles agents read and execute inline (as distinct from session-agents, which are callable specialists). Today they exist at `vault/skills/` — one `tropo-<name>.md` file per skill — with a shared body convention (preamble + Steps + Success post-conditions). (The 14-file `.tropo/skills/` layout with two naming dialects that this capsule was first authored against has been migrated.)
 
 This capsule defines the **typed how-to** — a skill with an explicit name, purpose, when-to-invoke, and (optionally) machine-readable triggers, I/O shape (via `reads`/`writes`), and structured invocation examples. Typed how-tos become registry-discoverable entries that the Librarian (v1.3+) can serve via queries like *"what skill handles markdown cleanup?"* or *"list skills that write to `vault/files/`."*
 
@@ -106,7 +106,7 @@ For `status: draft` skills: only Preamble required. Others optional during draft
 
 ### Inheritance from core — explicit reconciliation
 
-Skill files live at `.tropo/skills/<name>.skill.md` and are **kernel infrastructure artifacts, not vault entries**. They declare `extends: core` for conceptual alignment + UID governance, but are not subject to core's ledger-check-in validation in the same way. Mirrors session-agent.capsule treatment. The validator for skills is THIS capsule's validation check list, not core's. Specifically: `uid` enforced (8-hex, unique, immutable); `type: how-to` discriminator; `status` state machine; `title` NOT required (`name` + `purpose` serve catalog role); `owner` required going forward; `created` (or legacy) provenance pair; `modified` (or legacy `updated`) optional at Phase 1.
+Skill files live at `vault/skills/tropo-<name>.md` and are **kernel infrastructure artifacts, not vault entries**. They declare `extends: core` for conceptual alignment + UID governance, but are not subject to core's vault-check-in validation in the same way. Mirrors session-agent.capsule treatment. The validator for skills is THIS capsule's validation check list, not core's. Specifically: `uid` enforced (8-hex, unique, immutable); `type: how-to` discriminator; `status` state machine; `title` NOT required (`name` + `purpose` serve catalog role); `owner` required going forward; `created` (or legacy) provenance pair; `modified` (or legacy `updated`) optional at Phase 1.
 
 ---
 
@@ -141,7 +141,7 @@ Mirrors session-agent.capsule. `status: published` accepted as legacy synonym fo
 
 ### Governance Rules (6, in addition to core)
 
-1. **One skill file per skill.** Lives at `.tropo/skills/<name>.skill.md` where `<name>` equals the `name:` frontmatter field (or legacy synonym).
+1. **One skill file per skill.** Lives at `vault/skills/tropo-<name>.md` where `<name>` equals the `name:` frontmatter field (or legacy synonym).
 2. **Name field matches filename stem.** Validation failure if mismatch.
 3. **Accept legacy name fields.** `skill:` and `skill_id:` remain valid as synonyms for `name:` indefinitely. Phase 1 migrates opportunistically; no forced rewrite.
 4. **`reads` / `writes` are governance-relevant.** When declared, validator may cross-check against target folders' AGENTS.md write-scope. A skill that writes to a folder it's not authorized for is a capsule violation.
@@ -150,7 +150,7 @@ Mirrors session-agent.capsule. `status: published` accepted as legacy synonym fo
 
 ### Validation Checks (17, ERROR-severity at check-in / index rebuild)
 
-1. All 8 required frontmatter slots present: `uid`, `name` (or legacy `skill`/`skill_id`/`title`), `type`, `status`, `owner`, `purpose` (frontmatter OR implicit purpose rule), `when` (frontmatter OR implicit when rule), provenance pair. **Known Phase-1 exception:** `.tropo/skills/check-sa-catalog.skill.md` has `uid: null` and is marked YELLOW-retrofit. Validator flags but does not block.
+1. All 8 required frontmatter slots present: `uid`, `name` (or legacy `skill`/`skill_id`/`title`), `type`, `status`, `owner`, `purpose` (frontmatter OR implicit purpose rule), `when` (frontmatter OR implicit when rule), provenance pair. (The Phase-1 `uid: null` exception on check-sa-catalog has since been closed — `vault/skills/tropo-check-sa-catalog.md` now carries `uid: d8f3e2c1`.)
 2. Name source (from legacy-source rule) matches filename stem.
 3. `type` equals `"how-to"`.
 4. `status` ∈ {`draft`, `active`, `deprecated`, `superseded`}. **Accept `published` as legacy synonym for `active`** (Dialect B).
@@ -165,7 +165,7 @@ Mirrors session-agent.capsule. `status: published` accepted as legacy synonym fo
 13. If `triggers` present: each entry is a glob pattern, event name, or keyword
 14. If `reads` / `writes` present: paths well-formed; if `writes` declared, cross-check against target folders' AGENTS.md write-scope
 15. If `supersedes` / `superseded_by` present: referenced UIDs resolve to skill files; bidirectional pair consistent
-16. Skill file lives at `.tropo/skills/<name>.skill.md` (or accepted legacy location); path matches name-source
+16. Skill file lives at `vault/skills/tropo-<name>.md` (or accepted legacy location); path matches name-source
 17. **(v1.3; gated on `capsule_version: "1.3"`)** `trigger_description:` present, ≥50 chars, ≤600 chars. Pre-v1.3 instances grandfathered.
 
 Core checks inherited.
@@ -204,22 +204,21 @@ Core checks inherited.
 
 ## 5. Composes-With
 
-- **[session-agent.capsule (b4e2a718)](session-agent.capsule.md)** — sibling Pillar 1 primitive (`aligned_with` + `pattern_family`). Callable specialists vs inline behavior bundles. ~70% frontmatter overlap. Cross-capsule alignment note: session-agent.capsule uses `class: session-agent` discriminator; this capsule uses `type: how-to`. Alignment to `type:` across all Pillar 1 primitives planned at Stream 1 Step 4.
-- **[tool.capsule (d5e1b4a3)](tool.capsule.md)** — companion typed primitive (`composes_with`). Skills can be wrapped as tools via `transport: action`. Skills CAN invoke tools; tools do not invoke skills.
-- **[action.capsule (9b7f5e34)](action.capsule.md)** — compound operations. Distinct from skills (markdown-native behavior bundles read inline by agents).
-- **[playbook.capsule (e7b3c509)](playbook.capsule.md)** — playbooks may invoke skills as part of multi-step workflows.
-- **[playbook-run.capsule (f2a8c3e1)](playbook-run.capsule.md)** — skill invocations may be recorded in playbook-run event logs.
-- **[core.capsule (ee814120)](core.capsule.md)** — extended (with explicit reconciliation; skills are kernel infrastructure, not vault entries).
+- **[session-agent.capsule (b4e2a718)](tropo-session-agent.capsule.md)** — sibling Pillar 1 primitive (`aligned_with` + `pattern_family`). Callable specialists vs inline behavior bundles. ~70% frontmatter overlap. Cross-capsule alignment note: session-agent.capsule uses `class: session-agent` discriminator; this capsule uses `type: how-to`. Alignment to `type:` across all Pillar 1 primitives planned at Stream 1 Step 4.
+- **[tool.capsule (d5e1b4a3)](tropo-tool.capsule.md)** — companion typed primitive (`composes_with`). Skills can be wrapped as tools via `transport: action`. Skills CAN invoke tools; tools do not invoke skills.
+- **[action.capsule (9b7f5e34)](tropo-action.capsule.md)** — compound operations. Distinct from skills (markdown-native behavior bundles read inline by agents).
+- **[playbook.capsule (e7b3c509)](tropo-playbook.capsule.md)** — playbooks may invoke skills as part of multi-step workflows.
+- **[playbook-run.capsule (f2a8c3e1)](tropo-playbook-run.capsule.md)** — skill invocations may be recorded in playbook-run event logs.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — extended (with explicit reconciliation; skills are kernel infrastructure, not vault entries).
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — governs this capsule.
 - **[`vault/00-index.jsonl`](../../vault/00-index.jsonl)** — the index every runtime callable projects into. Skill rows are generated from skill frontmatter (Rule 6).
-- **[`.tropo/skill-catalog.md`](../skill-catalog.md)** — v1.15 ship surface. Catalog generator emits `trigger_description:` (v1.3 field) verbatim alongside structural fields.
-- **The CURATOR** at [`.tropo/skills/index.skill.md`](../skills/index.skill.md) — meta-skill (skill catalog index). Phase 3 decides whether to retrofit to standard shape or formalize as separate `type: index` artifact.
+- **[`.tropo/skill-catalog.md`](../../.tropo/skill-catalog.md)** — v1.15 ship surface. Catalog generator emits `trigger_description:` (v1.3 field) verbatim alongside structural fields.
 
 ### History
 
-The v1.0-v1.3 amendment-block opener prose, the two-dialect relationship narrative (Dialect A vs Dialect B), the sibling-vs-substitute relationship to session-agent, the full 4-phase Retrofit Rollout detail (with priority order for typed-I/O backfill), the 3 worked YAML examples (Dialect A minimal + Dialect B minimal + full typed), the full §Studio — Shop Signage authoring procedure (human-facing quick-ref), the Relationship-to-Other-Capsules narrative, and the full changelog are preserved in the companion [how-to.history.md (d04d382b)](how-to.history.md) governed by `capsule-history.capsule` (5ec083a3).
+The v1.0-v1.3 amendment-block opener prose, the two-dialect relationship narrative (Dialect A vs Dialect B), the sibling-vs-substitute relationship to session-agent, the full 4-phase Retrofit Rollout detail (with priority order for typed-I/O backfill), the 3 worked YAML examples (Dialect A minimal + Dialect B minimal + full typed), the full §Studio — Shop Signage authoring procedure (human-facing quick-ref), the Relationship-to-Other-Capsules narrative, and the full changelog are preserved in the companion [how-to.history.md (d04d382b)](tropo-how-to.history.md) governed by `capsule-history.capsule` (5ec083a3).
 
 ---
 
-*how-to capsule definition | LOCKED v1.4 | history at [how-to.history.md](how-to.history.md) | v1.4 body refactor 2026-05-11 by Argus A56 (v1.19.0 Stream C — 5-section pedagogy pattern). Prior v1.0–v1.3 locks preserved in history. UID `a7c3f489` preserved.*
+*how-to capsule definition | LOCKED v1.4 | history at [how-to.history.md](tropo-how-to.history.md) | v1.4 body refactor 2026-05-11 by Argus A56 (v1.19.0 Stream C — 5-section pedagogy pattern). Prior v1.0–v1.3 locks preserved in history. UID `a7c3f489` preserved.*
 *"The inline skill. Markdown-native. Read, follow, confirm."*

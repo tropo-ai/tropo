@@ -160,8 +160,11 @@ class SameLoaderDrivesToTerminalVerdict(unittest.TestCase):
         profile = load_profile(REPO, "6bf18510", declared_leaves=REAL_LEAVES)
         outcome = self.release_run.walk(profile)
         self.assertIn(outcome.status, ("complete", "halted"))
-        self.assertEqual(len(outcome.actions), 3, "the shipped profile halts at its "
-                          "third declared step (a judgment leaf), by measured design")
+        self.assertEqual(len(outcome.actions), 2, "the shipped profile halts at its "
+                          "second declared step (the doc-leg judgment leaf) — step order "
+                          "amended 2026-08-27, Mike-authorized: legs before build, because "
+                          "the build refuses until the legs settle (found on run d445af8b, "
+                          "the first runner-driven walk); the pin moves with the fact")
         self.assertEqual(outcome.status, "halted")
 
     def test_fixture_profile_with_a_different_step_set_loads_and_drives_to_a_terminal_verdict(

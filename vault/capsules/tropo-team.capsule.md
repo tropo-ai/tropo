@@ -34,7 +34,7 @@ disposition_hold: "FEDERATION-ARC HOLD (Mike verbatim 2026-07-12, sheet 5dcbadbd
 
 *A composite entity: a group of agents, people, or other entities operating together. Specializes entity by requiring non-empty `members:`, naming an executive principal, and optionally declaring shared channels.*
 
-*Subtype of [entity.capsule (1e9c3f7a)](entity.capsule.md). Per [Tropo Work v2 Architecture Specification (f2e8a7b1)](../../vault/files/f2e8a7b1.md) §2.5. Supersedes v0.3's informal `team` primitive.*
+*Subtype of [entity.capsule (1e9c3f7a)](tropo-entity.capsule.md). Per [Tropo Work v2 Architecture Specification (f2e8a7b1)](../../vault/files/f2e8a7b1.md) §2.5. Supersedes v0.3's informal `team` primitive.*
 
 ---
 
@@ -91,8 +91,8 @@ Teams have executive principals — the entity that signs on the team's behalf. 
 
 ## Relationship to Other Capsules
 
-- **[entity.capsule (1e9c3f7a)](entity.capsule.md)** — parent
-- **[agent.capsule (2f8b4e3d)](agent.capsule.md)** — most members are typically agent-subtype entities
+- **[entity.capsule (1e9c3f7a)](tropo-entity.capsule.md)** — parent
+- **[agent.capsule (2f8b4e3d)](tropo-agent.capsule.md)** — most members are typically agent-subtype entities
 
 ---
 
@@ -109,7 +109,7 @@ Inherits entity.capsule's gaps. Subtype-specific:
 
 ## Extension from core + entity
 
-*Where this capsule specializes [entity.capsule (1e9c3f7a)](entity.capsule.md).* team.capsule tightens: `subtype` must be `team`; `members:` must be non-empty; `principal:` must differ from self. Adds optional fields: `shared_channel:`, `charter:`, `team_class:`. All entity.capsule base rules inherited unchanged.
+*Where this capsule specializes [entity.capsule (1e9c3f7a)](tropo-entity.capsule.md).* team.capsule tightens: `subtype` must be `team`; `members:` must be non-empty; `principal:` must differ from self. Adds optional fields: `shared_channel:`, `charter:`, `team_class:`. All entity.capsule base rules inherited unchanged.
 
 ---
 
@@ -145,10 +145,10 @@ Inherits entity.capsule's gaps. Subtype-specific:
 - Argo crew as a team entity *(to be authored at v1.4 migration)* — members: agent-subtype entities for Argus/Vela/Metis/Orpheus/Talos; principal: Mike (vault principal)
 
 **Go next:**
-- Atomic member type → [agent.capsule (2f8b4e3d)](agent.capsule.md) or `person` subtype *(v1.5)*
-- Entity base → [entity.capsule (1e9c3f7a)](entity.capsule.md)
-- Team's vault context → [vault.capsule (4d6e2f9a)](vault.capsule.md)
-- Team delegating work → [task.capsule v3.0 (3289712a)](task.capsule.md) (request-lifecycle from team to member)
+- Atomic member type → [agent.capsule (2f8b4e3d)](tropo-agent.capsule.md) or `person` subtype *(v1.5)*
+- Entity base → [entity.capsule (1e9c3f7a)](tropo-entity.capsule.md)
+- Team's vault context → [vault.capsule (4d6e2f9a)](tropo-vault.capsule.md)
+- Team delegating work → [task.capsule v3.0 (3289712a)](tropo-task.capsule.md) (request-lifecycle from team to member)
 
 ---
 

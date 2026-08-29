@@ -559,6 +559,44 @@ def load_vendor_ref_manifest(vault: Path) -> Optional[set[str]]:
 
 
 # ---------------------------------------------------------------------------
+# Image-manifest loading (v1.93 anti-cure guard; metis-g113 ruled fix)
+# ---------------------------------------------------------------------------
+
+IMAGE_MANIFEST_REL_PATH = Path('tropo-image-manifest.json')
+
+
+def load_image_manifest_paths(vault: Path) -> Optional[set[str]]:
+    """v1.93 anti-cure guard: load the shipped image manifest's path set, if present.
+
+    The image manifest ships at the box root and enumerates every shipped path
+    (with sha256). Path MEMBERSHIP — not hash — classifies a governed file as
+    vendor-shipped vs customer-authored: a customer's edit to a shipped file
+    keeps its path in the manifest and is not customer-authored; a file the
+    customer minted has a path the manifest has never heard of.
+
+    Strict like load_vendor_ref_manifest: any structural problem (missing file,
+    bad JSON, wrong shape) returns None so the caller can say loudly that the
+    guard is blind, rather than silently trusting malformed data or spraying
+    false positives over every shipped record.
+
+    Returns the set of shipped relative paths (posix strings), or None.
+    """
+    manifest_path = vault / IMAGE_MANIFEST_REL_PATH
+    if not manifest_path.is_file():
+        return None
+    try:
+        data = json.loads(manifest_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    files = data.get('files')
+    if not isinstance(files, dict) or not files:
+        return None
+    return {p for p in files.keys() if isinstance(p, str)}
+
+
+# ---------------------------------------------------------------------------
 # Index loading
 # ---------------------------------------------------------------------------
 
@@ -4438,8 +4476,21 @@ def check_uid_stability_across_tier(vault: Path) -> tuple[list[str], int, int]:
     return findings, checked, defects
 
 
-def check_extraction_scope_values(vault: Path) -> tuple[list[str], int, int]:
+def check_extraction_scope_values(vault: Path,
+                                  customer_mode: bool = False,
+                                  image_manifest_paths: Optional[set[str]] = None,
+                                  ) -> tuple[list[str], int, int]:
     """Verify extraction_scope: values are in the allowed enum; enforce external→external-artifact only.
+
+    v1.93 anti-cure guard (metis-g113 ruled fix, customer mode only): a governed
+    file carrying `extraction_scope: ship` whose path is ABSENT from the shipped
+    image manifest is customer-authored. The flag looks like the cure for a D7
+    grounding error — it is actually a publish switch: it silently flips the
+    file's segment to 'os' (universally visible in the audience lattice) and
+    marks it ship-extractable. The guard fires an [ERROR] that names the harm in
+    operator terms. Path membership (not hash) keys the classification, so a
+    customer's edits to a shipped file never trip it, and every shipped record
+    is exempt by construction.
 
     Returns (findings, total_checked, defects)."""
     findings: list[str] = []
@@ -4449,6 +4500,14 @@ def check_extraction_scope_values(vault: Path) -> tuple[list[str], int, int]:
     files_dir = vault / 'vault' / 'files'
     if not files_dir.is_dir():
         return findings, checked, defects
+
+    if customer_mode and image_manifest_paths is None:
+        findings.append(
+            f'[WARN] anti-cure guard is BLIND — no usable image manifest at {IMAGE_MANIFEST_REL_PATH} '
+            f'— cannot distinguish your files from shipped ones; extraction_scope: ship on YOUR OWN files '
+            f'would silently mark them OS-level, universally visible, and ship-extractable, and this run cannot detect that'
+        )
+        defects += 1
 
     # Walk vault/files/*.md and vault/files/<uid>/metadata.md
     candidates: list[Path] = list(files_dir.glob('*.md'))
@@ -4471,6 +4530,22 @@ def check_extraction_scope_values(vault: Path) -> tuple[list[str], int, int]:
             continue
 
         checked += 1
+
+        # v1.93 anti-cure guard (customer mode only; see docstring)
+        if (customer_mode and scope == 'ship'
+                and image_manifest_paths is not None
+                and path.relative_to(vault).as_posix() not in image_manifest_paths):
+            rel = path.relative_to(vault).as_posix()
+            findings.append(
+                f'[ERROR] {rel} — extraction_scope: ship on a file that did NOT ship with this box. '
+                f'This line does not fix grounding — it PUBLISHES the file: it marks your private work '
+                f'OS-level and universally visible to every reader of this studio, and packages it for '
+                f'extraction into the vendor ship image. If this is your own work, DELETE the '
+                f'"extraction_scope: ship" line now (shipped files carry it because they are vendor '
+                f'content; your files must not).'
+            )
+            defects += 1
+
         if scope not in VALID_EXTRACTION_SCOPE_VALUES:
             findings.append(
                 f'[WARN] {path.relative_to(vault)} — extraction_scope={scope!r} not in {sorted(VALID_EXTRACTION_SCOPE_VALUES)}'
@@ -10576,6 +10651,18 @@ def check_cross_vault_member_of(vault: Path) -> tuple[list[str], int, int]:
     field (00-index.jsonl, written by the gardener pass) — this check is a
     READER of that tag, not a second discoverer (dev-spec §4).
 
+    AMENDMENT 2026-08-28 (Mike-ruled in session, verbatim "1"; Option G,
+    argus-a161, relayed by metis-g113): this check NO-OPS while zero live
+    `type: vault` manifests exist, announcing the suspension rather than
+    passing silently. See the gate block in the body for the condition,
+    the evidence, and the scope of the ruling. The revival is BY
+    CONSTRUCTION — the first `type: vault` manifest re-arms it, so v1.94
+    federation restores the check without anyone remembering to. The
+    paragraph immediately above ("Real-substrate honesty") is what the
+    ruling acted on: it recorded, correctly and for months, that no second
+    vault-node exists — which makes the rule unsatisfiable rather than
+    merely unexercised, and that distinction is the whole ruling.
+
     Returns (findings, checked, violation_count).
     """
     findings: list[str] = []
@@ -10592,6 +10679,62 @@ def check_cross_vault_member_of(vault: Path) -> tuple[list[str], int, int]:
         if record.get('uid')
     }
     if not by_uid:
+        return findings, checked, violations
+
+    # ── OPTION G GATE (Mike-ruled 2026-08-28, in session, verbatim "1") ──
+    # This check no-ops while ZERO live `type: vault` manifests exist.
+    #
+    # THE GATE CONDITION, stated so revival is BY CONSTRUCTION and not by
+    # memory: the moment one `type: vault` manifest record exists in the
+    # composed index, this branch stops firing and the full per-vault
+    # grounding check below runs again unchanged. Nothing has to be
+    # remembered, un-commented, or re-enabled by hand at v1.94 — the
+    # condition that suspends the check is the same condition federation
+    # removes.
+    #
+    # WHY (the evidence Mike ruled on, argus-a161): a per-vault grounding
+    # rule cannot be obeyed in a studio that has no vaults to ground in.
+    # Every record in this index carries `vault_node: None`; there is
+    # exactly one implicit node. Worse, the two documented D7 orphan-
+    # catchers (`2d5f9b04` 01-studio-inbox, `46dfbb0a` 01-inbox
+    # app-pipeline) are themselves os-segment, so ROUTING WORK TO THE
+    # ORPHAN-CATCHER THE RULE NAMES GUARANTEES VIOLATING THE RULE. A gate
+    # that cannot be satisfied is a false gate. The census that sized it:
+    # 266 private-segment records in this studio have every member_of
+    # parent in the os node — 69 dev-specs, 58 projects, 10 release plans,
+    # including the locked v1.93 release plan itself. Only 6 printed,
+    # purely because this check filters to work-item types. That shape is
+    # the house convention, not a deviation.
+    #
+    # SCOPE OF THE RULING: severity posture only. The classification
+    # authority in lib.cross_vault_member_of is untouched and still shared
+    # with the composed-index edge-exclusion layer, so the two surfaces
+    # still cannot drift. Widening `work_item_types` to cover the other
+    # ~260 records remains a DELIBERATE v1.94-era decision, never a
+    # discovery. The customer-box grounding cure (the genesis-mint pair,
+    # metis-g113-ruled) builds independently of this posture.
+    #
+    # The no-op is announced, never silent: a gate that cannot run is
+    # worse than one that fails loudly, and this studio spent two weeks
+    # reading past six real ERRORs precisely because a stable block in
+    # long output reads as background.
+    live_vault_manifests = [
+        uid for uid, record in by_uid.items()
+        if str(record.get('type') or '') == 'vault'
+        and str(record.get('state') or 'active') not in ('archived', 'retired')
+    ]
+    if not live_vault_manifests:
+        findings.append(
+            '[INFO] D7-per-vault check SUSPENDED — 0 live `type: vault` manifests '
+            'exist, so there is no second vault-node to ground against and the '
+            'rule cannot be satisfied (the documented orphan-catchers 2d5f9b04 / '
+            '46dfbb0a are themselves os-segment: obeying D7 would guarantee '
+            'violating it). Mike-ruled 2026-08-28 (Option G). REVIVES BY '
+            'CONSTRUCTION: the first `type: vault` manifest in the index re-arms '
+            'this check automatically — nothing to re-enable by hand. Grounding '
+            'hygiene is tracked at task 13c1755e; the shared classification '
+            'authority and the composed-index edge exclusion are UNCHANGED.'
+        )
         return findings, checked, violations
 
     # Local import — lib/ is a sibling directory; sys.path already set up at module level
@@ -13287,6 +13430,13 @@ def main() -> int:
     if getattr(args, 'customer', False):
         vendor_manifest = load_vendor_ref_manifest(vault)
 
+    # v1.93 anti-cure guard: shipped-path set for customer-authored classification.
+    # None outside customer mode (guard inert) and on any load problem (guard
+    # says loudly that it is blind rather than guessing).
+    image_manifest_paths: Optional[set[str]] = None
+    if getattr(args, 'customer', False):
+        image_manifest_paths = load_image_manifest_paths(vault)
+
     print('=' * 70)
     print('tropo-validate.py — vault structural validator')
     print(f'Vault root: {vault}')
@@ -14104,20 +14254,34 @@ def main() -> int:
             print(f'  ... and {remaining} more')
 
     # --- Extraction-Scope Values (v1.25.0 Stream E EXTENSION; spec 2b49ba79 §C.7) ---
+    # v1.93: + anti-cure guard (metis-g113 ruled fix) — customer mode only.
     print('\n--- Extraction-Scope Values (v1.25.0 Stream E EXTENSION; spec 2b49ba79) ---')
-    es_findings, es_checked, es_defects = check_extraction_scope_values(vault)
+    es_findings, es_checked, es_defects = check_extraction_scope_values(
+        vault,
+        customer_mode=getattr(args, 'customer', False),
+        image_manifest_paths=image_manifest_paths)
+    # Guard findings are ERROR-class and are NEVER capped or downgraded — they
+    # name a silent publish of customer-private data and must stay loud.
+    es_errors = [line for line in es_findings if line.startswith('[ERROR]')]
+    es_other = [line for line in es_findings if not line.startswith('[ERROR]')]
     if not es_findings:
         print(f'[PASS] {es_checked} entries with extraction_scope verified in allowed enum; external reserved for external-artifact type')
         total_passes += 1
     else:
-        print(f'[INFO] {es_checked} entries with extraction_scope checked; {es_defects} value defects (WARN-severity at v1.25.0 grace period; ERROR ratchet planned for v1.26.0+)')
-        for line in es_findings[:10]:
-            print(f'  {line}')
-            total_warnings += 1
-        if len(es_findings) > 10:
-            remaining = len(es_findings) - 10
-            total_warnings += remaining
-            print(f'  ... and {remaining} more')
+        if es_errors:
+            print(f'[INFO] ANTI-CURE GUARD: {len(es_errors)} customer-authored file(s) carry extraction_scope: ship — '
+                  f'this flag PUBLISHES private work (segment→os, universally visible, ship-extractable); it is not a grounding fix')
+            for line in es_errors:
+                print(f'  {line}')
+        if es_other:
+            print(f'[INFO] {es_checked} entries with extraction_scope checked; {len(es_other)} value defects (WARN-severity at v1.25.0 grace period; ERROR ratchet planned for v1.26.0+)')
+            for line in es_other[:10]:
+                print(f'  {line}')
+                total_warnings += 1
+            if len(es_other) > 10:
+                remaining = len(es_other) - 10
+                total_warnings += remaining
+                print(f'  ... and {remaining} more')
 
     # --- Working-Copy Schema (v1.26.0 Stream D; spec 5a89297a §3.10 check 1) ---
     print('\n--- Working-Copy Schema (v1.26.0 Stream D; spec 5a89297a §3.10 check 1) ---')

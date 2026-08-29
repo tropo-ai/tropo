@@ -695,13 +695,69 @@ def derive_state(events: list[dict]) -> dict:
             if state["step_status"].get(step) == "verified":
                 state["step_status"][step] = "completed"
         elif et == "tropo.release.package_superseded":
-            for invalidated in (ev.get("data") or {}).get(
-                "invalidated_steps", []
-            ):
+            _inv = (ev.get("data") or {}).get("invalidated_steps") or []
+            if not isinstance(_inv, (list, tuple, set)):
+                _inv = []
+            # `.get(key, [])` returned None when the key was present with a JSON
+            # null, crashing every action that derives state for that run with a
+            # TypeError instead of refusing cleanly. Found by the same recheck.
+            for invalidated in _inv:
                 if invalidated in state["step_status"]:
                     state["step_status"][invalidated] = "declared"
                     state["step_spans"].pop(invalidated, None)
             state["current_step"] = None
+        elif et == "step_redeclared" and step:
+            # GUARDRAIL 1, second half -- CORRECTED 2026-08-28 after four
+            # independent verifiers refuted the first version of this block AND
+            # the comment that stood here.
+            #
+            # WHAT THE OLD COMMENT CLAIMED, falsely: that replay "ALSO refuses"
+            # to honour a redeclare for a step carrying a completion or receipt.
+            # It did not. It checked only the immediately-prior REPLAYED status,
+            # so two hand-authored lines -- step_started, then step_redeclared --
+            # walked a REAL green (a step with a real verification_receipt) to
+            # 'declared' and back into eligible_steps, against the UNMUTATED
+            # engine. Three of four verifiers reproduced it independently. The
+            # false comment was the worse half of the defect: the next reviewer
+            # would have trusted it.
+            #
+            # Both readers now apply the same completion/receipt scan. They are
+            # NOT byte-identical, and I am not claiming again that they are:
+            # a second G4 recheck proved a divergence on a string-shaped
+            # invalidated_steps payload, where derive_state iterates the value
+            # (a string yields characters, resetting nothing) while the scan
+            # used `step in value` (substring containment on a string, which
+            # DID reset). The step stayed 'verified' to one reader while its
+            # real completion was scoped out for the other, and the EMITTER
+            # would then walk it to 'declared'. Both readers now require a
+            # list/tuple/set, so a malformed payload resets nothing anywhere.
+            #
+            # This is the SECOND false comment I wrote into this block in one
+            # day -- the first claimed the replay refused completions when it
+            # did not. Both were caught by someone else running something. A
+            # comment asserting a property the code does not have is the defect
+            # this file keeps producing; state the bound, not the aspiration.
+            #
+            # HONEST BOUND on what this buys (verifier 2's calibration, and it
+            # corrects my own rationale): the journal has NO tamper resistance
+            # for a text editor to defeat -- one forged `step_declared` line
+            # already returns any step to 'declared' unconditionally, and always
+            # has. So this guard is not a defence against forgery. It is a
+            # defence against ENGINE BUGS and FUTURE CALLERS emitting this event
+            # in a state the emitter would have refused. That is worth having,
+            # and it is a smaller claim than the one I made.
+            _prior = state["step_status"].get(step)
+            _blocked = any(
+                (_e.get("step") == step
+                 and _e.get("event") in ("step_completed", "verification_receipt"))
+                for _e in events[:i]
+                if _redeclare_scan_active(events, step, i, _e)
+            )
+            if _prior in ("started", "declared") and not _blocked:
+                state["step_status"][step] = "declared"
+                state["step_spans"].pop(step, None)
+                if state.get("current_step") == step:
+                    state["current_step"] = None
         elif et == "step_failed" and step:
             state["step_status"][step] = "failed"
         elif et == "step_skipped" and step:
@@ -2993,6 +3049,159 @@ def action_step_fail(activation_uid: str, step_uid: str, actor: str, failure_pha
     append_event(run_folder, ev)
     write_run_state_json(run_folder, pr["frontmatter"], derive_state(read_events(run_folder)), activation_uid)
     return f"failed:{step_uid}:{disposition}"
+
+
+def _redeclare_scan_active(events, step, upto, candidate) -> bool:
+    """Is `candidate` a completion/receipt that still counts against `step`?
+
+    Only events since the step was most recently RESET count. A
+    tropo.release.package_superseded (or a fresh step_declared) invalidates a
+    step back to 'declared' WITHOUT clearing its history, so scanning the whole
+    history permanently un-redeclares any step that ever completed -- reopening,
+    for that step, the exact wedge this action exists to close.
+
+    HONEST BOUND, correcting this docstring's first version: two verifiers
+    proved that re-wedge on HAND-CONSTRUCTED event shapes, not engine-produced
+    ones. A third checked the producer and found that
+    release_package.package_superseded_payload() never writes invalidated_steps
+    at all, and step_declared is emitted only in the bootstrap loop before any
+    step runs. So on every journal this studio currently produces, reset_at is
+    the bootstrap index and this scoping changes no verdict. It is defence
+    against a payload shape the engine could emit, not one it does emit -- and
+    saying otherwise is the same overstatement this file has now produced twice.
+    That dead invalidated_steps handler in derive_state is itself worth a
+    ruling: if supersession is meant to invalidate steps, it currently does not.
+    """
+    reset_at = -1
+    for j, e in enumerate(events[:upto]):
+        et = e.get("event")
+        if et == "step_declared" and (e.get("data") or {}).get("step_id") == step:
+            reset_at = j
+        elif et == "tropo.release.package_superseded":
+            _inv = (e.get("data") or {}).get("invalidated_steps") or []
+            # A STRING here is not a list of one uid: `step in "f9365ede"` is
+            # substring containment, which silently reset the scan while
+            # derive_state (iterating the same value character by character)
+            # reset nothing. Require a real sequence in both readers.
+            if isinstance(_inv, (list, tuple, set)) and step in _inv:
+                reset_at = j
+    for j, e in enumerate(events[:upto]):
+        if e is candidate:
+            return j > reset_at
+    return True
+
+
+def action_step_redeclare(activation_uid: str, step_uid: str, actor: str,
+                          reason: str, failed_invocation: str,
+                          dry_run: bool = False) -> str:
+    """Return a STARTED step to DECLARED so its run can proceed.
+
+    THE GAP THIS CLOSES (argus-a160, 2026-08-27, found by wedging a live
+    release): a step whose executor fails AFTER step-start has no way back.
+    step-start refuses (`status='started'` is not eligible), step-fail moves it
+    to `failed` which is equally ineligible, and the only replay path to
+    `declared` was `tropo.release.package_superseded` -- a mechanism built for a
+    superseded package, whose use here would write a false candidate story into
+    the journal. So one argparse error in one executor permanently wedged run
+    d445af8b, and would wedge any run at any of its remaining steps.
+
+    Ruled by metis-g113 as release owner over two alternatives she refused in
+    writing: package_superseded (wrong mechanism, the exact drift class this
+    cycle prosecutes) and abandon-and-restart (raises the principal's gesture
+    ledger, re-points live legs, resets the ignition clock mid-measurement, and
+    treats an ENGINE GAP as run-specific bad luck).
+
+    GUARDRAIL 1 -- structurally incapable of erasing a green. Re-declaring is
+    permitted ONLY from `started`, and ONLY when the step's own event history
+    carries no completion and no receipt. It cannot convert a failure into a
+    fresh start either: `failed` is not an accepted prior state, so a step that
+    was honestly failed stays failed and its disposition stands.
+
+    GUARDRAIL 2 -- the wedge stays on the record. A `step_redeclared` event is
+    journaled carrying the reason, the actor, the previous status and the failed
+    invocation. Re-declaring is a COST, and a mechanism that let a run quietly
+    forget having been stuck would under-report exactly what this release exists
+    to measure.
+
+    HONEST GAP, do not delete this until it is closed: NOTHING READS THIS EVENT.
+    An earlier version of this docstring claimed "the scorecard's friction tally
+    reads it"; three independent verifiers grepped the corpus and found zero
+    readers outside this file. The release scorecard schema is
+    additionalProperties:false over ten fixed keys with no friction metric. So
+    the wedge is journaled and does not yet COUNT. That is a writer with no
+    reader -- the exact inverse of the leg_attested defect found the same day,
+    and the same sibling-drift family. Filed for v1.94 with the scorecard work;
+    stated here rather than implied, because a docstring asserting a consumer
+    that does not exist is how the next reviewer gets misled.
+    """
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
+
+    status = state["step_status"].get(step_uid)
+    if status is None:
+        raise ContractError(
+            f"step {step_uid!r} is not in this run; nothing to re-declare")
+    if status != "started":
+        raise ContractError(
+            f"step {step_uid!r} is {status!r}, not 'started'. re-declare exists "
+            f"for a step whose executor failed AFTER step-start and left it "
+            f"open. It deliberately does not accept 'failed' (that disposition "
+            f"stands), 'completed'/'verified' (that would erase a green), or "
+            f"'declared' (already runnable)")
+
+    blocking = [
+        ev for ev in events
+        if ev.get("step") == step_uid
+        and ev.get("event") in ("step_completed", "verification_receipt")
+        and _redeclare_scan_active(events, step_uid, len(events), ev)
+    ]
+    if blocking:
+        raise ContractError(
+            f"step {step_uid!r} carries {len(blocking)} completion/receipt "
+            f"event(s); refusing to re-declare. A step that produced a verdict "
+            f"is not wedged, and re-declaring it would erase that verdict")
+
+    # GUARDRAIL 2, content half. argparse requires the FLAGS; it does not
+    # require them to say anything. Empty and whitespace-only values passed
+    # every guard and were written verbatim into the journal, producing exactly
+    # the artifact G2 exists to prevent: a wedge on the record with no recorded
+    # cause. Checked BEFORE the dry-run return so a dry run fails the same way a
+    # real one does. (Verifier 4, proved by real emission.)
+    if not (reason or "").strip():
+        raise ContractError(
+            "--reason must say something; a wedge recorded with no cause is the "
+            "artifact guardrail 2 exists to prevent")
+    if not (failed_invocation or "").strip():
+        raise ContractError(
+            "--failed-invocation must name what was invoked and how it failed; "
+            "without it the wedge is not auditable")
+    # Same discipline for the actor (Argus A160 + T52 recommendation, T53):
+    # argparse requires the FLAG for this action; direct API callers bypass
+    # argparse, so the action refuses an empty/whitespace actor here too.
+    if not (actor or "").strip():
+        raise ContractError(
+            "--actor must name who is re-declaring; an unattributed wedge "
+            "record under-reports exactly what this mechanism exists to measure")
+
+    if dry_run:
+        return _dry_run_report(
+            "step-redeclare",
+            f"would emit step_redeclared for {step_uid!r} "
+            f"(status {status!r} -> 'declared'; reason={reason!r})")
+
+    parent = find_event_span(events, "step_started", step_uid)
+    ev = make_event("step_redeclared", actor, step=step_uid,
+                    trace_id=activation_uid, parent_span_id=parent,
+                    data={
+                        "step_id": step_uid,
+                        "previous_status": status,
+                        "reason": reason,
+                        "failed_invocation": failed_invocation,
+                        "redeclared_by": actor,
+                    })
+    append_event(run_folder, ev)
+    write_run_state_json(run_folder, pr["frontmatter"],
+                         derive_state(read_events(run_folder)), activation_uid)
+    return f"redeclared:{step_uid}"
 
 
 def action_skip_request(activation_uid: str, step_uid: str, actor: str, reason: str,
@@ -5722,6 +5931,23 @@ def build_parser() -> argparse.ArgumentParser:
     sf.add_argument("--error-detail", required=True)
     sf.add_argument("--retry-count", type=int, default=0)
 
+    rd = sub.add_parser(
+        "step-redeclare",
+        help="return a STARTED step to DECLARED after its executor failed at "
+             "invocation (refuses if the step carries a completion or receipt)")
+    rd.add_argument("step_uid")
+    rd.add_argument("--reason", required=True,
+                    help="why this step is wedged, in one sentence")
+    rd.add_argument("--failed-invocation", required=True,
+                    help="what was invoked and how it failed -- the reference "
+                         "that makes the wedge auditable")
+    # Argus A160 + T52 recommendation, landed by T53 (2026-08-28): attribution
+    # is the point of a wedge record, so this action deliberately does NOT
+    # inherit the engine-wide generic 'user' default. The other actions keep it.
+    rd.add_argument("--actor", required=True,
+                    help="who is re-declaring (agent-generation or principal) -- "
+                         "a wedge cost must be attributable to somebody")
+
     sr = sub.add_parser("skip-request")
     sr.add_argument("step_uid")
     sr.add_argument("--reason", required=True)
@@ -5828,6 +6054,11 @@ def main() -> int:
                                        args.failure_phase, args.failure_class, args.disposition,
                                        args.error_detail, args.retry_count, dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
+        elif action == "step-redeclare":
+            result = action_step_redeclare(
+                args.activation_uid, args.step_uid, actor, args.reason,
+                args.failed_invocation, dry_run=args.dry_run)
+            print(result if not args.json else json.dumps({"result": result}))
         elif action == "skip-request":
             result = action_skip_request(args.activation_uid, args.step_uid, actor, args.reason,
                                           dry_run=args.dry_run)
@@ -5864,10 +6095,21 @@ def main() -> int:
             # v1.66 S1: standalone human-signoff CLI retired — action_resume is the ONE
             # enforced signoff path (Argus A102 ed04d931 §3). Direct callers to resume.
             print(
-                "ERROR: --action human-signoff is retired. "
-                "Use: python3 9e7003b1.py --action resume --confirmation-granted-by <principal> "
+                "ERROR: the human-signoff subcommand is retired. "
+                "Use: python3 vault/tools/9e7003b1.py --activation-uid <uid> "
+                "resume --confirmation-granted-by <principal> "
                 "(the approval gate is enforced there with full independence checks). "
-                "(v1.66 S1 consolidated fix; ed04d931)",
+                "(v1.66 S1 consolidated fix; ed04d931. Invocation corrected "
+                "2026-08-26 by argus-a159, Mike-approved: the previous text "
+                "named a flag this tool does not accept and omitted a required "
+                "one, so the redirect an operator was handed at a dead end did "
+                "not itself run. Verified against the tool's own --help and by "
+                "running it. The retired flag is deliberately NOT spelled here: "
+                "this message is checked by a test that reads every flag it "
+                "names against this tool's --help, and prose about a dead flag "
+                "is indistinguishable from an instruction to use one -- the same "
+                "reasoning tropo-release.py::cmd_fire gives for not naming its "
+                "own retired refusal code.)",
                 file=sys.stderr,
             )
             sys.exit(2)

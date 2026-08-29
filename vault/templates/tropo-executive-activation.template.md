@@ -18,7 +18,7 @@ last_updated: "[YYYY-MM-DD]"
 
 ## Who You Are
 
-You are **[Agent Name]**. Your role, soul, and scope are declared in your charter at [`agents/[agent-name]/[agent-name]-charter.md`](../agents/[agent-name]/[agent-name]-charter.md).
+You are **[Agent Name]**. Your role, soul, and scope are declared in your charter at [`agents/[agent-name]/[agent-name]-charter.md`]([agent-name]-charter.md).
 
 ## How to Boot
 
@@ -26,7 +26,7 @@ Execute the agent-activation playbook at [`.tropo/playbooks/agent-activation.pla
 
 ## Routing
 
-*Baked in by [create-executive-agent.skill (`c7ea9e01`)](../skills/tropo-create-executive-agent.md) per [playbook.capsule v2.3 §Subtypes §Concierge-Paths (`e7b3c509`)](vault/capsules/tropo-playbook.capsule.md). **THIS FILE IS THE CANONICAL SOURCE for the §Routing bounce-intent set.** All other surfaces that reference these intents (playbook.capsule v2.3 §Concierge-Paths declared minimum, welcome.playbook v0.6 Sub-step 5.5 + §8 Post-Outcome Handoff, the 5 audited concierge-paths playbooks' §Post-Outcome Handoff sections) MUST cite this file as canonical and re-source from it on contract change. Do not edit; if the contract changes, edit here and propagate to derived surfaces in a single atomic commit per the §Routing parity discipline (sa.skeptic 022 P0 closure 2026-04-28).*
+*Baked in by [create-executive-agent.skill (`c7ea9e01`)](../../vault/skills/tropo-create-executive-agent.md) per [playbook.capsule v2.6 §Composes-With §Subtypes §Concierge-Paths (`e7b3c509`)](../../vault/capsules/tropo-playbook.capsule.md). **THIS FILE IS THE CANONICAL SOURCE for the §Routing bounce-intent set.** All other surfaces that reference these intents (playbook.capsule §Concierge-Paths declared minimum, and the four shipped concierge-paths playbooks' §Post-Outcome Handoff sections — `vault/playbooks/57a87001.md` through `57a87004.md`) MUST cite this file as canonical and re-source from it on contract change. Do not edit; if the contract changes, edit here and propagate to derived surfaces in a single atomic commit per the §Routing parity discipline (sa.skeptic 022 P0 closure 2026-04-28).*
 
 When [Founder Name] asks for one of these things, do not handle it inline — bounce back to the [Tropo concierge](../../.tropo/concierge/activate.md) so the right outcome playbook governs the request:
 
@@ -37,7 +37,7 @@ When [Founder Name] asks for one of these things, do not handle it inline — bo
 
 For everything else — working on your queued tasks, modifying my own scope, answering questions about Tropo, creating notes or decisions, reviewing project status — handle it inline as part of the regular session.
 
-The bounce keeps Tropo's structural primitives (projects / agents / teams / system updates) under canonical playbook governance. Reinventing them inline drifts the Studio and bypasses the Vault — see [v1.3.1 Findings #3 + #8 + #13 (`21183d40`)](../../vault/files/21183d40.md) for the prior incident this rule prevents.
+The bounce keeps Tropo's structural primitives (projects / agents / teams / system updates) under canonical playbook governance. Reinventing them inline drifts the Studio and bypasses the Vault.
 
 ---
 

@@ -305,7 +305,7 @@ Output: journal updated; `audit_log_range:` (first + last event_uid for this run
 
 **Executor:** sa.reconciler authors the `reconcile-report` instance
 
-Author a new `reconcile-report` instance per the schema at [reconcile-report.capsule v1.0 (013b7b6e)](../files/013b7b6e.md). Includes:
+Author a new `reconcile-report` instance per the schema at [reconcile-report.capsule v1.0 (013b7b6e)](../capsules/tropo-reconcile-report.capsule.md). Includes:
 
 **Frontmatter:**
 - Core: uid, type, status, title, owner, created, modified
@@ -352,10 +352,10 @@ Executive picks up the report; triages per §A.7 + §C.5 of the arch-spec; compo
 This playbook composes with:
 
 - **[sa.reconciler activation file](../../agents/sa/sa.reconciler/sa.reconciler.md)** — the agent that runs this playbook
-- **[tropo-import-walker.py (bf886f30)](../files/bf886f30.md)** — the primary tool invoked at Steps 2 + 3 + 7
-- **[tropo-scan-import-state.py (0a316ca6)](../files/0a316ca6.md)** — optional pre-pass tool for fast scope reduction
-- **[external-artifact.capsule v1.0 (eedd7034)](../files/eedd7034.md)** — the type sa.reconciler reads + writes
-- **[reconcile-report.capsule v1.0 (013b7b6e)](../files/013b7b6e.md)** — the output schema this playbook authors against
+- **[tropo-import-walker.py (bf886f30)](../tools/tropo-import-walker.py)** — the primary tool invoked at Steps 2 + 3 + 7
+- **[tropo-scan-import-state.py (0a316ca6)](../tools/tropo-scan-import-state.py)** — optional pre-pass tool for fast scope reduction
+- **[external-artifact.capsule v1.0 (eedd7034)](../capsules/tropo-external-artifact.capsule.md)** — the type sa.reconciler reads + writes
+- **[reconcile-report.capsule v1.0 (013b7b6e)](../capsules/tropo-reconcile-report.capsule.md)** — the output schema this playbook authors against
 - **fleet-ops.playbook** (registry extension in v1.25.0 Stream D) — scheduled trigger source
 - **agent-activation.playbook** (Group 3 amendment in v1.25.0 Stream D) — anomaly-driven trigger source
 - **[Import Primitive Architecture Specification v1.0 LOCKED (2b49ba79)](../files/2b49ba79.md)** — the architectural foundation this playbook implements

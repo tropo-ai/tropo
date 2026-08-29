@@ -235,20 +235,42 @@ def render_hello_tropo_board(project_uid: str, project_fm: dict, index: dict) ->
 
 
 def render_all_boards(apply: bool) -> list:
-    """Find all projects with status_board: (or kernel-default-inheritance); render each.
+    """Find every project that belongs on this board and render each.
 
-    v1.35.0 minimal: only renders projects with explicit status_board: c72f1a85
-    or projects under tropo-examples / well-known parents. Argo's own dev-pipeline /
-    publish-pipeline / web-pipeline projects don't auto-render at v1.35.0 (would
-    add noise; not in scope).
+    A project renders when it EITHER declares `status_board: c72f1a85` explicitly
+    OR declares no `status_board:` at all. A project bound to some OTHER board is
+    the only thing excluded — which is the filter's actual purpose.
+
+    v1.93 CHANGE (argus-a161, metis-g114-ruled fold (b)). This previously required
+    an EXACT match on the kernel board UID, so a project that declared nothing
+    rendered nothing. The v1.93 cold-boot walk found the consequence: the operator
+    persona created a project by the shipped playbook, opened the board his entire
+    use case depends on, and got silence. The UID appeared in NEITHER the shipped
+    start-a-project playbook NOR "How Tropo Work Works", so there was no documented
+    way to discover it.
+
+    The alternative cure was documenting the constant — telling a customer to paste
+    `status_board: c72f1a85`, a vendor kernel UID, into their own project. That is
+    the same leak class as stamping our own scope vocabulary onto customer records,
+    and it makes an opaque magic value load-bearing for a first-run gesture. The
+    behaviour should default to including the customer's work, and `status_board:`
+    should be what you set to route a project SOMEWHERE ELSE.
+
+    Absent-means-included is also the non-regressing direction: every project that
+    rendered before still renders, because the explicit binding still matches.
+
+    (The pre-v1.93 docstring also promised "projects under tropo-examples /
+    well-known parents" would render. The code never implemented that. Removed
+    rather than left standing as a false promise.)
     """
     index = load_index()
     rendered = []
     for uid, entry in index.items():
         if entry.get("type") != "project":
             continue
-        if entry.get("status_board") != KERNEL_PROJECT_BOARD_UID:
-            continue  # v1.35.0 only renders explicit-binding projects
+        board = entry.get("status_board")
+        if board is not None and board != KERNEL_PROJECT_BOARD_UID:
+            continue  # bound to a DIFFERENT board — the one case that excludes
         project_fm = parse_frontmatter(VAULT_FILES / f"{uid}.md")
         if not project_fm:
             continue

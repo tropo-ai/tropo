@@ -472,6 +472,32 @@ def bump_version(current, bump_type):
 
 # ─── Index Reading ───────────────────────────────────────────────────────────
 
+# ─── Ship exclusions: entries the RECIPIENT mints, rather than receives ──────
+#
+# WHY TWO UIDs ARE DENIED BESIDE A POSITIVE FILTER (read this before "fixing" it
+# back). These two entries are the customer's OWN vault identity — not Argo
+# content, and not template content either. Shipping Argo's copies hands every
+# customer the same two UIDs, so the vault entity a studio boots on is a
+# stranger's row that collided across every install. They are instead MINTED
+# LOCALLY in the recipient's box at its first index rebuild, which gives each
+# studio its own vault entity and its own inbox project, with fresh UIDs.
+#
+# They still carry `extraction_scope: ship` in the source index, and that is
+# deliberate — release-owner ruled (metis-g114, terminal): changing their
+# extraction_scope was EXPLICITLY RULED OUT. The vault-entity singleton check
+# keys off scope, and every other available value is a semantic lie about what
+# these rows are. So the denial lives here, at the single chokepoint both
+# tropo-build-release.py and tropo-build-candidate-box.py inherit, where it can
+# be named in full instead of encoded as a scope value that means something else.
+#
+# Removing an entry from this map means the box ships Argo's copy again AND the
+# recipient's first rebuild mints a second one — a duplicate, not a fix.
+SHIP_EXCLUDED_MINTED_LOCALLY = {
+    '7c3a8e91': 'vault-entity "Your Tropo Vault" — minted per-studio at first index rebuild',
+    '2d5f9b04': 'inbox project "01-studio-inbox" — minted per-studio at first index rebuild',
+}
+
+
 def load_ship_entries(index_path):
     """Load all entries tagged for release: extraction_scope: ship.
 
@@ -491,8 +517,14 @@ def load_ship_entries(index_path):
     [vault/files/2b49ba79.md] §C.7) is automatically excluded from ship builds
     by virtue of not matching 'ship'. No code change needed; documented for
     clarity.
+
+    v1.93 amendment: the positive filter now has exactly two named exceptions —
+    see SHIP_EXCLUDED_MINTED_LOCALLY above for why they are denied here rather
+    than by extraction_scope, and why removing them from that map is a
+    regression rather than a cleanup.
     """
     entries = []
+    excluded = []
     with open(index_path, 'r') as f:
         for line in f:
             if not line.strip():
@@ -500,7 +532,13 @@ def load_ship_entries(index_path):
             row = json.loads(line)
             scope = row.get('extraction_scope')
             if scope == 'ship':
+                uid = row.get('uid')
+                if uid in SHIP_EXCLUDED_MINTED_LOCALLY:
+                    excluded.append(uid)
+                    continue
                 entries.append(row)
+    for uid in sorted(set(excluded)):
+        print(f'  Ship exclusion: {uid} withheld — {SHIP_EXCLUDED_MINTED_LOCALLY[uid]}')
     return entries
 
 
@@ -2296,6 +2334,99 @@ def step_10_sanitize_argo_identity(build_dir):
         # refusal: priced/outward-publication-and-egress — Argo's own internal identity strings freeze into the public template box and, once published, sit in every downloaded customer copy permanently, with nothing downstream re-checking for them
         sys.exit(1)
     print(f'  ✓ Build sanitized — genericized {sanitized} artifact file(s); no Argo-isms remain.')
+
+    # Welded to the sanitiser, not merely sequenced after it — see below.
+    regenerate_shipped_mint_registry(build_dir)
+
+
+def regenerate_shipped_mint_registry(build_dir):
+    """Re-derive the BOX's mint registry from the BOX's post-sanitisation bytes.
+
+    THE DEFECT THIS CLOSES (v1.93 cycle-blocker, release-owner ruled metis-g114).
+    vault/capsules/mint-registry.json is a DERIVED file: it stores a capsule_sha256
+    and mint_template_sha256 per type, and lib/template_leg.load_mint_registry
+    re-derives both and byte-compares on EVERY mint. The build copies the studio's
+    registry into the box, and THEN step_10_sanitize_argo_identity rewrites capsule
+    bytes (at v1.93: tropo-ship-artifact.capsule.md and
+    tropo-numeric-folder-prefix.capsule.md). From that moment the shipped registry
+    could never match its own box, and because the byte-compare is global rather
+    than per-type, the FIRST typed mint in a virgin box failed for EVERY type:
+
+        $ python3 vault/tools/tropo-mint-id.py --type task --author sam
+        ERROR: mint registry at vault/capsules/mint-registry.json is stale;
+               regenerate it before listing or minting
+
+    A rebuild-index heals it, which is exactly why this hid: anyone who rebuilt
+    before minting never saw it, and the customer who mints first always did.
+
+    WHY IT LIVES INSIDE THE SANITISER'S TAIL. The invariant is "whoever mutates
+    shipped capsule bytes re-derives the registry from them". Sequencing this in
+    main() would satisfy the release builder alone, while
+    tropo-build-candidate-box.py — which calls step_10_sanitize_argo_identity
+    directly as its final emitter — would keep producing boxes that cannot mint,
+    and every cold walk would be walking a box the customer never receives.
+
+    WHAT IT MUST NOT DO. Regeneration targets the BUILD DIR. The studio's own
+    registry is not a build output and mutating it here would silently rewrite
+    the source tree as a side effect of packaging, so this asserts the studio
+    copy is byte-identical afterwards and REFUSES if it moved.
+    """
+    if DRY_RUN:
+        print('  Mint registry: regeneration skipped (--dry-run)')
+        return
+
+    generator = os.path.join(tropo_roots.VAULT_DIR, 'tools', 'tropo-generate-mint-registry.py')
+    if not os.path.exists(generator):
+        print(f'  ✗ Build REFUSED — mint-registry generator not found at {generator}. '
+              f'The shipped registry cannot be re-derived from the shipped bytes, and a box '
+              f'whose registry does not match its own capsules cannot mint at all.',
+              file=sys.stderr)
+        # refusal: priced/false-success — the box freezes and ships with a registry that
+        # provably cannot match its own capsule bytes, so every customer's first typed mint
+        # fails for every type and no downstream gate re-checks it
+        sys.exit(4)
+
+    studio_registry = Path(tropo_roots.STUDIO_ROOT) / 'vault' / 'capsules' / 'mint-registry.json'
+    studio_before = studio_registry.read_bytes() if studio_registry.exists() else None
+
+    box_registry = os.path.join(build_dir, 'vault', 'capsules', 'mint-registry.json')
+    gen = subprocess.run(
+        ['python3', generator, '--vault-path', build_dir, '--output', box_registry],
+        capture_output=True, text=True, timeout=120)
+    if gen.returncode != 0:
+        print(f'  ✗ Build REFUSED — mint-registry regeneration failed for the built box:',
+              file=sys.stderr)
+        print('    ' + ((gen.stderr or gen.stdout).strip()[:600]).replace('\n', '\n    '),
+              file=sys.stderr)
+        # refusal: priced/false-success — see above; a box that cannot mint ships looking green
+        sys.exit(4)
+
+    # Prove the write landed in the BOX and byte-matches the BOX's capsules. A
+    # regeneration aimed at the wrong root exits 0 and leaves the shipped defect
+    # exactly as it was, so the exit code alone is not evidence.
+    chk = subprocess.run(['python3', generator, '--vault-path', build_dir, '--check'],
+                         capture_output=True, text=True, timeout=120)
+    if chk.returncode != 0:
+        print(f'  ✗ Build REFUSED — the built box\'s mint registry is STILL stale after '
+              f'regeneration:', file=sys.stderr)
+        print('    ' + ((chk.stderr or chk.stdout).strip()[:600]).replace('\n', '\n    '),
+              file=sys.stderr)
+        print(f'    Something rewrote shipped capsule bytes after this step, or the '
+              f'regeneration did not target {box_registry}.', file=sys.stderr)
+        # refusal: priced/false-success — see above
+        sys.exit(4)
+
+    studio_after = studio_registry.read_bytes() if studio_registry.exists() else None
+    if studio_after != studio_before:
+        print(f'  ✗ Build REFUSED — regeneration mutated the STUDIO registry at '
+              f'{studio_registry}. Building must not rewrite the source tree; the '
+              f'regeneration is meant to target the build dir only.', file=sys.stderr)
+        # refusal: warn — unpriced: the source-tree write is loud, local, and reversible from
+        # git, and the build stops before the box is sealed
+        sys.exit(4)
+
+    print(f'  ✓ Mint registry re-derived from the SHIPPED bytes '
+          f'(vault/capsules/mint-registry.json) — box mints without a rebuild first.')
 
 
 WALK_ANSWER_ENV = 'TROPO_WALK_ANSWER'

@@ -56,7 +56,7 @@ amendment_ref: 959a8b3d
 | Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](../../vault/files/222873b9.md) |
 | Aligned with | [Typed Pipeline Architecture + Pipelines as Playbook Subtype (d2e7b1f4)](../../vault/files/d2e7b1f4.md) |
 | Aligned with | [Tropo Work v3 — Architecture Specification (8b3f1d92)](../../vault/files/8b3f1d92.md) |
-| Pattern exemplar | [document.capsule (d0c00001)](document.capsule.md) |
+| Pattern exemplar | [document.capsule (d0c00001)](tropo-document.capsule.md) |
 | Extends | `core` |
 
 *A build is a versioned, tested package ready for Deploy. It's the Build-stage output of the typed pipeline — the bridge between a locked arch-spec and a shipped release. Each build derives from one or more arch-specs and, when it ships, composes into exactly one release.*
@@ -215,7 +215,7 @@ Enforced by `lib/release_capsule_contract.check_build_derivation`, which returns
 All other changes require supersession via `supersedes:` / `superseded_by:`.
 7. **One ship per build.** A build ships at most once (one `composes_into:` entry). If a build needs to ship twice (e.g., re-release after defect fix), the second ship is a new build via supersession.
 
-8. **Build is for versioned software packages, not content publications** (v2.1 — Gate B P0 #2 remediation, symmetric to release.capsule v3.0 Decision 11 pitfall). Content-production work-pipelines (a document going from draft to published) **skip `build` and `release` entirely** and terminate at [document.capsule (d0c00001)](document.capsule.md) at `status: published` per v3 Decision 11. The `build` capsule is shaped for versioned software packages: semver `build_version:`, filesystem `build_path:`, §Test Results section, ship-engineering protocol. A content-pipeline that reaches for `build` will get crushing friction at §Test Results (no software tests apply to a published document), `build_path:` (no folder is produced), and `build_version:` (content versions don't follow semver). The right move is not to amend `build` to handle content — it's to match the capsule to the workload. **Tropo provides primitives; users pick which fit their work** (per Decision 11). When a finding surfaces the wrong capsule for the work, fix the pipeline-authoring, not the capsule.
+8. **Build is for versioned software packages, not content publications** (v2.1 — Gate B P0 #2 remediation, symmetric to release.capsule v3.0 Decision 11 pitfall). Content-production work-pipelines (a document going from draft to published) **skip `build` and `release` entirely** and terminate at [document.capsule (d0c00001)](tropo-document.capsule.md) at `status: published` per v3 Decision 11. The `build` capsule is shaped for versioned software packages: semver `build_version:`, filesystem `build_path:`, §Test Results section, ship-engineering protocol. A content-pipeline that reaches for `build` will get crushing friction at §Test Results (no software tests apply to a published document), `build_path:` (no folder is produced), and `build_version:` (content versions don't follow semver). The right move is not to amend `build` to handle content — it's to match the capsule to the workload. **Tropo provides primitives; users pick which fit their work** (per Decision 11). When a finding surfaces the wrong capsule for the work, fix the pipeline-authoring, not the capsule.
 
 ---
 
@@ -258,11 +258,11 @@ Labeled **[enforced]** or **[honor-system]** per the v1.3 discipline.
 
 ## Relationship to Other Capsules
 
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor.
-- **[arch-spec.capsule v1.0 (a7f2e9c4)](arch-spec.capsule.md)** — upstream. Builds derive from specs via `derived_from:` ↔ spec's `composes_into:`.
-- **[release.capsule (forthcoming D4)](release.capsule.md)** — downstream (ship). Releases derive from builds via `derived_from:` ↔ build's `composes_into:`.
-- **[release-plan.capsule v1.0 (a3f1e7b2)](release-plan.capsule.md)** — coordination precedent. A release plan may name a build as a shipment target; when the build ships, the release entry satisfies the plan.
-- **[pipeline.capsule v1.0 (e4c8a6b2)](pipeline.capsule.md)** — declares `build` as the Build-stage artifact type via `artifact_types: {build: build}`.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor.
+- **[arch-spec.capsule v1.0 (a7f2e9c4)](tropo-arch-spec.capsule.md)** — upstream. Builds derive from specs via `derived_from:` ↔ spec's `composes_into:`.
+- **[release.capsule (forthcoming D4)](tropo-release.capsule.md)** — downstream (ship). Releases derive from builds via `derived_from:` ↔ build's `composes_into:`.
+- **[release-plan.capsule v1.0 (a3f1e7b2)](tropo-release-plan.capsule.md)** — coordination precedent. A release plan may name a build as a shipment target; when the build ships, the release entry satisfies the plan.
+- **[pipeline.capsule v1.0 (e4c8a6b2)](tropo-pipeline.capsule.md)** — declares `build` as the Build-stage artifact type via `artifact_types: {build: build}`.
 - **[build-archive evergreen project (d4f5b6a7)](../../vault/files/d4f5b6a7.md)** — terminal sink for closed builds that didn't ship (Close path at build-GATE).
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — this capsule's governance.
 
@@ -276,7 +276,7 @@ Extends `core`. Inherits UID immutability, type immutability, owner/created/modi
 
 ## Extension from core
 
-*Where this capsule specializes [core.capsule (ee814120)](core.capsule.md).* build.capsule extends core: **`title:` allowed up to 120 chars** (core: 100; build titles carry version strings); **`description:` up to 200 chars** (core: 120; build descriptions narrate packaging scope); **`status:` as workflow state** (`draft → building → tested → locked → archived`); **`state:` as archive-visibility** (`active/archived`). **v3 amendment (v2.0):** the `stage: build` pipeline-position literal previously required by v1.1 has been dropped per v3 Decision 4 — builds are identified by `type: build` alone; pipeline-position is a property of the pipeline-run, not the work. Rule 2a release-engineering carve-out (v1.1 amendment, retained under v3) permits `basis_spec:` from release-plan as substitute for `derived_from:` arch-spec under four mechanical conditions.
+*Where this capsule specializes [core.capsule (ee814120)](tropo-core.capsule.md).* build.capsule extends core: **`title:` allowed up to 120 chars** (core: 100; build titles carry version strings); **`description:` up to 200 chars** (core: 120; build descriptions narrate packaging scope); **`status:` as workflow state** (`draft → building → tested → locked → archived`); **`state:` as archive-visibility** (`active/archived`). **v3 amendment (v2.0):** the `stage: build` pipeline-position literal previously required by v1.1 has been dropped per v3 Decision 4 — builds are identified by `type: build` alone; pipeline-position is a property of the pipeline-run, not the work. Rule 2a release-engineering carve-out (v1.1 amendment, retained under v3) permits `basis_spec:` from release-plan as substitute for `derived_from:` arch-spec under four mechanical conditions.
 
 ---
 
@@ -309,7 +309,7 @@ Extends `core`. Inherits UID immutability, type immutability, owner/created/modi
 5. §Test Results populated before `status: locked`
 6. Body immutable after lock except two permitted mutations
 7. One release per build (Rule 7)
-8. **Build is for versioned software packages, not content publications** (v2.1) — content pipelines skip `build` and `release`, terminate at [document (status: published)](document.capsule.md) per Decision 11
+8. **Build is for versioned software packages, not content publications** (v2.1) — content pipelines skip `build` and `release`, terminate at [document (status: published)](tropo-document.capsule.md) per Decision 11
 
 **Pitfalls:**
 - Authoring a build without locked upstream spec → Rule 1 failure (unless Rule 2a carve-out applies)
@@ -318,7 +318,7 @@ Extends `core`. Inherits UID immutability, type immutability, owner/created/modi
 - Rule 2a without passing all four conditions → governance bypass attempt; validator catches
 - Build-spec drift (build deviates from spec's contracts) → Rule 3 violation; honor-system until v1.4+ validator
 - Version mismatch between build and release → Check 10 failure at release authoring
-- **Using `build` for content publications** → wrong capsule for content-vs-software work (Rule 8 / v2.1). Content pipelines skip `build` entirely and terminate at [document (status: published)](document.capsule.md). The capsule is shaped for versioned software packages (semver, build_path, §Test Results); content publications get crushing at §Test Results. Fix the pipeline, not the capsule (Decision 11 principle). Caught by sa.cold-boot 080 in stranger-authoring of "Documenting the vault-rebuild script — operator how-to" — Step 4 alone scored 5/5 ceremony-load.
+- **Using `build` for content publications** → wrong capsule for content-vs-software work (Rule 8 / v2.1). Content pipelines skip `build` entirely and terminate at [document (status: published)](tropo-document.capsule.md). The capsule is shaped for versioned software packages (semver, build_path, §Test Results); content publications get crushing at §Test Results. Fix the pipeline, not the capsule (Decision 11 principle). Caught by sa.cold-boot 080 in stranger-authoring of "Documenting the vault-rebuild script — operator how-to" — Step 4 alone scored 5/5 ceremony-load.
 
 **Worked examples:**
 - [v1.3.1 Build (dc9826d9)](../../vault/files/dc9826d9.md) — current live build; v1.1-era with Rule 2a carve-out applied; `derived_from: [f3c7a291]` (Tropo-OS Stack design-spec)
@@ -327,10 +327,10 @@ Extends `core`. Inherits UID immutability, type immutability, owner/created/modi
 - Release-engineering builds vs general builds: Rule 2a applies only to release-engineering builds; general builds must derive from arch-specs (Rule 1)
 
 **Go next:**
-- Downstream ship → [release.capsule v2.0 (b19e8d43)](release.capsule.md) — release records what shipped
-- Upstream plan → [release-plan.capsule v1.0 (a3f1e7b2)](release-plan.capsule.md) — for release-engineering builds, the plan provides `basis_spec:`
-- Upstream spec (general builds) → [arch-spec.capsule v1.0 (a7f2e9c4)](arch-spec.capsule.md)
-- Pipeline position context → [pipeline.capsule v2.0 (e4c8a6b2)](pipeline.capsule.md) declares build as build-stage output
+- Downstream ship → [release.capsule v2.0 (b19e8d43)](tropo-release.capsule.md) — release records what shipped
+- Upstream plan → [release-plan.capsule v1.0 (a3f1e7b2)](tropo-release-plan.capsule.md) — for release-engineering builds, the plan provides `basis_spec:`
+- Upstream spec (general builds) → [arch-spec.capsule v1.0 (a7f2e9c4)](tropo-arch-spec.capsule.md)
+- Pipeline position context → [pipeline.capsule v2.0 (e4c8a6b2)](tropo-pipeline.capsule.md) declares build as build-stage output
 - Test scenarios + results → *(test-scenario.capsule / test-run.capsule Studio uplifts forthcoming later in Stream 3 D3.2)*
 
 ---

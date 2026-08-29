@@ -53,6 +53,7 @@ class BootDerivationFreshnessTests(unittest.TestCase):
         for rel in (
             ".tropo",
             ".tropo-studio",
+            "docs",
             "vault/playbooks",
             "vault/files",
             "vault/tools",

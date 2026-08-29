@@ -38,7 +38,7 @@ retired_via: "Type Disposition walk 5dcbadbd (Mike-verdicted 2026-07-12, S2 acti
 
 *The vault-entity is the vault AS A PRINCIPAL: grounds every action in a founder/owner principal and anchors the D7 invariant. Exactly one vault-entity per vault-NODE (reframed per-vault-node, Mike's D7 ruling, ADR-051; generalizes the prior per-vault framing to the many-vaults-per-studio model — see Governance Rule 1). Makes federation recursive: vault-of-vaults composes via the same `entity` primitive. Renamed `vault` → `vault-entity` at v1.1 (ADR-051 Fork 1): the name `vault` was freed for a NEW, separate type — the vault-node MANIFEST (a1f7c750) — which governs membership + publish + audience + curation + contract, a different lifecycle from this capsule's principal-grounding + D7-anchor concern. UID `4d6e2f9a` is PRESERVED across the rename; only `name:` and display text changed.*
 
-*Subtype of [entity.capsule (1e9c3f7a)](entity.capsule.md). Per [Tropo Work v2 Architecture Specification (f2e8a7b1)](../../vault/files/f2e8a7b1.md) §2.5 + D7 (L0 hierarchy invariant).*
+*Subtype of [entity.capsule (1e9c3f7a)](tropo-entity.capsule.md). Per [Tropo Work v2 Architecture Specification (f2e8a7b1)](../../vault/files/f2e8a7b1.md) §2.5 + D7 (L0 hierarchy invariant).*
 
 ---
 
@@ -97,10 +97,10 @@ A vault is not an empty container holding entities — it IS an entity, sitting 
 
 ## Relationship to Other Capsules
 
-- **[entity.capsule (1e9c3f7a)](entity.capsule.md)** — parent
+- **[entity.capsule (1e9c3f7a)](tropo-entity.capsule.md)** — parent
 - **vault (a1f7c750) — the vault-node MANIFEST** — the SEPARATE type freed by this rename (ADR-051 Fork 1): membership + publish + audience + curation + contract. Not a parent/child relation — two types governing two lifecycles for the same vault-node.
-- **[project.capsule v2.3](project.capsule.md)** — vault-entity-owned projects enforce D7
-- **[agent.capsule (2f8b4e3d)](agent.capsule.md)** — crew agents are members of the vault-entity (typically)
+- **[project.capsule v2.3](tropo-project.capsule.md)** — vault-entity-owned projects enforce D7
+- **[agent.capsule (2f8b4e3d)](tropo-agent.capsule.md)** — crew agents are members of the vault-entity (typically)
 
 ---
 
@@ -118,7 +118,7 @@ Inherits entity.capsule's gaps. Subtype-specific:
 
 ## Extension from core + entity
 
-*Where this capsule specializes [entity.capsule (1e9c3f7a)](entity.capsule.md).* vault-entity.capsule tightens: `subtype` must be `vault-entity`; `principal:` must resolve to a `subtype: person` entity (or rare `agent`); `name:` is the vault's public name. Adds optional fields: `members:`, `vault_class:`, `inbox_project:`, `activity_log:`, `founded_at:`, `federation_parent:`. All entity.capsule base rules inherited unchanged.
+*Where this capsule specializes [entity.capsule (1e9c3f7a)](tropo-entity.capsule.md).* vault-entity.capsule tightens: `subtype` must be `vault-entity`; `principal:` must resolve to a `subtype: person` entity (or rare `agent`); `name:` is the vault's public name. Adds optional fields: `members:`, `vault_class:`, `inbox_project:`, `activity_log:`, `founded_at:`, `federation_parent:`. All entity.capsule base rules inherited unchanged.
 
 ---
 
@@ -159,10 +159,10 @@ Inherits entity.capsule's gaps. Subtype-specific:
 - Pattern for external Tropo vaults: user authors vault-entity at first-run; concierge prompts for founder person-entity + signing
 
 **Go next:**
-- Vault's principal → [entity.capsule subtype: person (1e9c3f7a)](entity.capsule.md) + forthcoming person.capsule
-- Vault's crew agents → [agent.capsule (2f8b4e3d)](agent.capsule.md)
-- Vault's crew as a team → [team.capsule (3c9a7b1e)](team.capsule.md)
-- Vault-inbox catching orphan work → [project.capsule v2.3 (34e4cb0b)](project.capsule.md) + [vault-inbox instance (8a4c9e15)](../../vault/files/8a4c9e15.md)
+- Vault's principal → [entity.capsule subtype: person (1e9c3f7a)](tropo-entity.capsule.md) + forthcoming person.capsule
+- Vault's crew agents → [agent.capsule (2f8b4e3d)](tropo-agent.capsule.md)
+- Vault's crew as a team → [team.capsule (3c9a7b1e)](tropo-team.capsule.md)
+- Vault-inbox catching orphan work → [project.capsule v2.3 (34e4cb0b)](tropo-project.capsule.md) + [vault-inbox instance (8a4c9e15)](../../vault/files/8a4c9e15.md)
 - D7 enforcement path → [Tropo Work v2 Arch Spec (f2e8a7b1)](../../vault/files/f2e8a7b1.md) §2.3
 
 ---

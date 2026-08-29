@@ -329,15 +329,40 @@ def parse_frontmatter(file_path: Path) -> tuple[dict, str, str]:
 
 
 def build_member_of_map(capabilities: list[str], vault_root: Path) -> dict[str, list[str]]:
-    """For each capability UID, read its file's `member_of:` array."""
+    """For each capability UID, read the hub edges it declares.
+
+    READS BOTH `member_of:` AND `subsystem_hub:`, and that is the point.
+
+    Until 2026-08-28 this read member_of alone, which put it in direct
+    contradiction with project.capsule v2.5 Rule 8: that rule REQUIRES hub UIDs to
+    live in `subsystem_hub:` and FORBIDS them in `member_of:`. The two mechanisms
+    demanded opposite placements of the same UID, so a capability could satisfy the
+    derivation or the capsule rule but never both.
+
+    Proven live, in one release: putting hub 8dd772a0 into 05de711d's member_of made
+    the derivation work (v1.93's release history was written for the first time), and
+    the release-mode validator then refused it as a NEW Rule 8 violation. An
+    independent verifier had named this fork hours earlier and said to reconcile it
+    before gating on it.
+
+    The reconciliation is one declared source consulted by one reader: this function
+    unions both fields, so the capsule-compliant placement is the one that works and
+    the legacy placement keeps working for the entries that already use it.
+    """
     result: dict[str, list[str]] = {}
     for cap_uid in capabilities:
         cap_path = find_vault_entry(cap_uid, vault_root)
         fm, _, _ = parse_frontmatter(cap_path)
-        member_of = fm.get("member_of") or []
-        if not isinstance(member_of, list):
-            raise StepError(2, f"capability {cap_uid} has non-list member_of: {member_of!r}")
-        result[cap_uid] = [str(u) for u in member_of]
+        edges: list[str] = []
+        for field in ("member_of", "subsystem_hub"):
+            value = fm.get(field) or []
+            if not isinstance(value, list):
+                raise StepError(
+                    2, f"capability {cap_uid} has non-list {field}: {value!r}")
+            edges.extend(str(u) for u in value)
+        # order-preserving dedup: a UID declared in both fields counts once
+        seen: set[str] = set()
+        result[cap_uid] = [u for u in edges if not (u in seen or seen.add(u))]
     return result
 
 
@@ -383,8 +408,23 @@ def prepend_release_history_row(
 def bump_last_release_reflected(hub_path: Path, version: str) -> None:
     """Surgical edit: replace last_release_reflected scalar value."""
     text = hub_path.read_text(encoding="utf-8")
+    # A BARE YAML SCALAR IS A VALID VALUE AND THIS REGEX REFUSED IT. The old
+    # pattern accepted only a quoted string, `null` or `~`. Governance hub
+    # 8dd772a0 carries `last_release_reflected: 1.92.0` UNQUOTED -- valid YAML,
+    # parses fine, and the field is plainly there -- so this raised "hub
+    # 8dd772a0.md has no last_release_reflected field" and exit 2, blocking the
+    # v1.93 release-history step.
+    #
+    # The tell: the substitution below always writes the value QUOTED. So this
+    # function only ever matched values it had written itself. Any hand-authored
+    # or externally-bumped value locked it out permanently -- which is consistent
+    # with this hub's own §400 note that this executor has been silently skipping
+    # since v1.26 and its rows have been hand-backfilled since. A reader bound to
+    # a shape only it produces. (argus-a160, 2026-08-28, found by driving v1.93.)
     pattern = re.compile(
-        r'^(last_release_reflected:\s*)(?:"[^"]*"|\'[^\']*\'|null|~)\s*$',
+        r'^(last_release_reflected:[ \t]*)'
+        r'(?:"[^"]*"|\'[^\']*\'|null|~|[^\s"\'#][^\r\n]*?)'
+        r'[ \t]*$',
         re.MULTILINE,
     )
     if not pattern.search(text):
@@ -669,8 +709,27 @@ def run(args: argparse.Namespace) -> int:
         wrote = prepend_release_history_row(
             hub_path, row_text, release_uid=args.release_entry_uid
         )
+        # THE BUMP IS NOT CONDITIONAL ON THE ROW BEING NEW. It used to be, and
+        # that coupling produced a hub in an inconsistent state that the step
+        # then reported as SUCCESS:
+        #
+        #   drive 1  prepended the v1.93.0 row, then died exit 2 in the bump
+        #            (its regex refused a bare YAML scalar -- fixed separately)
+        #   drive 2  saw the row already present, so `wrote` was False, so the
+        #            bump was SKIPPED ENTIRELY, and the step exited 0 and was
+        #            marked verified
+        #
+        # Net: governance hub 8dd772a0 carried a v1.93.0 release_history row
+        # while last_release_reflected still read 1.92.0, and nothing complained.
+        # A partial write on the first attempt silently suppressed the remainder
+        # on the retry -- the false-success class, produced by an idempotency
+        # check that guarded two independent writes as if they were one.
+        #
+        # The bump is idempotent on its own terms (it rewrites a scalar to the
+        # release version; running it twice is a no-op), so it does not need the
+        # row-write's guard. Found by argus-a160 driving v1.93, 2026-08-28.
+        bump_last_release_reflected(hub_path, release_version)
         if wrote:
-            bump_last_release_reflected(hub_path, release_version)
             hubs_written.append(hub_uid)
         else:
             hubs_skipped_idempotent.append(hub_uid)

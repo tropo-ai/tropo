@@ -77,9 +77,9 @@ The data already exists in `run.jsonl`. This capsule governs the *shape* of the 
 
 ## 5. Composes-With
 
-- **[pipeline-run.capsule (5a8f3b2c)](pipeline-run.capsule.md)** — the report renders from the run's `run.jsonl` event sequence (verification_receipt + step_completed + workflow_complete events).
-- **[pipeline.capsule (e4c8a6b2)](pipeline.capsule.md)** — per-step verdicts are the Rule 11 gate outcomes made visible.
-- **[release.capsule v3.10 Rule 17](release.capsule.md)** — a release cannot ship `status: done` while its cascade runs are active; the completion report is where that is read.
+- **[pipeline-run.capsule (5a8f3b2c)](tropo-pipeline-run.capsule.md)** — the report renders from the run's `run.jsonl` event sequence (verification_receipt + step_completed + workflow_complete events).
+- **[pipeline.capsule (e4c8a6b2)](tropo-pipeline.capsule.md)** — per-step verdicts are the Rule 11 gate outcomes made visible.
+- **[release.capsule v3.10 Rule 17](tropo-release.capsule.md)** — a release cannot ship `status: done` while its cascade runs are active; the completion report is where that is read.
 - **Po (presentation lane)** — Po translates the report for the principal (v1.62 Lane P1).
 
 ---

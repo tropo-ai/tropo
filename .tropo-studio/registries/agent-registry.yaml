@@ -1,30 +1,92 @@
-# Vault Agent Registry
-# Machine-readable roster of registered agents on this vault.
-# Schema: files map uid -> {name, type, class, path, purpose, status}
-# Updated by agents after any agent commissioning, retirement, or status change.
+# Agent Registry — the roster of agents registered in this Studio.
 #
-# System agents (sa.*) below are kernel-tier verification primitives — they ship
-# pre-registered. User agents are added here as you commission them.
-version: 1
+# Rule: not in this registry = not authorized to operate in this vault.
+#
+# ---------------------------------------------------------------------------
+# THE SHAPE, and why it is one map instead of two
+# ---------------------------------------------------------------------------
+# Everything registers under ONE top-level `agents:` map. Four shipped tools
+# read this file and all four consult `agents:`:
+#
+#   tropo-mint-id.py       REQUIRES `agents:` and raises without it
+#   tropo-check-events.py  reads ("user_agents", "agents")
+#   tropo-emit-event.py    reads ("user_agents", "agents")
+#   tropo-validate.py      reads `agents`
+#
+# Until v1.93 this template shipped `system_agents:` / `user_agents: {}` and no
+# `agents:` map at all. That satisfied two of the four readers and broke the
+# other two: typed minting failed for EVERY author with "agent registry has no
+# agents mapping for mint provenance", and a newly created agent could not clear
+# its own boot drain. Found by the v1.93 Release Test Harness walking a real box.
+#
+# ---------------------------------------------------------------------------
+# REGISTERING YOUR OWN AGENT — the shape typed minting needs
+# ---------------------------------------------------------------------------
+# Add a row keyed by the agent's 8-hex UID. For an agent that will AUTHOR
+# governed files under a generation label (e.g. `--author vega-v1`), the three
+# load-bearing fields are `type: agent`, `name:`, and `generation-prefix:`.
+# Without all three, minting still works but records no agent provenance.
+#
+#   agents:
+#     a1b2c3d4:                      # mint one with: tropo-mint-id.py --kind agent
+#       type: agent                  # REQUIRED for author provenance
+#       name: vega                   # the agent slug, lowercase
+#       generation-prefix: G         # MUST MATCH THE PREFIX IN THIS AGENT'S LINEAGE.
+#                                   # `tropo-lineage.py born` issues G1 by default, so
+#                                   # G is right unless you birth with --prefix. Mint
+#                                   # builds the author label from THIS field and
+#                                   # compares it to agents/<name>/lineage.jsonl
+#                                   # EXACTLY: register G and author as vega-G1.
+#                                   # Verified in a real box — registered G + born
+#                                   # default + `--author vega-G1` mints clean; any
+#                                   # other letter refuses with "no birth recorded".
+#                                   # This example shipped a wrong letter in the first
+#                                   # v1.93 cure and the harness re-run caught it.
+#       class: crew
+#       path: agents/vega/vega-activation.md
+#       purpose: "What this agent is for."
+#       status: active
+#
+# After adding the row, `tropo-check-events.py --as vega` resolves and the boot
+# drain clears. Full walkthrough: vault/skills/tropo-create-executive-agent.md
+# (§11 covers registration) — and the create-an-agent playbook routes you here.
 
-system_agents:
-  6742f183:
-    name: sa.first-use-walker
+version: 2
+last_updated: 2026-08-28
+updated_by: argus-a160 (v1.93 harness cure — one agents map, real sa rows)
+
+agents:
+
+  # ==========================================================================
+  # SYSTEM AGENTS (sa.*) — kernel-tier session agents that ship pre-registered.
+  # These three are the ones actually present under agents/sa/ in this box.
+  # ==========================================================================
+
+  5d588cb7:
+    type: session-agent
+    name: sa.vault-janitor
     class: session-agent
-    path: agents/sa/sa.first-use-walker/sa.first-use-walker.md
-    purpose: "Walks the vault as a first-time user and verifies the new-user experience end-to-end. Dispatched by run-release-test-plan (Stage 3.1)."
-    status: active
-  3c844ee6:
-    name: sa.user-error-walker
-    class: session-agent
-    path: agents/sa/sa.user-error-walker/sa.user-error-walker.md
-    purpose: "Walks a list of common new-user mistakes and reports per-mistake gracefulness verdicts (Skeptic mode). Dispatched by dispatch-cold-boot (Stage 3.3)."
-    status: active
-  a71ace01:
-    name: sa.pipeline-walker
-    class: session-agent
-    path: agents/sa/sa.pipeline-walker/sa.pipeline-walker.md
-    purpose: "Walks the release pipeline and verifies the build/ship process end-to-end. Dispatched by run-release-test-plan."
+    path: agents/sa/sa.vault-janitor/sa.vault-janitor.md
+    purpose: "Routine vault hygiene — finds and reports structural drift."
     status: active
 
-user_agents: {}   # your commissioned agents go here
+  3bedf4b2:
+    type: session-agent
+    name: sa.reconciler
+    class: session-agent
+    path: agents/sa/sa.reconciler/sa.reconciler.md
+    purpose: "Reconciles imported or anomalous vault state against the governed shape."
+    status: active
+
+  5993a668:
+    type: session-agent
+    name: sa.channel-health-monitor
+    class: session-agent
+    path: agents/sa/sa.channel-health-monitor/sa.channel-health-monitor.md
+    purpose: "Checks coordination surfaces for staleness and delivery gaps."
+    status: active
+
+  # ==========================================================================
+  # YOUR AGENTS — add commissioned agents below, using the shape documented
+  # at the top of this file.
+  # ==========================================================================

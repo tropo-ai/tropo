@@ -27,10 +27,10 @@ subsystem_hub:
 | Relation | Target |
 |---|---|
 | Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](../../vault/files/222873b9.md) |
-| Aligned with | [playbook.capsule (e7b3c509)](playbook.capsule.md) |
-| Pattern exemplar | [pipeline-run.capsule (5a8f3b2c)](pipeline-run.capsule.md) |
+| Aligned with | [playbook.capsule (e7b3c509)](tropo-playbook.capsule.md) |
+| Pattern exemplar | [pipeline-run.capsule (5a8f3b2c)](tropo-pipeline-run.capsule.md) |
 | Extends | `core` |
-| Composes with | [playbook.capsule (e7b3c509)](playbook.capsule.md) |
+| Composes with | [playbook.capsule (e7b3c509)](tropo-playbook.capsule.md) |
 
 *A playbook run is a single execution instance of a playbook. It is the state persistence unit for all execution that happens under a governed process.*
 
@@ -38,7 +38,7 @@ subsystem_hub:
 
 ## Intent
 
-Track one execution of one playbook, from authorization to completion. A playbook run is not the playbook itself (that lives in `.tropo/playbooks/`) — it is the instance. Each run has its own identity, its own context, its own event log, and its own working memory.
+Track one execution of one playbook, from authorization to completion. A playbook run is not the playbook itself (that lives at `vault/playbooks/<uid>.md`; `.tropo/playbooks/` holds thin pointers) — it is the instance. Each run has its own identity, its own context, its own event log, and its own working memory.
 
 **Ask:** *"Which project does this run belong to?"* Every run has a parent project. No orphaned runs.
 
@@ -69,7 +69,7 @@ Every run folder must contain these files. Before writing to the folder, read `p
 | `context.md` | None — free-form markdown | Instance specifics — who/what this run is for. Tier 4 binding. Written by the authorizing human or agent at run start. |
 | `thread.md` | None — free-form markdown | LLM working memory across sessions. What the next executor needs to *think* to continue. Append-only by convention. |
 | `run.jsonl` | N/A | Append-only structured event log. One JSON object per line. Seed with `run_created` event at creation. |
-| `run.state.json` | N/A | Typed resumption anchor. Written at every group boundary. NEVER groomed. Gives executor immediate current state without replaying full event log. Schema at [12d8918c](../../../vault/files/12d8918c.md) §3. |
+| `run.state.json` | N/A | Typed resumption anchor. Written at every group boundary. NEVER groomed. Gives executor immediate current state without replaying full event log. Schema at [12d8918c](../../vault/files/12d8918c.md) §3. |
 | `artifacts/` | N/A | Directory for files produced by this run. Create empty at run start. |
 
 ### run.jsonl Event Schema
@@ -164,7 +164,7 @@ Example: `playbook-runs/new-hire-onboarding-a3f2b1c4-2026-04-14/`
 - **Verify a step** — append `verification_receipt` event per Playbook Spec v2.2 §5 receipt schema; never edit prior receipts (Rule 3 append-only)
 - **Pause / resume** — write `pause_started` event, flip `state: paused`; on resume, write `pause_resumed`, flip back to `active`. Same UID, same folder, same `playbook_version:`.
 - **Archive on completion** — once all REQUIRED outcomes verified: write `archived` event with reason; flip `state: archived`; archived runs are read-only (Rule 5)
-- **Compose with the definition** — the run pins the definition's UID + version; the definition lives in `.tropo/playbooks/<slug>.playbook.md` governed by [playbook.capsule v2.1 (e7b3c509)](playbook.capsule.md); editing the definition mid-run does NOT affect this run's pinned version
+- **Compose with the definition** — the run pins the definition's UID + version; the definition lives at `vault/playbooks/<uid>.md` governed by [playbook.capsule v2.1 (e7b3c509)](tropo-playbook.capsule.md); editing the definition mid-run does NOT affect this run's pinned version
 - **Supersession discipline** — runs are NEVER superseded — they are completed, failed, or archived. Supersession is a definition-level concept, not an instance-level one.
 
 **Rules (at-a-glance):**
@@ -186,12 +186,12 @@ Example: `playbook-runs/new-hire-onboarding-a3f2b1c4-2026-04-14/`
 
 **Worked examples:**
 - Live run folders at vault root `playbook-runs/agent-activation-argus-a34-2026-04-25/` and predecessors (`agent-activation-argus-a33-2026-04-24/`, `agent-activation-argus-a32-2026-04-21/`, etc.) — canonical activation runs demonstrating the full file complement
-- [agent-activation.playbook.md (99341618)](../playbooks/agent-activation.playbook.md) — the definition every `agent-activation-argus-a*` run pins
-- [tropo-work-pipeline.pipeline.md](../playbooks/pipelines/tropo-work-pipeline.pipeline.md) + corresponding pipeline-run instances — composability with the pipeline-run sibling
+- [agent-activation.playbook.md (99341618)](../playbooks/99341618.md) — the definition every `agent-activation-argus-a*` run pins
+- [tropo-work-pipeline.pipeline.md](../../.tropo/playbooks/pipelines/tropo-work-pipeline.pipeline.md) + corresponding pipeline-run instances — composability with the pipeline-run sibling
 
 **Go next:**
-- Definition capsule (upstream) → [playbook.capsule v2.1 (e7b3c509)](playbook.capsule.md) — what the run instantiates
-- Sibling instance capsule → [pipeline-run.capsule v1.0 (5a8f3b2c)](pipeline-run.capsule.md) — same pattern at pipeline scope
+- Definition capsule (upstream) → [playbook.capsule v2.1 (e7b3c509)](tropo-playbook.capsule.md) — what the run instantiates
+- Sibling instance capsule → [pipeline-run.capsule v1.0 (5a8f3b2c)](tropo-pipeline-run.capsule.md) — same pattern at pipeline scope
 - Authoritative orchestration spec → [Playbook Specification v2.2 (e6d373bc)](../../vault/files/e6d373bc.md) §5 — run folder schema, receipt format, portability
 - Vault root `playbook-runs/AGENTS.md` — the folder-level governance for run authoring
 - Governance meta → [capsule-definition (222873b9)](../../vault/files/222873b9.md)

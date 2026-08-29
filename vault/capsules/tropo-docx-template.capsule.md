@@ -48,8 +48,8 @@ tags:
 |---|---|
 | Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](../../vault/files/222873b9.md) |
 | Aligned with | [Working-Copy + Template Registration + Format-Only Export Arch-Spec v0.5 (5a89297a)](../../vault/files/5a89297a.md) |
-| Sibling | [external-artifact.capsule v1.1 (eedd7034)](external-artifact.capsule.md) |
-| Composes with | [working-copy.capsule v1.0 (a2bc3e16)](working-copy.capsule.md) |
+| Sibling | [external-artifact.capsule v1.1 (eedd7034)](tropo-external-artifact.capsule.md) |
+| Composes with | [working-copy.capsule v1.0 (a2bc3e16)](tropo-working-copy.capsule.md) |
 | Member of | [v1.28.0 Stream A — Capsule Substrate (e3cde3f4)](../../vault/files/e3cde3f4.md) |
 | Member of | [Tropo Governance (8dd772a0)](../../vault/files/8dd772a0.md) |
 
@@ -194,10 +194,10 @@ Core checks inherited from core.capsule v1.1. In addition (per arch-spec §3.10 
 
 ## Relationship to Other Capsules
 
-- **[core.capsule v1.1 (ee814120)](../../vault/files/ee814120.md)** — inherited floor. UID/owner/created/modified invariants.
-- **[external-artifact.capsule v1.1 (eedd7034)](external-artifact.capsule.md)** — sibling. Both carry §3.4-shaped style metadata but under different field names (`extracted_styles:` vs `original_styles:`) for semantic distinction. Both consume the shared library function `extract_office_styles()`.
-- **[working-copy.capsule v1.0 (a2bc3e16)](working-copy.capsule.md)** — composes-with. The working-copy is the content that the template's format scaffolds at `tropo-export.py --template <uid>` invocation.
-- **[project.capsule v2.4 (34e4cb0b)](../../vault/files/34e4cb0b.md)** — `member_of:` resolves to project instances (typically the tropo-work hub or user-defined template collections).
+- **[core.capsule v1.1 (ee814120)](tropo-core.capsule.md)** — inherited floor. UID/owner/created/modified invariants.
+- **[external-artifact.capsule v1.1 (eedd7034)](tropo-external-artifact.capsule.md)** — sibling. Both carry §3.4-shaped style metadata but under different field names (`extracted_styles:` vs `original_styles:`) for semantic distinction. Both consume the shared library function `extract_office_styles()`.
+- **[working-copy.capsule v1.0 (a2bc3e16)](tropo-working-copy.capsule.md)** — composes-with. The working-copy is the content that the template's format scaffolds at `tropo-export.py --template <uid>` invocation.
+- **[project.capsule v2.4 (34e4cb0b)](tropo-project.capsule.md)** — `member_of:` resolves to project instances (typically the tropo-work hub or user-defined template collections).
 - **[tool.capsule]** — `tropo-register-template.py` + `tropo-export.py` are tool.capsule instances.
 
 ---
@@ -253,7 +253,7 @@ Extends `core`. Inherits UID immutability, type immutability, owner/created/modi
 **Go next:**
 
 - Need to understand the export gesture that uses templates? → [Arch-spec §3.7 (5a89297a)](../../vault/files/5a89297a.md) — `tropo-export.py` dual-path behavior
-- Need to understand the working-copy that pours into templates? → [working-copy.capsule v1.0 (a2bc3e16)](working-copy.capsule.md)
+- Need to understand the working-copy that pours into templates? → [working-copy.capsule v1.0 (a2bc3e16)](tropo-working-copy.capsule.md)
 - Need the shared style-extraction library? → `.tropo/scripts/office_styles.py` (v1.28.0 Stream B NEW)
 - Need to understand the binary-drift detection model? → arch-spec [§3.8 (5a89297a)](../../vault/files/5a89297a.md) + reconcile-imports playbook v1.1 → v1.2 amendment (v1.28.0 Stream C)
 

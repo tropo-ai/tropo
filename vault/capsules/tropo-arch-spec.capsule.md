@@ -52,7 +52,7 @@ subsystem_hub:
 | Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](../../vault/files/222873b9.md) |
 | Aligned with | [Typed Pipeline Architecture + Pipelines as Playbook Subtype (d2e7b1f4)](../../vault/files/d2e7b1f4.md) |
 | Aligned with | [Tropo Work v3 — Architecture Specification (8b3f1d92)](../../vault/files/8b3f1d92.md) |
-| Pattern exemplar | [document.capsule (d0c00001)](document.capsule.md) |
+| Pattern exemplar | [document.capsule (d0c00001)](tropo-document.capsule.md) |
 | Extends | `core` |
 
 *An arch-spec is a structurally-sound specification ready for Build. It formalizes thinking from one or more design-briefs into named contracts (frontmatter, body shape, validation rules, state machine) and declares what must be true for an artifact conforming to this spec. Arch-specs are the Specify-stage output of the typed pipeline — the moment work crosses from "what are we proposing" into "what are we building."*
@@ -237,12 +237,12 @@ In addition to core checks. Labeled **[enforced]** (checkable at vault rebuild o
 
 ## Relationship to Other Capsules
 
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor.
-- **[design-brief.capsule v2.1 (de5181b0)](design-brief.capsule.md)** — upstream. Specs derive from briefs via `derived_from:` ↔ brief's `composes_into:` bidirectional pair.
-- **[build.capsule (forthcoming D3)](build.capsule.md)** — downstream. Builds derive from specs via `derived_from:` ↔ spec's `composes_into:`.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor.
+- **[design-brief.capsule v2.1 (de5181b0)](tropo-design-brief.capsule.md)** — upstream. Specs derive from briefs via `derived_from:` ↔ brief's `composes_into:` bidirectional pair.
+- **[build.capsule (forthcoming D3)](tropo-build.capsule.md)** — downstream. Builds derive from specs via `derived_from:` ↔ spec's `composes_into:`.
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — specialized sibling. Capsule definitions are a specialized form of arch-spec that have their own meta-capsule. An arch-spec is the fallback type for specifications that don't fit a more specialized meta-capsule.
-- **[pipeline.capsule v1.0 (e4c8a6b2)](pipeline.capsule.md)** — declares `arch-spec` as the Specify-stage artifact type via `artifact_types: {specify: arch-spec}`.
-- **[project.capsule (v2.1 currently, v2.2 in v1.3 ship) (34e4cb0b)](project.capsule.md)** — specs are `member_of:` a project. The project coordinates; the spec specifies.
+- **[pipeline.capsule v1.0 (e4c8a6b2)](tropo-pipeline.capsule.md)** — declares `arch-spec` as the Specify-stage artifact type via `artifact_types: {specify: arch-spec}`.
+- **[project.capsule (v2.1 currently, v2.2 in v1.3 ship) (34e4cb0b)](tropo-project.capsule.md)** — specs are `member_of:` a project. The project coordinates; the spec specifies.
 - **[specify-archive evergreen project (c3e4a5f6)](../../vault/files/c3e4a5f6.md)** — terminal sink for closed specs (Close path from specify-GATE).
 
 ---
@@ -299,17 +299,17 @@ Extends `core`. Inherits UID immutability, type immutability, owner/created/modi
 
 **Worked examples:**
 - [f2e8a7b1](../../vault/files/f2e8a7b1.md) — Tropo Work v2 Arch Spec (A32, 2026-04-23; v1.4 central thesis, 635 lines, three-instrument verified)
-- [e01d7867](../../vault/files/e01d7867.md) — Helm walker toy-project Specify-stage artifact; first arch-spec to pass walker 10/10 end-to-end
-- [77d612ae](../../vault/files/77d612ae.md) — "Solace Day-1 Onboarding Email — Structural Specification" — locked by sa.pipeline-walker (Record 002); reference for content-authoring specs
-- [fb96c1cc](../../vault/files/fb96c1cc.md) — "Meetly User Research Synthesis — Structural Specification" — locked by sa.pipeline-walker (Record 003); companion to 77d612ae for walker-class specs
+- `e01d7867` (pruned from the vault; no longer resolvable) — Helm walker toy-project Specify-stage artifact; first arch-spec to pass walker 10/10 end-to-end
+- `77d612ae` (pruned from the vault; no longer resolvable) — "Solace Day-1 Onboarding Email — Structural Specification" — locked by sa.pipeline-walker (Record 002); reference for content-authoring specs
+- `fb96c1cc` (pruned from the vault; no longer resolvable) — "Meetly User Research Synthesis — Structural Specification" — locked by sa.pipeline-walker (Record 003); companion to 77d612ae for walker-class specs
 
 **Go next:**
-- Upstream → [design-brief.capsule v2.1 (de5181b0)](design-brief.capsule.md) — every spec derives from at least one brief
-- Downstream → [build.capsule v1.1 (b3d7e5a1)](build.capsule.md) — builds derive from locked specs
+- Upstream → [design-brief.capsule v2.1 (de5181b0)](tropo-design-brief.capsule.md) — every spec derives from at least one brief
+- Downstream → [build.capsule v1.1 (b3d7e5a1)](tropo-build.capsule.md) — builds derive from locked specs
 - Specialized sibling → [capsule-definition (222873b9)](../../vault/files/222873b9.md) — capsule definitions are a specialized form of arch-spec
 - Terminal sink (post-supersession) → [specify-archive (c3e4a5f6)](../../vault/files/c3e4a5f6.md)
-- Pipeline position → [pipeline.capsule v2.0 (e4c8a6b2)](pipeline.capsule.md) — arch-specs at Specify stage
-- Decision gates grounded in specs → [release-plan.capsule v1.0 (a3f1e7b2)](release-plan.capsule.md) — `basis_spec:` requires arch-spec at `status: locked`
+- Pipeline position → [pipeline.capsule v2.0 (e4c8a6b2)](tropo-pipeline.capsule.md) — arch-specs at Specify stage
+- Decision gates grounded in specs → [release-plan.capsule v1.0 (a3f1e7b2)](tropo-release-plan.capsule.md) — `basis_spec:` requires arch-spec at `status: locked`
 
 ---
 

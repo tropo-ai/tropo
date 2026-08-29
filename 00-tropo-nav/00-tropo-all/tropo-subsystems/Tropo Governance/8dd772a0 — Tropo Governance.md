@@ -28,9 +28,15 @@ member_of:
   - aae9a37b
 lifecycle: standing
 created_by: argus-a23
-last_release_reflected: 1.92.0
+last_release_reflected: "1.93.0"
 aligned_with: 8a4e21c5
 release_history:
+  - release_uid: 64b10a96
+    release_version: "1.93.0"
+    summary: 'v1.93 is the one-member release that answers one question: did releasing actually get cheaper. The release runner drives the real release for the first time — every deterministic step machine-executed, every halt a declared judgment or an unmet precondition with a paste-able command — and the machine scores its own fire for the first time (the card v1.92 could not produce). The target: Mike''s judgments unchanged, the mechanical tax (v1.92: ~20 CLI invocations, 4 live repairs, 6 hand-authored events) eliminated. Gesture count and scorecard publish beside the version, whatever they say.
+'
+    registry_uid: 0e03fac5
+    derived_from: capabilities_touched
   - release_uid: b7f176ab
     release_version: 1.92.0
     summary: "v1.92 conforms the release runtime to the pipeline that already governs it. Every one of 634913c2's twelve leaves now binds exactly one executor; every stop site in the build path declares whether it earned the right to stop (120 sites, 28 priced / 16 warn / 65 misuse, enumerated by AST); the completion verifier reads what producers actually write and returned complete for the first time in this Studio's history; the governance preflight gained a producer for its inputs and the lock now runs its own boundary. The dev-pipeline ships fully formed, the retirement driver walks its eight steps against the real playbook, and the subsystem-registry deriver stops churning identity. Proven by shipping v1.92 itself through the new path, every step run."

@@ -25,7 +25,7 @@ retired_by: argus-a130
 retired_via: "Type Disposition walk 5dcbadbd (Mike-verdicted 2026-07-12, S2 activation 0d9f89bc) — zero instances ever authored; retired on the how-to precedent (v1.60, 'never earned itself empirically'). Verified no live convention references before retirement (grep 2026-07-12: historical mentions only). Tombstone-in-place per the how-to pattern; a future need re-enters via the closed registry (propose capsule → Mike locks)."
 pruning:
   verdict: superseded
-  evidence_span: '> **⚠️ DEPRECATED as of 2026-04-24 (v3 Decision 1).** The `concept` type is subsumed by [note.capsule (7c47429a)](note.capsule.md).'
+  evidence_span: '> **⚠️ DEPRECATED as of 2026-04-24 (v3 Decision 1).** The `concept` type is subsumed by [note.capsule (7c47429a)](tropo-note.capsule.md).'
   evidence_locator:
     body_sha256: db7441af701d71e6ab3da7d94a08b69e74954ffffab7254479be1ec81fb8dc05
     start_byte: 1
@@ -39,7 +39,7 @@ pruning:
   normalized_body_hash_judged: db7441af701d71e6ab3da7d94a08b69e74954ffffab7254479be1ec81fb8dc05
 ---
 
-> **⚠️ DEPRECATED as of 2026-04-24 (v3 Decision 1).** The `concept` type is subsumed by [note.capsule (7c47429a)](note.capsule.md). Ideas, notes, and concepts are all one primitive in v3 — the simplest WorkItem, tagged per context (e.g., `tags: [idea]`, `tags: [product-idea]`). Historical concept instances remain readable and valid; new captures use note. See [Tropo Work v3 Architecture Specification (8b3f1d92)](../../vault/files/8b3f1d92.md) §6 Decision 1.
+> **⚠️ DEPRECATED as of 2026-04-24 (v3 Decision 1).** The `concept` type is subsumed by [note.capsule (7c47429a)](tropo-note.capsule.md). Ideas, notes, and concepts are all one primitive in v3 — the simplest WorkItem, tagged per context (e.g., `tags: [idea]`, `tags: [product-idea]`). Historical concept instances remain readable and valid; new captures use note. See [Tropo Work v3 Architecture Specification (8b3f1d92)](../../vault/files/8b3f1d92.md) §6 Decision 1.
 >
 > Body below preserved as historical reference.
 
@@ -52,7 +52,7 @@ pruning:
 | Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](../../vault/files/222873b9.md) |
 | Aligned with | [Typed Pipeline Architecture + Pipelines as Playbook Subtype (d2e7b1f4)](../../vault/files/d2e7b1f4.md) |
 | Extends | `core` |
-| Superseded by | [note.capsule (7c47429a)](note.capsule.md) |
+| Superseded by | [note.capsule (7c47429a)](tropo-note.capsule.md) |
 
 *A concept is a shaped idea — the bottom of the typed pipeline. It has enough form to be triaged at Design, enough substance to inform a design-brief, and enough honesty about its own incompleteness to invite the work that makes it real. Concepts compose upward through briefs, specs, and builds toward releases. Concepts come from anywhere.*
 
@@ -64,7 +64,7 @@ Every Ideate-stage output is a `concept`. A concept articulates an idea with jus
 
 **A concept is upstream-terminal.** Nothing precedes a concept in the typed pipeline. A concept's `derived_from:` is always empty (and the field is not included in the frontmatter at all — see Governance Rule 2). Concepts compose forward into design-briefs via the brief's `derived_from:` field; the concept's own `composes_into:` tracks which briefs it fed.
 
-**Before creating a concept:** does a live concept (or design-brief already) cover this idea? Check the ideate-stage inbox [work-pipeline/1-ideate/1-inbox/](../../work-pipeline/1-ideate/) and briefs in [design/1-inbox/](../../work-pipeline/2-design/1-inbox/) before authoring. Near-duplicate concepts create drift; prefer iterating a live concept to spawning a parallel one.
+**Before creating a concept:** does a live concept (or design-brief already) cover this idea? Query the vault index for `type: concept` and `type: design-brief` entries before authoring (the pre-flat-vault `work-pipeline/` inbox folders no longer exist). Near-duplicate concepts create drift; prefer iterating a live concept to spawning a parallel one.
 
 ---
 
@@ -179,7 +179,7 @@ draft → shaped → done → (state: archived)
 2. **No `derived_from:` field.** Concepts are upstream-terminal in the typed pipeline. The field is not declared in frontmatter. Validator enforces absence.
 3. **Shaped means ready for triage.** The `shaped` status is the triage gate — it signals to the **Ideate-stage owner** (a Director or executive agent assigned to triage Ideate-stage work; for Tropo's `tropo-work-pipeline`, this is declared in the pipeline instance) that the concept is reviewable. Concepts in `draft` are not yet triaged. "Director" in this capsule means a governance-role agent (per [ADR-022 Director pattern]); the concept's `owner:` field is the concept's *capturer* (whoever shaped it), which may or may not be the Ideate-stage owner who later triages it.
 4. **One concept per idea.** Near-duplicate concepts create triage drift. If a live concept is close to what you'd write, iterate it via `supersedes:` rather than parallel-authoring.
-5. **Advance/attach/close at the ideate-GATE.** The **ideate-GATE** is the position within the Ideate stage where the triage decision happens — specifically the `ideate-GATE` position declared in the pipeline the concept's project walks (see [pipeline.capsule v1.0 (e4c8a6b2)](pipeline.capsule.md) and Typed Pipeline Architecture brief §4). When a concept reaches `shaped` and the ideate-stage owner triages it, one of three transitions declares per the pipeline rule: advance to a brief, attach to an in-flight brief, or close. **Honor-system** means the discipline is documented and followed by convention but not mechanically enforced in v1.3; ADR-037 triggers automate enforcement in v1.4.
+5. **Advance/attach/close at the ideate-GATE.** The **ideate-GATE** is the position within the Ideate stage where the triage decision happens — specifically the `ideate-GATE` position declared in the pipeline the concept's project walks (see [pipeline.capsule v1.0 (e4c8a6b2)](tropo-pipeline.capsule.md) and Typed Pipeline Architecture brief §4). When a concept reaches `shaped` and the ideate-stage owner triages it, one of three transitions declares per the pipeline rule: advance to a brief, attach to an in-flight brief, or close. **Honor-system** means the discipline is documented and followed by convention but not mechanically enforced in v1.3; ADR-037 triggers automate enforcement in v1.4.
 6. **`composes_into:` is append-only post-done** (amended 2026-04-21 per Phase 5 swarm P0 #3). Once a concept transitions to `done`, the body is immutable BUT the `composes_into:` frontmatter array remains append-only — parallel to arch-spec Rule 2's carve-out. This preserves the bidirectional pair invariant: when a second design-brief is later authored with `derived_from: [<this-concept-uid>]`, the concept's `composes_into:` MUST be appended with the new brief's UID to keep the graph symmetric. The prior framing (v1.0 initial draft) asserted full immutability which broke the invariant; cold-boot + Phase 5 swarm caught this.
 
 ---
@@ -216,10 +216,10 @@ Per the ADR-031 pattern:
 
 ## Relationship to Other Capsules
 
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor.
-- **[design-brief.capsule v2.1 (de5181b0)](design-brief.capsule.md)** — downstream. Concepts compose into briefs via bidirectional pair (`concept.composes_into:` ↔ `brief.derived_from:`). Briefs are the immediate next step for concepts that advance.
-- **[project-plan.capsule v1.0 (f7b9c4a2)](project-plan.capsule.md)** — a concept may also compose into a project-plan directly if the concept spawns an immediate build without needing a formal brief (rare). The concept's `composes_into:` may include a project-plan UID in this case.
-- **[pipeline.capsule v1.0 (e4c8a6b2)](pipeline.capsule.md)** — the pipeline schema declares `concept` as the Ideate-stage artifact type via `artifact_types: {ideate: concept}`.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor.
+- **[design-brief.capsule v2.1 (de5181b0)](tropo-design-brief.capsule.md)** — downstream. Concepts compose into briefs via bidirectional pair (`concept.composes_into:` ↔ `brief.derived_from:`). Briefs are the immediate next step for concepts that advance.
+- **[project-plan.capsule v1.0 (f7b9c4a2)](tropo-project-plan.capsule.md)** — a concept may also compose into a project-plan directly if the concept spawns an immediate build without needing a formal brief (rare). The concept's `composes_into:` may include a project-plan UID in this case.
+- **[pipeline.capsule v1.0 (e4c8a6b2)](tropo-pipeline.capsule.md)** — the pipeline schema declares `concept` as the Ideate-stage artifact type via `artifact_types: {ideate: concept}`.
 - **[ideate-archive evergreen project (a1c2e3d4)](../../vault/files/a1c2e3d4.md)** — terminal sink for closed concepts.
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — this capsule's own governance.
 
@@ -267,15 +267,15 @@ Extends `core`. Inherits UID immutability, type immutability, owner/created/modi
 - Forgetting to append `composes_into:` when a downstream brief derives from this concept → bidirectional pair breaks
 
 **Worked examples:**
-- [25ddb006](../../vault/files/25ddb006.md) — "Meetly — User Research Synthesis" — toy-content concept authored by sa.pipeline-walker (Record 003) for the B2B meeting-assistant walker toy project
-- [8d2db0cd](../../vault/files/8d2db0cd.md) — Helm walker toy-project Ideate-stage artifact; the first concept that passed walker 10/10 end-to-end
-- [74d23972](../../vault/files/74d23972.md) — "Solace — Day-1 Onboarding Email" — toy-content concept for a learn-mode smart-thermostat brand (pipeline-walker Record 002)
+- `25ddb006` (pruned from the vault; no longer resolvable) — "Meetly — User Research Synthesis" — toy-content concept authored by sa.pipeline-walker (Record 003) for the B2B meeting-assistant walker toy project
+- `8d2db0cd` (pruned from the vault; no longer resolvable) — Helm walker toy-project Ideate-stage artifact; the first concept that passed walker 10/10 end-to-end
+- `74d23972` (pruned from the vault; no longer resolvable) — "Solace — Day-1 Onboarding Email" — toy-content concept for a learn-mode smart-thermostat brand (pipeline-walker Record 002)
 
 **Go next:**
-- Downstream composition → [design-brief.capsule v2.1 (de5181b0)](design-brief.capsule.md) — concepts compose into briefs
-- Rare direct-to-plan path → [project-plan.capsule v1.0 (f7b9c4a2)](project-plan.capsule.md)
+- Downstream composition → [design-brief.capsule v2.1 (de5181b0)](tropo-design-brief.capsule.md) — concepts compose into briefs
+- Rare direct-to-plan path → [project-plan.capsule v1.0 (f7b9c4a2)](tropo-project-plan.capsule.md)
 - Terminal sink → [ideate-archive (a1c2e3d4)](../../vault/files/a1c2e3d4.md) — evergreen archive project; the universal `member_of:` fallback when no originating project exists
-- Pipeline position → [pipeline.capsule v2.0 (e4c8a6b2)](pipeline.capsule.md) declares concept as Ideate-stage output
+- Pipeline position → [pipeline.capsule v2.0 (e4c8a6b2)](tropo-pipeline.capsule.md) declares concept as Ideate-stage output
 - Governance meta → [capsule-definition (222873b9)](../../vault/files/222873b9.md)
 
 ---
@@ -284,10 +284,10 @@ Extends `core`. Inherits UID immutability, type immutability, owner/created/modi
 
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
-| deprecated | 2026-04-24 | **DEPRECATED per v3 Decision 1.** Subsumed by [note.capsule (7c47429a)](note.capsule.md). Ideas/concepts/notes collapse into one universal lightweight primitive; tagging distinguishes. Historical concept instances remain readable under the deprecation banner at top of body; new captures use note. `superseded_by: 7c47429a` frontmatter set. UID preserved. | argus-a33 |
+| deprecated | 2026-04-24 | **DEPRECATED per v3 Decision 1.** Subsumed by [note.capsule (7c47429a)](tropo-note.capsule.md). Ideas/concepts/notes collapse into one universal lightweight primitive; tagging distinguishes. Historical concept instances remain readable under the deprecation banner at top of body; new captures use note. `superseded_by: 7c47429a` frontmatter set. UID preserved. | argus-a33 |
 | 1.0 | 2026-04-21 | Initial version LOCKED. D1 deliverable of v1.3 Typed Pipeline Capsule Ship v1.3 Typed Pipeline Capsule Ship project plan. Substantive body shape per Mike's OD1 (4 required sections). Upstream-terminal: no `derived_from:` field. Three-instrument verification: Argus build + sa.cold-boot 050 BATCH (verdict PASS-WITH-GAPS, ship recommended, 4 P1s remediated in-session): filename/location convention added to §Scope; `member_of:` stranger-fallback clarified (use ideate-archive as default); terminology defined inline (Director, ideate-GATE, honor-system, pipeline reference); Check 9 explicitly gated on status: shaped-or-later; Check 12 supersession-to-done transition clarified; validation checks labeled [enforced/gated]. Set-level swarm deferred to Phase 5. | argus-a30 |
 
 ---
 
-*concept capsule definition | **DEPRECATED** 2026-04-24 per v3 Decision 1 (subsumed by [note.capsule (7c47429a)](note.capsule.md)) | originally LOCKED v1.0 by Argus A30 on 2026-04-21*
+*concept capsule definition | **DEPRECATED** 2026-04-24 per v3 Decision 1 (subsumed by [note.capsule (7c47429a)](tropo-note.capsule.md)) | originally LOCKED v1.0 by Argus A30 on 2026-04-21*
 *"A concept is the honest bottom of the pipeline. Small on purpose. Shaped enough to triage. Upstream of everything that follows." — preserved as historical; new captures use note.*

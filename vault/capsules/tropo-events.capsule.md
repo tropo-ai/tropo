@@ -63,9 +63,9 @@ subsystem_hub:
 | Relation | Target |
 |---|---|
 | Governed by | [capsule-definition meta (222873b9)](../../vault/files/222873b9.md) |
-| Pattern exemplar | [doc-spec.capsule v1.0.2 (9a7d314a)](doc-spec.capsule.md) — sibling typed-primitive structural shape |
+| Pattern exemplar | [doc-spec.capsule v1.0.2 (9a7d314a)](tropo-doc-spec.capsule.md) — sibling typed-primitive structural shape |
 | Aligned with | [9fc86533 Messaging System Reframe v0.2 LOCKED](../../vault/files/9fc86533.md) — design brief that informs this capsule |
-| Aligned with | [activation.capsule (4e8b21f0)](activation.capsule.md) — substrate that Stream C auto-emits events for |
+| Aligned with | [activation.capsule (4e8b21f0)](tropo-activation.capsule.md) — substrate that Stream C auto-emits events for |
 | Aligned with | [channels/CAPSULE.md (8a46cb6f)](../../channels/CAPSULE.md) — substrate that becomes regenerated projection per Stream B |
 | Extends | `core` |
 
@@ -160,7 +160,7 @@ Every agent has two event-relevant axes. **The PARTY UID (`type:principal`, mess
 
 ### Agent-class-principal event-identity — the crew-wide pattern (v1.4)
 
-**Every crew agent's event party-UID is a `type:principal` party UID, not the `type:project` agent-root UID** — the two-axis shape is the rule for all agents. The `source_uid` validator allows a `type:principal` UID with `principal_class != human` as a valid emitter identity; future agent-class principals (federated-Studio concierges, marketplace agent-principals) follow the same shape — principal UID on the messaging axis, agent-root UID on the lineage axis. *(Founding case: Po's v1.3 carve-out, generalized crew-wide at v1.4 via v1.63 Immutable Identity — full narrative in the [history companion (63bf7487)](events.history.md).)*
+**Every crew agent's event party-UID is a `type:principal` party UID, not the `type:project` agent-root UID** — the two-axis shape is the rule for all agents. The `source_uid` validator allows a `type:principal` UID with `principal_class != human` as a valid emitter identity; future agent-class principals (federated-Studio concierges, marketplace agent-principals) follow the same shape — principal UID on the messaging axis, agent-root UID on the lineage axis. *(Founding case: Po's v1.3 carve-out, generalized crew-wide at v1.4 via v1.63 Immutable Identity — full narrative in the [history companion (63bf7487)](tropo-events.history.md).)*
 
 ### Principal UIDs - registered
 
@@ -513,7 +513,7 @@ New event types extend the registry per the standard amendment pattern. Registry
 
 **Tool-sourced events use the emitting tool's vault UID directly in `source_uid`.** Lookup via `vault/00-index.jsonl` graph query: `grep '"name":"<tool-name>"' vault/00-index.jsonl` → returns tool entry with UID + implementation path. No prefixed-string convention; no separate registry to maintain; the tool registry IS the vault graph.
 
-**New tools that emit events:** register as tool entries per tool.capsule v1.6 single-file-truth pattern at `vault/tools/<uid>.{py\|md\|json}`. Their UIDs become valid `source_uid` values automatically via vault index. *(The v1.0 `script:` prefixed-string identifier registry was RETIRED at v1.1; retirement narrative + examples table in the [history companion (63bf7487)](events.history.md).)*
+**New tools that emit events:** register as tool entries per tool.capsule v1.6 single-file-truth pattern at `vault/tools/<uid>.{py\|md\|json}`. Their UIDs become valid `source_uid` values automatically via vault index. *(The v1.0 `script:` prefixed-string identifier registry was RETIRED at v1.1; retirement narrative + examples table in the [history companion (63bf7487)](tropo-events.history.md).)*
 
 ---
 
@@ -666,7 +666,7 @@ The PARTY UID (`type:principal`, messaging axis) is the canonical agent identifi
 
 **Addressing Union:** directed messages (`subject` axis) SHOULD address the recipient's party UID for messaging-axis convergence. However, to ensure no message is missed, readers (`check-events`) scan for their ID on BOTH the party-UID and the agent-root-UID axes. This union is a robustness provision for READERS; senders remain disciplined to the party-UID.
 
-*(Rule 4 version history — the v1.3 Po carve-out → v1.4 crew-wide generalization → v1.7 addressing-union — in the [history companion (63bf7487)](events.history.md).)*
+*(Rule 4 version history — the v1.3 Po carve-out → v1.4 crew-wide generalization → v1.7 addressing-union — in the [history companion (63bf7487)](tropo-events.history.md).)*
 
 ### Author-vs-emitter split (Rule 5; Decision F)
 
@@ -706,7 +706,7 @@ Event substrate stays Studio-bounded at L1. Cross-Studio events require explicit
 
 **Two user-facing surfaces are KEPT** because their audience is the human principal, who does not run `query-events`: `channels/tropo.md` (Studio-activity feed) + `channels/releases.md` (release/news). They survive as **user-facing projections of the event log** — rendered, auto-updated, never stale. The user-facing projection renderer (distinct from the retired crew-channel renderer) is a booked follow-on; until it ships, the two files are maintained as-is.
 
-One canonical event log; crew channels become queries (zero intermediary); user surfaces become projections (rendered intermediary, because users read, not query). Drift is structurally impossible either way. *(The rule's original "all channels gone" over-claim + same-day Mike-A88 correction, and the v1.61 per-lane retirement inventory, are preserved in the [history companion (63bf7487)](events.history.md) v1_3 note.)*
+One canonical event log; crew channels become queries (zero intermediary); user surfaces become projections (rendered intermediary, because users read, not query). Drift is structurally impossible either way. *(The rule's original "all channels gone" over-claim + same-day Mike-A88 correction, and the v1.61 per-lane retirement inventory, are preserved in the [history companion (63bf7487)](tropo-events.history.md) v1_3 note.)*
 
 ### Bounded one-type segment lock-break (Rule 14; v1.10)
 
@@ -833,34 +833,34 @@ Note: events are NOT vault entries at `vault/files/<uid>.md`. They are rows in `
 
 ### Pillar 1 callable surfaces (canonical composition per v1.1 Pillar 1 taxonomy reconciliation)
 
-- **[tool.capsule v1.6 (d5e1b4a3)](tool.capsule.md)** — CANONICAL composition relationship. Tools are the typed primitive that emits substrate-write events; tool UIDs at `vault/tools/<uid>.{py\|md\|json}` per single-file-truth are valid `source_uid` values directly. emit-event itself is a tool registered per tool.capsule v1.6 from inception.
-- **[how-to.capsule v1.4 (a7c3f489)](how-to.capsule.md)** — sibling Pillar 1 callable surface (inline behavior bundles). Tool invocations within a how-to emit events the same way standalone tool invocations do.
-- **[session-agent.capsule v1.5 (b4e2a718)](session-agent.capsule.md)** — sibling Pillar 1 callable surface (session-resident specialists). sa.* dispatch family event types per §3 capture sa.* lifecycle.
-- **[action.capsule v1.1 (9b7f5e34)](action.capsule.md)** — sibling Pillar 1 callable surface (kernel-tier compound operations). Action invocations emit substrate-write events (actions mint typed vault entries → tropo.substrate.created events).
-- **[kernel.capsule v2.0 (7c0e314a)](kernel.capsule.md)** — kernel infrastructure governance; events shipping at v1.55 are vault-tier substrate (not kernel-tier; events live at vault/events/ not .tropo/events/); composes for the kernel/vault boundary discipline.
+- **[tool.capsule v1.6 (d5e1b4a3)](tropo-tool.capsule.md)** — CANONICAL composition relationship. Tools are the typed primitive that emits substrate-write events; tool UIDs at `vault/tools/<uid>.{py\|md\|json}` per single-file-truth are valid `source_uid` values directly. emit-event itself is a tool registered per tool.capsule v1.6 from inception.
+- **[how-to.capsule v1.4 (a7c3f489)](tropo-how-to.capsule.md)** — sibling Pillar 1 callable surface (inline behavior bundles). Tool invocations within a how-to emit events the same way standalone tool invocations do.
+- **[session-agent.capsule v1.5 (b4e2a718)](tropo-session-agent.capsule.md)** — sibling Pillar 1 callable surface (session-resident specialists). sa.* dispatch family event types per §3 capture sa.* lifecycle.
+- **[action.capsule v1.1 (9b7f5e34)](tropo-action.capsule.md)** — sibling Pillar 1 callable surface (kernel-tier compound operations). Action invocations emit substrate-write events (actions mint typed vault entries → tropo.substrate.created events).
+- **[kernel.capsule v2.0 (7c0e314a)](tropo-kernel.capsule.md)** — kernel infrastructure governance; events shipping at v1.55 are vault-tier substrate (not kernel-tier; events live at vault/events/ not .tropo/events/); composes for the kernel/vault boundary discipline.
 
 ### Other composability
 
 - **[9fc86533 Messaging System Reframe v0.2 LOCKED (9fc86533)](../../vault/files/9fc86533.md)** — design brief that this capsule formalizes. v0.2 architectural decisions A-I translated into this capsule's schema + governance + validation.
-- **[activation.capsule v1.0 (4e8b21f0)](activation.capsule.md)** — agent lifecycle substrate; `tropo.agent.activated` / `tropo.agent.retired` event types auto-emit at boot/retire per Stream C retrofit of write-activation-entry tool.
+- **[activation.capsule v1.0 (4e8b21f0)](tropo-activation.capsule.md)** — agent lifecycle substrate; `tropo.agent.activated` / `tropo.agent.retired` event types auto-emit at boot/retire per Stream C retrofit of write-activation-entry tool.
 - **[channels/CAPSULE.md v1.2 (8a46cb6f)](../../channels/CAPSULE.md)** — channel substrate that becomes regenerated projection per Stream B. Channel frontmatter `rendered_from_events:` marker enables incremental migration (Rule 8).
-- **[doc-spec.capsule v1.0.2 (9a7d314a)](doc-spec.capsule.md)** — sibling typed-primitive structural shape; pattern_exemplar. doc-spec authoring auto-emits `tropo.substrate.created` per Stream C.
-- **[dev-spec.capsule v1.0 (c3f68cb5)](dev-spec.capsule.md)** — same as doc-spec composition.
-- **[test-spec.capsule v1.0 (621824df)](test-spec.capsule.md)** — same as doc-spec composition.
-- **[release.capsule (b19e8d43)](release.capsule.md)** — `tropo.release.shipped` event type auto-emits at build-release tool clean-ship.
-- **[publish.pipeline.capsule (e5b3f2c7)](publish.pipeline.capsule.md)** — `tropo.pipeline.*` event types auto-emit per pipeline lifecycle per Stream C retrofit of pipeline-runtime tool.
-- **[agent-activation.playbook v2.12 (99341618)](../playbooks/agent-activation.playbook.md)** — boot chain emits `tropo.agent.activated` at Group 0 Step 0.0b per Stream C retrofit.
-- **[Self-Healing OS-tier primitive (db0fd9b1)](../SELF-HEALING.md)** — composes with substrate-verify-twice (Path 0 verify-before-author via events.capsule schema discipline; Path 1 fix-on-see for catch-side; together close the messaging-substrate disease structurally per 9fc86533 §2).
+- **[doc-spec.capsule v1.0.2 (9a7d314a)](tropo-doc-spec.capsule.md)** — sibling typed-primitive structural shape; pattern_exemplar. doc-spec authoring auto-emits `tropo.substrate.created` per Stream C.
+- **[dev-spec.capsule v1.0 (c3f68cb5)](tropo-dev-spec.capsule.md)** — same as doc-spec composition.
+- **[test-spec.capsule v1.0 (621824df)](tropo-test-spec.capsule.md)** — same as doc-spec composition.
+- **[release.capsule (b19e8d43)](tropo-release.capsule.md)** — `tropo.release.shipped` event type auto-emits at build-release tool clean-ship.
+- **[publish.pipeline.capsule (e5b3f2c7)](tropo-publish-pipeline.capsule.md)** — `tropo.pipeline.*` event types auto-emit per pipeline lifecycle per Stream C retrofit of pipeline-runtime tool.
+- **[agent-activation.playbook v2.12 (99341618)](../playbooks/99341618.md)** — boot chain emits `tropo.agent.activated` at Group 0 Step 0.0b per Stream C retrofit.
+- **[Self-Healing OS-tier primitive (db0fd9b1)](../../.tropo/SELF-HEALING.md)** — composes with substrate-verify-twice (Path 0 verify-before-author via events.capsule schema discipline; Path 1 fix-on-see for catch-side; together close the messaging-substrate disease structurally per 9fc86533 §2).
 - **[substrate-verify-twice defect-class brief (83af4ac1)](../../vault/files/83af4ac1.md)** — composes architecturally; events-as-canonical-truth removes the disease that substrate-verify-twice patches as a symptom.
 - **[Workbench Surface Visibility Doctrine (3c02f3b7)](../../vault/files/3c02f3b7.md)** — composes; event log is the workbench. Active cycles + open conversations + in-flight substrate writes all become queryable surfaces.
 - **[Captain's Briefing v3.0 (a5f4b26b)](../../vault/files/a5f4b26b.md)** — strategic frame; messaging substrate reframe is on the path to v2.0.0 "full lifecycle around a vault."
 - **[Federation Foundation (7cac6473)](../../vault/files/7cac6473.md)** — L3 readiness composes; event substrate carries Studio-prefix identity at federation.
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — this capsule's own governance; capsule amendments per meta-capsule discipline.
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor.
 
 ### History
 
-Authored at the [history companion (63bf7487)](events.history.md) — v1.69 S3 split. Current + previous amendment notes stay in this file's frontmatter; older notes, the changelog, and extracted narratives live there.
+Authored at the [history companion (63bf7487)](tropo-events.history.md) — v1.69 S3 split. Current + previous amendment notes stay in this file's frontmatter; older notes, the changelog, and extracted narratives live there.
 
 ---
 
@@ -868,7 +868,7 @@ Authored at the [history companion (63bf7487)](events.history.md) — v1.69 S3 s
 
 **Hot pitfalls (the two that recur):** emit + address agents at the PARTY UID, never the agent-root (Check 22; the message is otherwise invisible to a party-UID reader) · never edit the JSONL directly (Rule 1; append via the emit-event tool only).
 
-Full signage — tools list, rules at-a-glance, all pitfalls, worked-example pointers — in the [history companion (63bf7487)](events.history.md). The live rules are §7; the live checks are §8.
+Full signage — tools list, rules at-a-glance, all pitfalls, worked-example pointers — in the [history companion (63bf7487)](tropo-events.history.md). The live rules are §7; the live checks are §8.
 
 ---
 
@@ -876,13 +876,13 @@ Full signage — tools list, rules at-a-glance, all pitfalls, worked-example poi
 
 *Required per pattern_exemplar (doc-spec.capsule.md §How to Validate).*
 
-The capsule shipped at v1.55 and its acceptance tests passed (evidence in the [history companion (63bf7487)](events.history.md)). Current validation = the §8 checks live in `.tropo/scripts/lib/event_validators.py`, fired at every vault rebuild; emit-time enforcement = the emit-event tool guards (Rule 11 strictness + the Rule 4 axis guards).
+The capsule shipped at v1.55 and its acceptance tests passed (evidence in the [history companion (63bf7487)](tropo-events.history.md)). Current validation = the §8 checks live in `.tropo/scripts/lib/event_validators.py`, fired at every vault rebuild; emit-time enforcement = the emit-event tool guards (Rule 11 strictness + the Rule 4 axis guards).
 
 ---
 
 ## 13. Changelog
 
-Full changelog (v1.0 → v1.4 rows verbatim) lives in the [history companion (63bf7487)](events.history.md). Current + previous version provenance: the `v1_7_amendment_note` + `v1_4_amendment_note` frontmatter fields above. v1.5 = member_of DISAMBIGUATE (hub membership moved to `subsystem_hub`; see §2 field table).
+Full changelog (v1.0 → v1.4 rows verbatim) lives in the [history companion (63bf7487)](tropo-events.history.md). Current + previous version provenance: the `v1_7_amendment_note` + `v1_4_amendment_note` frontmatter fields above. v1.5 = member_of DISAMBIGUATE (hub membership moved to `subsystem_hub`; see §2 field table).
 
 ---
 

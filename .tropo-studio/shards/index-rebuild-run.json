@@ -1,22 +1,22 @@
 {
   "archive_cache_action": "not-written: initial worktree-derived cache reuse disabled",
   "archive_cache_reuse_disabled": true,
-  "archive_record_count": 3,
+  "archive_record_count": 4,
   "archive_source_skip_count": 0,
-  "assembled_record_count": 501,
+  "assembled_record_count": 500,
   "authoritative_for": {
     "federation": false,
     "local": true,
     "ratchet_baseline": false,
     "release": false
   },
-  "current_record_count": 498,
+  "current_record_count": 496,
   "derived_from_uncommitted": true,
   "mode": "initial-worktree-derived",
-  "parsed_record_count": 501,
-  "run_started_at": "2026-08-26T15:37:24Z",
+  "parsed_record_count": 500,
+  "run_started_at": "2026-08-29T02:09:41Z",
   "schema_version": 2,
-  "source_inventory_sha256": "853c29271d6b771e64c18bd9d5835e8bdf1072f399d5d8fa1eb129c3943f0385",
+  "source_inventory_sha256": "2874e83365bfd494529aedd740b4b3ce895a4d44e388ed5b810cc3430daca729",
   "uncommitted_inputs": [
     {
       "content_sha256": "8d08f809e717ab51616dd0448ffd324fbf1228c248f4807a94a3674450956c17",
@@ -28,12 +28,6 @@
       "content_sha256": "32a11c3a659c1ad5a7bb1e699d9531aad02692efbe88b438eb9dd998c981a336",
       "mode": "100644",
       "path": ".tropo-studio/memory/entries/839a65f9.md",
-      "symlink_target_sha256": null
-    },
-    {
-      "content_sha256": "c5e916f2ef075b0c742354f4a4e2c6fde9d510947bddd39f084333ae4fcf21fc",
-      "mode": "100644",
-      "path": ".tropo/00-index.md",
       "symlink_target_sha256": null
     },
     {
@@ -61,7 +55,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "b38c4c01831e77fc6401254326097b7a0a8956213eba9833183b461a7b00ddcc",
+      "content_sha256": "1b63ef0200f92b3a0d401dffa4301b8072b51f244080bd8ac14b804df5afc8ce",
       "mode": "100644",
       "path": ".tropo/TROPO-CONTROL.md",
       "symlink_target_sha256": null
@@ -151,7 +145,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "70ef8bc7dd85b6febecf009208dd873236120b4c2c1abb38392a062a24fe51f0",
+      "content_sha256": "e927584bcbe94aa4800b2d21a7c516339a00abeb08d06fb460583156204e0b48",
       "mode": "100644",
       "path": "AGENTS.md",
       "symlink_target_sha256": null
@@ -163,31 +157,37 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "79d1727c5f43dcb4598138dfec763877fb4c6d0497fa1fd71e4096ab02cf17d5",
+      "content_sha256": "c882aea0a6708efe2e3a4df4d710a9d50de5027283d47cf980128b8f7374026d",
       "mode": "100644",
       "path": "CHANGELOG.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "6ad6771f5b55b44c7194f6514134ace377075b6fca5e2d4fafaa89ea3b1f4cd9",
+      "content_sha256": "6ef814b5f70e0a1af8bd319505c68dae2afbc143a62e466c00259bb4aeb7b006",
       "mode": "100644",
       "path": "CLAUDE.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "98e0f669dfa58afe2ba9820b887181c5f5c35561b13800b61eb9b355a94a0433",
+      "content_sha256": "a8733968bddbb1f3ee77d02afa94891934151c6fbbcc719778c9087f659d5a1a",
       "mode": "100644",
       "path": "GEMINI.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "3f4f3446a473b64f60601bd2b0c465bb297c03b9594ed90c2b77b06a8e7ad2dd",
+      "content_sha256": "fd85e340ab1554247ad775b8bd491d48dd521a954b168dcef0f46435b2d19498",
+      "mode": "100644",
+      "path": "KNOWN-LIMITATIONS.md",
+      "symlink_target_sha256": null
+    },
+    {
+      "content_sha256": "96b6e659ccff8b2f720a048a1ec4bacb6c8e03943e854d234d639fcd4fc879bd",
       "mode": "100644",
       "path": "MANIFEST.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "2a91b7181275a282208a3755eb80a4fed28ba1349cf8aab6e7b490031193ea09",
+      "content_sha256": "883d41c7195882614da391f471b93cd7bca82cece708496d1601414c8a600175",
       "mode": "100644",
       "path": "README.md",
       "symlink_target_sha256": null
@@ -199,19 +199,19 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "6e0d09a48a7790305185ec87290650aa3db6cc3055b8f5a1dafd2b9f99a3821d",
+      "content_sha256": "4550dd6ad59a3cd347aa7a246f85bf1f20cfca9bfe47231f75c71cb17a132d55",
       "mode": "100644",
       "path": "START-TROPO.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "18d5001d340c5df600c5969bfb13ee234b656e879232c17822d80c425f5707f0",
+      "content_sha256": "e1c4debf959d9b98244ed60b8891d2c3c77d64f13338b6bf7ad71407f322a1a0",
       "mode": "100644",
       "path": "STUDIO.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "ece40dfba376393e3d9e0d003637e09841a2681fb535937882fdb5bd4a039713",
+      "content_sha256": "4d1a450059794bab8b192e419f6be91fe2964882ccd300d98f542e09f18e8622",
       "mode": "100644",
       "path": "TROPO-CAPABILITIES.md",
       "symlink_target_sha256": null
@@ -271,7 +271,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "25348474453f4a0164dda1fe1f6f5dcb96f02dd8b07da52bf3f0968e8cabbc5c",
+      "content_sha256": "9d286d2f077eb75be2b9877bf0310951892ea9a8e4e24d98afcf37266c423809",
       "mode": "100644",
       "path": "agents/tropo/briefing-package/current-release-notes.md",
       "symlink_target_sha256": null
@@ -343,13 +343,13 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "768aa27a8be193cea92d1ccdf865fec0451d5c07ec261759d195ed2e79472a4e",
+      "content_sha256": "1f914e2fd566d1d038949a95570477dc6706cee004a14271c1553339bf85d5d1",
       "mode": "100644",
       "path": "vault/agents/3031ffa3.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "e41d98732a739aa6fa05499aca297ad7611ba59815a6571101507234d159bbe4",
+      "content_sha256": "a8f0d8f73d9f7602c24a12549c6234ea6aed82b11c9bf43639c099b2b81f9e9a",
       "mode": "100644",
       "path": "vault/agents/523d663d.md",
       "symlink_target_sha256": null
@@ -367,37 +367,37 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "b897663225247f91e42cf4e3decd839964c8285cad713a388e225f95fab3673e",
+      "content_sha256": "12ba6eec2fafa8871ebb96d0874c834d1da84cfc39b237eb97e2ffcc91243e04",
       "mode": "100644",
       "path": "vault/agents/8b81aecf.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "8e40337b778e44242c42320bd2d0596bc71c1e0004ef4c08344480fb51a2b43f",
+      "content_sha256": "7ac97faac821426583dc084442c699b1ce6871b19f58dd803b50636db145dd2a",
       "mode": "100644",
       "path": "vault/agents/9fc001c3.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "805dd9a52b12d16565a05f13cb5b9ab0df161727689cac71b69759d84c1f3b93",
+      "content_sha256": "c1e52363619af0b38bc2392bfdbcb4406f3b8e5e0aeea488213310a99100f90a",
       "mode": "100644",
       "path": "vault/capsules/tropo-action.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "3a43272abba90e4b46ae9b8ce12171a1fa5cc97e11d52fd0838fed5f3d6cc7be",
+      "content_sha256": "4e0a1ec491fe024e83d6fb62c1e2b062b8d5a6dff2fc9c18fe9c8302a486debc",
       "mode": "100644",
       "path": "vault/capsules/tropo-activation-log.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "f614b4ae97d4e42a3b8ba3e4ce35210e1743b88c9b8a3de69b8fea7534722ebf",
+      "content_sha256": "edd49324db00d49860a13a48ed732dd30e8020d92cc3ac93081591502d674cb7",
       "mode": "100644",
       "path": "vault/capsules/tropo-activation.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "86708006d55570a5d90deed389e1c4ebf84fe5e4ec42c60bcff675abdd878537",
+      "content_sha256": "4c50c7bee3c5b5298e09c272a3ccb998c8a225b556ce87c7421d6027425d99b4",
       "mode": "100644",
       "path": "vault/capsules/tropo-agent-configurator.capsule.md",
       "symlink_target_sha256": null
@@ -409,25 +409,25 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "2c467d550e876ed1800da7e8ba924e532065bef8b55ce9d9a0adeabbc665c7de",
+      "content_sha256": "acffb74a26691371fb5e941f0f6fca8192dbf10eb3b9ce6943112e9212822de9",
       "mode": "100644",
       "path": "vault/capsules/tropo-arch-spec.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "2f8efcf16c6709230cccfadc5498cdffaae14716af6c056fff0d0e53a27dd325",
+      "content_sha256": "988e781de2e9f659842d172ad32d99668fe6c76cdff1540e751d8c3fad670882",
       "mode": "100644",
       "path": "vault/capsules/tropo-board-definition.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "035258e80293671a60dfd7f21d7f6b2f5579e273c8dd77282173e2fe1b4ca15f",
+      "content_sha256": "b43c764ace45606a259dce57861dd8637e0a99fb57803100b3bb3b02387a81d9",
       "mode": "100644",
       "path": "vault/capsules/tropo-board-snapshot.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "7ed54b7f758382cae70c1c77db1c508177d1363fd1ecc8622c507454de76dbdd",
+      "content_sha256": "a1587e6515e06fab1d93d1e60678485552810e18550fc48a45de618e9ca1fea2",
       "mode": "100644",
       "path": "vault/capsules/tropo-build.capsule.md",
       "symlink_target_sha256": null
@@ -439,61 +439,61 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "eb0ee153cfc5af603579c7be0de9d11c9671b2ebf24c3fa9d4accae0d7e10eeb",
+      "content_sha256": "a261682357c840f8f7ebdd7b02b9b45a6e195c30d8a707bfdb843555a56120d3",
       "mode": "100644",
       "path": "vault/capsules/tropo-charter.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "4a4d4ace430eeacc020d81ec457670f673bc329dcfb8cee47bedea169048727e",
+      "content_sha256": "ed5e9c032faf354353a605f6ee400f76c0fb8f614d4d79be5b10be9ffe6fcb1a",
       "mode": "100644",
       "path": "vault/capsules/tropo-chat-session.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "f09c18820196af95707b17e06ea87c0153003738eead7a54488b1846b7b3ffe8",
+      "content_sha256": "64ec6e3ac5853740d93f11f80c7d695dfcceaab8a618d8b22b2699fd751ef538",
       "mode": "100644",
       "path": "vault/capsules/tropo-collection-ref.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "4a11f827a26e052aed286e48c03d7044b55d79b430550491f35e71db4d6a315b",
+      "content_sha256": "5ffdcc83cc3482f0b7441389dfc1b604f8159412c12e0655ce969d77653d1716",
       "mode": "100644",
       "path": "vault/capsules/tropo-collection.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "6bbdfa5a74f83fdefe321f41102ee83f364d4ac7850394d388a3543a9e88c634",
+      "content_sha256": "a4b16c1aa97a232fbe89fca1a3c41b0b8a50a646beec143c9eb68b392de6b949",
       "mode": "100644",
       "path": "vault/capsules/tropo-completion-report.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "79ef02c1e011045c10ee93208041df1cfa884148b2f31f0a4699af804f68c5e1",
+      "content_sha256": "509df7b2a57d02e844aae77457143bcb36035ff2292c92e0f9cef7c9abe8835c",
       "mode": "100644",
       "path": "vault/capsules/tropo-concept.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "588bc031f04034290ab915b09cd75af18bf20eb68f38c2b89c8f3084d3d36ef5",
+      "content_sha256": "50597359d486e79863b2c1058b98a1e4724e2e61763aa9920f495a4d247b2635",
       "mode": "100644",
       "path": "vault/capsules/tropo-core.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "95f426b92f7213f1d9692a09f9f5a49bc94f9dd98c95968b32cdec6d4a4a3f9f",
+      "content_sha256": "c8d8b780b6643aff72408059038f9392ddea934d1e7fc81f97f81ea810a25047",
       "mode": "100644",
       "path": "vault/capsules/tropo-decision.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "e69619b9e80d987f8f5b094067f44077f143fb36352dda50ff4c7eef91df7f67",
+      "content_sha256": "ab508417312421fde38ea88163452472cc83914d613d0790559a2cbbb8a9b3ed",
       "mode": "100644",
       "path": "vault/capsules/tropo-design-brief.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "7276ae3d4626c94fd95e602f78758041e2fa1915904b1b3fdf4d73a4c0961ec9",
+      "content_sha256": "a76973fd372dd1e77e4626fcf5bf7b32a8cd54040fe53bb0d3080db50f60315b",
       "mode": "100644",
       "path": "vault/capsules/tropo-design-spec.capsule.md",
       "symlink_target_sha256": null
@@ -505,43 +505,43 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "654274820eb72eaa22cbd3e45b59dd6a38f5b7b4e8a5fc8de76df7664f2fda0e",
+      "content_sha256": "708f0e3889b7daa891bedb097bac8fbf84699e69cb0791c67b61a8df3b67c84b",
       "mode": "100644",
       "path": "vault/capsules/tropo-doc-spec.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "8ac09c66a5f45c3d7fbf8a59a490af904078a7b3199561f2bf68f2c829421786",
+      "content_sha256": "bd429b17141e97e22003da963ee6f9308424f9aeddb3d1db234207a394bad791",
       "mode": "100644",
       "path": "vault/capsules/tropo-document.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "66d88be9292cf347a19c8f216ab938480acb7a30aae11d7aec749edc12ed3fdd",
+      "content_sha256": "ce980e74684685e50b1e53445b4ff08ba7159d7e48dae56dfa314353f541ad42",
       "mode": "100644",
       "path": "vault/capsules/tropo-docx-template.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "8a728082656c0b03785f515504568e7cbd08bf69f3e16ac866c1ed931a254504",
+      "content_sha256": "a2d09f0301d0a5b4b0c81bf1656f54931787ac9854c4449905f1a35ff4e41627",
       "mode": "100644",
       "path": "vault/capsules/tropo-entity.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "cd8154387104eceaa173e78faf4662053594844845dab35514109d0362bee4be",
+      "content_sha256": "77e90c83f1abfd15e0e31b3109ede3c3f4073dc584dcfc5a511c81d3c0d35f38",
       "mode": "100644",
       "path": "vault/capsules/tropo-events.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "b782705738cf6a45d604e4f5aefd1a47e3e6036b41353710e34c500335132812",
+      "content_sha256": "e455cc86db03e6e7c6668964fbbfa76a49759fd8da444f48e16f1dc0d01d9e49",
       "mode": "100644",
       "path": "vault/capsules/tropo-external-artifact.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "f94f349cf3a324d9d03d5aefc04906609e25e2f2a047f0a3ec8a85b904603f18",
+      "content_sha256": "3c41748169417e20165fe8979f3e428592400d39bf3e9d9e3cf7f95e1d380273",
       "mode": "100644",
       "path": "vault/capsules/tropo-governance-contract.capsule.md",
       "symlink_target_sha256": null
@@ -553,13 +553,13 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "20f913e19e51e7cbb09decfa7ea3afcf69ad7de27b807afc61bf16f9545cf7e1",
+      "content_sha256": "22329bc3d633600b7c890b9e36fd9e95d9af38bb028364611be0a91e4ca55d18",
       "mode": "100644",
       "path": "vault/capsules/tropo-how-to.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "c4769cb57052a66a0f6573551fabe90e4d344f502468c246b6d4caf3a0b77791",
+      "content_sha256": "4bd776a5fc15545222e87d79399f4a7f167feda4f119599141a52c3b16ab6168",
       "mode": "100644",
       "path": "vault/capsules/tropo-kb-article.capsule.md",
       "symlink_target_sha256": null
@@ -571,37 +571,37 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "ef7bff2fe21958b1ade6e4e4aa45398ea6ffaa7f6a271def10a85f08898bd45b",
+      "content_sha256": "314e2360f1584933bf47651d844ac139af55a95893ef3b829689c50e67149360",
       "mode": "100644",
       "path": "vault/capsules/tropo-loop-run.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "f078c5ccfcdaa0fcd1fa54d824359137eec0289827e09405cecdd401b37bc0c7",
+      "content_sha256": "1ad117e785d32d355cd81d5de31ebfef5a8542a48f1e7f9ca0c849ed3493ccc7",
       "mode": "100644",
       "path": "vault/capsules/tropo-loop.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "969fb97d22343b4b44c3f19332648e973f5a25393e5aaa674cbd75902624afa7",
+      "content_sha256": "7c9a96fc2155ddbaa68d0d352524126060edd8c63949d301d16b2eafcbc45407",
       "mode": "100644",
       "path": "vault/capsules/tropo-memory.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "c0e19d7f80f0059e1185bff22659a554eecb3e01b9b4f79b85a9df2a5aadd83a",
+      "content_sha256": "20e8b0c45abab107e7135308a34385d9637a6ff0605b4e7ec3982c220ca6dc7c",
       "mode": "100644",
       "path": "vault/capsules/tropo-node.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "969c60eb396f2f6d62300700594472cc37a8bd2fa3b52cd9135e54fc8e3c6003",
+      "content_sha256": "bb2d221de48ce4d2231a74bad5536a796b86137c649c6c9e6434b75174e5bd58",
       "mode": "100644",
       "path": "vault/capsules/tropo-note.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "4e1df94405611ccfe3945db3abfb79a16346c25c656d7f638c9cb1970fc35d15",
+      "content_sha256": "800d9deef99f8b95c521c98720f7bac14018754d8f8c155bfc159876b0be0e01",
       "mode": "100644",
       "path": "vault/capsules/tropo-numeric-folder-prefix.capsule.md",
       "symlink_target_sha256": null
@@ -613,25 +613,25 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "e4071d64375e94721932c528b1b98b8ce06e73500b0d4e162c9317e5497b939f",
+      "content_sha256": "6952009dea895e201ef14afeed51cad0967d2aca59a87bd83c3e6d6a5681925c",
       "mode": "100644",
       "path": "vault/capsules/tropo-pipeline-run.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "25a8926707574a7c9a70e10dcb8c5239380ff7895a08028ba992c6ac4e4a5406",
+      "content_sha256": "47abc79518d8de432ad9bea2f2bbb9a7fc650ad0bd473bc2e8f1fdd18ab43b49",
       "mode": "100644",
       "path": "vault/capsules/tropo-pipeline.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "ee9717205273c94e0be79afb8d2458562f2fc73ae4bd2c4f5a3b1801e33361fd",
+      "content_sha256": "ee648fc05ea7101b8470094bb7caff00a812ddac9afb2c0b4c48882d4536ddae",
       "mode": "100644",
       "path": "vault/capsules/tropo-playbook-run.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "3a59efc44aab813460bd5b075baebca804f62ca9e9f22d52810907164b77df5d",
+      "content_sha256": "9a18b6926c198546d2bdc9722a5a838a57fe410ae5b4a51c3baca030b6f41b60",
       "mode": "100644",
       "path": "vault/capsules/tropo-playbook.capsule.md",
       "symlink_target_sha256": null
@@ -643,37 +643,37 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "2c1b1f3afec0d795cd5089a3a00e10ba10d2b5c3617905a35b70cfa15165ef98",
+      "content_sha256": "cd02bc898ef9987fa1d6e00c9dbe9fdfcc5dd7c49f26101837828f3b9fd39aac",
       "mode": "100644",
       "path": "vault/capsules/tropo-project-plan.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "00a9545435b2b6f25755d0c66de96590713a4186dce83faac33f1b7ce5fe4859",
+      "content_sha256": "4a3117418918478cb38b69eafe91f98e3f5231c444907d5b1cdf7149666ee21b",
       "mode": "100644",
       "path": "vault/capsules/tropo-project.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "8fe137142982db8a5b9a88f0e89a48f62f3241f87fed702c0f024a2f26f66a2f",
+      "content_sha256": "8f00b7f08c2ced539b5b9602cfd51e400716854221df362b8be91b2a5061cb62",
       "mode": "100644",
       "path": "vault/capsules/tropo-publish-pipeline.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "c113fde2bb8df222e59b030af2bbf604d0db547806392b16a2e0523b626b998a",
+      "content_sha256": "b91be62396628af45592d93e82e7e9241f6541a3600eb3348e0842e455aff249",
       "mode": "100644",
       "path": "vault/capsules/tropo-reconcile-report.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "f8ef03185c6c5c170693eab6e15c83f74ad5c325618d96f69dacbe81e6e89c31",
+      "content_sha256": "e859bfbdcae3d66da747e60ae1504d64803825b5d587c70d467f88255ebbeccd",
       "mode": "100644",
       "path": "vault/capsules/tropo-registry.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "2ecd443422f7fef7e533f9f6cccccbdca6f6b7e38ad6265cf09e1e83b8bfecd6",
+      "content_sha256": "904c56f84fd12132702952757860df624df33507147243bc56a4e900c079d34b",
       "mode": "100644",
       "path": "vault/capsules/tropo-release-plan.capsule.md",
       "symlink_target_sha256": null
@@ -685,7 +685,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "1a050effe9aa14ca0f9da2a0d079e58bf5e1f21b99e54121928d1928595597c5",
+      "content_sha256": "861461e23ed34e9d857649ec5edd3bd56c31a086c75495840807e45c1fadb42e",
       "mode": "100644",
       "path": "vault/capsules/tropo-release.capsule.md",
       "symlink_target_sha256": null
@@ -697,25 +697,25 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "f0d21fce5e3fad0b668bfb78d3be4ee62a91127ec1d73caf1624b2f4d40210e8",
+      "content_sha256": "1c9bdaed8956936f698e9d11495a530bcfbfaf755b65b5d740964d0a74210458",
       "mode": "100644",
       "path": "vault/capsules/tropo-session-agent.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "930d0397302aa6e5e32b42fe2119501f2a9f64de89a601d66b9b635fba1d969a",
+      "content_sha256": "fa980a73e919a8c3edc872ec9ed77452050f694db269c802121011081e78eaf0",
       "mode": "100644",
       "path": "vault/capsules/tropo-ship-artifact.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "84550e25d58a71984ddbc429cddbd7bf93918a7401db2f429c40b42281417874",
+      "content_sha256": "e9073ac8006cfdb33508b9c466b0214fa68f5480cc6a97bfe036cb959d97c750",
       "mode": "100644",
       "path": "vault/capsules/tropo-subsystem-hub.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "ded252005bbe862d6ceee21c31876aa9304ad7b3a1fb5007848285be988e68da",
+      "content_sha256": "ba45e0ed4106717db189b0defb97c8b9c5b04efa0c2b0a6367b813e33df875f4",
       "mode": "100644",
       "path": "vault/capsules/tropo-task.capsule.md",
       "symlink_target_sha256": null
@@ -727,19 +727,19 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "ce632b3144e2c30bb2102df11ff4588bf65b07bf4cf884ca0a9bfb199b86fc53",
+      "content_sha256": "d0de9ba9cc714d89a9ef733d411644f437ebfe9e729d914a9cb9485e5d6380d9",
       "mode": "100644",
       "path": "vault/capsules/tropo-team.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "7209f4743a704ad14725da361eaaa6f32381a3243067a6d0595882d91c4c3e84",
+      "content_sha256": "bf50cf393c3e9c91698f9322896e2f0de6de2d0cfbab6ead3d23dc9c965506bc",
       "mode": "100644",
       "path": "vault/capsules/tropo-test-run.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "4b701bcaba4cff62e5002d1952664d4c2e6d269121b6f5a94f66ec68121b7d7a",
+      "content_sha256": "ef260fdd37ffaf5985d7fa9ebb9b732c831d4fcb0f2cdaa95a11d65fe02331e2",
       "mode": "100644",
       "path": "vault/capsules/tropo-test-scenario.capsule.md",
       "symlink_target_sha256": null
@@ -751,19 +751,19 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "5066fde351c8a42ac0d8f6c875089e3f1c7547d8a9d5fe39bb55bdc8ef2e0111",
+      "content_sha256": "39f8071be8ddbaed116f87f9acc04b5b52d87861c8e5b070bf9e56fa29ad3a93",
       "mode": "100644",
       "path": "vault/capsules/tropo-tool.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "bab9876da1f5be194a08cb77d4bdf9fa265888e21e275ab37ea24a450c5036bd",
+      "content_sha256": "bf3d906b23a47db3f90ad6166cd276d9c25363dd4b9869cb7de640eafdf4047e",
       "mode": "100644",
       "path": "vault/capsules/tropo-vault-entity.capsule.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "c38f37af2e23d96287d6d912766b8900e09d2ad66de14feefe614a6dd7d32fdd",
+      "content_sha256": "9df0939f97b36be10b302cff28e4b4d9f0f1de034b0d6f2d24558cca78f53f1b",
       "mode": "100644",
       "path": "vault/capsules/tropo-vault-ops-spec.capsule.md",
       "symlink_target_sha256": null
@@ -775,7 +775,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "eb0bc5fea2022f0ed3869acb1010d93290c221fc6281be8da2a22277330f7357",
+      "content_sha256": "71ffb0cf354c77979f7cbd4339e0f7d8d3ce1305ff79ebce73895964f29d6617",
       "mode": "100644",
       "path": "vault/capsules/tropo-working-copy.capsule.md",
       "symlink_target_sha256": null
@@ -835,13 +835,13 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "d4abfe29308e4a787fca4b021dfebd8fcc95e88b455074f80a91b05fa375a8fa",
+      "content_sha256": "d598b967d8d17cf2d28cd5e2c3635ea706672cc8a9df6a0d84df5c22db2c70ec",
       "mode": "100644",
       "path": "vault/files/0b9188b9.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "b81af091bffe7c5a955b5ad41626a61c7fd3fa23f861800efd23e172da0b3f2d",
+      "content_sha256": "cbe1ac80fe89f3197b435f96f7df2d0804a0a4badbb6c1d0a7567f3216228fe9",
       "mode": "100644",
       "path": "vault/files/0c2b6aa4.md",
       "symlink_target_sha256": null
@@ -949,13 +949,13 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "f1758f4155b8185a5bd523834c259969edebcf9492e8a9974509d02b2fa91d8a",
+      "content_sha256": "2f3e80867587fc5c7b4bf9462d07a039817815bc0ed30047893f5018b5733c44",
       "mode": "100644",
       "path": "vault/files/2d4f8c91.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "4cdb0a5e05cb05ecf93429c7ec521f022c237c1feeaea64677a535cdce1ebb04",
+      "content_sha256": "9d1c44a0f0aa7ee48576d226bfcc4d027113c08f2fc374db3cd70841e02f6a29",
       "mode": "100644",
       "path": "vault/files/2d5f9b04.md",
       "symlink_target_sha256": null
@@ -1213,7 +1213,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "b9583b0817b2d0fa6abe1ee77d6cbeb16fba731a62d89cef224dc58bf84354c7",
+      "content_sha256": "92208a0a8ca30f19927268e2ae4f255e41b4559073680e09acc55ac4f1299376",
       "mode": "100644",
       "path": "vault/files/4e7d2c91.md",
       "symlink_target_sha256": null
@@ -1315,7 +1315,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "b8d9b83ae154e3b7d6aa87e2033682c70bc8586db2062dd67b66cadeb41d5296",
+      "content_sha256": "f7ca7fe856d318d7b943d5c635aa820737c7395e70bbcfa58490a75802c703be",
       "mode": "100644",
       "path": "vault/files/5f7a9d83.md",
       "symlink_target_sha256": null
@@ -1381,7 +1381,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "a1608182926d10bcea8e706da1073543e1a0e163a18f2062549339d91190e135",
+      "content_sha256": "6695b369ad91dd492c2b5ee77663e4076072c7070e20f02454b45530832fb31e",
       "mode": "100644",
       "path": "vault/files/6bf18510.md",
       "symlink_target_sha256": null
@@ -1507,7 +1507,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "455c9016cf0d67acc333d6ffc01de5f55491f43728ab775e25df4206d57ac2a4",
+      "content_sha256": "88a25d320c7ece5d44032f11e4d0384c9dfb265115cf28b0bfe5cdd905741290",
       "mode": "100644",
       "path": "vault/files/7c3a8e91.md",
       "symlink_target_sha256": null
@@ -1573,7 +1573,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "e111732fbc67aac03fe073fd780cfa30d233ff3b4cd1f0b4a61437e6928f08a5",
+      "content_sha256": "58fc6f4ba8ec36037a76fc538ddf2579afdef296797ee3a510b938db39f6debf",
       "mode": "100644",
       "path": "vault/files/8c4e1b73.md",
       "symlink_target_sha256": null
@@ -1603,7 +1603,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "036866d28df184010f9caa09796485664e791713225a344bc482e04f134a18b7",
+      "content_sha256": "c1da3500c0e5f132e1dffe56ae54634648b390282e1f7e70bd2f733be7efc0de",
       "mode": "100644",
       "path": "vault/files/8dd772a0.md",
       "symlink_target_sha256": null
@@ -1663,7 +1663,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "5eb6824f9b4449e52b2035b3f8c7bfb469ad6f4612a565faa503e5f830e293d6",
+      "content_sha256": "ab20fef66c9b55dba6386e59223913179aaa0b05910e0ffc3d41aad881e1383f",
       "mode": "100644",
       "path": "vault/files/9b3e8c47.md",
       "symlink_target_sha256": null
@@ -1723,7 +1723,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "ed75284f607bf75403014ae59ff59e2bf25ee16918c26cae2fb00e842e3cd8d4",
+      "content_sha256": "31698e6750f6a6c66940b93b6de4aa31ef14acd02e59b4fb9dcf4151d981a1b5",
       "mode": "100644",
       "path": "vault/files/a24c5b66.md",
       "symlink_target_sha256": null
@@ -1765,7 +1765,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "b495a0496a6505340363adb1f76f899f7f910e6ea36b1e8dbd5691d1be7d4245",
+      "content_sha256": "ad1e58195e19e8b3780aab2a39168266851c9a65a3774b047cd5219866817058",
       "mode": "100644",
       "path": "vault/files/aa51d888.md",
       "symlink_target_sha256": null
@@ -1777,7 +1777,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "401eca7919fda527865f8714179ee95147210a44d7dbe7b850d96c934d50324e",
+      "content_sha256": "d7adbb44de3573386f7a90102252e9713ece1f0883e19e4915320e9bcf4726a2",
       "mode": "100644",
       "path": "vault/files/afccc0b2.md",
       "symlink_target_sha256": null
@@ -1819,7 +1819,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "536f2b0fa5c891ca58b18bbcde83cd8358b10cfd2a53144a3ca031e2136a87cc",
+      "content_sha256": "f93db6d25475addf03e3aee4f471a7401edf0979bfda2b5a23246a0c93c3d198",
       "mode": "100644",
       "path": "vault/files/b622f271.md",
       "symlink_target_sha256": null
@@ -1831,7 +1831,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "605a4d11570fff0484cffe333e704300648c9f0c1ae2f854bfb83cf2c845847a",
+      "content_sha256": "92f74ab68a90608e63eb73bbe0bdbfd04a84ae31dd79a0d6dc429badb109ea20",
       "mode": "100644",
       "path": "vault/files/b6a3f582.md",
       "symlink_target_sha256": null
@@ -1885,7 +1885,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "7e78108ec012fa2765f84619341cb0480322621781ca700b10b080cdcff39436",
+      "content_sha256": "a27386598c357ed703b96c69358f37af0ab1a8f6969f7583cbc9fd5f6d58550a",
       "mode": "100644",
       "path": "vault/files/c3b9e1a5.md",
       "symlink_target_sha256": null
@@ -1951,7 +1951,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "081524cfa3c04ddc38fbe9da4d2dada10adaf372f48f80a9447317f10fd789e6",
+      "content_sha256": "f589d862fd78d18888d11a5daaf0272a17b5ffd011b82167e3ce1977ca0c457b",
       "mode": "100644",
       "path": "vault/files/d1a4f8e2.md",
       "symlink_target_sha256": null
@@ -1975,7 +1975,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "04af52ab411ce40eb4ac266be973da3ae22bc33a158baa2c47f2d522c946761d",
+      "content_sha256": "b0b3f5444542abb06648d7b787d5c150b549e0464dd1a15d3cd534995a0b1ae1",
       "mode": "100644",
       "path": "vault/files/d61ce0a7.md",
       "symlink_target_sha256": null
@@ -2113,7 +2113,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "43d53acb5fd1c7d2729209db41733ef6247a7e613b07dcf5bfd807043a535346",
+      "content_sha256": "3748061e4cee12d4e46be57fc20109253f0afac7d4c0188034b2416df3e0e522",
       "mode": "100644",
       "path": "vault/files/f2a7d3c8.md",
       "symlink_target_sha256": null
@@ -2179,43 +2179,43 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "14c7089e8c90e201254c85f609dd5ea54a50b8ff77327836daeeff6f8c68a8ad",
+      "content_sha256": "e7deea77a6f0c785c04ccf677dc5f3935cf27e9b9b79593061ed16b12a463bbd",
       "mode": "100644",
       "path": "vault/playbooks/40ff3db1.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "d1fad7e88247999de7012f30799d250d062f054db05430684b80e33479bc7276",
+      "content_sha256": "136eb42868bff6a5d3c108c43e188cb4a2de7b870692ab09900329ae2e98e897",
       "mode": "100644",
       "path": "vault/playbooks/45d21cd8.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "bb26443247248763c5e7bc1dbab423da2439ca2c5f9cc6a5016f5446c6e14727",
+      "content_sha256": "2b32b13d6ef1fcbb29d108620013ebbc24cd7fa6efc05b3a0dbab04390ca4891",
       "mode": "100644",
       "path": "vault/playbooks/4a2f6dbd.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "2e0c95cc03062da1c58fd5a0ecfd20691e996350398d23351e7fa2ca4e414fab",
+      "content_sha256": "f824108f45333b71741f9170e11102e0ac96aa6a87206b3a6f89b22b0fb22d28",
       "mode": "100644",
       "path": "vault/playbooks/57a87001.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "e4fcf090e8144273fb61d5811648e6b54791a00e06275315b0103767771f859e",
+      "content_sha256": "746a4a13a1f075a49b5015a0d4fa5837b6f18bb3cdca814519ad17d2eb25cbea",
       "mode": "100644",
       "path": "vault/playbooks/57a87002.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "3302cadecec5f02cf073ea75b1438910cee5b75a9bca1d113294dca50c8d05ad",
+      "content_sha256": "98a3446f1847a421d3575e7925a3234c6f5f85fe0bdb2e20b3b08f048fec0a57",
       "mode": "100644",
       "path": "vault/playbooks/57a87003.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "4365c273b343230d83dcaa7d645a7079942c9a60838a55dd80d309ed1c58f3c2",
+      "content_sha256": "3f3bbbf6f6a779a7b6cd381156fe1ae4b520604ecdaf6bcae2edb8b1cdbc6591",
       "mode": "100644",
       "path": "vault/playbooks/57a87004.md",
       "symlink_target_sha256": null
@@ -2227,19 +2227,19 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "c906aa6f5ca7285e11d0cd6ef4d6fb254e5af9738295869322e8e26f10e20b19",
+      "content_sha256": "0899dad6d8b570240fe773d559ed11ee500d16c4deeae2f0664ed2876129b255",
       "mode": "100644",
       "path": "vault/playbooks/6f3d2a18.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "eae0550387e484be4d29de0ec07bfc554c581d545537dc6cca638ef99be55e4c",
+      "content_sha256": "c8017700cbbfe870ab526e0761a835d056a228546075dee8c22b50282cdaf932",
       "mode": "100644",
       "path": "vault/playbooks/71f186cf.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "4bcf90f0f5247a31d6e56a4e0ce4cb33d0f652e6d98babe2edd614b7b662f77d",
+      "content_sha256": "8dbb167e7fc7406a85523b6664c54dbbd77595000b91e57d8e517a2397d4d407",
       "mode": "100644",
       "path": "vault/playbooks/7579f894.md",
       "symlink_target_sha256": null
@@ -2251,37 +2251,37 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "75ecfff4a296d25361de2cc745ceb9383aea809bff2d1808ca115b780a6fa227",
+      "content_sha256": "06d80d8bfeb378d1ef0dc8d3f629fcbd9c61f95eb2b4a14fffe18b07981e308a",
       "mode": "100644",
       "path": "vault/playbooks/7c5a2b8f.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "f8c5365b38a7bfb7c7ad3ba11292da16bc9f939462e3a8e9cb2b2f8f251ce7d6",
+      "content_sha256": "1cf81bf47655bf9f136803297527ad624aedb99d54801698c422312f47f9e517",
       "mode": "100644",
       "path": "vault/playbooks/7f2efd7c.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "b779f29bd0c05114bed56ef63ae5c64fc342709eca408b40fe79eea84b5709f7",
+      "content_sha256": "9751ba90ed6a5d302efe7ac2cc7223f4fc333d2cd910bd4194f97601c4fae354",
       "mode": "100644",
       "path": "vault/playbooks/91d8f2c5.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "ca65e5703f7c205521249e914d7aacc762665ea42f5ec922d68e1054b05e0ff7",
+      "content_sha256": "dbed3caf9f27a6f5643f29aff19e3cc822c5fc35feb7875cacfdddc5aa830299",
       "mode": "100644",
       "path": "vault/playbooks/99341618.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "66c04037f8a9262522a1b1ccbf344938993223dfda0be8162bb34fe094a30234",
+      "content_sha256": "c05111176116f25387bf754acdb56edb1fc4502abf1fb35a047f017c35e8bbe0",
       "mode": "100644",
       "path": "vault/playbooks/a5fb24a6.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "5b66a8dd39c35f962ec96193ff01543f3077006bfbbaf89a0f5e8134ec1d687e",
+      "content_sha256": "7311284cf76cd85b1fe6a8a99d05321c949d517556926de60a0f8b5be2e6c9aa",
       "mode": "100644",
       "path": "vault/playbooks/af8fc98a.md",
       "symlink_target_sha256": null
@@ -2293,31 +2293,31 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "79155d93da89675c7924fe2b756b4ffc6326870cca84e0f8188a9e56f67190a3",
+      "content_sha256": "ae1ca84a46373013eaa655035e65f8570c18ae08a0223664e73dc9cf66d85560",
       "mode": "100644",
       "path": "vault/playbooks/cb007e57.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "29f39f2ba6c4d6c06023723be752dce45727ed4d3ebac1bccd8ade593a3b21a3",
+      "content_sha256": "1615a92659423aa40cef6377ed9b70933727b1ab00ad3dd980c5994eab4e0244",
       "mode": "100644",
       "path": "vault/playbooks/cd2b6d03.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "648e45120b438ee980fb11af335c577efac22ba7f00c2d2422d08ac67ecc91ca",
+      "content_sha256": "5cd3aa39f543249192da95b473f50a31cf3721b4490e49075c99c5c52dad7a0c",
       "mode": "100644",
       "path": "vault/playbooks/d2efcac9.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "81a80a6442f0ffaf1fe79da476b2976d2d611fa7ef2e2f87934ba43626708ca5",
+      "content_sha256": "04385956db1d4162988fccc07a3f3d023fd975d22be4c51c17dd43857e07f78b",
       "mode": "100644",
       "path": "vault/playbooks/e2c7d185.md",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "06990631003f0d597408705b18bf6f5b9bebdc17715adb782cf18c7fde9f49a1",
+      "content_sha256": "6decd5c2630741333bbd0d501de6a0bafa9b27722390c4d8c387a4d5bfdbec27",
       "mode": "100644",
       "path": "vault/playbooks/f4a81b29.md",
       "symlink_target_sha256": null
@@ -2443,7 +2443,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "3dbf860010db5646b6dc44eee7caf6dc2748b141dc2d2f6e9ef09b1a37b56bc4",
+      "content_sha256": "4a28cd6822e88a8440777c4fdd03f4d7966eb7f66c15922eeaf7d58607a05288",
       "mode": "100644",
       "path": "vault/skills/tropo-create-executive-agent.md",
       "symlink_target_sha256": null
@@ -2647,7 +2647,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "480913bee39492d379e36d500a4c0e977db52c3f906bb59aa692302f583ec6ec",
+      "content_sha256": "782d4bafc752e28a02ba745e694d0840947cfd875182b88adfb7488b83e04936",
       "mode": "100644",
       "path": "vault/tools/81e168d6.py",
       "symlink_target_sha256": null
@@ -2659,15 +2659,9 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "5b8d6969fa46902a31cb97cb29eab0b698344adbb28b92962826d0b2a44d73c0",
+      "content_sha256": "58b88b0b877c9aa57783d445ea7c393cbe1a0da8e7173e7119a923564ffc446c",
       "mode": "100644",
       "path": "vault/tools/9e7003b1.py",
-      "symlink_target_sha256": null
-    },
-    {
-      "content_sha256": "fde19d6342dba6f103228f80b5c0f92ff983d71a20e6c981809e5fb86059f3c9",
-      "mode": "100644",
-      "path": "vault/tools/_test_mint_id_bypass_fixture.py",
       "symlink_target_sha256": null
     },
     {
@@ -2755,7 +2749,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "3b2660e0c110bc71e4e3c6dc5edcdc4d567e474e3475851cd606f0aac4c0c1bb",
+      "content_sha256": "1b36ba5b09ecc5479050a1c3432cc6b4ccb6dfb079603d6184316a7b602758a4",
       "mode": "100644",
       "path": "vault/tools/tropo-activate.py",
       "symlink_target_sha256": null
@@ -2785,19 +2779,25 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "2244e446032713f6f8c325e796131b75f5858290f5910ae300da46cc65bafe8e",
+      "content_sha256": "c24982c9cb8cb6070e68f6cbceb6844022897808c8e5b5976fde760ee9cb370b",
       "mode": "100644",
       "path": "vault/tools/tropo-build-release.py",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "6dba9592a8569162369e24b90f9f315aed7578ed2f2f13b2250ee9a383fe878c",
+      "content_sha256": "962e4adfae04c1f6a938c1340e9dde2c8a77af34ae06baa2def6011c85063bf8",
+      "mode": "100644",
+      "path": "vault/tools/tropo-check-doc-currency.py",
+      "symlink_target_sha256": null
+    },
+    {
+      "content_sha256": "8ab0db45aafd6696984a8415b3700335553b46e9f403d76348155cc3a42961fe",
       "mode": "100644",
       "path": "vault/tools/tropo-check-events.py",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "15f9336414f3888241e181242678b7f8ed0381abed11a159a43eed446b563566",
+      "content_sha256": "8a1c31ba85ff8f689d4cf6369e373d7d43a6a39c05644b39b4cda25dc0f092b4",
       "mode": "100644",
       "path": "vault/tools/tropo-check-harness-receipt.py",
       "symlink_target_sha256": null
@@ -2827,7 +2827,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "661bc2a5500c29249bd897946200adee1c332959a248d01281d74b43b38f5308",
+      "content_sha256": "5cb66b78f67b190f4efd826f436159196ad500b6810e5d8c46d7f88b369d370a",
       "mode": "100644",
       "path": "vault/tools/tropo-compact-continue.py",
       "symlink_target_sha256": null
@@ -2899,7 +2899,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "aef4eca40f8e1d4f5e12c599dd154f63ee4d68d71d5c8daa4cf543e435efce66",
+      "content_sha256": "a3efce4e5376ba702407839fe216176f01dbbc121b7dad76b54a9f3e6b9ac4bb",
       "mode": "100644",
       "path": "vault/tools/tropo-freeze-release-candidate.py",
       "symlink_target_sha256": null
@@ -3001,7 +3001,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "68321d0d9e568d72630b308cab42cfc6e632ac6554462ac76710261332cae2a3",
+      "content_sha256": "2f31e58f211d857373cfb634114e223b162d2944ecca7abf509befef9ce53825",
       "mode": "100644",
       "path": "vault/tools/tropo-mint-id.py",
       "symlink_target_sha256": null
@@ -3037,7 +3037,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "b76e10153d097ee7d9382c0c5f5aa30fa8cb4b330818d61decc63e359d5e0569",
+      "content_sha256": "f4ff446676bad0b7b5845ce1064eed7820db799902271a3161b18b123537653c",
       "mode": "100644",
       "path": "vault/tools/tropo-publish-release.py",
       "symlink_target_sha256": null
@@ -3073,7 +3073,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "599469f31d19e0ca200beebd05efbe69231bb06bad36c6727ecc59811796270c",
+      "content_sha256": "4d01b37a14194078ff460e5077510c145e58d4ee9354caa4f9fe480b869f8e62",
       "mode": "100644",
       "path": "vault/tools/tropo-rebuild-index.py",
       "symlink_target_sha256": null
@@ -3115,13 +3115,13 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "41d8a0ab42ee6125d40de59266512b6e7811dd06ea6137de4294cd08f9c3f3c9",
+      "content_sha256": "ea582c2feb679bf6662410d687230c0b3899d071825dfb1e47d6ef4b845eedd6",
       "mode": "100644",
       "path": "vault/tools/tropo-release-preflight.py",
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "ee6c38a2346f7a33918a95d4f6ac4f40d6725245f2c1aaf226135e1402faa046",
+      "content_sha256": "540835cbbfd9f83ae9e989e5000c746bb82281971674269bfe99f082ffe660d4",
       "mode": "100644",
       "path": "vault/tools/tropo-release-run.py",
       "symlink_target_sha256": null
@@ -3133,7 +3133,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "a84b023d32afced8f3b0f0a391d91a8124e5790a5237c20de8bfbbff3bcfd907",
+      "content_sha256": "b5c5e9925f94c60ddb2590fdb6f93fbc7a4bdc47e121fae0c23c9e08ae467add",
       "mode": "100644",
       "path": "vault/tools/tropo-release.py",
       "symlink_target_sha256": null
@@ -3205,7 +3205,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "8a442db010751be63d9233d2eb7b439410b92939655654cf2decd8af91666a7a",
+      "content_sha256": "0371420d7f8e5731fd243552cc23e4c778a409581f23731ab907c5c09029c9aa",
       "mode": "100644",
       "path": "vault/tools/tropo-test.py",
       "symlink_target_sha256": null
@@ -3241,7 +3241,7 @@
       "symlink_target_sha256": null
     },
     {
-      "content_sha256": "7b1b93f3471054c611c9928da28cb37710dc09b0957bdbeb93fdf7d6fc856484",
+      "content_sha256": "fb5d29c10d0aa8147b96ec00c94d603dbda1602ea14f75ecadce364aaee3e4fa",
       "mode": "100644",
       "path": "vault/tools/tropo-validate.py",
       "symlink_target_sha256": null
@@ -3271,12 +3271,11 @@
       "symlink_target_sha256": null
     }
   ],
-  "wall_clock_seconds": 2.497678375,
+  "wall_clock_seconds": 2.6317990840000003,
   "worktree_derived": true,
   "worktree_derived_paths": [
     ".gitattributes",
     ".tropo-studio/memory/entries/839a65f9.md",
-    ".tropo/00-index.md",
     ".tropo/CAPSULE.md",
     ".tropo/HUMAN-NAVIGATION.md",
     ".tropo/MODES-AND-PROTOCOLS.md",
@@ -3301,6 +3300,7 @@
     "CHANGELOG.md",
     "CLAUDE.md",
     "GEMINI.md",
+    "KNOWN-LIMITATIONS.md",
     "MANIFEST.md",
     "README.md",
     "RELEASING.md",
@@ -3715,7 +3715,6 @@
     "vault/tools/81e168d6.py",
     "vault/tools/8c4cea94.py",
     "vault/tools/9e7003b1.py",
-    "vault/tools/_test_mint_id_bypass_fixture.py",
     "vault/tools/c778f748.py",
     "vault/tools/e337f1dd.py",
     "vault/tools/lib/cross_vault_member_of.py",
@@ -3736,6 +3735,7 @@
     "vault/tools/tropo-backfill-styles.py",
     "vault/tools/tropo-build-candidate-box.py",
     "vault/tools/tropo-build-release.py",
+    "vault/tools/tropo-check-doc-currency.py",
     "vault/tools/tropo-check-events.py",
     "vault/tools/tropo-check-harness-receipt.py",
     "vault/tools/tropo-check-one.py",

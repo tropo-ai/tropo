@@ -9,10 +9,30 @@ Tropo-OS turns a shared folder into a governed multi-agent system. No code. No s
 You need a folder-aware AI tool — one that can read and write files on your computer. Claude Code, OpenAI Codex, Cursor, or similar.
 
 1. Download and unpack this vault
-2. Open your AI tool and point it at this folder
-3. Say: **"read START-TROPO.md"**
+
+2. **Build your local index — run this once, from the unpacked folder:**
+
+   ```bash
+   python3 vault/tools/tropo-rebuild-index.py --apply --vault-path .
+   ```
+
+   Release packages leave out machine-local derived indexes so the same zip works on macOS, Linux,
+   and Windows. This command derives yours from the shipped files. It is normal first-time setup,
+   not a repair — but it is not optional, and nothing else will do it for you.
+
+   It prints roughly 1,200 `[WARN] ... dead link` lines. That is expected on a fresh box and does
+   not mean anything failed; `START-TROPO.md` explains why.
+
+3. Open your AI tool and point it at this folder
+
+4. Say: **"read START-TROPO.md"**
 
 Your Studio concierge will greet you and walk you through setting up your first agent.
+
+If you ever want to check your Studio's structural health, run
+`python3 vault/tools/tropo-validate.py --customer`. **Pass `--customer`** — without it the
+validator also runs vendor-development checks that do not apply to your Studio and reports around
+30 failures on a perfectly healthy box.
 
 ## What You'll Get
 
@@ -66,4 +86,4 @@ Apache License 2.0 — see [LICENSE](LICENSE) for the full text. See [ADR 4a4a12
 
 ---
 
-*Tropo-OS v1.92.0 | The file is the agent. The folder is the workspace. The vault is the OS.*
+*Tropo-OS v1.93.0 | The file is the agent. The folder is the workspace. The vault is the OS.*

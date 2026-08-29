@@ -219,21 +219,21 @@ The 8 existing sa.\* are inventoried: 6 green-retrofit, 2 yellow (arch-specs, me
 ## 5. Composes-With
 
 - **[sa/CAPSULE.md (e863a1e0)](../../vault/files/e863a1e0.md)** — sibling. Universal commissioning protocol (`aligned_with`). This capsule extends it with typing. The two capsules are complementary, not redundant.
-- **[how-to.capsule (a7c3f489)](how-to.capsule.md)** — companion typed primitive (v1.2 Pillar 1; `composes_with` + `pattern_family`). Skills are markdown behaviors; session-agents are callable specialists. Both are indexed in `vault/00-index.jsonl`.
-- **[tool.capsule (d5e1b4a3)](tool.capsule.md)** — companion typed primitive (v1.2 Pillar 1). External MCP tools expose typed I/O via their own schema; sa.\* are internal typed specialists. sa.\* can be wrapped as tools via `transport: sa`.
-- **[playbook-run.capsule (f2a8c3e1)](playbook-run.capsule.md)** — sa.\* invocations can produce playbook-run entries when the sa.\* executes a playbook-like sequence.
-- **[action.capsule (9b7f5e34)](action.capsule.md)** — composed substrate. Compound operations distinct from sa.\* callable specialists.
-- **[core.capsule (ee814120)](core.capsule.md)** — extended (with explicit reconciliation; sa.\* are agent-lifecycle artifacts, not vault entries).
+- **[how-to.capsule (a7c3f489)](tropo-how-to.capsule.md)** — companion typed primitive (v1.2 Pillar 1; `composes_with` + `pattern_family`). Skills are markdown behaviors; session-agents are callable specialists. Both are indexed in `vault/00-index.jsonl`.
+- **[tool.capsule (d5e1b4a3)](tropo-tool.capsule.md)** — companion typed primitive (v1.2 Pillar 1). External MCP tools expose typed I/O via their own schema; sa.\* are internal typed specialists. sa.\* can be wrapped as tools via `transport: sa`.
+- **[playbook-run.capsule (f2a8c3e1)](tropo-playbook-run.capsule.md)** — sa.\* invocations can produce playbook-run entries when the sa.\* executes a playbook-like sequence.
+- **[action.capsule (9b7f5e34)](tropo-action.capsule.md)** — composed substrate. Compound operations distinct from sa.\* callable specialists.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — extended (with explicit reconciliation; sa.\* are agent-lifecycle artifacts, not vault entries).
 - **[capsule-definition meta-capsule (222873b9)](../../vault/files/222873b9.md)** — governs this capsule.
 - **[`vault/00-index.jsonl`](../../vault/00-index.jsonl)** — the index every runtime callable projects into. sa.\* rows are generated from activation-file frontmatter (Rule 7).
 - **[`agents/sa/commission-quickref.md`](../../agents/sa/commission-quickref.md)** — hot-path commissioning quickref. Read at commission time.
-- **[`.tropo/sa-agent-catalog.md`](../sa-agent-catalog.md)** — v1.15 ship surface. Catalog generator emits `trigger_description:` (v1.4 field) verbatim alongside structural fields. The user-facing filename uses Mike's preferred language; underlying schema type is `session-agent`.
+- **[`.tropo/sa-agent-catalog.md`](../../.tropo/sa-agent-catalog.md)** — v1.15 ship surface. Catalog generator emits `trigger_description:` (v1.4 field) verbatim alongside structural fields. The user-facing filename uses Mike's preferred language; underlying schema type is `session-agent`.
 
 ### History
 
-The v0.1-v1.4 amendment-block opener prose, Phase 1-vs-Phase 4 framing, relationship-to-existing-sa.\*-infrastructure narrative, the full Inheritance-from-core reconciliation table, the 2 worked YAML examples (minimal Phase 1 + full Phase 2+ typed sa.cold-boot), the full §Studio — Shop Signage authoring procedure (human-facing quick-ref), the Relationship-to-Other-Capsules narrative, the Cross-References block, and the full changelog are preserved in the companion [session-agent.history.md (709efecd)](session-agent.history.md) governed by `capsule-history.capsule` (5ec083a3).
+The v0.1-v1.4 amendment-block opener prose, Phase 1-vs-Phase 4 framing, relationship-to-existing-sa.\*-infrastructure narrative, the full Inheritance-from-core reconciliation table, the 2 worked YAML examples (minimal Phase 1 + full Phase 2+ typed sa.cold-boot), the full §Studio — Shop Signage authoring procedure (human-facing quick-ref), the Relationship-to-Other-Capsules narrative, the Cross-References block, and the full changelog are preserved in the companion [session-agent.history.md (709efecd)](tropo-session-agent.history.md) governed by `capsule-history.capsule` (5ec083a3).
 
 ---
 
-*session-agent capsule definition | LOCKED v1.5 | history at [session-agent.history.md](session-agent.history.md) | v1.5 body refactor 2026-05-11 by Argus A56 (v1.19.0 Stream C — 5-section pedagogy pattern). Prior v0.1–v1.4 locks preserved in history. UID `b4e2a718` preserved.*
+*session-agent capsule definition | LOCKED v1.5 | history at [session-agent.history.md](tropo-session-agent.history.md) | v1.5 body refactor 2026-05-11 by Argus A56 (v1.19.0 Stream C — 5-section pedagogy pattern). Prior v0.1–v1.4 locks preserved in history. UID `b4e2a718` preserved.*
 *"The typed specialist. Loads a domain once. Serves queries with contracts."*

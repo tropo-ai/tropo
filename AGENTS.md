@@ -20,6 +20,7 @@ not to the retirement playbook.
 
 This folder is part of a Tropo Studio. Before operating, read these files in order:
 
+0. **`.tropo/orientation.md`** -- Orientation: the router to every capability, rule, and location *(resolves to the Studio Map where it ships; carries its own degraded floor otherwise -- pointer made box-honest 2026-08-28 after the harness caught the dead docs/ reference, Mike-ruled fix-and-rebuild)*
 1. **`.tropo/TROPO-CONTROL.md`** -- OS rules, identity checkpoint, invariants
 2. **`STUDIO.md`** (vault root) -- Organization defaults and constraints
 3. **`CAPSULE.md`** (this folder) -- Folder purpose and operating logic

@@ -142,7 +142,7 @@ Extends `core`. Inherits all core rules.
 
 **Tools available:**
 - `vault/00-index.jsonl` - grep `type: vault-ops-spec` for live activations
-- Companion capsules: [dev-spec (c3f68cb5)](dev-spec.capsule.md); [doc-spec (9a7d314a)](doc-spec.capsule.md); [test-spec (621824df)](test-spec.capsule.md) - sibling *-spec capsules
+- Companion capsules: [dev-spec (c3f68cb5)](tropo-dev-spec.capsule.md); [doc-spec (9a7d314a)](tropo-doc-spec.capsule.md); [test-spec (621824df)](tropo-test-spec.capsule.md) - sibling *-spec capsules
 - Pipeline definition: [vault-ops-pipeline (9dab87a0)](../../vault/files/9dab87a0.md)
 
 **Rules at-a-glance:**
@@ -160,7 +160,7 @@ Extends `core`. Inherits all core rules.
 
 **Go next:**
 - Pipeline definition - [vault-ops-pipeline v1.0 (9dab87a0)](../../vault/files/9dab87a0.md)
-- Sibling spec precedent - [test-spec v1.0 (621824df)](test-spec.capsule.md)
+- Sibling spec precedent - [test-spec v1.0 (621824df)](tropo-test-spec.capsule.md)
 - Strategic-frame parent - [Captain's Briefing v3.0 (a5f4b26b)](../../vault/files/a5f4b26b.md)
 
 ---

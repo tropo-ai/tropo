@@ -54,7 +54,7 @@ subsystem_hub:
 
 # Run Release Test Plan — v1.4.2 Ship Gauntlet Orchestrator
 
-*Sprint 4 first-instance test-harness orchestrator. Pulls dispatch-walker.playbook v0.2 + dispatch-cold-boot.playbook v0.2 together as the executable form of [release-test-plan v2 (f4a8c2d6)](../files/f4a8c2d6.md). Per [The Patient Honing Doctrine](../../.tropo-studio/memory/patient-honing-doctrine.md): the workshop IS the system; the system compensates for forgetting. The ship gauntlet is workshop primitive from v1.4.2 forward.*
+*Sprint 4 first-instance test-harness orchestrator. Pulls dispatch-walker.playbook v0.2 + dispatch-cold-boot.playbook v0.2 together as the executable form of [release-test-plan v2 (f4a8c2d6)](../files/f4a8c2d6.md). Per [The Patient Honing Doctrine](../../.tropo-studio/memory/entries/a9d7c364.md): the workshop IS the system; the system compensates for forgetting. The ship gauntlet is workshop primitive from v1.4.2 forward.*
 
 ---
 
@@ -65,8 +65,8 @@ Orchestrate the 3-stage release ship gauntlet end-to-end against a target releas
 **Why this is kernel primitive (not crew operational doc).** The v1.4.0 → v1.4.1 cycle proved the gauntlet works. It also proved the orchestration logic lives in V36's session memory rather than substrate. This playbook makes the protocol discoverable + executable. Per release.capsule v3.1 Rule 10, walker + cold-boot are required pre-ship gates; the orchestrator binds them into a single ship-eligibility verdict.
 
 **Sibling sub-playbooks** (called by this orchestrator):
-- [`dispatch-walker.playbook` v0.2 (`7579f894`)](dispatch-walker.playbook.md) — Stage 3.1
-- [`dispatch-cold-boot.playbook` v0.2 (`a5fb24a6`)](dispatch-cold-boot.playbook.md) — Stages 3.2-strict + 3.3-skeptic
+- [`dispatch-walker.playbook` v0.2 (`7579f894`)](7579f894.md) — Stage 3.1
+- [`dispatch-cold-boot.playbook` v0.2 (`a5fb24a6`)](a5fb24a6.md) — Stages 3.2-strict + 3.3-skeptic
 
 **Spec implemented:** [release-test-plan v2 (f4a8c2d6)](../files/f4a8c2d6.md). Sprint 5 amends v1 → v2 to formalize the Stage 3.2-strict / 3.3-skeptic split + cite this orchestrator as canonical executable form.
 
@@ -86,7 +86,7 @@ Orchestrate the 3-stage release ship gauntlet end-to-end against a target releas
 8. **Activation-log evidence is required.** Each Stage 3 sub-stage produces an activation-log record. The release entry's `verification_artifacts:` array MUST include all run records' UIDs (or DEFERRED-PENDING-CAPSULE annotation per Rule 11 for Stage 3.3 in transitional state). For partial gauntlets that HALT before Stage 3 completes: the partial record set IS the audit trail; release entry is NOT authored (no ship-eligibility); activation-log records persist as historical evidence of the failed run.
 9. **Dispatcher MAY be Vela** (orchestrator is Vela-owned per crew scope). Argus, Metis, or Mike MAY also dispatch with appropriate lane awareness (Stage 3.1 walker dispatcher must be Mike or Metis per walker allowlist; Stage 3.2/3.3 cold-boot dispatcher follows cold-boot allowlist).
 10. **Dispatcher MUST author the orchestrator-run record themselves.** Same audit obligation as sibling playbooks. Copy-paste from another agent's draft is a Gate 5 independence violation.
-11. **Stage 3.3 Skeptic-mode DEFERRED-PENDING-CAPSULE is bounded transitional — max 2 release cycles.** (Round 1 v0.2 amendment per skeptic 027 F1 + cold-boot 106 F2 convergence.) When `sa.user-error-walker` capsule does not yet exist (transitional state), Step 3.3 marks DEFERRED-PENDING-CAPSULE per dispatch-cold-boot.playbook's pre-spawn `ls` check. **Forcing function:** the deferral is valid for at most 2 release cycles (e.g., v1.4.2 + v1.4.3). On the 3rd consecutive release where the capsule still doesn't exist, DEFERRED escalates to HALT-SHIP — the architectural debt becomes ship-blocking. Phase-out target: post-Sprint-1b activation-log.capsule close (Argus-tracked at [argus-vela 2026-05-01](../../channels/argus-vela.md)). Track deferral count in §Known Enforcement Gaps row 1 — increment per release that defers; reset on capsule lock.
+11. **Stage 3.3 Skeptic-mode DEFERRED-PENDING-CAPSULE is bounded transitional — max 2 release cycles.** (Round 1 v0.2 amendment per skeptic 027 F1 + cold-boot 106 F2 convergence.) When `sa.user-error-walker` capsule does not yet exist (transitional state), Step 3.3 marks DEFERRED-PENDING-CAPSULE per dispatch-cold-boot.playbook's pre-spawn `ls` check. **Forcing function:** the deferral is valid for at most 2 release cycles (e.g., v1.4.2 + v1.4.3). On the 3rd consecutive release where the capsule still doesn't exist, DEFERRED escalates to HALT-SHIP — the architectural debt becomes ship-blocking. Phase-out target: post-Sprint-1b activation-log.capsule close (Argus-tracked at [argus-vela 2026-05-01](../../99-recycle/v1.61-stream-b-retired-2026-05-29/argus-vela.md)). Track deferral count in §Known Enforcement Gaps row 1 — increment per release that defers; reset on capsule lock.
 12. **Combinatoric escalation: ≥2 PARTIALs in Stage 3 → HALT-SHIP-REVIEW.** (Round 1 v0.2 amendment per skeptic 027 F2.) Single PARTIAL in Stage 3 → PASS-WITH-FINDINGS (standard). **Two or more PARTIALs across Stage 3 sub-stages** (e.g., Stage 3.1 PARTIAL AND Stage 3.2-strict PARTIAL) → orchestrator verdict escalates to HALT-SHIP-REVIEW: ship-blocked by default; ship requires Mike + Argus review of the combinatoric pattern (PARTIAL across distinct lenses signals coverage gap each lens missed in isolation). Three PARTIALs → HALT-SHIP (not just review).
 
 ---
@@ -201,21 +201,21 @@ Run against the extracted vault at `releases/v<ver>/testing/<vault-name>/` BEFOR
 #### Step 3.1 — Walker dispatch (boot chain structural integrity)
 *Executor: Mike or Metis (walker allowlist; Vela/Argus denylisted).*
 
-Invoke [`dispatch-walker.playbook` v0.2](dispatch-walker.playbook.md) per Rule 4 — spawn fresh subagent session via Agent tool; subagent reads the sub-playbook + executes its 9 Steps + writes [DONE] to its activation-log record. Pass parameters: target = extracted ship-zip path; user story = release plan §0; dispatcher = `mike` or `metis-<gen>`.
+Invoke [`dispatch-walker.playbook` v0.2](7579f894.md) per Rule 4 — spawn fresh subagent session via Agent tool; subagent reads the sub-playbook + executes its 9 Steps + writes [DONE] to its activation-log record. Pass parameters: target = extracted ship-zip path; user story = release plan §0; dispatcher = `mike` or `metis-<gen>`.
 
 Pass criterion: walker `[DONE]` verdict is PASS or PARTIAL within tolerance (per §Verdict Aggregation tolerance definition). HALT-SHIP class FAIL blocks the gauntlet.
 
 #### Step 3.2 — Cold-boot Strict-mode dispatch
 *Executor: Vela (or any cold-boot-allowlisted dispatcher).*
 
-Invoke [`dispatch-cold-boot.playbook` v0.2](dispatch-cold-boot.playbook.md) per Rule 4 with `mode: strict`. Peer walker record UID = Step 3.1 output (paired-Stage-3 dispatch).
+Invoke [`dispatch-cold-boot.playbook` v0.2](a5fb24a6.md) per Rule 4 with `mode: strict`. Peer walker record UID = Step 3.1 output (paired-Stage-3 dispatch).
 
 Pass criterion: cold-boot Strict `[DONE]` verdict is PASS or PARTIAL within tolerance.
 
 #### Step 3.3 — Cold-boot Skeptic-mode dispatch (DEFERRED-PENDING-CAPSULE bounded per Rule 11)
 *Executor: Vela (or any cold-boot-allowlisted dispatcher).*
 
-Invoke [`dispatch-cold-boot.playbook` v0.2](dispatch-cold-boot.playbook.md) per Rule 4 with `mode: skeptic`.
+Invoke [`dispatch-cold-boot.playbook` v0.2](a5fb24a6.md) per Rule 4 with `mode: skeptic`.
 
 **Pre-spawn capsule check** (per dispatch-cold-boot Step 6): `ls agents/sa/sa.user-error-walker/sa.user-error-walker.md`.
 
@@ -329,7 +329,7 @@ PARTIAL outside tolerance is HALT-SHIP class — it's just a softer phrase for t
 
 When does the dispatcher escalate up vs cycle through? When does HALT-SHIP-REVIEW move to architect-level redesign vs another remediation pass? These are the meta-decisions the orchestrator MUST encode.
 
-**Repeat-finding rule.** If the SAME finding (same root cause; not just same symptom) surfaces in two consecutive gauntlet runs against the same release version, the issue escalates from "remediation work" to "architect review required" — there's a structural pattern the surfacing-layer fix isn't addressing. Surface to Argus on argus-vela; do not auto-remediate a third time.
+**Repeat-finding rule.** If the SAME finding (same root cause; not just same symptom) surfaces in two consecutive gauntlet runs against the same release version, the issue escalates from "remediation work" to "architect review required" — there's a structural pattern the surfacing-layer fix isn't addressing. Surface to Argus; do not auto-remediate a third time. (The argus-vela pair channel this rule originally named was retired at v1.61 — crew surfacing now goes through `tropo.broadcast.crew` events.)
 
 **Repeat-HALT-SHIP rule.** If the SAME stage HALTs SHIP three times in a row across consecutive gauntlet runs (e.g., Stage 3.2 cold-boot Strict HALTs in v1.4.2-rc1 + rc2 + rc3 with related findings), the cycle is a candidate for architect-level redesign — the artifact-under-test or the test instrument is mismatched. Surface to Argus + Mike for redesign discussion; do not commit to a 4th rebuild without that discussion.
 
@@ -401,12 +401,12 @@ The TARGET-side verification is each Stage's job; the dispatcher's verification 
 ### Knowledge Base
 
 - [release-test-plan v2 (f4a8c2d6)](../files/f4a8c2d6.md) — the spec this orchestrator implements as executable form. v2 amendment (Sprint 5 task `1f5b3a9d`) formalizes Stage 3.2-strict / 3.3-skeptic split.
-- [dispatch-walker.playbook v0.2 (7579f894)](dispatch-walker.playbook.md) — Stage 3.1 sub-playbook.
-- [dispatch-cold-boot.playbook v0.2 (a5fb24a6)](dispatch-cold-boot.playbook.md) — Stages 3.2-strict + 3.3-skeptic sub-playbook.
-- [release.capsule v3.1 (b19e8d43)](../capsules/release.capsule.md) — Rule 10 declares walker + cold-boot required pre-ship.
-- [build.capsule v1.1 (b3d7e5a1)](../capsules/build.capsule.md) — build entry schema for Stage 2.
+- [dispatch-walker.playbook v0.2 (7579f894)](7579f894.md) — Stage 3.1 sub-playbook.
+- [dispatch-cold-boot.playbook v0.2 (a5fb24a6)](a5fb24a6.md) — Stages 3.2-strict + 3.3-skeptic sub-playbook.
+- [release.capsule v3.1 (b19e8d43)](../capsules/tropo-release.capsule.md) — Rule 10 declares walker + cold-boot required pre-ship.
+- [build.capsule v1.1 (b3d7e5a1)](../capsules/tropo-build.capsule.md) — build entry schema for Stage 2.
 - [agents/sa/commission-quickref.md (8c3b8017)](../../agents/sa/commission-quickref.md) — sa.* spawn protocol.
-- [The Patient Honing Doctrine](../../.tropo-studio/memory/patient-honing-doctrine.md) — doctrinal grounding; Rule 11 + §Escalation Heuristics operationalize the doctrine for the orchestrator's meta-decision-maker role.
+- [The Patient Honing Doctrine](../../.tropo-studio/memory/entries/a9d7c364.md) — doctrinal grounding; Rule 11 + §Escalation Heuristics operationalize the doctrine for the orchestrator's meta-decision-maker role.
 - [Strict-vs-Skeptic Test-Harness Modes brief (f7b3e2a1)](../files/f7b3e2a1.md) — informs Stage 3.2/3.3 split.
 
 ### Sub-Playbooks Called
@@ -430,12 +430,12 @@ No prior orchestrator-run records exist — this is the first-instance test-harn
 
 | Gap | Severity | Tracking | Land at |
 |---|---|---|---|
-| `sa.user-error-walker` capsule not yet authored — Rule 11 DEFERRED-PENDING-CAPSULE counter starts at 0; increments per release that defers; resets on capsule lock; escalates to HALT-SHIP at count ≥3 | P1 — bounded transitional | [Argus A41 path-2 decision on argus-vela 2026-05-01](../../channels/argus-vela.md); deferral count tracked here in this row (current: 0 — first eat-own-dog-food run will increment if v1.4.2 runs gauntlet pre-capsule) | Argus authors capsule post-Sprint-1b; deferral counter resets |
+| `sa.user-error-walker` capsule not yet authored — Rule 11 DEFERRED-PENDING-CAPSULE counter starts at 0; increments per release that defers; resets on capsule lock; escalates to HALT-SHIP at count ≥3 | P1 — bounded transitional | [Argus A41 path-2 decision on argus-vela 2026-05-01](../../99-recycle/v1.61-stream-b-retired-2026-05-29/argus-vela.md); deferral count tracked here in this row (current: 0 — first eat-own-dog-food run will increment if v1.4.2 runs gauntlet pre-capsule) | Argus authors capsule post-Sprint-1b; deferral counter resets |
 | Stage-1-restart back-pressure — restart-from-Stage-1-after-any-Stage-3-fix is O(n²) under realistic remediation; §Escalation Heuristics §When-in-doubt-surface-don't-cycle softens but doesn't formalize | P1 from skeptic 027 F5 | Round 2 polish; possibly partial-restart semantics (re-run only affected stages) | v0.3 amendment OR Sprint 5 spec amendment |
 | Sibling-drift hazard — orchestrator + dispatch-walker + dispatch-cold-boot share scaffolding by design; Sprints 2+3 deferrals (max-attempts ceiling, escalation heuristics) now have a HOME (this orchestrator's Rule 12 + §Escalation Heuristics); but no mechanical sync at vault:rebuild | P1 from skeptic 027 F10 + skeptic 026 F7 + skeptic 025 F7 | Round 2 polish; possibly vault-rebuild lint rule | v0.3 amendment OR vault-rebuild infrastructure work |
 | §Outcomes lacks `[REQUIRED]` / `[OPTIONAL]` tags per playbook.capsule §3 §Outcomes worked example — affects ALL three siblings (orchestrator + dispatch-walker + dispatch-cold-boot) | P1 from arch-specs 027 F1 | Cross-sprint cleanup — covers walker v0.3 + cold-boot v0.3 + this orchestrator v0.3 | sweep amendment across all three siblings |
 | `composes_into: run-release-test-plan` resolved by this orchestrator's `calls:` declaration — Validation Check 21 bidirectional loop is now closeable for v1.4.2 test-harness suite (per arch-specs 027 Probe 7 PASS) | P3 housekeeping — closes a gap noted in Sprints 2+3 §Known Enforcement Gaps | Sprints 2+3 sibling §Known Enforcement Gaps rows can be closed at sibling v0.3 amendment | sibling v0.3 amendments (sweep) |
-| Capsule v2.5 amendment candidates inherited from Sprints 2+3 + Sprint 4: (a) `mode:` semantics for dual-mode playbooks (sub-playbook gap), (b) placeholder/forward-reference dispatch targets, (c) `dispatches:` typed-field-vs-relationships lean, (d) verdict_format canonical enum extension to include orchestrator's `PASS/PASS-WITH-FINDINGS/HALT-SHIP-REVIEW/HALT-SHIP` 4-valued shape (or codify inline-declaration as canonical for orchestrator-class) | P2 — Argus-lane capsule work | [argus-vela 2026-05-01 capsule v2.5 [QUERY]](../../channels/argus-vela.md) | playbook.capsule v2.5 |
+| Capsule v2.5 amendment candidates inherited from Sprints 2+3 + Sprint 4: (a) `mode:` semantics for dual-mode playbooks (sub-playbook gap), (b) placeholder/forward-reference dispatch targets, (c) `dispatches:` typed-field-vs-relationships lean, (d) verdict_format canonical enum extension to include orchestrator's `PASS/PASS-WITH-FINDINGS/HALT-SHIP-REVIEW/HALT-SHIP` 4-valued shape (or codify inline-declaration as canonical for orchestrator-class) | P2 — Argus-lane capsule work | [argus-vela 2026-05-01 capsule v2.5 [QUERY]](../../99-recycle/v1.61-stream-b-retired-2026-05-29/argus-vela.md) | playbook.capsule v2.5 |
 
 ---
 

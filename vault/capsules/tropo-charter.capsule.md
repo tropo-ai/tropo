@@ -218,8 +218,8 @@ Per more-capsules-equals-more-maintenance pin (Mike-A69 2026-05-17): ONE capsule
 
 ## 10. Composability
 
-- `session-agent.capsule v1.5 LOCKED` ([b4e2a718](../../vault/files/b4e2a718.md)) — parallel typed primitive for ephemeral agents; charter capsule does NOT override or replace; the two capsules govern disjoint file types via different discriminator fields (`type: charter` vs `type: session-agent`)
-- `activation.capsule v1.0.3` ([4e8b21f0](../../vault/files/4e8b21f0.md)) — uses `agent_class:` field with extended enum (charter values + `pipeline`); cross-capsule consistency: executive/director values in charters are also valid `agent_class:` values in activation entries
+- `session-agent.capsule v1.5 LOCKED` ([b4e2a718](tropo-session-agent.capsule.md)) — parallel typed primitive for ephemeral agents; charter capsule does NOT override or replace; the two capsules govern disjoint file types via different discriminator fields (`type: charter` vs `type: session-agent`)
+- `activation.capsule v1.0.3` ([4e8b21f0](tropo-activation.capsule.md)) — uses `agent_class:` field with extended enum (charter values + `pipeline`); cross-capsule consistency: executive/director values in charters are also valid `agent_class:` values in activation entries
 - `sa/CAPSULE.md` ([e863a1e0](../../vault/files/e863a1e0.md)) — commissioning protocol; composes with charter via `boot_protocol: commissioned` for director-class agents
 - `capsule-definition meta-capsule` ([222873b9](../../vault/files/222873b9.md)) — governs this capsule's shape
 

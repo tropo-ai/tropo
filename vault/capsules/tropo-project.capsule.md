@@ -107,7 +107,7 @@ member_of: null
 | Aligned with | [Tropo Work v2 — Architecture Specification (f2e8a7b1)](../../vault/files/f2e8a7b1.md) |
 | Extends | `core` |
 
-*A container node in the project graph. Projects organize work, provide navigation, and compose hierarchically through `member_of:` relationships. **Projects are static organizational containers — they do not walk pipelines, they do not carry pipeline-position.** Flow is expressed via pipeline-runs (per [pipeline-run.capsule (5a8f3b2c)](pipeline-run.capsule.md)), which may have projects as members.*
+*A container node in the project graph. Projects organize work, provide navigation, and compose hierarchically through `member_of:` relationships. **Projects are static organizational containers — they do not walk pipelines, they do not carry pipeline-position.** Flow is expressed via pipeline-runs (per [pipeline-run.capsule (5a8f3b2c)](tropo-pipeline-run.capsule.md)), which may have projects as members.*
 
 **v2.3 (2026-04-23, Argus A32)** — v2 substrate compliance per [Tropo Work v2 Architecture Specification (f2e8a7b1)](../../vault/files/f2e8a7b1.md). **Breaking change vs v2.2:** removes the three pipeline-walk frontmatter fields (`active_pipeline:`, `position:`, `attached_to:`), the three body sections (§Scope of Activity, §Stage Transitions, §Pipeline Mobility), and six validation checks (10-15) that governed project-walks-pipeline semantics. In v2, projects are static; pipeline-runs walk. Per Mike's 2026-04-23 Edison directive: *"if we blow up something we did two days ago, why should we care if it is better? We are building an operating system."* The v2.2 pipeline-walk work shipped 2026-04-21 is explicitly deprecated. UID `34e4cb0b` preserved.
 
@@ -220,7 +220,7 @@ evergreen — permanent studio-structure holder; never reaches done (standing bu
 
 6. **`version:` required when `lifecycle: versioned`.** Versioned projects without version strings are incomplete.
 
-7. **Projects are static organizational containers.** They do not carry pipeline-walk metadata. Flow is expressed via pipeline-runs (per [pipeline-run.capsule (5a8f3b2c)](pipeline-run.capsule.md)) that may have this project as a member. Authoring a project with `active_pipeline:` or similar v2.2-era fields is a validation failure in v2.3; migration script strips.
+7. **Projects are static organizational containers.** They do not carry pipeline-walk metadata. Flow is expressed via pipeline-runs (per [pipeline-run.capsule (5a8f3b2c)](tropo-pipeline-run.capsule.md)) that may have this project as a member. Authoring a project with `active_pipeline:` or similar v2.2-era fields is a validation failure in v2.3; migration script strips.
 
 8. **(NEW v2.5)** **Subsystem hub membership uses `subsystem_hub:`, not `member_of:`.** Subsystem hubs are identified by their `subsystem_name:` frontmatter field; entries currently include `tropo-governance (8dd772a0)`, `tropo-work (2d083137)`, `tropo-agents (99ed55fd)`, `tropo-playbooks (76bab75f)`, `tropo-rendering (dbc1cbbf)`, `tropo-documentation (f87e33f0)`, `tropo-library (1aba710c)`, `tropo-link (3a207ed3)`, `tropo-test-harness (952f3aa3)`, `import-primitive (58722bdf)`, plus archived hubs. When a project nests under a subsystem hub for navigation rendering, declare via `subsystem_hub: [<hub-uid>]`. When a project has a true non-hub parent project, declare via `member_of: [<parent-uid>]`. Both fields may be populated when a project has both a true parent + subsystem hub membership. The two fields are NOT interchangeable; the v1.12 backfill collapsed them and the v1.13.1 render workaround masked the conflation for 18 months. v2.5 closes the schema ambiguity at the root + retires the workaround.
 
@@ -250,18 +250,18 @@ In addition to core checks:
 
 ## Relationship to Other Capsules
 
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor.
-- **[entity.capsule (1e9c3f7a)](entity.capsule.md)** — `owner:` references entity UIDs (post-v2 migration).
-- **[vault.capsule (4d6e2f9a)](vault.capsule.md)** — top-level projects are vault-entity-owned.
-- **[task.capsule v3.0 (3289712a)](task.capsule.md)** — tasks' `member_of:` points at projects.
-- **[pipeline-run.capsule (5a8f3b2c)](pipeline-run.capsule.md)** — pipeline-runs may have projects as members. Projects themselves do not carry pipeline-position; pipeline-runs do.
-- **[board-definition.capsule (b0d1e4f2)](board-definition.capsule.md)** — `*_board:` references.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor.
+- **[entity.capsule (1e9c3f7a)](tropo-entity.capsule.md)** — `owner:` references entity UIDs (post-v2 migration).
+- **[vault.capsule (4d6e2f9a)](tropo-vault.capsule.md)** — top-level projects are vault-entity-owned.
+- **[task.capsule v3.0 (3289712a)](tropo-task.capsule.md)** — tasks' `member_of:` points at projects.
+- **[pipeline-run.capsule (5a8f3b2c)](tropo-pipeline-run.capsule.md)** — pipeline-runs may have projects as members. Projects themselves do not carry pipeline-position; pipeline-runs do.
+- **[board-definition.capsule (b0d1e4f2)](tropo-board-definition.capsule.md)** — `*_board:` references.
 
 ---
 
 ## Extension from core
 
-*Where this capsule specializes the [core.capsule (ee814120)](core.capsule.md) floor.* project.capsule v2.3 extends core per capsule-inheritance convention: **`title:` allowed up to 120 chars** (core: 100; project titles often describe scope + version); **uses `status:` as the lifecycle enum** (core's generic `status:` field; project specifies the `{active, evergreen, done, cancelled}` vocabulary — v1.72 Move 1, Mike-A116). **The legacy `stage:` field is retired** (the pre-pipeline `ideate → build → done` vocabulary; pipelines now own the build lifecycle); `ideate`/`build`/`specify` alias → `active`, and the ~71 residual `stage:` carriers drop in the v1.72 backfill. These extensions are honest documentation; the typed-capsule specialization pattern is load-bearing across the capsule set.
+*Where this capsule specializes the [core.capsule (ee814120)](tropo-core.capsule.md) floor.* project.capsule v2.3 extends core per capsule-inheritance convention: **`title:` allowed up to 120 chars** (core: 100; project titles often describe scope + version); **uses `status:` as the lifecycle enum** (core's generic `status:` field; project specifies the `{active, evergreen, done, cancelled}` vocabulary — v1.72 Move 1, Mike-A116). **The legacy `stage:` field is retired** (the pre-pipeline `ideate → build → done` vocabulary; pipelines now own the build lifecycle); `ideate`/`build`/`specify` alias → `active`, and the ~71 residual `stage:` carriers drop in the v1.72 backfill. These extensions are honest documentation; the typed-capsule specialization pattern is load-bearing across the capsule set.
 
 ---
 
@@ -313,10 +313,10 @@ In addition to core checks:
 - **L0 root project** *(introduced v2.4, ships from v1.6)* — a project at the L0 root of the work-substrate graph (no parent; `member_of: []`). Pure-hierarchy use case: organizes children but does no work, holds no decisions, hosts no board. Properties: `status: active` permanent (no transitions through `proposed → active → completed → archived`); no required board; no required collection; `member_of: []` (true L0); children attach via their own `member_of:` arrays. Examples that ship in every vault: [`tropo-work (b8e5f3a2)`](../../vault/files/b8e5f3a2.md) — the work-substrate L0 root introduced in v1.6. Per Mike directive 2026-05-04 (during v1.6 pair-design walk): *"I have always used the concept of a 'project' as an enhanced 'folder.'"* The L0 root project is the limit case of that mental model — projects as enhanced organizational anchors, with no work attached at the root level. Earned-the-abstraction: the existing `project` capsule type carries this sub-pattern without requiring a new lighter type.
 
 **Go next:**
-- Need to identify the project's owner? → [entity.capsule (1e9c3f7a)](entity.capsule.md) + subtypes (agent/team/vault)
-- Tasks live in this project? → [task.capsule v3.0 (3289712a)](task.capsule.md)
-- Need to orchestrate flow over this project? → [pipeline.capsule v2.0 (e4c8a6b2)](pipeline.capsule.md) + [pipeline-run.capsule (5a8f3b2c)](pipeline-run.capsule.md)
-- Need a status/grooming board? → [board-definition.capsule (b0d1e4f2)](board-definition.capsule.md)
+- Need to identify the project's owner? → [entity.capsule (1e9c3f7a)](tropo-entity.capsule.md) + subtypes (agent/team/vault)
+- Tasks live in this project? → [task.capsule v3.0 (3289712a)](tropo-task.capsule.md)
+- Need to orchestrate flow over this project? → [pipeline.capsule v2.0 (e4c8a6b2)](tropo-pipeline.capsule.md) + [pipeline-run.capsule (5a8f3b2c)](tropo-pipeline-run.capsule.md)
+- Need a status/grooming board? → [board-definition.capsule (b0d1e4f2)](tropo-board-definition.capsule.md)
 
 ---
 

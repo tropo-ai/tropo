@@ -2,18 +2,18 @@
 uid: f6a967fd
 type: release
 agent: tropo
-title: Tropo Release Notes — v1.92.0
-description: Current Tropo release notes for delivery via Tropo's release-liaison role. Refreshed each release by the update pipeline. v1.92.0 ships a dev-pipeline a stranger studio can actually start work with — the command that opens a cycle now travels in the box alongside mint, evidence and close, a newly-opened cycle declares the process that really runs, and a dev cycle can no longer fail over release machinery it has never used. Behind that: refusals must now name the irreversible harm they prevent or step aside, so the checks that stop a build are the ones guarding something that cannot be undone.
-release_version: v1.92.0
-release_date: '2026-08-26'
+title: Tropo Release Notes — v1.93.0
+description: Current Tropo release notes for delivery via Tropo's release-liaison role. Refreshed each release by the update pipeline. v1.93.0 makes the release runner actually drive a release — the deterministic steps are machine-executed, and the walk halts only where a human must judge or a precondition is unmet, naming a runnable command at every stop. It ships one capability by deliberate scope, because this release exists to answer one measurable question — did releasing get cheaper — and a larger release would confound the answer. Behind that, a step whose executor fails after starting can now be returned to runnable with its cause journaled instead of stranding the run, and the release history a build writes is no longer silently skipped when part of it was already there.
+release_version: v1.93.0
+release_date: '2026-08-28'
 last_delivered_version: null
 audience: Studio user (whoever opened this Studio)
 read_first_at: Group 2 boot (release-state awareness check)
 delivered_at: Pattern 1 returning user OR Pattern 3 scheduled summary; suppressed if last_delivered_version matches
 created: '2026-05-10'
 created_by: argus-a55
-modified: '2026-08-21'
-modified_by: talos-t48
+modified: '2026-08-28'
+modified_by: argus-a160
 schema_version: 2
 extraction_scope: ship
 governance_class: kernel-managed
@@ -34,7 +34,7 @@ retyped_at: '2026-07-12'
 retyped_by: argus-a130 (walked disposition 5dcbadbd, Mike-verdicted, S2 activation 0d9f89bc)
 ---
 
-# Tropo v1.91.0 — Release Notes
+# Tropo v1.93.0 — Release Notes
 
 *The current Tropo release. Delivered by Tropo's release-liaison role at Pattern 1 returning user startup OR Pattern 3 scheduled summary.*
 

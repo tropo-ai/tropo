@@ -232,8 +232,28 @@ def resolve_identity(agent_name: str) -> tuple[str, str | None]:
     except (OSError, ValueError, TypeError):
         pass
 
+    # NAME THE CURE, not just the symptom. The v1.93 Release Test Harness walked a
+    # real box and found this refusal stopping a customer's agent at Group 3 -- the
+    # mandatory boot drain -- while the vendor's own agents cleared it, because the
+    # shipped registry had no row for the customer's agent. The message said "check
+    # spelling", which sends the one person who needs the cure looking for a typo.
     print(f"ERROR: --as '{agent_name}' resolves to no unified entry in vault/agents/ "
-          f"or user agent in agent-registry.yaml (check spelling)",
+          f"and no row in .tropo-studio/registries/agent-registry.yaml",
+          file=sys.stderr)
+    print(f"  CURE: register the agent. Add a row under the top-level `agents:` map "
+          f"in .tropo-studio/registries/agent-registry.yaml, keyed by its 8-hex uid:",
+          file=sys.stderr)
+    print(f"      <uid>:", file=sys.stderr)
+    print(f"        type: agent", file=sys.stderr)
+    print(f"        name: {agent_name}", file=sys.stderr)
+    print(f"        generation-prefix: G   # must match this agent's lineage; "
+          f"`born` issues G1 by default", file=sys.stderr)
+    print(f"        path: agents/{agent_name}/{agent_name}-activation.md",
+          file=sys.stderr)
+    print(f"        status: active", file=sys.stderr)
+    print(f"  The registry file documents the full shape at its head. Walkthrough: "
+          f"vault/skills/tropo-create-executive-agent.md", file=sys.stderr)
+    print(f"  (If the name is simply misspelled, that is the other possibility.)",
           file=sys.stderr)
     sys.exit(1)
 

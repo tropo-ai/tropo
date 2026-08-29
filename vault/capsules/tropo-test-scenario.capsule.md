@@ -171,12 +171,12 @@ In addition to core checks:
 
 | Skill | When |
 |---|---|
-| [sa.release-test-harness](../../agents/sa/sa.release-test-harness/sa.release-test-harness.md) | The runner. Executes `harness_mode: sa-batch` and `hybrid` scenarios; produces a [test-run](test-run.capsule.md) per execution |
-| [create-design-spec.action.md](../actions/create-design-spec.action.md) (analogue) | Pattern for authoring a governed spec entry; scenarios follow the same drafting discipline |
+| [sa.release-test-harness](../../agents/sa/sa.release-test-harness/sa.release-test-harness.md) | The runner. Executes `harness_mode: sa-batch` and `hybrid` scenarios; produces a [test-run](tropo-test-run.capsule.md) per execution |
+| [tropo-create-design-spec.md](../actions/tropo-create-design-spec.md) (analogue) | Pattern for authoring a governed spec entry; scenarios follow the same drafting discipline |
 
 ### Procedures
 
-- **Authoring a new scenario.** (1) Pick the next `scenario_id` (`T-NN` format; never reuse). (2) **Generate a UID** via `openssl rand -hex 4` (or any random-hex source). (3) Author at `vault/files/<uid>.md` with `type: test-scenario`, `stage: draft`. (4) Fill all 7 required body sections. (5) Set `applies_to: vault-agnostic` (default) — use role-based placeholders, not Argo UIDs, in Execution Steps. (6) Get owner-plus-one-reviewer approval (record by file edit by the reviewer + a one-line ack post on [channels/ops.md](../../channels/ops.md), or by review entry in the file's Regression History section). (7) Flip `stage: draft → active`. The scenario is now in the harness.
+- **Authoring a new scenario.** (1) Pick the next `scenario_id` (`T-NN` format; never reuse). (2) **Generate a UID** via `openssl rand -hex 4` (or any random-hex source). (3) Author at `vault/files/<uid>.md` with `type: test-scenario`, `stage: draft`. (4) Fill all 7 required body sections. (5) Set `applies_to: vault-agnostic` (default) — use role-based placeholders, not Argo UIDs, in Execution Steps. (6) Get owner-plus-one-reviewer approval (record by file edit by the reviewer + a one-line ack via a `tropo.broadcast.crew` event (`channels/ops.md` was retired with the channels surface), or by review entry in the file's Regression History section). (7) Flip `stage: draft → active`. The scenario is now in the harness.
 - **Revising an active scenario.** Flip `stage: active → draft` to pause runs while reshaping. Edit. Flip back to `active`. The `scenario_id` stays put — it's immutable.
 - **Archiving a scenario.** Flip `stage: active → archived`. Body must add a "Reason for Archival" note + link to a successor scenario if one exists.
 - **Quoting all UIDs.** All UID-type frontmatter values (`uid:`, `relationships.to:`, `depends_on:` entries) MUST be quoted strings. Bare 8-hex tokens are coerced to `Infinity` by some YAML parsers (validated against real index corruption — sa.release-test-harness record 001, 2026-04-20).
@@ -201,12 +201,12 @@ In addition to core checks:
 ### Worked examples
 
 - **[sa.release-test-harness records 001 + 002](../../agents/sa/sa.release-test-harness/activation-log/)** — the only live evidence of a test-scenario being executed in this vault. Read these to see what a scenario produces in execution + what a re-run looks like (record 002 archived record 001's run after the v1.2.1 hotfix).
-- **Stranger-encounter is also exercised via the lighter [sa.cold-boot](../templates/agents-skeleton/sa/sa.cold-boot/sa.cold-boot.md) path** dispatched by [evaluate-tropo.playbook](../playbooks/concierge-paths/evaluate-tropo.playbook.md) Step 4. That path doesn't author a formal `test-scenario` entry — it's the inline-prompt fallback. Full `test-scenario` discipline applies when the scenario is meant to be re-run across releases (the harness path, not the cold-boot inline path).
+- **Stranger-encounter is also exercised via the lighter [sa.cold-boot](../templates/agents-skeleton/sa/sa.cold-boot/sa.cold-boot.md) path** dispatched by [evaluate-tropo.playbook](../../.tropo/playbooks/concierge-paths/evaluate-tropo.playbook.md) Step 4. That path doesn't author a formal `test-scenario` entry — it's the inline-prompt fallback. Full `test-scenario` discipline applies when the scenario is meant to be re-run across releases (the harness path, not the cold-boot inline path).
 - **Future:** kernel-seed scenarios at `.tropo/seed/test-scenarios/<id>.md` are a candidate convention for v1.4.1; the directory is not yet populated. Until then, sa.release-test-harness records 001/002 are the canonical reference set.
 
 ### Go next
 
-- **Pair capsule:** [test-run.capsule (ae0b2ee5)](test-run.capsule.md) — records one execution of this scenario against a specific release.
+- **Pair capsule:** [test-run.capsule (ae0b2ee5)](tropo-test-run.capsule.md) — records one execution of this scenario against a specific release.
 - **Runner:** [sa.release-test-harness](../../agents/sa/sa.release-test-harness/sa.release-test-harness.md) (Argo's harness runner; the matching ship-class primitive is [sa.cold-boot](../templates/agents-skeleton/sa/sa.cold-boot/sa.cold-boot.md)).
 - **Stream context:** [v1.3 Stream: Release Test Harness v1.0 maturation (42373659)](../../vault/files/42373659.md) — where this capsule was locked.
 

@@ -206,7 +206,7 @@ def resolve_receipt_set(
     freezing does not change the bytes, so the two digests are the same
     value by the time a publish is possible.
     """
-    by_instrument: dict = {}
+    by_instrument_history: dict = {}
     for raw in raw_receipts or []:
         receipt = validate_receipt(raw)
 
@@ -223,30 +223,54 @@ def resolve_receipt_set(
                 f"are {expected_sha256[:12]}. Whatever that instrument "
                 f"approved, it is not this artefact."
             )
+        by_instrument_history.setdefault(receipt.instrument, []).append((receipt, raw))
 
-        # LATEST RECEIPT PER INSTRUMENT GOVERNS; AGREEING PASS DUPLICATES STILL
-        # REFUSE. First live release (v1.90, 2026-08-22, Metis G109): the
-        # original rule refused ANY second receipt, which made every instrument
-        # that ever reported a FAIL fatal to its run forever — re-running an
-        # instrument after a cure is the only way a failed instrument ever
-        # passes, and the journal is append-only, so the earlier FAIL can never
-        # leave. That is not the harm the rule named. The harm it named — two
-        # PASSING executions with one record of why — is still refused below.
-        prior = by_instrument.get(receipt.instrument)
-        if prior is not None:
-            if prior.verdict == "pass" and receipt.verdict == "pass":
+    # LATEST RECEIPT PER INSTRUMENT GOVERNS; AGREEING PASS DUPLICATES ANYWHERE
+    # IN THE HISTORY STILL REFUSE, UNLESS THE FINAL WINNER SELF-CERTIFIES.
+    # First live release (v1.90, 2026-08-22, Metis G109): the original rule
+    # refused ANY second receipt, which made every instrument that ever
+    # reported a FAIL fatal to its run forever — re-running an instrument
+    # after a cure is the only way a failed instrument ever passes, and the
+    # journal is append-only, so the earlier FAIL can never leave. That is not
+    # the harm the rule named. The harm it named — two PASSING executions with
+    # one record of why — is still refused below.
+    #
+    # v1.92 addendum (vela-v74, 2026-08-26, Mike-directed "most lightweight
+    # fix"): resolved once over the FULL history per instrument, not pairwise
+    # against only the immediately-preceding receipt — a pairwise walk raises
+    # (and the whole function aborts) the moment two consecutive receipts
+    # disagree, even when a LATER receipt in the same history is the one that
+    # actually explains the duplicate; that shape cannot ever reach its own
+    # fix. "One record of why" can now be the final, chronologically-latest
+    # receipt's OWN word: it may declare `supersedes_duplicate_receipt: true`
+    # + a non-empty `duplicate_reason` naming what the earlier pass(es) were
+    # (e.g. "written in error before the real dispatch's evidence existed") —
+    # additive, optional, outside RECEIPT_FIELDS' closed schema, same shape as
+    # candidate_invalidated_payload's already-solved pattern for the candidate
+    # axis. This does not let a bad receipt silently win: the winner still has
+    # to independently satisfy every other check (real instrument, correct
+    # digest, resolvable evidence), and the declaration must sit on the
+    # winner itself, not on whichever receipt happens to be adjacent to the
+    # duplicate. A proper explicit retraction event mirroring
+    # candidate_invalidated is the permanent fix and stays deferred to v1.93.
+    by_instrument: dict = {}
+    for instrument, history in by_instrument_history.items():
+        history.sort(key=lambda pair: str(pair[0].completed_at or ""))
+        winner, winner_raw = history[-1]
+        other_passes = any(r.verdict == "pass" for r, _ in history[:-1])
+        if winner.verdict == "pass" and other_passes:
+            declared_reason = str(winner_raw.get("duplicate_reason") or "").strip()
+            if not (winner_raw.get("supersedes_duplicate_receipt") and declared_reason):
                 raise VerifyRefusal(
-                    f"{receipt.instrument} has more than one PASSING receipt for "
+                    f"{instrument} has more than one PASSING receipt for "
                     f"run {release_run_uid}. Exactly one passing execution is "
                     f"legal, and agreeing duplicates refuse — two executions "
-                    f"with one record of why is not a thing this can certify."
+                    f"with one record of why is not a thing this can certify. "
+                    f"(The final receipt may declare "
+                    f"supersedes_duplicate_receipt:true + duplicate_reason to "
+                    f"self-certify why two exist.)"
                 )
-            # A later receipt supersedes an earlier FAIL (or is itself a later
-            # FAIL): keep the most recent by completed_at, which is the
-            # instrument's current word.
-            if str(receipt.completed_at or "") < str(prior.completed_at or ""):
-                continue
-        by_instrument[receipt.instrument] = receipt
+        by_instrument[instrument] = winner
 
     missing = [name for name in INSTRUMENTS if name not in by_instrument]
     if missing:

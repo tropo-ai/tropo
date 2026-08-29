@@ -53,8 +53,8 @@ subsystem_hub:
 | Relation | Target |
 |---|---|
 | Governed by | [capsule-definition meta (222873b9)](../../vault/files/222873b9.md) |
-| Aligned with | [dev-spec.capsule v1.0 (c3f68cb5)](dev-spec.capsule.md) — sibling activation-input *-spec capsule (precedent) |
-| Aligned with | [test-spec.capsule v1.0 (621824df)](test-spec.capsule.md) — sibling *-spec capsule (parallel Phase B walk) |
+| Aligned with | [dev-spec.capsule v1.0 (c3f68cb5)](tropo-dev-spec.capsule.md) — sibling activation-input *-spec capsule (precedent) |
+| Aligned with | [test-spec.capsule v1.0 (621824df)](tropo-test-spec.capsule.md) — sibling *-spec capsule (parallel Phase B walk) |
 | Pattern family | `spec-family` — dev-spec + doc-spec + test-spec (symmetric activation-input shape across dev / doc / test pipelines) |
 | Extends | `core` |
 
@@ -156,7 +156,7 @@ In addition to core checks:
 6. `check_doc_spec_triggered_by_dev_cycle_resolvable` — UID resolves to a dev-pipeline activation entry
 7. `check_doc_spec_acceptance_criteria_present` — non-empty string
 8. `check_doc_spec_voice_review_evidence_present` — if `voice_review_required: true` (or default for tier summary + subsystem), `acceptance_evidence:` must include Orpheus O11 voice-review entry UID
-9. `check_doc_spec_cross_reference_check_evidence` — if `cross_reference_check: true` (or default for tier spec), `acceptance_evidence:` must include cross-reference audit entry UID. **EXTENDED v1.0 per Q3 walk lock:** check now verifies (a) all UIDs cited in body prose resolve, (b) all `member_of:` edges in frontmatter resolve, (c) **nav-block renders cleanly post-touch** (the auto-generated 📍 Path / 🔗 Self / ↓ Children / ↔ Siblings / 📥 Cited by sections via [.tropo/scripts/generate-relations-header.py](../scripts/generate-relations-header.py)). The render check catches a defect class invisible to body-prose-only audits — if a frontmatter `member_of:` edge points at an archived parent, body prose looks clean but nav-block renders broken.
+9. `check_doc_spec_cross_reference_check_evidence` — if `cross_reference_check: true` (or default for tier spec), `acceptance_evidence:` must include cross-reference audit entry UID. **EXTENDED v1.0 per Q3 walk lock:** check now verifies (a) all UIDs cited in body prose resolve, (b) all `member_of:` edges in frontmatter resolve, (c) **nav-block renders cleanly post-touch** (the auto-generated 📍 Path / 🔗 Self / ↓ Children / ↔ Siblings / 📥 Cited by sections via [.tropo-studio/scripts/generate-relations-header.py](../../.tropo-studio/scripts/generate-relations-header.py)). The render check catches a defect class invisible to body-prose-only audits — if a frontmatter `member_of:` edge points at an archived parent, body prose looks clean but nav-block renders broken.
 10. `check_doc_spec_cross_validation_against_dev_spec` — for each `triggered_by_dev_cycle`'s dev-spec.committed_substrate entry with `change_class: NEW`, this doc-spec MUST have either (a) doc_changes_required entry referencing the substrate's subsystem hub OR (b) doc_changes_required entry with change_summary including "no doc impact: <rationale>". WARN at v1.0; ERROR ratchet at v1.2 (Rule 4 enforcement)
 11. `check_doc_spec_close_invariants` — `status: done` + `state: active` requires `closed_at` + voice-review evidence (if required) + cross-reference audit (if required)
 12. `check_doc_spec_supersession_bidirectional` — if `superseded_by:` set, target also has `supersedes:` pointing back (Rule 7)
@@ -260,7 +260,7 @@ orpheus_disposition_signoff:
 ### Composition
 
 - **[Workbench Surface Visibility doctrine (3c02f3b7)](../../vault/files/3c02f3b7.md)** — signoff IS visible attestation that doc-work landed substantively. Without the signoff, completed doc-work without surface = dropped work per the doctrine.
-- **[voice-review.skill v1.1 (811856a5)](../skills/voice-review.skill.md)** — Step 3 voice-review notes feed the signoff's evidence base; substrate-verify-twice discipline (v1.1 Step 4.5) self-applies to the signoff text itself (Orpheus verifies the attestation text claims hold against the actual substrate touched).
+- **[voice-review.skill v1.1 (811856a5)](../skills/tropo-voice-review.md)** — Step 3 voice-review notes feed the signoff's evidence base; substrate-verify-twice discipline (v1.1 Step 4.5) self-applies to the signoff text itself (Orpheus verifies the attestation text claims hold against the actual substrate touched).
 - **[substrate-verify-twice brief (83af4ac1)](../../vault/files/83af4ac1.md)** — the signoff is the structural enforcement layer that the brief's Layer 1 (skill discipline) + Layer 2 (validator) + Layer 3 (cross-cycle ledger) compose against.
 - **doc-pipeline Step 5 close-activation (343dd5d8)** — the operational gate; engine refuses close without the signoff object well-formed (Talos T10 engine wiring).
 
@@ -290,7 +290,7 @@ The specific style rules (em-dash discipline, voice-tone catalog, etc.) live in 
 - `vault/00-index.jsonl` — grep `type: doc-spec` for live doc-pipeline activations
 - `vault/00-index.jsonl` — find triggering dev-spec by `triggered_by_dev_cycle:` UID
 - `.tropo-studio/registries/subsystem-registry.jsonl` — subsystem hub UIDs + current scope
-- Companion capsules: [dev-spec.capsule v1.0 (c3f68cb5)](dev-spec.capsule.md); [test-spec.capsule v1.0 (621824df)](test-spec.capsule.md) — sibling *-spec capsules
+- Companion capsules: [dev-spec.capsule v1.0 (c3f68cb5)](tropo-dev-spec.capsule.md); [test-spec.capsule v1.0 (621824df)](tropo-test-spec.capsule.md) — sibling *-spec capsules
 - doc-pipeline definition (forthcoming Phase C; Orpheus O11 primary owner)
 
 **Skills (forthcoming v1.51):**
@@ -317,11 +317,11 @@ The specific style rules (em-dash discipline, voice-tone catalog, etc.) live in 
 
 **Worked examples (forthcoming Phase D):**
 - v1.51 cycle's own doc-spec — Argus authors at trigger fire (step 4.5); Orpheus O11 walks doc-pipeline activation; closes at Phase D. Will become the first instance.
-- Composition example: dev-spec.committed_substrate NEW entry for [dev-spec.capsule v1.0](dev-spec.capsule.md) → doc-spec doc_changes_required entry for tier:summary updating L1 entry + tier:subsystem updating tropo-governance hub.
+- Composition example: dev-spec.committed_substrate NEW entry for [dev-spec.capsule v1.0](tropo-dev-spec.capsule.md) → doc-spec doc_changes_required entry for tier:summary updating L1 entry + tier:subsystem updating tropo-governance hub.
 
 **Go next:**
-- Sibling activation-input capsule → [dev-spec.capsule v1.0 (c3f68cb5)](dev-spec.capsule.md) — precedent shape
-- Sibling activation-input capsule → [test-spec.capsule v1.0 (621824df)](test-spec.capsule.md) — parallel Phase B walk
+- Sibling activation-input capsule → [dev-spec.capsule v1.0 (c3f68cb5)](tropo-dev-spec.capsule.md) — precedent shape
+- Sibling activation-input capsule → [test-spec.capsule v1.0 (621824df)](tropo-test-spec.capsule.md) — parallel Phase B walk
 - Pipeline class → doc-pipeline definition (forthcoming Phase C; Orpheus O11 primary)
 - Architectural parent → [Three-Pipeline Substrate-Enforcement Architecture v0.3 (c3dc9f00)](../../vault/files/c3dc9f00.md) §2
 - Strategic-frame parent → [Captain's Briefing v3.0 (a5f4b26b)](../../vault/files/a5f4b26b.md) §Structural-Enforcement Requirement 1 (pristine three tiers)

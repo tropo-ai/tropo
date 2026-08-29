@@ -60,7 +60,7 @@ tags:
 
 ## 1. Intent
 
-A loop is a declarative contract for **agent-decided iteration toward a verifiable goal, bounded by brakes**. Where a [pipeline (e4c8a6b2)](pipeline.capsule.md) is a *fixed* DAG (the path is known before the run; the acyclic + forward-only invariants forbid loopback), a loop is the **agent-decided-next-step + verifier-loopback superset**: look at state → the agent DECIDES the next action toward the goal → act → an independent verifier CHECKS → stop-or-repeat. The loop is the template; the [loop-run (ee42c7c8)](loop-run.capsule.md) is the instance.
+A loop is a declarative contract for **agent-decided iteration toward a verifiable goal, bounded by brakes**. Where a [pipeline (e4c8a6b2)](tropo-pipeline.capsule.md) is a *fixed* DAG (the path is known before the run; the acyclic + forward-only invariants forbid loopback), a loop is the **agent-decided-next-step + verifier-loopback superset**: look at state → the agent DECIDES the next action toward the goal → act → an independent verifier CHECKS → stop-or-repeat. The loop is the template; the [loop-run (ee42c7c8)](tropo-loop-run.capsule.md) is the instance.
 
 **The loop is not the product — the exit condition is.** The whole value of declaring a loop is its `goal`: a verifiable, externally-defined done-condition, written *before* the run and checked by something *other than* the agent. That is bounded verification, Tropo's moat. A loop without a frozen, independently-checked goal is a "confident token furnace," not a governed loop.
 
@@ -83,11 +83,11 @@ Before creating a loop: is this work actually a loop? See §6 (When-to-loop). If
 | `author` | UID | Authoring entity. |
 | `state` | enum | `active` / `archived`. |
 | `status` | enum | `draft` / `active` / `locked` / `archived`. See §State Machine. |
-| `goal` | object | **The frozen done-condition (a precondition).** `{ exit_criteria: [<DSL string>], authored_by: <principal-uid> }`. `exit_criteria` REUSES the pipeline Exit-Criteria DSL ([pipeline.capsule §6](pipeline.capsule.md)). `authored_by` MUST be a principal distinct from the loop's executor (§4); for `consequence: high\|critical` it MUST be a human principal. The executor may NOT edit `goal` after a loop-run starts. |
+| `goal` | object | **The frozen done-condition (a precondition).** `{ exit_criteria: [<DSL string>], authored_by: <principal-uid> }`. `exit_criteria` REUSES the pipeline Exit-Criteria DSL ([pipeline.capsule §6](tropo-pipeline.capsule.md)). `authored_by` MUST be a principal distinct from the loop's executor (§4); for `consequence: high\|critical` it MUST be a human principal. The executor may NOT edit `goal` after a loop-run starts. |
 | `trigger` | object | `{ kind: schedule\|event\|manual, spec: <string> }`. `schedule` → ScheduleWakeup/launchd; `event` → an event-log correlation; declares WHAT starts a loop-run. |
 | `policy` | object | The decision-maker. `{ kind: executive\|agentic-tool, ref: <agent-class\|tool-uid> }`. Route by consequence: mechanical/interpretive → agentic-tool (Haiku-class via `lib/llm.py`); judgment/irreversible → executive. |
 | `tools` | UID array | The allowed tool set (Toolbelt UIDs) the loop's policy may call. The loop declares its tool scope; absent = read-only. |
-| `verifier` | object | The independent checker. `{ kind: gauntlet\|validator\|cold-boot\|sa.<slug>, independent: true, lenses: <int>, attestation: aspirational\|signed }`. Extends [pipeline §4](pipeline.capsule.md) with the loop's independence requirement (§5). Rigor scales with `consequence` (§5). |
+| `verifier` | object | The independent checker. `{ kind: gauntlet\|validator\|cold-boot\|sa.<slug>, independent: true, lenses: <int>, attestation: aspirational\|signed }`. Extends [pipeline §4](tropo-pipeline.capsule.md) with the loop's independence requirement (§5). Rigor scales with `consequence` (§5). |
 | `brakes` | object | **The circuit-breaker (the one new safety primitive).** Required, non-empty — a loop-run with no `brakes` does not start (§State Machine + Rule 2). Schema in §3. |
 | `consequence` | enum | `low` / `medium` / `high` / `critical`. Drives required verifier rigor (§5) + brake ceilings. A loop whose `tools` include vault writes, external API calls, or multi-agent dispatch MUST NOT be `low` without a human-signed classification (Rule 4). |
 
@@ -145,7 +145,7 @@ brakes:
 - **Check-in cadence (`human_checkpoint_every`) — the OPTIONAL pause-and-resume mode (v1.1).** For longer loops where a terminal stop-at-N is too blunt: every N iterations the loop PAUSES — appends `human_checkpoint_required` to run.jsonl and STOPS until an explicit human `continue` — so the human reviews progress (incl. no-progress) and resumes or kills. Distinct from `max_iterations` (terminal). The cooperative count triggers the pause; the hard floor catches a gamed count. (Un-forgeable OTEL iteration enforcement deferred — see the v1.1/v1.2 notes.)
 - The **in-agent check** (policy reads its counters + self-stops) is **cooperative-but-audited**: the fast path; if skipped/forged, the validator catches the over-run after the fact. It is NOT the circuit-breaker.
 
-Runtime: the brakes circuit-breaker tool ([1edbee15](../../vault/files/1edbee15.md), Talos-built) + the `loop-run` engine. **Fail-closed:** the engine refuses to start a loop-run with empty `brakes`, no `goal`, no `verifier`, or no gateway route.
+Runtime: the brakes circuit-breaker tool ([1edbee15](../tools/1edbee15.py), Talos-built) + the `loop-run` engine. **Fail-closed:** the engine refuses to start a loop-run with empty `brakes`, no `goal`, no `verifier`, or no gateway route.
 
 ### 3.1 The activation gate — the human sets the ceilings at launch (Mike-A114)
 
@@ -162,7 +162,7 @@ The human-set iteration stop is the brake the operator reasons about ("it'll run
 
 ## 4. The `goal` — frozen, external, non-executor-authored (realizes §Q2 property 2)
 
-The exit condition is written *before* the loop runs (a precondition), uses the [pipeline Exit-Criteria DSL (§6)](pipeline.capsule.md), and is **authored or countersigned by a principal distinct from the loop's executor** — verifier-independence applied to the precondition, not just the verdict. A bar the executor set for itself is trivially passable. `consequence: high|critical` loops require a human principal (Mike) to sign the `goal` before the first run. The executor cannot redefine "done" mid-run (the `goal` is immutable once a loop-run pins it).
+The exit condition is written *before* the loop runs (a precondition), uses the [pipeline Exit-Criteria DSL (§6)](tropo-pipeline.capsule.md), and is **authored or countersigned by a principal distinct from the loop's executor** — verifier-independence applied to the precondition, not just the verdict. A bar the executor set for itself is trivially passable. `consequence: high|critical` loops require a human principal (Mike) to sign the `goal` before the first run. The executor cannot redefine "done" mid-run (the `goal` is immutable once a loop-run pins it).
 
 ---
 
@@ -223,10 +223,10 @@ Fail any → one-shot or pipeline instead.
 
 ## 8. Composes-With
 
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor.
-- **[pipeline.capsule (e4c8a6b2)](pipeline.capsule.md)** — sibling. The loop REUSES its Exit-Criteria DSL (§6) for `goal` + its Verifier Pattern (§4) for `verifier`; it does not reinvent them. The loop is the agent-decided-next-step + verifier-loopback *superset* of the pipeline's fixed, acyclic DAG.
-- **[loop-run.capsule (ee42c7c8)](loop-run.capsule.md)** — the runtime/instance layer. A loop is the template; a loop-run is the instance, recording iterations as run.jsonl events + the (cooperative) brake counters + verifier receipts.
-- **brakes circuit-breaker ([1edbee15](../../vault/files/1edbee15.md))** — the platform enforcer (metering gateway + launchd watchdog + loop-run engine). Talos-built per the dev-spec.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor.
+- **[pipeline.capsule (e4c8a6b2)](tropo-pipeline.capsule.md)** — sibling. The loop REUSES its Exit-Criteria DSL (§6) for `goal` + its Verifier Pattern (§4) for `verifier`; it does not reinvent them. The loop is the agent-decided-next-step + verifier-loopback *superset* of the pipeline's fixed, acyclic DAG.
+- **[loop-run.capsule (ee42c7c8)](tropo-loop-run.capsule.md)** — the runtime/instance layer. A loop is the template; a loop-run is the instance, recording iterations as run.jsonl events + the (cooperative) brake counters + verifier receipts.
+- **brakes circuit-breaker ([1edbee15](../tools/1edbee15.py))** — the platform enforcer (metering gateway + launchd watchdog + loop-run engine). Talos-built per the dev-spec.
 - **[dev-spec 9da979b2](../../vault/files/9da979b2.md)** — the design this capsule realizes (Q1 brakes locus, Q2 verifier stack, Q3/Q4 when-to-loop, all Mike-A112-walk-locked).
 
 The dispatcher (66f7b892), continuous-listen (91c4e2a7), and fleet-ops (cb7d713a) v1.71 mechanisms are the loop's first three consumers — each a declared loop instance.

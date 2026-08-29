@@ -1,7 +1,3 @@
----
-
----
-
 # Tropo Studio — Gemini entry
 
 ## Compacted session? Continue — do not activate

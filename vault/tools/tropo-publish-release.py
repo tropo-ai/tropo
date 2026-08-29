@@ -1870,7 +1870,22 @@ def _site_endpoint_url(state: dict) -> str | None:
     )
     if explicit:
         return explicit
-    return f"https://tropo-ai.com/{Path(OS_RELEASE_REL).name}"
+    # The default is the DECLARED endpoint, not a URL built from the badge
+    # file's name. This line used to read
+    #     f"https://tropo-ai.com/{Path(OS_RELEASE_REL).name}"
+    # -> https://tropo-ai.com/os-release.json, a path the site has never
+    # served. tropo-app is a Next.js app: it serves the badge from the purpose-
+    # built route app/api/os-release/route.ts, and static files only out of
+    # public/ -- os-release.json sits at the repo ROOT, where the route reads it
+    # from disk and no URL exposes it. So every fire probed a URL that could not
+    # exist, site_endpoint went unobserved, and the saga could not complete.
+    #
+    # release_site.SITE_ENDPOINT has carried the right value the whole time, in
+    # a module this file already imports, and tropo-verify-release-live.py
+    # already falls back to it. One fact, two resolvers, one of them deriving
+    # instead of reading. Found by probing both URLs: /api/os-release answers
+    # 200 with v1.92.0 while /os-release.json 404s. (argus-a159, 2026-08-26.)
+    return str(release_site.SITE_ENDPOINT)
 
 
 def _saga():
@@ -2526,6 +2541,67 @@ def _pre_outward_fire_verifiers(gates) -> dict:
     def badge_target(ctx):
         return probe_badge_target(_site_badge_remote(ctx["publish_state"]))
 
+    def scorecard_inputs(ctx):
+        """The release must be ABLE to measure what it cost the principal.
+
+        D-12 (adversarial review, 2026-08-26). The scorecard needs
+        `tropo.release.orchestrator_invoked` in the run journal; without it the
+        card cannot be valid, `completion_verification` is never observed, and
+        the saga ends "the release is public; the journal is not" — which is
+        exactly where v1.92.0 sits. Every link in that chain behaved correctly
+        and the measurement still did not happen.
+
+        Nothing on the fire path noticed until the card was already refused,
+        AFTER the outward act, when the only remedy left is re-firing a live
+        release. This moves the same fact to the earliest boundary where it is
+        knowable and where refusing is free. The runner's own gate protects
+        runner-driven releases; this protects every other route, including the
+        direct one v1.92 took.
+        """
+        state = ctx["publish_state"]
+        activation = str(state.get("activation_uid") or "")
+        if not activation:
+            raise PublishError(
+                "publish-state names no activation_uid, so the release run "
+                "cannot be located and the scorecard's inputs cannot be checked")
+        runs = Path(tropo_roots.STUDIO_ROOT) / "vault" / "pipeline-runs"
+        run_dir = None
+        for candidate in sorted(runs.glob("release-pipeline-*")):
+            state_file = candidate / "run.state.json"
+            if not state_file.is_file():
+                continue
+            try:
+                body = json.loads(state_file.read_text(encoding="utf-8")) or {}
+            except (OSError, ValueError):
+                continue
+            if str(body.get("activation_uid") or "") == activation:
+                run_dir = candidate
+                break
+        if run_dir is None:
+            raise PublishError(
+                "no release run folder carries activation %s, so the "
+                "scorecard's inputs cannot be checked" % activation)
+        journal = run_dir / "run.jsonl"
+        moment = ""
+        if journal.is_file():
+            for line in journal.read_text(encoding="utf-8", errors="replace").splitlines():
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if str(row.get("event") or "") == "tropo.release.orchestrator_invoked":
+                    moment = str(row.get("ts") or "")
+                    break
+        if not moment:
+            raise PublishError(
+                "the orchestrator has not been run for this release, so the "
+                "release scorecard cannot be valid and the saga cannot close "
+                "after the fire. This is v1.92.0's exact state. Cure, before "
+                "firing: python3 vault/tools/tropo-release.py "
+                "--release-plan-uid <plan>")
+        return ("orchestrator moment recorded at %s — the scorecard has its "
+                "inputs" % moment)
+
     checks = {
         "fire-staged-state": staged_state,
         "fire-remote-identity": remote_identity,
@@ -2537,6 +2613,7 @@ def _pre_outward_fire_verifiers(gates) -> dict:
         "fire-gh-auth": gh_auth,
         "fire-supabase-credentials": supabase_credentials,
         "fire-badge-target": badge_target,
+        "fire-scorecard-inputs": scorecard_inputs,
     }
     return {gate_id: _gate_verifier(gates, gate_id, check) for gate_id, check in checks.items()}
 

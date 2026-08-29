@@ -68,6 +68,8 @@ Add your own identity checks here if your vault has conventions beyond the OS fl
 
 **Coordination via event log** (v1.61+; Rule 13 — crew coordination retired from channel files to typed event log):
 - `check-events` — the canonical drain (v1.70 v1.1: receipts + set-difference; surfaces everything addressed to you, directed + broadcasts, with no cursor-boundary misses). This is THE boot drain even in degraded mode (the tool reads the log directly).
+  - **BEFORE AN AGENT'S FIRST BOOT, REGISTER IT — the drain refuses an unregistered agent, and Group 3 is a structural gate, so boot stops here.** Add a row for the agent under the top-level `agents:` map in `.tropo-studio/registries/agent-registry.yaml`; that file documents the exact shape at its head, and `vault/skills/tropo-create-executive-agent.md` is the full walkthrough. Verify with `python3 vault/tools/tropo-check-events.py --as <agent>` — a registered agent prints `✓ Inbox clear` on a fresh Studio.
+  - *Why this line exists: the v1.93 Release Test Harness walked a real shipped box and found that the vendor's own agents cleared this drain while a customer's agent could not — registered versus not. The cure existed in the box and was routed from no boot document, so the one person who needed it could not find it. That asymmetry is invisible from a live Studio by construction.*
 - `query-events --type tropo.broadcast.crew` — specialized broadcast scan (survives as a type-filtered query; not the primary drain)
 - `channels/` may hold user-facing event-projection surfaces (`tropo.md`, `releases.md`) — scan if present.
 - *(The retired pre-v1.61 model used `channels/ops.md` + `channels/alerts.md` as audit-trail surfaces — these are no longer shipped or used.)*

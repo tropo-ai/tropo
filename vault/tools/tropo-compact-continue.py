@@ -272,10 +272,34 @@ def find_activation_run(root: Path, slug: str, generation: str) -> dict:
     # lowercase generation (agent-activation-metis-g111-...), lineage returns "G111", and
     # pathlib.glob is case-sensitive here — so Continue refused a completed run it was
     # looking straight at. Match both casings.
-    pattern = f"agent-activation-{slug.lower()}-{generation.lower()}-*"
+    #
+    # v1.93 CORRECTION (argus-a161): the comment above said "Match both casings" and the code
+    # lowercased ONLY THE PATTERN, so it matched exactly one casing — the lowercase one. Any
+    # agent whose run folder carries the generation as the boot playbook actually tells you to
+    # write it (playbook 99341618 line 163 stamps the value `born` returned, e.g. "A161") was
+    # invisible to this tool. PROVEN ON MY OWN LIVE SESSION: with
+    # playbook-runs/agent-activation-argus-A161-2026-08-28/ complete on disk, this refused with
+    # "no completed activation run for argus A161 on this machine".
+    #
+    # WHY IT WAS A SHIP BLOCKER RATHER THAN AN ANNOYANCE, per the v1.93 release harness: five
+    # front-door documents (CLAUDE.md, START-TROPO.md, GEMINI.md, .tropo/boot-config.md and the
+    # playbook) bind the agent to run THIS TOOL FIRST after a compaction and to never run `born`.
+    # The refusal's only offered exit was "use normal activation", and normal activation IS
+    # `born` — so the box contradicted itself and pushed the recovering agent toward writing a
+    # phantom generation into permanent lineage. The diagnostic compounded it: the folder is
+    # present and complete, and the tool called it "stale or missing".
+    #
+    # Now case-insensitive on BOTH sides, which is what the comment always claimed. Globbing a
+    # slug-only pattern and filtering in Python keeps this independent of filesystem case
+    # semantics, which differ across the platforms a portable Studio is meant to survive.
+    wanted_prefix = f"agent-activation-{slug.lower()}-{generation.lower()}-"
     complete: list[dict] = []
     partial: list[str] = []
-    for candidate in sorted(runs_dir.glob(pattern)) if runs_dir.is_dir() else []:
+    candidates = [
+        c for c in sorted(runs_dir.glob("agent-activation-*"))
+        if c.name.lower().startswith(wanted_prefix)
+    ] if runs_dir.is_dir() else []
+    for candidate in candidates:
         run_path = candidate / "run.jsonl"
         if not run_path.is_file():
             continue

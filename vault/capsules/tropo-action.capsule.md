@@ -33,10 +33,10 @@ subsystem_hub:
 | Relation | Target |
 |---|---|
 | Governed by | [Ledger Schema v2 — Architecture Specification (222873b9)](../../vault/files/222873b9.md) |
-| Aligned with | [how-to.capsule (a7c3f489)](how-to.capsule.md) |
-| Pattern family | [how-to.capsule (a7c3f489)](how-to.capsule.md) |
+| Aligned with | [how-to.capsule (a7c3f489)](tropo-how-to.capsule.md) |
+| Pattern family | [how-to.capsule (a7c3f489)](tropo-how-to.capsule.md) |
 | Extends | `core` |
-| Composes with | [tool.capsule (d5e1b4a3)](tool.capsule.md) |
+| Composes with | [tool.capsule (d5e1b4a3)](tropo-tool.capsule.md) |
 
 *The governance contract for Tropo actions — compound OS-level operations with typed inputs, verification checklists, and atomic multi-artifact outcomes. Parallel pattern to how-to (skills) and tool (callables), filling the meta-capsule gap flagged by sa.research 025.*
 
@@ -56,7 +56,7 @@ Actions differ from playbooks:
 - **Playbooks** — multi-group, multi-session orchestration with run.jsonl state. Resumable. Long-running.
 - **Actions** — single-session, single-operation, deterministic. One invocation, one outcome.
 
-Before this capsule, Tropo shipped 10 actions (verified by sa.research 025) none of which carried `governed_by:` pointers. Action governance existed in [.tropo/actions/00-index.md](../actions/00-index.md) prose — not in a capsule the actions themselves conform to. This capsule closes that gap: every action now has a governance contract it must satisfy to be valid.
+Before this capsule, Tropo shipped 10 actions (verified by sa.research 025) none of which carried `governed_by:` pointers. Action governance existed in `.tropo/actions/00-index.md` prose (a since-retired catalog file) — not in a capsule the actions themselves conform to. This capsule closes that gap: every action now has a governance contract it must satisfy to be valid.
 
 **Retrofit philosophy: zero forced migration.** The 10 existing actions conform to the shape this capsule declares (they just never declared it). Setting `governed_by: 9b7f5e34` on each action is the one-line retrofit. No rewrites required.
 
@@ -134,7 +134,7 @@ Standard footer: `*<Title> | v<version> | Tropo OS | <date>*` + version-history 
 
 ## Relationship to `tool.capsule`
 
-A subtlety worth naming: the [tool.capsule (d5e1b4a3)](tool.capsule.md) accepts `action` as one of its five transport values (`mcp | action | http | platform | sa`). This creates apparent overlap — is an "action" just a tool with `transport: action`?
+A subtlety worth naming: the [tool.capsule (d5e1b4a3)](tropo-tool.capsule.md) accepts `action` as one of its five transport values (`mcp | action | http | platform | sa`). This creates apparent overlap — is an "action" just a tool with `transport: action`?
 
 **No.** The distinction:
 
@@ -187,7 +187,7 @@ Actions should NOT have a `ready` or `staging` intermediate state. Two states is
 
 ## Retrofit Path (one-time)
 
-The 10 existing actions ([create-task](../actions/create-task.action.md), [create-project v3.1](../actions/create-project.action.md), [create-design-brief](../actions/create-design-brief.action.md), [create-design-spec](../actions/create-design-spec.action.md), [create-collection](../actions/create-collection.action.md), [create-decision](../actions/create-decision.action.md), [create-note](../actions/create-note.action.md), [generate-view](../actions/generate-view.action.md), [refresh-view](../actions/refresh-view.action.md), [delete-entry](../actions/delete-entry.action.md)) each need:
+The 10 existing actions ([create-task](../actions/tropo-create-task.md), [create-project v3.1](../actions/tropo-create-project.md), [create-design-brief](../actions/tropo-create-design-brief.md), [create-design-spec](../actions/tropo-create-design-spec.md), [create-collection](../actions/tropo-create-collection.md), [create-decision](../actions/tropo-create-decision.md), [create-note](../actions/tropo-create-note.md), [generate-view](../actions/tropo-generate-view.md), [refresh-view](../actions/tropo-refresh-view.md), [delete-entry](../actions/tropo-delete-entry.md)) each need:
 
 1. **Add `governed_by: 9b7f5e34`** to frontmatter.
 2. **Verify body conforms to 6-section shape.** sa.research 025 spot-checked; all conform to convention. Confirming requires reading each once — ~15 min total.
@@ -198,10 +198,10 @@ Retrofit is a v1.3 Stream D item (D5 in the residual cleanup list).
 
 ## Relationship to Other Capsules
 
-- **Parallels [how-to.capsule (a7c3f489)](how-to.capsule.md)** — both are callable-surface governance. Actions are compound; skills are inline.
-- **Parallels [session-agent.capsule (b4e2a718)](session-agent.capsule.md)** — actions are turn-bound; session agents are lifecycle-bound.
-- **Parallels [tool.capsule (d5e1b4a3)](tool.capsule.md)** — actions can be surfaced as tools with `transport: action`.
-- **Reads [core.capsule (ee814120)](core.capsule.md)** — floor rules apply.
+- **Parallels [how-to.capsule (a7c3f489)](tropo-how-to.capsule.md)** — both are callable-surface governance. Actions are compound; skills are inline.
+- **Parallels [session-agent.capsule (b4e2a718)](tropo-session-agent.capsule.md)** — actions are turn-bound; session agents are lifecycle-bound.
+- **Parallels [tool.capsule (d5e1b4a3)](tropo-tool.capsule.md)** — actions can be surfaced as tools with `transport: action`.
+- **Reads [core.capsule (ee814120)](tropo-core.capsule.md)** — floor rules apply.
 
 Together, these four capsules (action + how-to + session-agent + tool) form the complete Pillar 1 callable-surface governance.
 
@@ -213,16 +213,16 @@ All 10 active actions governed by this capsule on retrofit. Source of truth rema
 
 | action_id | File | Purpose |
 |---|---|---|
-| `act-create-task` | [create-task.action.md](../actions/create-task.action.md) | Create one task entry |
-| `act-create-project` | [create-project.action.md](../actions/create-project.action.md) | Compound: project + 2 collections + navigation folder |
-| `act-create-design-brief` | [create-design-brief.action.md](../actions/create-design-brief.action.md) | Create one exploratory design-brief |
-| `act-create-design-spec` | [create-design-spec.action.md](../actions/create-design-spec.action.md) | Create one design-spec as draft |
-| `act-create-collection` | [create-collection.action.md](../actions/create-collection.action.md) | Two-file write: manifest + vault collection-ref |
-| `act-create-decision` | [create-decision.action.md](../actions/create-decision.action.md) | Create one ADR as proposed |
-| `act-create-note` | [create-note.action.md](../actions/create-note.action.md) | Create one governed note |
-| `act-generate-view` | [generate-view.action.md](../actions/generate-view.action.md) | Create a new folder hierarchy of collections |
-| `act-refresh-view` | [refresh-view.action.md](../actions/refresh-view.action.md) | Refresh collection memberships in an existing view |
-| `act-delete-entry` | [delete-entry.action.md](../actions/delete-entry.action.md) | Retire/destroy a vault entry (draft) |
+| `act-create-task` | [tropo-create-task.md](../actions/tropo-create-task.md) | Create one task entry |
+| `act-create-project` | [tropo-create-project.md](../actions/tropo-create-project.md) | Compound: project + 2 collections + navigation folder |
+| `act-create-design-brief` | [tropo-create-design-brief.md](../actions/tropo-create-design-brief.md) | Create one exploratory design-brief |
+| `act-create-design-spec` | [tropo-create-design-spec.md](../actions/tropo-create-design-spec.md) | Create one design-spec as draft |
+| `act-create-collection` | [tropo-create-collection.md](../actions/tropo-create-collection.md) | Two-file write: manifest + vault collection-ref |
+| `act-create-decision` | [tropo-create-decision.md](../actions/tropo-create-decision.md) | Create one ADR as proposed |
+| `act-create-note` | [tropo-create-note.md](../actions/tropo-create-note.md) | Create one governed note |
+| `act-generate-view` | [tropo-generate-view.md](../actions/tropo-generate-view.md) | Create a new folder hierarchy of collections |
+| `act-refresh-view` | [tropo-refresh-view.md](../actions/tropo-refresh-view.md) | Refresh collection memberships in an existing view |
+| `act-delete-entry` | [tropo-delete-entry.md](../actions/tropo-delete-entry.md) | Retire/destroy a vault entry (draft) |
 
 ---
 
@@ -231,10 +231,10 @@ All 10 active actions governed by this capsule on retrofit. Source of truth rema
 *What's on the wall above this bench. Scan before you author or invoke an action.*
 
 **Tools available:**
-- `ls .tropo/actions/*.action.md` — survey the 10 shipped actions before authoring a duplicate
-- [`.tropo/actions/00-index.md`](../actions/00-index.md) — action catalog with semantic groupings
+- `ls vault/actions/` — survey the 10 shipped actions before authoring a duplicate
+- [`vault/actions/`](../actions/) — the shipped action files (the folder listing is the catalog; the former `.tropo/actions/00-index.md` catalog file no longer ships)
 - `vault/00-index.jsonl` — grep `governed_by: 9b7f5e34` to enumerate retrofit-compliant actions
-- Reference instances: [create-project.action.md](../actions/create-project.action.md) (compound multi-artifact, atomic), [create-collection.action.md](../actions/create-collection.action.md) (two-file write — manifest + ledger ref), [create-task.action.md](../actions/create-task.action.md) (single-artifact baseline)
+- Reference instances: [tropo-create-project.md](../actions/tropo-create-project.md) (compound multi-artifact, atomic), [tropo-create-collection.md](../actions/tropo-create-collection.md) (two-file write — manifest + vault ref), [tropo-create-task.md](../actions/tropo-create-task.md) (single-artifact baseline)
 
 **Skills:**
 - `author-action.skill.md` *(forthcoming v1.5)* — scaffold the 6 REQUIRED body sections + minimum frontmatter (`action_id`, `version`, `status: draft`, `tier: os`, `target_capsule`, `reads`, `writes`); pre-fills `governed_by: 9b7f5e34`
@@ -247,7 +247,7 @@ All 10 active actions governed by this capsule on retrofit. Source of truth rema
 - **Invoke an action** — caller satisfies all `Prerequisites`; supplies all REQUIRED inputs per `## 3. Inputs`; runs the action; runs §6 Verification post-execution
 - **Verify the invocation** — execute every checklist item in §6; on any failure, follow §7 Failure Modes remediation; partial success is NOT success per Rule 4
 - **Compose with tool.capsule** — to wrap an action as a registry-discoverable tool, create a `type: tool` vault entry with `transport: action` + `action_id: <this-id>` + `target_capsule:` (per tool.capsule v1.0 conditional-required fields); the action file remains the authoritative body
-- **Compose with capsules being minted** — every write step in §4 Process MUST cite the governing capsule for the artifact; a write to `vault/files/` minting a project cites [project.capsule v2.1 (34e4cb0b)](project.capsule.md), etc.
+- **Compose with capsules being minted** — every write step in §4 Process MUST cite the governing capsule for the artifact; a write to `vault/files/` minting a project cites [project.capsule v2.1 (34e4cb0b)](tropo-project.capsule.md), etc.
 - **Supersede an action** — author successor with new `action_id` (NOT a version bump — capsule-contract-breaking changes need new identity per Rule 3); set `superseded_by:` on predecessor + `supersedes:` on successor (Validation Check 9)
 - **Archive (no separate state)** — no `archived` state; supersession + retirement combined: predecessor moves to `superseded`, successor active
 
@@ -271,16 +271,16 @@ All 10 active actions governed by this capsule on retrofit. Source of truth rema
 - **Confusing actions with skills** — skills (how-to) are inline, lightweight, single-file focus; actions are compound, multi-artifact, atomic. If multiple typed artifacts mint atomically, it's an action
 
 **Worked examples:**
-- [create-project.action.md](../actions/create-project.action.md) v3.1 — compound: project + 2 collections + navigation folder; canonical multi-artifact atomic action; references all 6 REQUIRED body sections + §7 Failure Modes
-- [create-collection.action.md](../actions/create-collection.action.md) — two-file write (manifest + vault collection-ref); pairs with [collection.capsule (c04e7a91)](collection.capsule.md) + [collection-ref.capsule v3.0 (c01ec700)](collection-ref.capsule.md)
-- [create-task.action.md](../actions/create-task.action.md) — single-artifact baseline; the simplest shape
+- [tropo-create-project.md](../actions/tropo-create-project.md) v3.1 — compound: project + 2 collections + navigation folder; canonical multi-artifact atomic action; references all 6 REQUIRED body sections + §7 Failure Modes
+- [tropo-create-collection.md](../actions/tropo-create-collection.md) — two-file write (manifest + vault collection-ref); pairs with [collection.capsule (c04e7a91)](tropo-collection.capsule.md) + [collection-ref.capsule v3.0 (c01ec700)](tropo-collection-ref.capsule.md)
+- [tropo-create-task.md](../actions/tropo-create-task.md) — single-artifact baseline; the simplest shape
 
 **Go next:**
-- Sibling Pillar 1 (inline behaviors) → [how-to.capsule v1.0 (a7c3f489)](how-to.capsule.md)
-- Sibling Pillar 1 (typed callables, 5 transports) → [tool.capsule v1.0 (d5e1b4a3)](tool.capsule.md) — actions can wrap as tools with `transport: action`
-- Sibling Pillar 1 (callable specialists) → [session-agent.capsule v1.2 (b4e2a718)](session-agent.capsule.md)
-- Action catalog → [`.tropo/actions/00-index.md`](../actions/00-index.md)
-- Folder governance → `.tropo/actions/AGENTS.md` (when authored)
+- Sibling Pillar 1 (inline behaviors) → [how-to.capsule v1.0 (a7c3f489)](tropo-how-to.capsule.md)
+- Sibling Pillar 1 (typed callables, 5 transports) → [tool.capsule v1.0 (d5e1b4a3)](tropo-tool.capsule.md) — actions can wrap as tools with `transport: action`
+- Sibling Pillar 1 (callable specialists) → [session-agent.capsule v1.2 (b4e2a718)](tropo-session-agent.capsule.md)
+- Action catalog → [`vault/actions/`](../actions/) (folder listing; the former `00-index.md` catalog file no longer ships)
+- Folder governance → `vault/actions/AGENTS.md` (when authored)
 - Governance meta → [capsule-definition (222873b9)](../../vault/files/222873b9.md)
 
 ---

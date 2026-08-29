@@ -165,21 +165,21 @@ Extends `core`. Inherits all core rules. May be extended by domain-specific subt
 - Using `document` type for content that belongs as a decision, arch-spec, or design-brief → Rule 6 violation; degrades queryability
 - Editing a published document without bumping `version:` after significant changes → invisible drift; readers can't tell what changed
 - Flipping to `status: published` without setting `published_by:` + `published_at:` → Check 4 failure
-- Authoring step-by-step procedural content as a `document` when [how-to.capsule (a7c3f489)](how-to.capsule.md) fits better
+- Authoring step-by-step procedural content as a `document` when [how-to.capsule (a7c3f489)](tropo-how-to.capsule.md) fits better
 - Forgetting `audience:` when the doc targets a non-default reader (agents vs users vs operators)
 - Using deprecated v3.0 enum values (`design` / `done`) instead of v3.1 (`draft` / `published` / `archived`) — pre-migration documents may carry the old values; the v2→v3 migration script remaps `design → draft` and `done → published`
 
 **Worked examples:**
-- [a4f9e2b1](../../vault/files/a4f9e2b1.md) — Agent Operating Principles; the vault's governing operating document (boot-required reading for every agent)
+- [a4f9e2b1](../../.tropo-studio/operating-principles.md) — Agent Operating Principles; the vault's governing operating document (boot-required reading for every agent)
 - [5a766c42](../../vault/files/5a766c42.md) — Architectural Principles v2; the architectural keel of the vault
 - [8ce11580](../../vault/files/8ce11580.md) — Tropo Operating Values; six values locked 2026-04-02, read at every boot
 - [5ab66d92](../../vault/files/5ab66d92.md) — Mike's Notebook; running capture of Mike's observations with universal append protocol (any crew member may append)
 
 **Go next:**
-- More structured alternative → [how-to.capsule (a7c3f489)](how-to.capsule.md) — for procedural step-by-step content
-- If the document records a decision → [decision.capsule (179d74e9)](decision.capsule.md)
-- If the document is exploratory design thinking → [design-brief.capsule v2.1 (de5181b0)](design-brief.capsule.md)
-- If the document specifies structure formally → [arch-spec.capsule v1.0 (a7f2e9c4)](arch-spec.capsule.md)
+- More structured alternative → [how-to.capsule (a7c3f489)](tropo-how-to.capsule.md) — for procedural step-by-step content
+- If the document records a decision → [decision.capsule (179d74e9)](tropo-decision.capsule.md)
+- If the document is exploratory design thinking → [design-brief.capsule v2.1 (de5181b0)](tropo-design-brief.capsule.md)
+- If the document specifies structure formally → [arch-spec.capsule v1.0 (a7f2e9c4)](tropo-arch-spec.capsule.md)
 - Governance meta → [capsule-definition (222873b9)](../../vault/files/222873b9.md)
 
 ---

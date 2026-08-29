@@ -224,8 +224,8 @@ In addition to core checks:
 
 ### Go next
 
-- **Pair capsule:** [test-scenario.capsule (e02c52b1)](test-scenario.capsule.md) — the journey this run records.
-- **Release context:** [release.capsule (b19e8d43)](release.capsule.md) — the release this run validates.
+- **Pair capsule:** [test-scenario.capsule (e02c52b1)](tropo-test-scenario.capsule.md) — the journey this run records.
+- **Release context:** [release.capsule (b19e8d43)](tropo-release.capsule.md) — the release this run validates.
 - **Stream context:** [v1.3 Stream: Release Test Harness v1.0 maturation (42373659)](../../vault/files/42373659.md) — where this capsule was locked.
 
 ---

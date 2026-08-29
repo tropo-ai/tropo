@@ -3,7 +3,8 @@ uid: 4e8b21f0
 name: activation
 type: capsule-definition
 extends: core
-version: 1.0.6
+version: 1.0.7
+v1_0_7_lock_break: "MIKE-AUTHORIZED 2026-08-27, verbatim 'proceed with fixing it' (orpheus-o36 session; standing authority: the twice-given August authorizations for this same defect, per the O35 transfer — 'proceed I authorize', 2026-08-04, and the 2026-08-03 lineage 'I authorize'). Documentation-only mint repoint: the two LIVE instruction sites in the §Template leg (the stamp header and the timeline row) named `tropo-activate.py`, the mint retired at the 2026-08-06 lifecycle cutover (metis-g102); they now name `tropo-lineage.py born`. No schema field, enum, validation rule, state-machine transition or required-field change. The two DATED HISTORICAL RECORDS that name the old mint — the v1.0.5 remediation summary below and metis-g101's v1.0.6 correction parenthetical at `agent_public_key` — are preserved verbatim per the instructions-repoint-records-do-not rule: they state what was true at their dates, and rewriting them would manufacture false history. Found live at O36 boot because O35's transfer said this fix never landed; verified (4 references), executed, both authorizations named here."
 v1_0_6_lock_break: "MIKE-AUTHORIZED 2026-08-04, verbatim 'I authorize'. Documentation-only: corrects the `agent_public_key` field DESCRIPTION to match ADR-066 (ff7dd221), which Mike accepted 2026-08-03. No field added or removed, no enum, no validation rule, no state-machine transition, no required-field change — the field was and remains OPTIONAL, so every pre-v1.0.6 entry stays valid untouched, and the original v1.0.4 semantics are preserved verbatim because pre-ADR-066 keys still exist and are still checked against them. WHY IT MATTERED: this capsule is where an agent goes for design intent, and it taught that birth mints a keypair — precisely what ADR-066 retired. The contradiction was invisible for a day because the boot path still ran the old mint, which still issued keys; the 2026-08-04 cutover exercised the seam and Orpheus O35 hit it on the first birth through the new mint. Found by Metis G101 running a changed-mechanism sweep across the whole corpus rather than the agent entries alone; surfaced and NOT edited until authorized, because status: locked."
 v1_0_5_lock_break: "MIKE-AUTHORIZED 2026-08-03, verbatim 'I authorize'. Additive §Template leg only: no schema field, enum, validation rule, state-machine transition or required-field change, so all 512 pre-v1.0.5 entries stay valid untouched. Requested by Metis G100 during review of the activation-mint build; the reviewing agent (Metis) flagged that the builder had cited additive precedent WITHOUT naming an authority, which is the half of the precedent that matters."
 tier: os
@@ -12,9 +13,9 @@ status: locked
 locked_by: argus-a58
 locked_at: 2026-05-11
 created: 2026-05-11
-modified: 2026-08-03
+modified: 2026-08-27
 created_by: argus-a58
-modified_by: metis-g100
+modified_by: orpheus-o36
 template_enforced_from: '2026-08-03'
 template_enforced_from_note: "The date THIS capsule's §Template leg was authored (v1.0.5). Declares the mint-time contract's start so the 512 activation entries that predate the scaffold are not judged against it (core.capsule v1.9 §Governance Rule 11)."
 remediation_history:
@@ -264,25 +265,25 @@ Core checks inherited: UID uniqueness, UID immutability, type immutability, owne
 
 ## 5. Composes-With
 
-- **[core.capsule (ee814120)](core.capsule.md)** — inherited floor for UID / owner / created / modified invariants.
+- **[core.capsule (ee814120)](tropo-core.capsule.md)** — inherited floor for UID / owner / created / modified invariants.
 - **[v1.21.0 brief — Unified Agent-Activation Registry (5591f018)](../../vault/files/5591f018.md)** — the design brief that walked this capsule's schema + lifecycle + invariants to walk-lock. Read for context on why specific field choices were made.
 - **agent root projects (Stream 0a bootstrap)** — Level 1 of the graph; every activation `member_of:` an agent root. Live at `vault/files/<root-uid>.md` with `type: project`, `name: agent-root-<slug>`. **(v1.22.0.3 lock per P1-2 finding):** the `agent_root_map.yaml` reference at `.tropo-studio/scripts/v1.21.0-agent-root-map.yaml` is the canonical slug-to-UID lookup produced by the v1.21.0 Stream 0a bootstrap script and verified to exist at every release ship; rebuild-vault.py + write-activation-entry.py both read from it for slug resolution. Validator should verify the map file's continued existence; flagged as v1.23.0 candidate work.
-- **[governance-contract.capsule v1.0 (7901662b)](governance-contract.capsule.md)** — `pattern_exemplar`; mirror of the 5-section pedagogy structure + folder-governance discipline for `.tropo-studio/registries/`.
-- **[subsystem-hub.capsule (8a4e21c5)](subsystem-hub.capsule.md)** — parent governance. Activation entries `member_of:` Tropo Agents hub (99ed55fd) primarily, plus cycle-activation roots when the activation produces release-scoped work.
-- **[write-activation-entry.skill](../skills/write-activation-entry.skill.md)** (v1.21.0 Stream 2) — canonical write abstraction. All writes to activation entries route through this skill — at boot (open), retirement (close), [SHUTDOWN] (close), stale-sweep (flip to stale), pause/resume (status flip).
-- **[agent-activation.playbook v2.6 (99341618)](../playbooks/agent-activation.playbook.md)** (v1.21.0 Stream 3) — boot playbook. Group 0 Step 0.0b writes the activation entry alongside the run folder. Group 1 Step 1.3 retires the legacy gen-log row write (gen-log substrate retires this cycle); ADR-016 + ADR-028 hard-gates query the activation registry instead of the gen-log.
-- **[agent-retire.playbook](../playbooks/agent-retire.playbook.md)** (v1.21.0 Stream 3 amendment) — retirement playbook. Closure step writes `retired_at:` + `status: retired` + optional `transfer_uid:` + `closure_reason: clean-retirement` to the activation entry.
+- **[governance-contract.capsule v1.0 (7901662b)](tropo-governance-contract.capsule.md)** — `pattern_exemplar`; mirror of the 5-section pedagogy structure + folder-governance discipline for `.tropo-studio/registries/`.
+- **[subsystem-hub.capsule (8a4e21c5)](tropo-subsystem-hub.capsule.md)** — parent governance. Activation entries `member_of:` Tropo Agents hub (99ed55fd) primarily, plus cycle-activation roots when the activation produces release-scoped work.
+- **[write-activation-entry.skill](../skills/tropo-write-activation-entry.md)** (v1.21.0 Stream 2) — canonical write abstraction. All writes to activation entries route through this skill — at boot (open), retirement (close), [SHUTDOWN] (close), stale-sweep (flip to stale), pause/resume (status flip).
+- **[agent-activation.playbook v2.6 (99341618)](../playbooks/99341618.md)** (v1.21.0 Stream 3) — boot playbook. Group 0 Step 0.0b writes the activation entry alongside the run folder. Group 1 Step 1.3 retires the legacy gen-log row write (gen-log substrate retires this cycle); ADR-016 + ADR-028 hard-gates query the activation registry instead of the gen-log.
+- **[agent-retire.playbook](../playbooks/e2c7d185.md)** (v1.21.0 Stream 3 amendment) — retirement playbook. Closure step writes `retired_at:` + `status: retired` + optional `transfer_uid:` + `closure_reason: clean-retirement` to the activation entry.
 - **transfer documents (`agents/<name>/transfers/living-transfer.md`)** — the canonical session-narrative document. Each transfer carries `member_of: [<activation-uid>]` going forward; the activation entry carries `transfer_uid:` back. Bidirectional pointer.
 - **run.jsonl** at `playbook-runs/<run>/run.jsonl` — execution event log. Pointed at via `run_folder:`. The jsonl is workspace state; the activation entry is the typed governed index.
 - **Tier 1 canonical substrate (8f6ea459)** (v1.21.0 Stream 3 amendment) — universal required outcome added: "activation entry written to registry."
 - **rebuild-vault.py** — indexes activation entries; derives `.tropo-studio/registries/agent-activations.jsonl`; renders `00-tropo-nav/agents/<name>.md` per-agent lineage pages; renders `.tropo/scheduled-agents.md` fleet catalog. All four surfaces are derived from activation entries; activation entries are the single source of truth.
-- **[SELF-HEALING.md (db0fd9b1)](../../vault/files/db0fd9b1.md)** — Path 1/Path 2 discipline applies to activation entry authoring. Trivial defects (typos, broken UID refs) fix in place; substantive defects (schema gaps, lifecycle ambiguity) file as tracked work-items.
+- **[SELF-HEALING.md (db0fd9b1)](../../.tropo/SELF-HEALING.md)** — Path 1/Path 2 discipline applies to activation entry authoring. Trivial defects (typos, broken UID refs) fix in place; substantive defects (schema gaps, lifecycle ambiguity) file as tracked work-items.
 
 ### Composition with generation-log substrate (retiring in Stream 3)
 
-The pre-v1.21.0 substrate stack — `agents/<name>/generation-log.md` + [write-gen-log-row.skill (c9b3e6f1)](../skills/write-gen-log-row.skill.md) + [generation-log.capsule (7f4a8d2e)](generation-log.capsule.md) + `sort-gen-log.py` + the gen-log invariant check inside `tropo-validate.py` — retires at v1.21.0 Stream 3. Their job generalizes into the activation registry stack:
+The pre-v1.21.0 substrate stack — `agents/<name>/generation-log.md` + [write-gen-log-row.skill (c9b3e6f1)](../skills/tropo-write-gen-log-row.md) + [generation-log.capsule (7f4a8d2e)](tropo-generation-log.capsule.md) + `sort-gen-log.py` + the gen-log invariant check inside `tropo-validate.py` — retires at v1.21.0 Stream 3. Their job generalizes into the activation registry stack:
 
-- `write-gen-log-row.skill` → [`write-activation-entry.skill`](../skills/write-activation-entry.skill.md)
+- `write-gen-log-row.skill` → [`write-activation-entry.skill`](../skills/tropo-write-activation-entry.md)
 - `generation-log.capsule` → this capsule (`activation.capsule`)
 - `sort-gen-log.py` → no replacement needed (entries are UID-addressable + sortable by `activated_at:` in the derived JSONL)
 - gen-log invariant check → activation-registry invariants from §4 Validation Checks (graph-walkable; substrate-level)
@@ -297,7 +298,7 @@ Dev-pipeline cycles already author "activation root projects" — for example, v
 
 ## §Template (v1.0.5 — the mint-stamped scaffold; contract at [b933eafb](../../vault/files/b933eafb.md))
 
-*Stamped by `tropo-activate.py`, the lifecycle mint — **not** by the generic `mint file --type activation`, which refuses. `activation` is a system-only type: it is the record of an identity being issued, and a second generic writer for it is exactly the two-authored-copies divergence rule 7 names ([40b13b5b](../../vault/files/40b13b5b.md)).*
+*Stamped by `tropo-lineage.py born`, the lifecycle mint (since the 2026-08-06 cutover; `tropo-activate.py` before it) — **not** by the generic `mint file --type activation`, which refuses. `activation` is a system-only type: it is the record of an identity being issued, and a second generic writer for it is exactly the two-authored-copies divergence rule 7 names ([40b13b5b](../../vault/files/40b13b5b.md)).*
 
 *The mint stamps the five `<<MINT:*>>` tokens (`author` resolves to `<agent>-<generation>`, the entry's own handle), then fills every `<!-- REQUIRED: -->` frontmatter value with what it computed and **deletes** the `<!-- OPTIONAL: -->` lines it has nothing for — absence reads as "not recorded", never as an error. The body's one OPTIONAL placeholder is where the pointer block lands.*
 
@@ -343,7 +344,7 @@ governed_by: 4e8b21f0
 
 | Transition | Timestamp | Reason |
 |---|---|---|
-| (opened) | <<MINT:date>> | activation minted by `tropo-activate.py` |
+| (opened) | <<MINT:date>> | activation minted by `tropo-lineage.py born` |
 ~~~
 
 **Leg rules.** No `<!-- REQUIRED: -->` placeholder survives in the body, deliberately: an activation body is machine-written boilerplate (§2 — "activations are slim metadata"), so the scaffold is complete as stamped and the generic section-presence check has nothing to fire on. Substantive narrative belongs in the living transfer, never here. `status:` IS scaffolded, unlike most types, because an activation has exactly one legal birth state — `active` means "the handoff has not been written yet." No key material appears anywhere in this leg (`agent_public_key` stays an optional §2 field for the records that already carry one); the redesigned lifecycle mints, reads and destroys no cryptographic keys, so the shared-key-root destruction family has no way in. `predecessor_activation_uid` is OPTIONAL rather than nullable: at genesis there is no predecessor, and an absent field says that more honestly than a `null` a reader can mistake for a broken link.
@@ -351,4 +352,5 @@ governed_by: 4e8b21f0
 ---
 
 *activation capsule definition | LOCKED v1.0.2 (amended v1.22.0.3 per remaining sa.skeptic P1 findings — closure_reason + agent_root_map.yaml clarifications) | UID `4e8b21f0` | Authored by Argus A58 2026-05-11 | v1.21.0 Stream 1 origin; v1.22.0 amendment for per-class stale threshold + Vela failed-authority; v1.0.5 §Template leg 2026-08-03 by metis-g100*
+*activation capsule definition | LOCKED v1.0.2 (amended v1.22.0.3 per remaining sa.skeptic P1 findings — closure_reason + agent_root_map.yaml clarifications) | UID `4e8b21f0` | Authored by Argus A58 2026-05-11 | v1.21.0 Stream 1 origin; v1.22.0 amendment for per-class stale threshold + Vela failed-authority; v1.0.5 §Template leg 2026-08-03 by metis-g100; v1.0.7 mint repoint 2026-08-27 by orpheus-o36 (Mike-authorized, both live instruction sites now name `tropo-lineage.py born`)*
 *"One typed entity per session, executive or sa.* or anything in between. Provenance for free. ADR-016 and ADR-028 become graph-walkable substrate invariants."*

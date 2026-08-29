@@ -4,8 +4,22 @@
 uid: 39f6f96d
 name: tropo-activate
 type: tool
-title: "tropo-activate — the activation mint (birth issues the identity, and never refuses it)"
-status: active
+title: "tropo-activate — SUPERSEDED as the birth path (retired at the 2026-08-06 lifecycle cutover; use tropo-lineage.py born)"
+status: superseded
+superseded_by: 5b2e91c7   # tropo-lineage.py — the live birth path since metis-g102's 2026-08-06 cutover
+superseded_note: >-
+  Retired as the birth path 2026-08-06 (metis-g102, Mike-directed). It remains ON DISK as
+  superseded history and is still exercised by its own suite (test_activation_mint.py, 27
+  tests green) — per .tropo/boot-fast-path.md, the superseded tools "are not the boot path".
+  Re-titled by argus-a161 at v1.93 because the GENERATED tool catalog was still advertising
+  it to customers as "the activation mint", and that catalog line is the only
+  customer-reachable route to it: no shipped playbook, skill or creation flow points here.
+  Running it exits 0 while writing an activation record this studio's own validator rejects
+  (--customer goes 0 failed -> 3 failed: missing agent_root / model / platform), because a
+  fresh studio has no agent-root project for it to name honestly. THE TOOL IS NOT CHANGED
+  HERE: making it refuse turns its own green 27-test suite red, and migrating that suite to
+  the live path is a v1.94-scope decision for the release owner, not a mid-release edit.
+  This change cuts the advertisement, not the artifact.
 owner: metis
 domain: "Agent birth — issues the generation number, writes the activation record, and records what it could not prove instead of refusing"
 transport: cli
@@ -228,7 +242,13 @@ class Findings:
             "  │  PROVISIONAL ACTIVATION — you are born, and something is    │\n"
             "  │  wrong with your lineage record. You are expected to work.  │\n"
             "  │  Surface these in your startup signal; a human decides.     │\n"
-            "  └─────────────────────────────────────────────────────────────┘",
+            "  └─────────────────────────────────────────────────────────────┘\n"
+            "  YOU DID NOT NEED TO BE PROVISIONAL. This tool is superseded; the\n"
+            "  live birth path issues a clean generation and records no provisional\n"
+            "  state at all:\n"
+            "    python3 vault/tools/tropo-lineage.py born --agent <slug> --by <principal> --model <sleeve>\n"
+            "  It reads your lineage, issues the next generation and cannot refuse\n"
+            "  you. Your record here stands; use that command from now on.",
             file=sys.stderr,
         )
         for item in self.items:
@@ -991,6 +1011,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=SCRIPT_NAME,
         description=(
+            "SUPERSEDED — NOT THE BIRTH PATH. Agent birth is:\n"
+            "  python3 vault/tools/tropo-lineage.py born --agent <slug> --by <principal> --model <sleeve>\n"
+            "This tool was retired as the mint at the 2026-08-06 lifecycle cutover and "
+            "remains only for its own legacy test suites. Running it writes a governed "
+            "activation record that this Studio's boot playbook tells agents not to "
+            "create, and that the validator rejects in a fresh Studio.\n\n"
             "Mint an activation: issue this agent's identity and write its record. "
             "Records every check it could not pass and proceeds anyway; the single "
             "refusal is a malformed --agent-class, because without a class there is no "
@@ -1019,8 +1045,34 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+SUPERSEDED_BANNER = (
+    "\n"
+    "  ┌─────────────────────────────────────────────────────────────┐\n"
+    "  │  SUPERSEDED TOOL — THIS IS NOT HOW AGENTS ARE BORN.         │\n"
+    "  └─────────────────────────────────────────────────────────────┘\n"
+    "  Agent birth is:\n"
+    "    python3 vault/tools/tropo-lineage.py born --agent <slug> --by <principal> --model <sleeve>\n"
+    "\n"
+    "  tropo-activate.py was retired as the mint at the 2026-08-06 lifecycle\n"
+    "  cutover and is kept only for its own legacy test suites. It still has\n"
+    "  the most obvious name in the box, which is why you are reading this:\n"
+    "  the v1.93 release harness found a stranger reaching for it by name.\n"
+    "  It will now proceed and write a record — one the boot playbook tells\n"
+    "  agents not to create. If you did not mean to be here, stop and run the\n"
+    "  command above instead.\n"
+)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    # v1.93 (argus-a161, metis-g114-ruled): warn-safe, never silent. The banner
+    # prints BEFORE any record is written, so the stranger is told while the
+    # choice is still theirs. Full sunset — refuse outright and migrate the
+    # 27-test suite to the live path — is ruled v1.94: making it refuse tonight
+    # aborts `npm run test:lifecycle` and silently kills 38 retirement tests,
+    # which is exactly the widening we do not do at hour eleven.
+    print(SUPERSEDED_BANNER, file=sys.stderr)
 
     # THE ONE REFUSAL. Everything below this line records and proceeds.
     if args.agent_class is not None and args.agent_class not in VALID_CLASSES:

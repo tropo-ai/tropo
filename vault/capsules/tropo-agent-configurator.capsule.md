@@ -36,9 +36,9 @@ subsystem_hub:
 
 ## Version Note
 
-**v2.1 (2026-04-20, Argus A29)** — Cold-boot 039 remediation. Closes gaps found by [sa.cold-boot 039 stranger test](../../agents/sa/sa.cold-boot/activation-log/039-argus-a29-record.md) against v2.0: adds §Authoring Protocol (UID minting + registry update), expands §Optional: Compiled Output with no-filesystem-access branch + compiled-artifact frontmatter schema + build-activation.playbook forward-spec, adds §Validation tier-unreachable halt semantics, adds §Migration Protocol for existing monolithic files, clarifies §State Machine scope (instances, not capsule file), pins §One Per Agent Rule to per-vault. ADR-035 ([a7c4e5b2](../../vault/files/a7c4e5b2.md)) is now `status: accepted`, so the capsule's citation is compliant with Surface 4.
+**v2.1 (2026-04-20, Argus A29)** — Cold-boot 039 remediation. Closes gaps found by sa.cold-boot 039 stranger test (record since pruned from the activation log) against v2.0: adds §Authoring Protocol (UID minting + registry update), expands §Optional: Compiled Output with no-filesystem-access branch + compiled-artifact frontmatter schema + build-activation.playbook forward-spec, adds §Validation tier-unreachable halt semantics, adds §Migration Protocol for existing monolithic files, clarifies §State Machine scope (instances, not capsule file), pins §One Per Agent Rule to per-vault. ADR-035 ([a7c4e5b2](../../vault/files/a7c4e5b2.md)) is now `status: accepted`, so the capsule's citation is compliant with Surface 4.
 
-**v2.0 (2026-04-20, Argus A29, superseded)** — Reframed the canonical artifact as a **thin loader** that reads the three-tier boot configuration chain (ADR-032) at boot time, instead of a monolith with inlined Groups. Compiled output demoted to an **optional export** for attach-only deployments (marketplace, cold Claude.ai pastes, tester distribution). Metis G44 greenlight: 2026-04-19 in [channels/metis-argus.md](../../channels/metis-argus.md).
+**v2.0 (2026-04-20, Argus A29, superseded)** — Reframed the canonical artifact as a **thin loader** that reads the three-tier boot configuration chain (ADR-032) at boot time, instead of a monolith with inlined Groups. Compiled output demoted to an **optional export** for attach-only deployments (marketplace, cold Claude.ai pastes, tester distribution). Metis G44 greenlight: 2026-04-19 in [channels/metis-argus.md (retired, archived)](../../99-recycle/v1.61-channels-retired-2026-05-29/metis-argus.md).
 
 **v1.0 (2026-04-17, Argus A27, superseded)** described the canonical artifact as a monolithic compiled file that inlined Groups 0–5 with hardcoded paths. That framing contradicted what Vela V31 shipped on 2026-04-19 — thin loaders executing the ADR-032 three-tier chain at boot time. v2.0 named the shipped reality as canonical; v2.1 hardened the spec.
 
@@ -50,7 +50,7 @@ The agent-configurator is the activation artifact for one specific agent — the
 
 **The canonical form is a thin loader.** The loader:
 - Declares agent identity and soul-letter path
-- Delegates the activation sequence to [`.tropo/playbooks/agent-activation.playbook.md` (99341618)](../playbooks/agent-activation.playbook.md)
+- Delegates the activation sequence to [`.tropo/playbooks/agent-activation.playbook.md` (99341618)](../playbooks/99341618.md)
 - Points at the three-tier boot configuration chain (ADR-032 — [e6c3f410](../../vault/files/e6c3f410.md)) so the playbook can resolve vault-specific and agent-specific extensions
 - Contains a pre-response directive block that halts the agent until Groups 0–5 complete
 
@@ -58,7 +58,7 @@ The loader does NOT inline the activation sequence. It does NOT hardcode tier co
 
 **Why thin loader, not monolith:** the three-tier chain (Tier 1 OS, Tier 2 vault, Tier 3 agent) is the governance model. Inlining Groups into the configurator re-copies Tier 1 and Tier 2 content into every agent's activation file, creating a drift surface that updates to Tier 1 or Tier 2 do not automatically close. The thin loader reads live tiers at boot; updates to any tier land for every agent on the next boot.
 
-**Why the name stays `agent-configurator`:** the artifact identity — *"the file Mike attaches to boot an agent"* — is unchanged. Only the internal structure changed. Renaming to `activation-loader` would churn `type:` fields across six activation files and the fresh vault for purity with no functional win. Per [crew scope lock](../../.tropo-studio/memory/crew-scope-lock-gtm-focus.md) discipline: less ceremony, more work.
+**Why the name stays `agent-configurator`:** the artifact identity — *"the file Mike attaches to boot an agent"* — is unchanged. Only the internal structure changed. Renaming to `activation-loader` would churn `type:` fields across six activation files and the fresh vault for purity with no functional win. Per [crew scope lock](../../.tropo-studio/memory/entries/e8f3c691.md) discipline: less ceremony, more work.
 
 ---
 
@@ -350,11 +350,11 @@ supersedes: argus-activation-v1.0-monolith
 ## Cross-References
 
 - [ADR-032 — Three-Layer Boot Configuration Model (e6c3f410)](../../vault/files/e6c3f410.md) — the governance model this loader delegates to.
-- [Agent Activation Playbook v2.2 (99341618)](../playbooks/agent-activation.playbook.md) — the execution engine the loader hands off to.
-- [Tier 1 boot-config v1.1 (b7e3a291)](../boot-config.md) — OS floor.
+- [Agent Activation Playbook v2.2 (99341618)](../playbooks/99341618.md) — the execution engine the loader hands off to.
+- [Tier 1 boot-config v1.1 (b7e3a291)](../../.tropo/boot-config.md) — OS floor.
 - [Tier 2 vault extension (8a83579e)](../../.tropo-studio/agent-boot.extension.md) — vault defaults.
 - [ADR-035 — Declared-Presence Validation Rule (a7c4e5b2)](../../vault/files/a7c4e5b2.md) — governs tier-chain reachability and compiled-artifact staleness checks.
-- [channels/metis-argus.md](../../channels/metis-argus.md) — Metis G44 greenlight for the v2.0 amendment (2026-04-19).
+- [channels/metis-argus.md (retired, archived)](../../99-recycle/v1.61-channels-retired-2026-05-29/metis-argus.md) — Metis G44 greenlight for the v2.0 amendment (2026-04-19).
 
 ---
 
