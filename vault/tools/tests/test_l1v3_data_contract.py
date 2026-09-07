@@ -244,7 +244,10 @@ class TestA3SegmentDerived(TmpVault):
     def _make_manifest(self, uid: str):
         mp = self.root / ".tropo" / "vault-manifest.md"
         mp.parent.mkdir(parents=True, exist_ok=True)
-        mp.write_text(f"---\nuid: {uid}\ntype: vault\n---\n# manifest\n")
+        # vault_uid:, not uid: — lib/segment.py's read_vault_manifest_uid
+        # reads only vault_uid: since 52d7a9b71 (ADR-050 vault-code split).
+        # (suite-health 2026-09-03)
+        mp.write_text(f"---\nvault_uid: {uid}\ntype: vault\n---\n# manifest\n")
 
     def test_read_exposes_derived_segment(self):
         self._make_manifest("beefcafe")

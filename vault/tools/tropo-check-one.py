@@ -498,7 +498,7 @@ def main() -> int:
     parser.add_argument("--quiet", action="store_true", help="Suppress per-finding output")
     args = parser.parse_args()
 
-    if not re.fullmatch(r"[0-9a-f]{8}", args.uid):
+    if not re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", args.uid):  # accepts-both (3d430852)
         print(f"check-one: uid must be 8-hex; got {args.uid!r}", file=sys.stderr)
         return 2
 

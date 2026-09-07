@@ -316,6 +316,36 @@ def scorecard_exemption(run_dir: Path) -> Optional[Dict[str, str]]:
     return None
 
 
+def load_bus_rows(vault_root, bus_events=None, no_bus: bool = False):
+    """THE bus, loaded one way, for every caller.
+
+    The default IS vault/events/streams/ -- the bus is not an unknown location in
+    this Studio. Conflating "you did not tell me where the bus is" with "the bus
+    is unobserved" was the 2026-08-25 defect cured in main() below.
+
+    It was cured there and ONLY there. The release facade
+    (tropo-release.py::_completion_observers) called build_observers() directly
+    and handed it `run_dir / "bus-events.jsonl"` -- a literal that occurs exactly
+    once in the whole tree, at that read, and that nothing has ever written. So
+    `tropo-release.py status` observed an empty bus for every release ever
+    published, and since bus_published_event is a REQUIRED bound fact, status
+    could never return anything but REFUSED. There is no flag to override it.
+
+    The same fix, twice, in two files, is how that happened. This function exists
+    so there is one loader to fix. (argus-a165, 2026-09-01.)
+    """
+    rows = []
+    if no_bus:
+        return rows
+    if bus_events:
+        return _read_journal(Path(bus_events))
+    streams = Path(vault_root).resolve() / "vault" / "events" / "streams"
+    if streams.is_dir():
+        for stream in sorted(streams.glob("*.jsonl")):
+            rows.extend(_read_journal(stream))
+    return rows
+
+
 def build_observers(
     run_dir: Path,
     bus_rows: List[Dict[str, Any]],
@@ -590,13 +620,21 @@ def _release_version_for(run_dir: Path, studio_root: Path) -> str:
     return ""
 
 
-def clear_publish_pending(studio_root: Path, run_dir: Path) -> str:
+def clear_publish_pending(studio_root: Path, run_dir: Path,
+                          verified_version: str = "") -> str:
     """S3 AC6 (176a8995): verify-live green flips .tropo/publish-pending.json to live.
 
     Returns a one-line account of what happened, for the operator. Only the
     marker for the version THIS run verified is flipped; a marker for another
     version (a later build awaiting its own publish) is left loud, and a run
     that cannot name its version leaves the marker alone and says so.
+
+    3d8d4351 §6: `verified_version` is the VERIFY-ONLY case's teacher — that
+    path verified a named version against the remote without walking this
+    run's publication events, so the run-shaped resolver honestly finds
+    nothing. The explicit version is not a guess: it is what the tag/object
+    verification just proved live. Still one writer; the walk path keeps
+    resolving from the run and never passes the override.
     """
     marker = studio_root / PUBLISH_PENDING_REL
     if not marker.is_file():
@@ -606,7 +644,9 @@ def clear_publish_pending(studio_root: Path, run_dir: Path) -> str:
     except (OSError, ValueError) as exc:
         return "publish-pending: marker %s unreadable (%s) — left as is" % (marker, exc)
     marker_version = _normalise_version(body.get("version"))
-    run_version = _release_version_for(run_dir, studio_root)
+    run_version = (_normalise_version(verified_version)
+                   if verified_version
+                   else _release_version_for(run_dir, studio_root))
     if str(body.get("publish_state")) in PUBLISH_PENDING_SILENT_STATES:
         return "publish-pending: already %s for v%s" % (body.get("publish_state"), marker_version)
     if not run_version:
@@ -622,11 +662,66 @@ def clear_publish_pending(studio_root: Path, run_dir: Path) -> str:
         "live_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "verified_by": "tropo-verify-release-live.py",
         "verified_run": run_dir.name,
+        # 3d8d4351: the completion VERDICT beside the flip's own facts, so the
+        # marker answers "what did verification conclude" not just "when".
+        # One writer still — this is THE marker's flip path (fbe50871), never
+        # forked; the verify-only case reaches this same writer.
+        "completion_verdict": str(body.get("completion_verdict") or "verified-live"),
     })
     staged = marker.with_name("." + marker.name + ".tmp")
     staged.write_text(json.dumps(body, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     staged.replace(marker)
     return "publish-pending: v%s -> live (%s)" % (body["version"], marker)
+
+
+def defer_publish_pending(studio_root: Path, version: str,
+                          defer_record: Optional[Mapping[str, Any]] = None,
+                          written_by: str = "tropo-publish-release.py cmd_defer") -> str:
+    """The marker's OTHER silent state, through the same module that owns the file.
+
+    fbe50871 names two states that silence boot step 5.1.8: live and
+    deferred-by-mike. clear_publish_pending above writes the first; nothing
+    wrote the second. cmd_defer stamped the release entry deferred-by-mike and
+    left the marker at not-staged, so the founder's defer produced two readers
+    of one fact with one updated — every boot after the v1.94 defer
+    (2026-09-05T12:58:49Z) printed a "built but not published" line for a
+    release he had already deferred, and §30 of the Architecture Review had
+    recorded the identical marker defect on v1.92 two weeks earlier. Found by
+    metis-g120, wired by argus-a171, 2026-09-05.
+
+    Same shape as the live flip: only the marker for THIS version is touched,
+    a marker for another version is left loud, an already-silent marker is
+    reported and left alone. Returns a one-line account for the operator.
+    """
+    marker = Path(studio_root) / PUBLISH_PENDING_REL
+    if not marker.is_file():
+        return "publish-pending: no marker at %s (nothing to defer)" % marker
+    try:
+        body = json.loads(marker.read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError) as exc:
+        return "publish-pending: marker %s unreadable (%s) — left as is" % (marker, exc)
+    marker_version = _normalise_version(body.get("version"))
+    want = _normalise_version(version)
+    if str(body.get("publish_state")) in PUBLISH_PENDING_SILENT_STATES:
+        return "publish-pending: already %s for v%s" % (body.get("publish_state"), marker_version)
+    if not want:
+        return ("publish-pending: defer names no release version, so the marker for "
+                "v%s is left at %s" % (marker_version, body.get("publish_state")))
+    if marker_version and marker_version != want:
+        return ("publish-pending: marker is for v%s, this defer is v%s — left loud"
+                % (marker_version, want))
+    body.update({
+        "version": marker_version or want,
+        "publish_state": "deferred-by-mike",
+        "deferred_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "written_by": written_by,
+        "defer_record": dict(defer_record or {}),
+    })
+    body.pop("cure", None)
+    staged = marker.with_name("." + marker.name + ".tmp")
+    staged.write_text(json.dumps(body, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    staged.replace(marker)
+    return "publish-pending: v%s -> deferred-by-mike (%s)" % (body["version"], marker)
 
 
 # S3 AC5 (176a8995): site_endpoint is OBSERVED — downloaded and hashed — or
@@ -820,15 +915,8 @@ def main(argv=None) -> int:
     # vault/events/streams/. Conflating "you did not tell me where the bus is"
     # with "the bus is unobserved" was the defect. Not-observing stays
     # available, but it is now something you ASK for.
-    bus_rows: List[Dict[str, Any]] = []
-    if args.no_bus:
-        pass
-    elif args.bus_events:
-        bus_rows = _read_journal(Path(args.bus_events))
-    else:
-        streams = Path(args.vault).resolve() / "vault" / "events" / "streams"
-        for stream in sorted(streams.glob("*.jsonl")):
-            bus_rows.extend(_read_journal(stream))
+    bus_rows: List[Dict[str, Any]] = load_bus_rows(
+        args.vault, bus_events=args.bus_events, no_bus=args.no_bus)
 
     identity = _identity(run_dir)
     if not identity:

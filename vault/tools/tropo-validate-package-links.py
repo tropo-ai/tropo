@@ -72,8 +72,15 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.governed_path import UID_HEX_PATTERN  # noqa: E402
+
 LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
-UID_RECORD = re.compile(r"vault/files/[0-9a-f]{8}\.md$")
+# accepts-both (UID_SHAPES): legacy 8-hex uids stay first-class forever;
+# every new governed mint is 12-hex composite since the Stage B flip
+# (2026-08-31). The literal 8-only pattern this replaced never classified a
+# link to a composite-uid vault/files record as "producing-studio-record".
+UID_RECORD = re.compile(r"vault/files/(?:%s)\.md$" % UID_HEX_PATTERN)
 PLACEHOLDER = re.compile(r"[\[<]")
 
 #: What a recipient meets before they have done anything.

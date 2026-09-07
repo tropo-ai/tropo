@@ -40,12 +40,13 @@ import threading
 from pathlib import Path
 from typing import Iterator
 
+from lib.governed_path import is_governed_uid_shape
+
 _TOOLS = Path(__file__).resolve().parent.parent  # <studio>/vault/tools
 _STUDIO = _TOOLS.parents[1]  # vault/tools -> vault -> studio root
 REGISTRY_PATH = _STUDIO / "vault" / "schema" / "tool-telemetry-registry.json"
 
 _DEFAULT_QUEUE_SIZE = 4096
-_UID8_RE = re.compile(r"^[0-9a-f]{8}$")
 _SHA_RE = re.compile(r"^[0-9a-f]{16,}$")
 _TOKEN_RE = re.compile(r"^\S{1,64}$")
 _COUNTER_CLASSES = (
@@ -139,7 +140,13 @@ def _validate_and_shape(payload: dict, outcome: str, registry: dict) -> dict | N
     code = payload.get("reason_code")
     if category not in taxonomy or code not in taxonomy[category]["codes"]:
         return None
-    if not _UID8_RE.fullmatch(str(payload.get("tool_uid") or "")):
+    # is_governed_uid_shape, not the wider UID_HEX_PATTERN: tool_uid keys
+    # the registry's segment_floor dict below, which is keyed by the real
+    # (lowercase-minted) uid. A case-mismatched but shape-plausible uid
+    # would fail that dict lookup silently (floor_name=None) and skip the
+    # floor-enforcement check entirely -- the exact resolver-split class
+    # is_governed_uid_shape exists to close.
+    if not is_governed_uid_shape(str(payload.get("tool_uid") or "")):
         return None
     for token_field in ("invocation_uid", "operation_uid"):
         value = str(payload.get(token_field) or "")
@@ -198,7 +205,7 @@ def _validate_and_shape(payload: dict, outcome: str, registry: dict) -> dict | N
         "recorder_version": _recorder_version,
     }
     if payload.get("gate_uid") is not None:
-        if not _UID8_RE.fullmatch(str(payload["gate_uid"])):
+        if not is_governed_uid_shape(str(payload["gate_uid"])):
             return None
         record["gate_uid"] = payload["gate_uid"]
     if payload.get("harm_class") is not None:

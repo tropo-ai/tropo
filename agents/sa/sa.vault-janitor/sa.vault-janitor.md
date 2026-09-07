@@ -5,18 +5,19 @@ class: session-agent
 type: session-agent
 archetype: one-shot
 status: active
-version: 1.0
+version: 1.1
 owner: vela
-domain: Channel ceiling enforcement, working channel cleanup, recycle bin report
+domain: Channel ceiling enforcement, topic-channel cleanup, recycle bin report
 spawnable_by:
   - vela
   - fleet-ops
 commissioned: 2026-04-16
 commissioned_by: vela-v29
-modified: 2026-07-13
-modified_by: vela-v66
+modified: 2026-09-03
+modified_by: vela-v77
 governed_by: b4e2a718
 capsule_version: '1.4'
+cost_tier: low  # f0153984a89f item 5, vela-v77 2026-09-04 -- see agents/sa/commission-quickref.md for the per-harness model translation
 extraction_scope: ship
 schema_version: 2
 supersedes: agents/operations/vault-janitor/activate.md
@@ -71,10 +72,11 @@ Check every ceiling-governed file against its hard limit. Archive proactively wh
 
 | File type | Ceiling | Trigger | Files |
 |-----------|---------|---------|-------|
-| Working channel | 150 lines | 112 lines | `channels/[a]-[b].md` |
 | Topic channel | 150 lines | 112 lines | `channels/releases.md`, `channels/tropo.md` |
 | Crew brief | 250 lines | 200 lines | `00-crew-brief.md` |
 | Agent status card | 60 lines | 48 lines | `agents/[name]/[name]-status.md` |
+
+*(Working-pair-channel tier — `channels/[a]-[b].md` — removed from this table 2026-09-03. That tier was fully retired at Rule 13 / v1.61 (2026-05-29): pair channels were archived away and none exist on disk. Not "currently empty" — the tier itself no longer exists. See `channels/CAPSULE.md` v2.0 for the canonical current inventory.)*
 
 **Steps:**
 1. Count lines in every ceiling-governed file
@@ -83,10 +85,9 @@ Check every ceiling-governed file against its hard limit. Archive proactively wh
 4. Above ceiling → archive immediately. Flag "CEILING BREACH", emit a `tropo.broadcast.crew` event (category: ops) — see §Event-Log Posting below
 
 **Archival methods:**
-- **Working channels** — move entries older than 48h to `archive/channels/[channel]-[YYYY-MM].md`. Keep the most recent 48h. Fallback: if still over ceiling after age-based archival (all content is recent), keep the most recent 80 lines and archive the rest regardless of age.
+- **Topic channels** — archive entries older than their rolling window (releases: 7 days; tropo.md's rolling window is not yet documented anywhere found — flag for Vela/Argus to formalize rather than guess) to `archive/channels/[channel]-[YYYY-MM].md`.
 
-  **CRITICAL — channel ordering (per v1.21.0.1 amendment):** Vault channels use **newest-at-bottom** ordering — new entries are appended to the bottom of the file. "Most recent 80 lines" = the last 80 lines (tail of file). When applying the fallback, read the file, take the last 80 lines as the content to keep, archive everything before that. `tail -80 <channel>.md` returns the newest. Governance was amended at v1.21.0.1 captain-mode reversal: previous newest-at-top rule had zero practical compliance; channels/CAPSULE.md amended to align governance with practice.
-- **Topic channels** — archive entries older than their rolling window (releases: 7 days; tropo.md's rolling window is not yet documented anywhere found — flag for Vela/Argus to formalize rather than guess) to `archive/channels/[channel]-[YYYY-MM].md`
+  **CRITICAL — channel ordering (per v1.21.0.1 amendment):** Vault channels use **newest-at-bottom** ordering — new entries are appended to the bottom of the file. If a fallback to "keep the most recent N lines" is ever needed, that means the last N lines (tail of file): `tail -N <channel>.md` returns the newest. Governance was amended at v1.21.0.1 captain-mode reversal: previous newest-at-top rule had zero practical compliance; channels/CAPSULE.md amended to align governance with practice.
 - **Crew brief** — do NOT auto-archive. If over trigger, emit a `tropo.broadcast.crew` event (category: ops): `[vault-janitor] ALERT | 00-crew-brief.md at [N] lines (trigger: 200). Vela should groom.` — see §Event-Log Posting below
 - **Status cards** — do NOT auto-archive. If over trigger, emit a `tropo.broadcast.crew` event (category: ops): `[vault-janitor] BULLETIN | [agent]-status.md at [N] lines. Owner should trim.` — see §Event-Log Posting below
 
@@ -94,10 +95,7 @@ Check every ceiling-governed file against its hard limit. Archive proactively wh
 
 ## Task 2 — Channel Cleanup
 
-**Working channels** (files matching `[name]-[name].md` in `channels/`):
-- Clear entries older than 24 hours
-- Keep file header intact (everything above the first `---` after the header block)
-- If all entries current: leave untouched
+*(The working-pair-channel tier — `[name]-[name].md` files — is retired entirely, Rule 13 / v1.61, 2026-05-29. No such files exist; there is nothing to clean at that tier and nothing to check for. Removed from this task 2026-09-03 — see `channels/CAPSULE.md` v2.0.)*
 
 **Topic channels** (`releases.md`, `tropo.md` — `ops.md` and `alerts.md` were retired 2026-05-29 per v1.61 Rule 13; coordination moved to the typed event log, see §Event-Log Posting):
 - Move entries older than rolling window to `archive/channels/[channel]-[YYYY-MM].md`
@@ -109,10 +107,11 @@ Check every ceiling-governed file against its hard limit. Archive proactively wh
 - `channels/metis-historian.md`
 - `channels/vela-historian.md`
 - Any other `*-historian.md` channels (long-term lineage memory)
+- *(None of these currently exist on disk — checked 2026-09-03. The rule stands as a standing constraint in case one is ever created; it is not describing current inventory.)*
 
-**Other skip-class:** `channels/README.md`, `channels/pm.md`.
+**Other skip-class:** `channels/README.md`, `channels/pm.md`, `channels/d.writing-curator.md` (explicitly preserved-dormant per CAPSULE.md v2.0 — never archive, never treat as active).
 
-**Special case — `channels/crew-standup.md`:** Clear any standup entries older than 24h (between the format block and end of file). **Never archive.** Standup content is intentionally ephemeral — no monthly archive, no rolling window. Just clear.
+**Special case — `channels/crew-standup.md`:** if it exists, clear any standup entries older than 24h (between the format block and end of file). **Never archive.** Standup content is intentionally ephemeral — no monthly archive, no rolling window, just clear. *(Does not currently exist on disk — checked 2026-09-03.)*
 
 ---
 
@@ -186,7 +185,8 @@ Recycle: [N] items (report only)
 
 ---
 
-*sa.vault-janitor | v1.0 | Ops Fleet SA | Vela V29 | April 16, 2026*
+*sa.vault-janitor | v1.1 | Ops Fleet SA | Vela V29 | April 16, 2026*
 *Supersedes: `agents/operations/vault-janitor/activate.md`*
-*Dispatched by: `playbooks/fleet-ops.playbook.md`*
+*Dispatched on Mike's word per studio-ops v2.0 read-and-warn (fleet-ops.playbook.md retired 2026-08-29; see .tropo/WAKE-DISCIPLINE.md + tropo-studio-status.py).*
 *"Keep the channels clean. That's the whole job."*
+*v1.1 2026-09-03 vela-v77 — retired the working-pair-channel tier from Task 1 + Task 2 (it described a system Rule 13 fully retired 2026-05-29; no such files have existed for months). Flagged twice in two consecutive dispatches (012, 2026-09-01 and 2026-09-03) by the agent's own honest self-report before anyone fixed the doc. Also closed a real gap: `d.writing-curator.md` is a genuinely still-live, CAPSULE-protected file that had no skip-class entry here at all. Content behavior is unchanged — every dispatch on record already correctly found zero working channels and acted accordingly; this just makes the doc match what the agent has been doing.*

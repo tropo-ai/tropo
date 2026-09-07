@@ -45,7 +45,15 @@ VAULT_ROOT = Path(__file__).resolve().parents[2]
 VAULT_FILES = VAULT_ROOT / 'vault' / 'files'
 TOOLS = VAULT_ROOT / 'vault' / 'tools'
 TODAY = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-UID_RE = re.compile(r'^[0-9a-f]{8}$')
+# Governed UID shape and filename resolution have one shared authority.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.governed_path import (  # noqa: E402
+    AmbiguousGovernedPath,
+    UnsafeGovernedPath,
+    is_governed_uid_shape,
+    resolve_governed_path,
+)
+
 COMMIT_RE = re.compile(r'^[0-9a-f]{7,40}$')
 
 
@@ -57,21 +65,18 @@ def _split_frontmatter(text: str):
 
 
 def resolve_uid_path(uid: str) -> Path | None:
-    candidates = [
-        VAULT_ROOT / 'vault' / 'files' / f'{uid}.md',
-        VAULT_ROOT / 'vault' / 'agents' / f'{uid}.md',
+    """Resolve within the tool's declared write scope, never recycle bins."""
+    matches = [
+        path
+        for home in ('vault/files', 'vault/agents')
+        if (path := resolve_governed_path(uid, VAULT_ROOT, home=home)) is not None
     ]
-    for p in candidates:
-        if p.exists():
-            return p
-    # Fallback: scan vault/agents + vault/files
-    for base in (VAULT_ROOT / 'vault' / 'agents', VAULT_ROOT / 'vault' / 'files'):
-        if not base.exists():
-            continue
-        fp = base / f'{uid}.md'
-        if fp.exists():
-            return fp
-    return None
+    if len(matches) > 1:
+        raise AmbiguousGovernedPath(
+            f"{len(matches)} restorable files claim uid {uid}: "
+            + ", ".join(str(path) for path in matches)
+        )
+    return matches[0] if matches else None
 
 
 def parse_frontmatter(path: Path) -> tuple[dict, str, str] | None:
@@ -150,17 +155,17 @@ def rebuild_only(uid: str) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('uid', help='8-hex governed entry UID')
+    parser.add_argument('uid', help='Governed entry UID')
     parser.add_argument('--to', dest='commit', required=True, help='Git commit SHA')
     parser.add_argument('--reason', required=True, help='Why this restore (required)')
     parser.add_argument('--actor', default='talos-t25', help='Who performed the restore')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
 
-    uid = args.uid.strip().lower()
+    uid = args.uid.strip()
     commit = args.commit.strip().lower()
     reason = args.reason.strip()
-    if not UID_RE.match(uid):
+    if not is_governed_uid_shape(uid):
         print(f'ERROR: invalid uid {uid!r}', file=sys.stderr)
         return 1
     if not COMMIT_RE.match(commit):
@@ -170,7 +175,11 @@ def main() -> int:
         print('ERROR: --reason is required', file=sys.stderr)
         return 1
 
-    fp = resolve_uid_path(uid)
+    try:
+        fp = resolve_uid_path(uid)
+    except (AmbiguousGovernedPath, UnsafeGovernedPath) as e:
+        print(f'ERROR: {e}', file=sys.stderr)
+        return 1
     if fp is None:
         print(f'ERROR: no governed file for uid {uid}', file=sys.stderr)
         return 1

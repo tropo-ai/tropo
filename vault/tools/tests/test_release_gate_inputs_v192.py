@@ -22,6 +22,7 @@ from __future__ import annotations
 import importlib.util
 import subprocess
 import sys
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -30,6 +31,13 @@ STUDIO_ROOT = Path(__file__).resolve().parents[3]
 TOOLS = STUDIO_ROOT / "vault" / "tools"
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
+# The fixture-Studio helper lives beside this file (same gesture as
+# test_release_plan_lock_end_to_end.py:25).
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+import temp_studio  # noqa: E402
 
 from lib import release_gate_inputs as gate_inputs  # noqa: E402
 from lib.release_gates import VERDICT_PASS, VERDICT_REFUSED  # noqa: E402
@@ -69,11 +77,16 @@ class TheProducerFeedsEveryGate(unittest.TestCase):
         outcomes = preflight.build_registry().run_phase("lock-static", context)
         skipped = [o for o in outcomes if "SKIPPED" in o.verdict.upper()
                    or "inputs absent" in (o.detail or "")]
+        # v1.95 Spine B (f015997f8d8e): build-activation-key declares
+        # pipeline_run — a per-ACTIVATION fact no plan can supply. The producer
+        # feeds every plan-derivable input; the one honest skip is a gate whose
+        # declared input is the activation, when no activation is in hand.
+        registry = preflight.build_registry()
         self.assertEqual(
-            [], skipped,
-            "these gates still cannot fire: "
-            + ", ".join(o.gate_id for o in skipped),
-        )
+            [o.gate_id for o in skipped
+             if "pipeline_run" not in registry.get(o.gate_id).required_inputs],
+            [],
+            "a plan-derivable input was left unfed: " + ", ".join(o.gate_id for o in skipped))
         self.assertTrue(outcomes)
 
     def test_producer_reads_member_states_from_entries_not_the_index(self) -> None:
@@ -196,12 +209,83 @@ class TheCorpusRootIsTheStudioRoot(unittest.TestCase):
 
 
 class TheLockRunsItsOwnBoundary(unittest.TestCase):
-    """AC3. The tool referenced the preflight zero times."""
+    """AC3. The tool referenced the preflight zero times.
+
+    These two tests stood on the LIVE plan 088e21aa until 2026-09-03. It was
+    cancelled, and a cancelled plan is refused for its STATUS several checks
+    before the preconditions are ever consulted -- so both tests failed on a
+    message about lockable statuses while asserting on precondition text. The
+    plan's identity was never the subject: what is under test is that the lock
+    consults the lock-static boundary at all, and names every unmet gate.
+
+    Repointing at the one currently-lockable live plan (301dce9d, v1.94) was the
+    obvious move and is the wrong one -- that is precisely the plan the crew is
+    working to make lockable, so the fix would re-arm the same trap and go red
+    the moment the release succeeds. A precondition-refusal test needs a subject
+    that is PERMANENTLY refusable, which no live plan can promise.
+
+    So the subject is a fixture Studio: a plan in a lockable status whose single
+    member is not terminal, which makes lock-members-terminal refuse by
+    construction and keeps doing so no matter what the real vault does next.
+    """
+
+    #: Two governed uids that exist only inside the fixture Studio.
+    FIXTURE_PLAN = "0dd0f1a7"
+    FIXTURE_SPEC = "0dd0f1a8"
+
+    def _fixture_studio(self):
+        """A Studio whose plan is lockable and whose member is not done.
+
+        `plan_release_lock` derives its studio root as
+        `files_dir.parent.parent`, and loads the preflight from
+        `<studio>/vault/tools/`. TempStudio copies the tool set, so the
+        lock-static gates really run here rather than falling to warn-safe --
+        which is the difference between this test asserting something and
+        asserting nothing.
+        """
+        tmp = Path(tempfile.mkdtemp(prefix="gate-inputs-v192-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        studio = temp_studio.TempStudio(tmp).build()
+        # Opt IN to live lock-static gates for this fixture only. This is not in
+        # TempStudio's shared tool set on purpose: putting it there turns the
+        # preconditions on for every consumer, and the one time it was tried it
+        # broke test_release_plan_lock_end_to_end in five places. See the
+        # PREFLIGHT_TOOL note in temp_studio.py.
+        shutil.copy2(temp_studio.REAL_TOOLS / temp_studio.PREFLIGHT_TOOL,
+                     studio.tools / temp_studio.PREFLIGHT_TOOL)
+        (studio.files / f"{self.FIXTURE_PLAN}.md").write_text(
+            "---\n"
+            f"uid: {self.FIXTURE_PLAN}\n"
+            "type: release-plan\n"
+            "title: 'Fixture plan — permanently refusable by construction'\n"
+            "status: design\n"
+            "release_version: '9.99.0'\n"
+            "ratchet_targets:\n"
+            "  - fixture-ratchet\n"
+            "dev_spec_uids:\n"
+            f"  - {self.FIXTURE_SPEC}\n"
+            "---\n\n# Fixture plan\n",
+            encoding="utf-8",
+        )
+        # The member is deliberately NOT `done`: that is what keeps
+        # lock-members-terminal refusing for as long as this fixture exists.
+        (studio.files / f"{self.FIXTURE_SPEC}.md").write_text(
+            "---\n"
+            f"uid: {self.FIXTURE_SPEC}\n"
+            "type: dev-spec\n"
+            "title: 'Fixture member — not terminal'\n"
+            "status: locked\n"
+            "---\n\n# Fixture member\n",
+            encoding="utf-8",
+        )
+        return studio
 
     def test_lock_refuses_a_plan_with_unmet_preconditions(self) -> None:
+        studio = self._fixture_studio()
         lock = _load("lk_ac3", LOCK_PATH)
         with self.assertRaises(lock.LockRefused) as caught:
-            lock.plan_release_lock(LIVE_PLAN, "test-principal")
+            lock.plan_release_lock(self.FIXTURE_PLAN, "test-principal",
+                                   files_dir=studio.files)
         message = str(caught.exception)
         self.assertIn("unmet governance precondition", message)
         self.assertIn("lock-members-terminal", message)
@@ -209,15 +293,19 @@ class TheLockRunsItsOwnBoundary(unittest.TestCase):
     def test_lock_names_every_unmet_precondition_not_only_the_first(self) -> None:
         """An operator who fixes the named one only to meet the next is being
         drip-fed a truth the check already had."""
+        studio = self._fixture_studio()
         lock = _load("lk_ac3b", LOCK_PATH)
         preflight = _load("pf_ac3", PREFLIGHT_PATH)
         context = gate_inputs.build_context(
-            STUDIO_ROOT, LIVE_PLAN, version_string="1.92.0"
+            studio.root, self.FIXTURE_PLAN, version_string="9.99.0"
         )
         outcomes = preflight.build_registry().run_phase("lock-static", context)
         refused = [o for o in outcomes if o.verdict == VERDICT_REFUSED]
+        self.assertTrue(refused, "fixture must produce at least one refusal, "
+                                 "or this test asserts over an empty list")
         with self.assertRaises(lock.LockRefused) as caught:
-            lock.plan_release_lock(LIVE_PLAN, "test-principal")
+            lock.plan_release_lock(self.FIXTURE_PLAN, "test-principal",
+                                   files_dir=studio.files)
         for outcome in refused:
             with self.subTest(gate=outcome.gate_id):
                 self.assertIn(outcome.gate_id, str(caught.exception))
@@ -262,7 +350,9 @@ class OneCommandReportsEveryBoundary(unittest.TestCase):
         gates here' and 'the listing broke', and three boundaries stood empty
         for months behind that blank."""
         result = self._run("--phase", "all", "--plan-uid", LIVE_PLAN)
-        self.assertIn("(0 gates registered at candidate)", result.stdout)
+        # v1.95 Spine B (f015997f8d8e, 2026-09-05): candidate is no longer empty —
+        # the build's guards register there; pre-freeze still is.
+        self.assertIn("(0 gates registered at pre-freeze)", result.stdout)
 
     def test_report_exit_code_follows_the_existing_contract(self) -> None:
         refused = self._run("--phase", "all", "--plan-uid", LIVE_PLAN,

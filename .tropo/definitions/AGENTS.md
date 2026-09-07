@@ -2,7 +2,7 @@
 spec_version: 2
 tier: os
 maintained_by: tropo
-tropo_version: 0.3.0
+tropo_version: "0.3.0"
 subsystem_hub:
   - 8dd772a0
 ---

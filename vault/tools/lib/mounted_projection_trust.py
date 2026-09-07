@@ -8,17 +8,43 @@ neither caller can silently adopt a weaker interpretation.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import os
 import posixpath
-import re
 import stat
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
 import yaml
 
 
-UID_RE = re.compile(r'^[0-9a-f]{8}$')
+def _load_governed_path():
+    """Load the co-located governed-uid shape authority without ``lib`` ambiguity.
+
+    Mirrors ``public_snapshot.py``'s ``_load_governed_path``: this module can
+    be exec'd by file path (tropo-validate.py's mounted-content checks) after
+    ``.tropo/scripts`` has already claimed ``sys.modules['lib']`` as a
+    separate namespace package, so ``from lib.governed_path import ...``
+    would resolve against the wrong ``lib`` and fail with a missing
+    submodule -- exactly the failure this module carried until fixed.
+    """
+    module_name = "tropo_mounted_projection_trust_governed_path"
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
+    spec = importlib.util.spec_from_file_location(
+        module_name, Path(__file__).resolve().with_name("governed_path.py")
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError("could not load canonical governed_path module")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+is_governed_uid_shape = _load_governed_path().is_governed_uid_shape
 
 
 def safe_mount_relative(value: Any) -> Optional[Path]:
@@ -184,7 +210,10 @@ def load_sidecar_catalog(
         sidecar_sha256 = hashlib.sha256(raw).hexdigest()
         by_path[sidecar_relpath] = (metadata, sidecar_sha256)
         uid = str(metadata.get('uid') or '')
-        if UID_RE.fullmatch(uid):
+        # accepts-both (UID_SHAPES): these sidecars are minted through the
+        # composite-aware chokepoint, so an 8-only check silently dropped
+        # every post-flip 12-hex sidecar from the by_uid index.
+        if is_governed_uid_shape(uid):
             by_uid.setdefault(uid, []).append(
                 (sidecar_relpath, metadata, sidecar_sha256)
             )

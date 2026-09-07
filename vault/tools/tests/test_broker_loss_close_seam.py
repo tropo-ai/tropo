@@ -41,6 +41,8 @@ import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import git_env  # noqa: E402  (the git-env containment seam)
 
 _VAULT_TOOLS = Path(__file__).resolve().parent.parent
 if str(_VAULT_TOOLS) not in sys.path:
@@ -108,10 +110,7 @@ class BrokerLossCloseSeamTests(unittest.TestCase):
         # The close path takes an authority lock, which is git-backed. A real
         # repo keeps the sandbox faithful to production rather than stubbing
         # out the very locking the lifecycle write depends on.
-        subprocess.run(
-            ["git", "init", "-q", str(self.tmp)],
-            check=True, capture_output=True,
-        )
+        git_env.git_run("init", "-q", cwd=self.tmp)
         self._orig = (
             closetool.VAULT_ROOT, closetool.VAULT_FILES, closetool.VAULT_AGENTS
         )

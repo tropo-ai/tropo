@@ -7,6 +7,7 @@ kind: file
 target:
   - web
 source_mode: skip
+ship_verdict: DENY
 canonical_source: app/(web)/build-with-tropo/copy.ts
 parent: b72bd718
 extraction_scope: ship

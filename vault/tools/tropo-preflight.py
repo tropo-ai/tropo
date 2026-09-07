@@ -138,6 +138,45 @@ def check_module(mod: str) -> tuple[bool, str]:
     return (True, origin)
 
 
+
+def warn_from_caller(caller_name: str) -> None:
+    """The first real caller surface (59c61b0e, folded into 00d776ae W1).
+
+    tropo-validate.py and tropo-rebuild-index.py call this at their entry
+    points, BEFORE their own work. WARN-SAFE per deb77758: a not-ready
+    environment is one warn line naming the pip remedy, never a refusal —
+    a broken dependency must never halt the studio's own repair tools.
+    Covers the be9abd46 S8 class (shipped tools dead on import) at the
+    earliest machine-local surface: the box's own tools now TELL the
+    operator which dependency class is broken instead of failing opaque.
+    Swallows everything: a preflight that cannot run must not block the
+    caller either.
+    """
+    try:
+        required, _found = parse_requirements(studio_root() / "requirements.txt")
+        missing = [
+            dist for dist in required
+            if not check_module(module_for(dist))[0]
+        ]
+        py_ok = sys.version_info[:2] >= PYTHON_FLOOR
+        if missing or not py_ok:
+            what = ", ".join(missing) if missing else (
+                f"python {'.'.join(map(str, PYTHON_FLOOR))}+ required"
+            )
+            print(
+                f"[PREFLIGHT] {caller_name}: environment not ready "
+                f"({what}) — remedy: pip3 install -r requirements.txt. "
+                f"Proceeding (warn-safe; 59c61b0e / be9abd46 S8 class).",
+                file=sys.stderr,
+            )
+    except Exception as exc:  # never block the caller
+        print(
+            f"[PREFLIGHT] {caller_name}: check could not run ({exc}) — "
+            f"proceeding.",
+            file=sys.stderr,
+        )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(add_help=True, description=__doc__)
     ap.add_argument("--json", action="store_true", help="machine-readable output")

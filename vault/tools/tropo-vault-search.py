@@ -66,6 +66,28 @@ if str(SCRIPT_DIR) not in sys.path:
 from lib import index_surfaces  # noqa: E402
 
 
+
+def _real_record_path(uid: str) -> Path:
+    """3d430852 (vault-search row): the real path of a record — the index row's
+    own `path` when present (slug-named records carry it), the bare file when
+    it exists, FILES_DIR/<uid>.md as the honest fallback for absent records."""
+    bare = FILES_DIR / f"{uid}.md"
+    if bare.is_file():
+        return bare
+    try:
+        for line in open(INDEX if 'INDEX' in dir() else FILES_DIR.parent / "00-index.jsonl", encoding="utf-8"):
+            if f'"uid": "{uid}"' in line or f'"uid":"{uid}"' in line:
+                import json as _json
+                row = _json.loads(line)
+                rp = row.get("path")
+                if rp:
+                    cand = FILES_DIR.parent.parent / rp
+                    if cand.is_file():
+                        return cand
+    except (OSError, ValueError):
+        pass
+    return bare
+
 def build_haystack(entry: dict) -> str:
     """Flatten all string-valued fields in a vault index entry into one searchable string."""
     parts = []
@@ -149,7 +171,7 @@ def search_content(query: str, limit: int = 10) -> list[dict]:
             "surface": "archive" if archived else "current",
             "score": 1,
             "snippet": " ".join((snip or "").split()),
-            "path": str(FILES_DIR / f"{uid}.md"),
+            "path": str(_real_record_path(uid)),  # 3d430852: search returns the REAL path — a 12-hex slug-named record must not resolve to a nonexistent bare file
         })
     return out
 

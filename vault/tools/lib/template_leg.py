@@ -50,6 +50,19 @@ MINT_BINDING_FIELDS = (
 MINT_TOKEN_NAMES = frozenset(
     {"uid", "date", "author", "capsule_version", "activation_uid"}
 )
+#: 3d430852 (template-leg row): the OPTIONAL title token. The five mandatory
+#: tokens are unchanged; title is legal in a template but never required --
+#: a template without it mints exactly as before (note is EXEMPT by design).
+MINT_OPTIONAL_TOKENS = frozenset({"title"})
+
+#: The absent-title default payloads: each type's own placeholder guidance,
+#: restored when the template carries the optional token but the caller named
+#: no title (3d430852: "absent title restores the type's own placeholder text").
+_TITLE_PLACEHOLDER_TEXT = {
+    "task": "<!-- REQUIRED: human-readable display title, ≤120 chars -->",
+    "dev-spec": "<!-- REQUIRED: human-readable build contract title, ≤100 chars -->",
+    "design-brief": "<!-- REQUIRED: problem-first title, ≤100 chars -->",
+}
 SYSTEM_CONTEXT_TOKEN_RE = re.compile(r"<<SYSTEM:([a-z_]+)>>")
 
 #: Generic-tier check names the instance verifier grades. The GRADES live on the
@@ -345,7 +358,7 @@ def _mint_token_names(scaffold: str, source: object) -> set[str]:
 
 def _exact_mint_tokens(scaffold: str, source: object) -> None:
     tokens = _mint_token_names(scaffold, source)
-    unknown = sorted(tokens - MINT_TOKEN_NAMES)
+    unknown = sorted(tokens - MINT_TOKEN_NAMES - MINT_OPTIONAL_TOKENS)
     missing = sorted(MINT_TOKEN_NAMES - tokens)
     if unknown or missing:
         details = []
@@ -837,6 +850,16 @@ def load_template_leg(vault_root: Path, type_name: str) -> TemplateLeg:
     )
 
 
+def declares_title(leg: TemplateLeg) -> bool:
+    """Whether this leg's scaffold carries the optional <<MINT:title>> token.
+
+    The single authority callers check before accepting a caller-supplied
+    title -- mirrors mint_basename being the one place the readable-filenames
+    flag and the filename rule meet, so no caller re-derives "does this type
+    have a title" by hand."""
+    return "title" in MINT_TOKEN_RE.findall(leg.scaffold)
+
+
 def stamp(
     leg: TemplateLeg,
     *,
@@ -844,6 +867,7 @@ def stamp(
     date: str,
     author: str,
     activation_uid: str | None,
+    title: str | None = None,
 ) -> str:
     """Substitute the exact universal token set -- the ONLY substitutions mint
     performs per the contract -- and return the finished instance text. An
@@ -861,8 +885,22 @@ def stamp(
         ),
     }
 
+    if title is not None:
+        # the optional token: provided ONLY when the caller named a title; a
+        # template without the token never asks and never sees it. Absent
+        # title on a template WITH the token falls through to the template's
+        # own placeholder text (the type's default guidance).
+        tokens["title"] = title
+
     def _sub(m: re.Match) -> str:
         key = m.group(1)
+        if key == "title" and "title" not in tokens:
+            # the optional token with NO caller title: restore the type's own
+            # placeholder guidance rather than refusing -- the token is
+            # optional precisely so a template may carry it at rest.
+            _stem = leg.capsule_path.stem.replace(".capsule", "")
+            _type_name = _stem[len("tropo-"):] if _stem.startswith("tropo-") else _stem
+            return _TITLE_PLACEHOLDER_TEXT.get(_type_name, "<!-- title -->")
         if key not in tokens:
             raise TemplateLegError(
                 f"unknown mint token <<MINT:{key}>> in {leg.capsule_path.name} -- "

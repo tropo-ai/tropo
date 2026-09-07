@@ -5,7 +5,13 @@ ship_scope_lock_break: 'extraction_scope: ship ADDED 2026-07-02 per Mike verbati
 name: project
 type: capsule-definition
 extends: core
-version: 2.9
+version: 3.0
+mint_binding_2026_08_30: "v2.9 -> v3.0 (00d776ae W1, Mike-locked 'W1 - ratify and lock as drafted'): enables mint --type project — the five-field binding (mode/template/version/sha256/output_home) plus the companion template file. Purely additive: no enum, state-machine, rollup, or validation-rule change; existing instances unaffected. Registry regenerated in the same commit."
+mint_mode: human
+mint_template: vault/capsules/templates/project.template.md
+mint_template_version: '1.0'
+mint_template_sha256: 7a72dcd07c13bc1339b4dcfc2cb0f13a010865753f69c78aa13a167c8899a5d5
+mint_output_home: vault/files
 lifecycle_pairing_amendment_2026_08_16: "v2.8 -> v2.9 amendment 2026-08-16 by talos-t44 under Mike-locked v1.89 dev-spec 271d28d7 (activation 7a47c089), whose committed_substrate assigns this amendment to the pairing package. Purely additive: adds the OPTIONAL lifecycle_pairing declaration (core.capsule v2.1) so this type's archived-state law is machine-readable. No enum, alias, state-machine, transition, rollup, template, or validation-rule change; every existing instance stays valid. Version bumped 2026-08-16 on Argus A150's ruling (evt_dd132e700471fc5e_00000014, verbatim: 'semantic capsule changes bump all six'), after T44 measured the effect and asked rather than deciding. For dev-spec specifically A150 held template_enforced_from_version at 1.8 in the same ruling, so v1.8+ stable-AC-ID behaviour is unchanged by the bump. Mint registry regenerated in the same commit."
 template_enforced_from: '2026-07-13'
 template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'

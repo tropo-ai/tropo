@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<!-- ============================================================================
+     TROPO BOARD FORMAT · release-board
+     ----------------------------------------------------------------------------
+     SHAPE (pairs with boards/_shared/board.css for the style). FILL-IN TEMPLATE.
+
+     WHEN TO USE: what ships in ONE cycle — the dev-pipeline status spine for a
+     single release. The streams/workstreams, their live status, the ship gates,
+     and what is still owed before the release cuts. The agent reads the release
+     entry + its activations + live vault status and frames ship-readiness.
+     NOT for: a multi-cycle arc (use roadmap-board) · a single design's status
+     across cycles (use design-status-board) · a per-decision walk (prose).
+
+     HOW TO FILL (you are the engine — supply judgment + real, current state):
+       1. Copy to boards/<you>/<slug>-<date>.html  (stylesheet link below is correct)
+       2. Replace every {{FILL: ...}} from the release entry + its activations.
+       3. STATUS IS THE ARBITER: every stream/gate badge = the AUTHORITATIVE status
+          of that workstream or activation; "What's owed" reads non-terminal status
+          + ownership fields, never a stale "pending" tag.
+       4. Hand-link files as [readable name](path); no bare UIDs; no em-dashes.
+       5. TIMESTAMP TO THE MINUTE, IN UTC — not just the date. A release board is
+          read hours after it is written and the reader must know how stale it is.
+          Stamp the render time in the footer AND the last-touched time of every
+          spec row. (Mike-directed 2026-08-31: "It should also have timestamps on
+          it, not just date.")
+       6. LINK EVERY VEHICLE. Section 2 is a table of the dev-specs themselves —
+          uid link, what it covers, live state, activation uid, last touched. A
+          reader who wants the detail must be one click away, never a search.
+       7. ANSWER "WHAT IS BLOCKED ON ME" ON THE BOARD. Section 3 states the open
+          decision rows in full so the principal does not open a second file.
+       8. THE ENDGAME IN DEPENDENCY ORDER, WITH SEATS. What remains after the
+          specs, what each step is gated on, and WHICH SEAT can execute it — a
+          step no available seat can run is the single most decision-relevant
+          fact a release board can carry.
+       9. KEEP THE HONEST LEDGER (section 5). What the machinery caught, and the
+          author's OWN corrections. A board that hides its author's misses is
+          worth less than one that does not.
+     ============================================================================ -->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{FILL: version + "— Ship Status"}}</title>
+<link rel="stylesheet" href="../_shared/board.css">
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ── HEADER ─────────────────────────────────────────────────────────────-->
+  <header>
+    <div class="eyebrow">{{FILL: context, e.g. "Tropo-OS · Release"}}</div>
+    <h1>{{FILL: version}} — {{FILL: release theme}}</h1>
+    <div class="thesis">{{FILL: one italic sentence — what this release delivers + why it earns a slot}}</div>
+    <div class="statebar">
+      <span class="pill live">Ship state: <b>{{FILL: building / verifying / cut}}</b></span>
+      <span class="pill good">Streams done: <b>{{FILL: n of m}}</b></span>
+      <span class="pill">Owner: <b>{{FILL: release driver}}</b></span>
+    </div>
+  </header>
+
+  <!-- ── 1 · STREAMS (the workstreams in this release) ───────────────────────
+       one .rel per stream. Mark with .flight (building) / .done / .next. The
+       .status chip and the bottom badge both read the stream's real state. -->
+  <h2>1 · Streams</h2>
+  <div class="track">
+    <div class="rel done">
+      <div class="ver">{{FILL: Stream A}}</div><span class="status s-done">Done</span>
+      <div class="theme">{{FILL: what the stream delivers}}</div>
+      <ul class="delivers"><li>{{FILL}}</li></ul>
+      <div class="lanes"><span class="lane done">{{FILL: owner}}</span></div>
+    </div>
+    <div class="rel flight">
+      <div class="ver">{{FILL: Stream B}}</div><span class="status s-flight">Building</span>
+      <div class="theme">{{FILL}}</div>
+      <ul class="delivers"><li>{{FILL}}</li></ul>
+      <div class="lanes"><span class="lane">{{FILL: owner}}</span></div>
+    </div>
+  </div>
+
+  <!-- ── 2 · WHAT SHIPS (the deliverables, with live status) ──────────────────-->
+  <h2>2 · What Ships</h2>
+  <table>
+    <tr><th>Deliverable</th><th>Owner</th><th>Status</th><th>Lands</th></tr>
+    <tr><td class="item">{{FILL}}</td><td>{{FILL}}</td><td><span class="badge b-done">done</span></td><td class="lands">{{FILL}}</td></tr>
+    <tr><td class="item">{{FILL}}</td><td>{{FILL}}</td><td><span class="badge b-flight">building</span></td><td class="lands">{{FILL}}</td></tr>
+    <tr><td class="item">{{FILL}}</td><td>{{FILL}}</td><td><span class="badge b-next">next</span></td><td class="lands">{{FILL}}</td></tr>
+  </table>
+
+  <!-- ── 3 · SHIP GATES (what must be green before the release cuts) ──────────-->
+  <h2>2b · The Specs — every vehicle, live state</h2>
+  <p class="thesis">{{FILL: "Read from each file's own frontmatter at <TIME> UTC, never inferred from the machine-local index. Timestamp = that file's last substantive touch."}}</p>
+  <table>
+    <tr><th>Spec</th><th>Covers</th><th>State</th><th>Activation</th><th>Last touched (UTC)</th></tr>
+    <tr><td class="item">{{FILL: uid link + short name}}</td><td>{{FILL: core rows}}</td><td><span class="badge b-flight">{{FILL: live status}}</span></td><td><code>{{FILL: activation uid or —}}</code></td><td class="lands">{{FILL: MM-DD HH:MM}}</td></tr>
+    <!-- one row per vehicle; every core row must appear in some vehicle's Covers cell -->
+  </table>
+  <p>{{FILL: "Briefs behind them:" + linked list}}</p>
+
+  <h2>3 · Ship Gates</h2>
+  <div class="cols">
+    <div class="card">
+      <div class="grp">{{FILL: gate group, e.g. Build}}</div>
+      <div class="gate"><span class="dot d-done">✓</span><div><div class="g-label">{{FILL: gate, e.g. tsc + lint clean}}</div><div class="g-when">{{FILL}}</div></div></div>
+      <div class="gate"><span class="dot d-prog">◐</span><div><div class="g-label">{{FILL: gate}}</div><div class="g-when">{{FILL}}</div></div></div>
+    </div>
+    <div class="card">
+      <div class="grp">{{FILL: gate group, e.g. Verify}}</div>
+      <div class="gate"><span class="dot d-open">◯</span><div><div class="g-label">{{FILL: gate, e.g. clean-vault / Mike sign-off}}</div><div class="g-when">{{FILL}}</div></div></div>
+    </div>
+  </div>
+
+  <!-- ── 4 · WHAT'S OWED (open items + owners; status-is-arbiter) ─────────────-->
+  <h2>4 · What's Owed Before Ship</h2>
+  <div class="card">
+    <ul class="ledger">
+      <li><b>{{FILL: owner}}</b> — {{FILL: what's open, plain English}}</li>
+      <li><b>Fenced on Mike:</b> {{FILL: sign-off / push / decision only the principal makes}}</li>
+    </ul>
+  </div>
+
+  <h2>5 · Waiting on the principal</h2>
+  <p class="thesis">{{FILL: pointer to the live decision board + "N rows open; everything else this release has been ruled and is recorded there with his verbatim."}}</p>
+  <div class="cols">
+    <div class="card">
+      <div class="grp">{{FILL: ROW NAME — one-line what it decides}}</div>
+      <p>{{FILL: the decision stated in full, with the lean, so the board answers it without opening another file}}</p>
+    </div>
+    <!-- one card per open row; if the board is empty, SAY SO in one line -->
+  </div>
+
+  <h2>6 · The Endgame — what is left, in dependency order</h2>
+  <p class="thesis">{{FILL: "Specs and builds parallelize. Everything below is serial." + where the date actually moves}}</p>
+  <table>
+    <tr><th>Step</th><th>Gated on</th><th>Seat</th><th>State</th></tr>
+    <tr><td class="item">{{FILL: step}}</td><td>{{FILL: what must land first}}</td><td>{{FILL: WHICH SEAT can run it — local machine / cloud / either}}</td><td><span class="badge b-next">{{FILL}}</span></td></tr>
+    <!-- SEAT is not decoration: a step no available seat can execute is the release's real blocker -->
+  </table>
+
+  <h2>7 · Honest Ledger</h2>
+  <div class="card">
+    <p>{{FILL: what the machinery CAUGHT this cycle — defects found by RUNNING things, with what each would have cost}}</p>
+    <p>{{FILL: corrections kept deliberately, INCLUDING the board author's own misses. A board that hides them is worth less.}}</p>
+  </div>
+
+  <footer>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--tropo-done)"></i>done</span>
+      <span><i class="sw" style="background:var(--tropo-flight)"></i>building</span>
+      <span><i class="sw" style="background:var(--tropo-next)"></i>next</span>
+      <span><i class="sw" style="background:var(--tropo-blocked)"></i>blocked</span>
+    </div>
+    <div class="note">{{FILL: author + date}} · release-board format · L1-native render, pulls boards/_shared/board.css. A snapshot; regenerate when work moves.</div>
+  </footer>
+
+</div>
+</body>
+</html>

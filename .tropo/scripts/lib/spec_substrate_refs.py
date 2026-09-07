@@ -14,7 +14,12 @@ from pathlib import Path
 from typing import Iterable
 
 
-UID_RE = re.compile(r"^[0-9a-f]{8}$")
+# Accepts-both (3d430852 Stage B): legacy 8-hex first-class forever; every
+# new governed mint is 12-hex composite since the 2026-08-31 flip. The
+# literal 8 here refused a freshly-minted composite activation uid and
+# would have refused the paired-test stamp at the NEXT spec lock
+# (A165, first-real-file finding at the flip).
+UID_RE = re.compile(r"^[0-9a-f]{8}(?:[0-9a-f]{4})?$")
 ROOT_FILE_RE = re.compile(r"^[A-Za-z0-9._-]+\.[A-Za-z0-9]+$")
 OPAQUE_RE = re.compile(r"^[a-z][a-z0-9.-]*$")
 

@@ -66,7 +66,7 @@ ARCHIVE_INDEX = VAULT_ROOT / "vault" / "00-archive-index.jsonl"
 TODAY = time.strftime("%Y-%m-%d")
 NOW = time.strftime("%Y-%m-%dT%H:%M:%S")
 
-_UID_RE = re.compile(r'\b([0-9a-f]{8})\b')
+_UID_RE = re.compile(r'\b([0-9a-f]{8}(?:[0-9a-f]{4})?)\b')  # accepts-both (3d430852)
 
 
 def uid_search_paths(vault_root: Optional[Path] = None) -> "list":
@@ -205,7 +205,26 @@ def recycle_uid(uid: str, reason: str, dest_dir: Path) -> tuple[bool, str]:
         uid = src.stem
     else:
         search_paths = uid_search_paths()
+        # BARE FAST PATH, then SLUG-ANCHORED. Until 2026-09-02 this searched for
+        # `<uid>.md` and nothing else, so every readable-named governed file — which is
+        # what `tropo-mint-id.py --title` now produces — was invisible to the canonical
+        # deletion path. The canonical AUTHORING path was making files the canonical
+        # DELETION path could not address by uid, and the failure was quiet: SKIP,
+        # `Recycled 0/1`, exit 0. Deletion Discipline (0aefe71d) says never `rm`, always
+        # recycle, so the honest end of that road is somebody reaching for `rm` — the one
+        # thing the discipline exists to prevent. Filed by argus-a167 (f0150ba5074d) after
+        # recycling a probe one minute after minting it.
+        #
+        # `*-<uid>.md` plus an exact `-<uid>` stem check is ANCHORING, not parsing: the
+        # uid is already known here, so there is nothing to infer and no second filename
+        # parser is introduced. `_governed_fp` in the rebuild learned this same resolution
+        # when readable minting shipped; the recycler is the third reader of "what a
+        # governed file is called" and was the one nobody migrated.
         matches = [d / f"{uid}.md" for d in search_paths if (d / f"{uid}.md").exists()]
+        for d in search_paths:
+            for candidate in sorted(d.glob(f"*-{uid}.md")):
+                if candidate.stem.endswith(f"-{uid}") and candidate not in matches:
+                    matches.append(candidate)
         if len(matches) > 1:
             # UIDs are unique by OS invariant, so two homes for one UID is drift, and
             # picking the first silently would soft-delete a file the caller did not name.
@@ -222,7 +241,12 @@ def recycle_uid(uid: str, reason: str, dest_dir: Path) -> tuple[bool, str]:
     # file silently renamed to .md would misrepresent its own type); the existing <uid>.md
     # convention is unchanged for the primary markdown case (both explicit-path .md hits
     # and every bare-UID lookup, which only ever resolves a <uid>.md candidate above).
-    dest_name = f"{uid}.md" if src.suffix == ".md" else src.name
+    # PRESERVE THE READABLE NAME. The explicit-path branch above sets `uid = src.stem`,
+    # so a slug-named file recycled BY PATH lands in the bin under its full readable
+    # name. If the uid branch forced `<uid>.md` the same file would land under two
+    # different names depending on which argument the caller used — one fact, two
+    # behaviours, in the tool whose whole job is that nothing is lost.
+    dest_name = src.name
     dest = dest_dir / dest_name
     if dest.exists():
         suffix = time.strftime("%H%M%S")
@@ -289,7 +313,7 @@ def main():
         # Bypass with --force if the references have already been resolved / are stale.
         if not args.force:
             # Only check 8-hex UIDs (not explicit paths whose stem isn't itself a UID)
-            if re.fullmatch(r"[0-9a-f]{8}", uid_str):
+            if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", uid_str):  # accepts-both
                 inbound = _find_inbound_refs(uid_str)
                 if inbound:
                     print(f"  REFUSED {uid_str}: referenced by {len(inbound)} vault entry/entries "
@@ -306,7 +330,7 @@ def main():
         print(msg, file=(sys.stdout if ok else sys.stderr))
         if ok:
             successes += 1
-            if re.fullmatch(r"[0-9a-f]{8}", uid_str):
+            if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", uid_str):  # accepts-both
                 _remove_from_index(uid_str)
             # C.3 — Stream C auto-emission: tropo.substrate.recycled (v1.58)
             try:

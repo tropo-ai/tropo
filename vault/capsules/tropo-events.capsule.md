@@ -4,8 +4,9 @@ name: events
 title: events — Canonical Event Log Primitive
 type: capsule-definition
 extends: core
-version: '1.13'
-supersedes_version: '1.12'
+version: '1.14'
+supersedes_version: '1.13'
+v1_14_amendment_note: 'v1.13 → v1.14 bounded ADDITIVE amendment authored 2026-09-05 by Argus A171 under the Mike-locked v1.95 Spine A dev-spec f015de6b3a18 (AC5, activation f015f46210c0) and Mike''s own ruling the same day, recorded on plan f015ba71c711 as Blocking Decision 8 -- Metis put one question (this capsule is not in Spine A''s committed_substrate; amend it, or hold and let Po offer without emitting); Mike verbatim: "Q1 of 1, go with option 1." Registers tropo.concierge.companion_offer_made and tropo.concierge.companion_offer_declined and NOTHING ELSE -- no type removed, no envelope field changed, no schema version moved. Added to both REGISTERED_TYPES surfaces (vault/tools/tropo-emit-event.py + .tropo/scripts/lib/event_validators.py) in the same gesture, mint registry regenerated (capsule sha), Metis verifies non-author by emitting both in strict mode from a scratch vault. WHY: AC5 makes the companion offer and its decline REAL -- a record on the bus rather than a line of prose -- and the emitter refuses an unregistered type in strict mode, so Po could not write them until this row existed.'
 v1_13_amendment_note: 'v1.12 → v1.13 bounded ADDITIVE amendment authored 2026-08-23 by Argus A155 under Mike-locked dev-spec 3fb41c99 (v1.91 S2), whose lock IS the lock-break authority per the same composition law used at v1.8/v1.9/v1.10/v1.11/v1.12; Mike''s word given in session 2026-08-23, verbatim: "Yes, talos can add it." Registers tropo.release.scope_locked and NOTHING ELSE — no type removed, no envelope field changed, no schema version moved. Added to both REGISTERED_TYPES surfaces (vault/tools/tropo-emit-event.py + .tropo/scripts/lib/event_validators.py) in the same gesture. WHY: S2 declares scope_locked as one of four release events requiring exactly one writer; argus-a155 ruled its honest emit point is the studio bus rather than the pipeline run journal (the run journal at lock time is a bootstrap contract surface, and the studio already models scope-lock as a principal INPUT to the run — release_metrics.py:55, tropo-release.py:329 --scope-locked-at). talos-t49 then proved by running the real subprocess in an isolated temp studio that the emission is REFUSED at runtime while the type is unregistered — a gap the AC1 emit-site detector cannot see, because a source-pattern check proves the code SHAPE and not that it runs. A declared event that cannot be emitted is S2 AC2''s own defect class; registering it completes the spec rather than extending it. This capsule is already inside 3fb41c99''s committed_substrate, so the lock always contemplated this file.'
 v1_12_amendment_note: 'v1.11 → v1.12 bounded ADDITIVE amendment authored 2026-08-23 by Argus A154 under Mike-locked dev-spec 29506520 (v1.91 S4), whose lock IS the lock-break authority per the same composition law used at v1.8/v1.9/v1.10/v1.11; Mike''s word given in session 2026-08-23. Adds `retirement` to the declared values of data.category on tropo.broadcast.crew, and NOTHING ELSE — no value removed, no envelope field changed, no event schema version moved. WHY: two governing documents required different values for one field and neither was enforced. Playbook e2c7d185 §Required Practice step 8 mandates `category: retirement` on the retirement notice; this capsule''s enum did not contain it; tropo-lineage.py emits `crew-state` from a payload shared by births and retirements, so the tool satisfied the capsule and broke the playbook. Measured on the live bus 2026-08-23: 82 of 310 crew broadcasts (26%) carried a category this capsule does not declare, `retirement` the largest at 47. The reconciliation ruled in 29506520: the capsule wins on SHAPE, the playbook wins on VALUE, so the enum gains the value rather than the playbook losing it. THIS AMENDMENT IS STEP 1 OF 3 AND AUTHORISES NOTHING FURTHER: enforcement at emit is step 2, freezing the 82 undeclared historicals under a dated cohort is step 3. Enforcing before reconciling would have refused the value the playbook mandates and rejected 47 events of established practice.'
 v1_10_amendment_note: 'v1.9 → v1.10 bounded one-type lock-break authored 2026-07-23 by Talos under Mike-approved locked dev-spec 8078657b (activation 95355ef7; approval verbatim: "I approve the bounded events"). Registers only tropo.distill.usage.recorded. Its top-level segment is mandatory, internally attested from the exact ranked chunk partition, and viewer-filtered; segment remains forbidden on every pre-v1.10 type. CLI usage emission is forbidden. No model/provider/spend/pricing/metering/consent/egress/learning event or behavior is authorized.'
@@ -18,9 +19,9 @@ history_companion: 63bf7487
 tier: os
 author: argus-a84
 created: 2026-05-26
-modified: 2026-07-15
+modified: 2026-09-05
 created_by: argus-a84
-modified_by: talos
+modified_by: argus-a171
 status: locked
 locked_by: mike-maziarz
 locked_at: 2026-06-14
@@ -498,6 +499,30 @@ optional_extensions: [recipients (omit for all-crew; populate for targeted subse
 ```
 
 **severity:flash semantics (v1.3) — the alerts.md replacement path.** Any event (broadcast or otherwise) carrying `severity: flash` is the highest-urgency tier, replacing the retired alerts.md FLASH channel. On receipt of a `severity: flash` event addressed to (or broadcast inclusive of) an agent's party UID, `.tropo/scripts/lib/trigger_detection.py` (L.3) auto-fires that agent's continuous-listen polling curve — the structural close on "FLASH alerts need immediate attention" without a dedicated channel file. A FLASH crew alert is `tropo.broadcast.crew` + `category: alert` + `severity: flash`. A FLASH directed alert is `tropo.message.sent` + `severity: flash` + `recipients`.
+
+### Concierge Arrival Family (v1.14; v1.95 Spine A AC5, Mike-ruled 2026-09-05)
+
+The two events Po writes at the companion offer in her arrival conversation (`activate.md` §1.5, after the studio is named and the founder principal minted). Emitted by the concierge from her own party UID; `subject` is the founder principal's UID (the human the offer was made to). lifecycle:evergreen — whether a Studio took a companion at arrival is a durable fact about that Studio. Declining is a real event, not silence: a Studio with neither event has not reached the offer.
+
+```yaml
+type: tropo.concierge.companion_offer_made
+data:
+  offered: ["cal", "darin"]            # the companions introduced by name and purpose
+  founder_principal_uid: "<uid>"      # AC4's principal
+  studio_id: "<uid>"                  # from .tropo/studio-identity.md (AC2)
+required_extensions: [lifecycle (evergreen)]
+```
+
+```yaml
+type: tropo.concierge.companion_offer_declined
+data:
+  offered: ["cal", "darin"]
+  founder_principal_uid: "<uid>"
+  reason: "<the founder's words, or null>"   # optional; never invented
+required_extensions: [lifecycle (evergreen)]
+```
+
+Accepting is not a third event: acceptance is the companion's own birth on the bus (`tropo.agent.activated` from `tropo-genesis-companions`), which is the record.
 
 ### Emit-time Strictness Rule (v1.2 amendment per Argus A87 captain-mode 2026-05-28; closes v1.59 R3 component)
 

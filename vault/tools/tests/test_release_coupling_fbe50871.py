@@ -456,6 +456,43 @@ class TestPublishReleaseFireAndDeferGates(unittest.TestCase):
             rc = pub.cmd_defer(types.SimpleNamespace(version="9.9.9", reason="testing"))
         self.assertNotEqual(rc, 0)
 
+    def _marker(self, version, state="not-staged"):
+        marker = self.studio_root / ".tropo" / "publish-pending.json"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(json.dumps({"version": version, "publish_state": state,
+                                      "written_by": "tropo-build-release.py step_11_zip_and_upload",
+                                      "cure": "stage; then preflight + fire, or defer"}))
+        return marker
+
+    def _defer(self, version="9.9.9"):
+        with patch.object(pub.tropo_roots, "STUDIO_ROOT", self.studio_root), \
+             patch.object(pub, "_stamp_release_entry", lambda *a, **k: None), \
+             patch.object(pub, "_confirm_tty", lambda prompt: True):
+            return pub.cmd_defer(types.SimpleNamespace(version=version, reason="testing"))
+
+    def test_defer_flips_the_marker_to_deferred_by_mike(self):
+        # 2026-09-05: cmd_defer stamped the release entry and left the marker at
+        # not-staged, so every boot nagged about a release Mike had deferred.
+        # Mutation clause: drop the defer_publish_pending call from cmd_defer
+        # and this fails on publish_state.
+        marker = self._marker("9.9.9")
+        self.assertEqual(self._defer(), 0)
+        body = json.loads(marker.read_text())
+        self.assertEqual(body["publish_state"], "deferred-by-mike")
+        self.assertEqual(body["defer_record"]["reason"], "testing")
+        self.assertNotIn("cure", body)
+        self.assertIn("deferred_at", body)
+
+    def test_defer_leaves_another_versions_marker_loud(self):
+        marker = self._marker("9.9.8")
+        self.assertEqual(self._defer("9.9.9"), 0)
+        self.assertEqual(json.loads(marker.read_text())["publish_state"], "not-staged")
+
+    def test_defer_leaves_a_live_marker_alone(self):
+        marker = self._marker("9.9.9", state="live")
+        self.assertEqual(self._defer(), 0)
+        self.assertEqual(json.loads(marker.read_text())["publish_state"], "live")
+
 
 class TestColdWalkPublishGate(unittest.TestCase):
     def setUp(self):
@@ -531,6 +568,201 @@ class TestColdWalkPublishGate(unittest.TestCase):
              patch.object(pub, "require_release_authorization") as authorize:
             pub.cmd_stage(args)
         authorize.assert_called()
+
+
+class _FakeResponse:
+    """Minimal urlopen context manager: status + body, nothing else."""
+
+    def __init__(self, status=200, payload=None):
+        self.status = status
+        self._payload = json.dumps(payload or {}).encode("utf-8")
+
+    def read(self):
+        return self._payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class VerifyChannelTwoLegs(unittest.TestCase):
+    """4e9ce4cc AC1 — the channel verifies itself, on EVERY publish path.
+
+    NETWORK-FREE BY CONSTRUCTION. Every urlopen is mocked; nothing here touches the live
+    bucket. AC1's two LIVE runs (the red birth-certificate run against today's stale
+    manifest, and the green run after the v1.94 publish) are operational acts against
+    the real channel, explicitly outside any suite, and are NOT what this class claims
+    to cover. They belong to the release owner and get recorded on the AC when run.
+
+    WHY THE GATE EXISTS, which is also why the wiring test below matters most: v1.93
+    shipped through `cmd_verify_only` while every manifest gate lived only inside
+    `cmd_fire`. A gate wired into one path is skipped by exactly the other path a
+    deadlocked fire falls back to — so "has a caller" is not enough, and this asserts
+    the specific callers.
+    """
+
+    VERSION = "1.94.0"
+
+    def _manifest(self, current="1.94.0", rows=None):
+        if rows is None:
+            rows = [{"version": "1.94.0", "url": "https://example.invalid/u/1.94.0.zip"}]
+        return {"current": current, "updates": rows}
+
+    # -- leg 1: completeness ---------------------------------------------
+
+    def _run_completeness(self, manifest):
+        with patch.object(pub, "_load_supabase_credentials",
+                          return_value=("https://fake.invalid", "key")), \
+             patch("urllib.request.urlopen",
+                   return_value=_FakeResponse(200, manifest)):
+            return pub._verify_published_update_manifest(self.VERSION)
+
+    def test_leg1_passes_when_current_matches_and_the_row_is_present(self):
+        got = self._run_completeness(self._manifest())
+        self.assertEqual(got["current"], self.VERSION)
+
+    def test_leg1_reds_when_current_is_an_older_version(self):
+        """The birth-certificate shape: current 1.92.0, no matching row."""
+        with self.assertRaises(pub.PublishError) as ctx:
+            self._run_completeness(self._manifest(
+                current="1.92.0",
+                rows=[{"version": "1.92.0", "url": "https://example.invalid/u/1.92.0.zip"}]))
+        message = str(ctx.exception)
+        self.assertIn(
+            "mismatch", message.lower(),
+            "the refusal must CITE the completeness mismatch — a red that does not say "
+            "which leg fired cannot prove the completeness bucket was reached")
+        self.assertIn("1.92.0", message,
+                      "the refusal does not name the version actually observed")
+
+    def test_leg1_reds_when_current_matches_but_the_row_is_missing(self):
+        """The half nobody would think to break: `current` right, no matching entry.
+
+        Asserted separately because a check that only compares `current` passes this
+        case, and a manifest naming a version it has no package for is exactly the
+        1.87/1.88 failure this gate was written after.
+        """
+        with self.assertRaises(pub.PublishError):
+            self._run_completeness(self._manifest(
+                current=self.VERSION,
+                rows=[{"version": "1.93.0", "url": "https://example.invalid/u/x.zip"}]))
+
+    # -- leg 2: resolution -----------------------------------------------
+
+    def test_leg2_heads_every_url_bearing_row(self):
+        manifest = self._manifest(rows=[
+            {"version": "1.94.0", "url": "https://example.invalid/a.zip"},
+            {"version": "1.93.0", "url": "https://example.invalid/b.zip"},
+        ])
+        seen = []
+
+        def _fake(request, timeout=None):
+            seen.append((request.full_url, request.get_method()))
+            return _FakeResponse(200)
+
+        with patch("urllib.request.urlopen", side_effect=_fake):
+            pub.resolve_manifest_urls(manifest)
+
+        self.assertEqual(len(seen), 2, f"expected both rows HEADed, saw {seen}")
+        for _url, method in seen:
+            self.assertEqual(method, "HEAD",
+                             "the resolution leg must HEAD, not GET — it proves the "
+                             "object exists without downloading a release")
+
+    def test_leg2_skips_url_less_rows_so_a_dead_row_cannot_red_forever(self):
+        """The design point stated in verify_channel's own docstring.
+
+        Dead catalog rows carry no url. If leg 2 tried to resolve them the gate would be
+        permanently red on history nobody can fix, and a gate that cannot go green is
+        one people route around.
+        """
+        manifest = self._manifest(rows=[
+            {"version": "1.10.0"},                                        # dead, url-less
+            {"version": "1.94.0", "url": "https://example.invalid/a.zip"},
+        ])
+        seen = []
+        with patch("urllib.request.urlopen",
+                   side_effect=lambda request, timeout=None: (
+                       seen.append(request.full_url) or _FakeResponse(200))):
+            pub.resolve_manifest_urls(manifest)
+        self.assertEqual(
+            seen, ["https://example.invalid/a.zip"],
+            "leg 2 reached a url-less row; a dead catalog row must be skipped, not "
+            "resolved")
+
+    def test_leg2_reds_on_an_http_error_status(self):
+        manifest = self._manifest()
+        with patch("urllib.request.urlopen",
+                   return_value=_FakeResponse(404)):
+            with self.assertRaises(pub.PublishError) as ctx:
+                pub.resolve_manifest_urls(manifest)
+        self.assertIn("unresolvable", str(ctx.exception).lower())
+
+    def test_leg2_reds_when_the_url_cannot_be_reached_at_all(self):
+        """A structural check proves the manifest NAMES the release; only this proves
+        the named object exists. That insufficiency shipped 1.87 and 1.88 empty."""
+        manifest = self._manifest()
+        with patch("urllib.request.urlopen", side_effect=OSError("no route")):
+            with self.assertRaises(pub.PublishError) as ctx:
+                pub.resolve_manifest_urls(manifest)
+        self.assertIn("unresolvable", str(ctx.exception).lower())
+
+    # -- both legs, through the real entry point --------------------------
+
+    def test_verify_channel_runs_both_legs_in_one_call(self):
+        manifest = self._manifest()
+        heads = []
+
+        def _fake(request, timeout=None):
+            method = request.get_method()
+            if method == "HEAD":
+                heads.append(request.full_url)
+                return _FakeResponse(200)
+            return _FakeResponse(200, manifest)
+
+        with patch.object(pub, "_load_supabase_credentials",
+                          return_value=("https://fake.invalid", "key")), \
+             patch("urllib.request.urlopen", side_effect=_fake):
+            got = pub.verify_channel(self.VERSION)
+
+        self.assertEqual(got["current"], self.VERSION, "leg 1 did not run")
+        self.assertEqual(
+            heads, ["https://example.invalid/u/1.94.0.zip"],
+            "leg 2 did not run inside verify_channel — the two legs must both fire from "
+            "the one entry point, or a caller gets half a gate")
+
+    # -- the wiring, which is the whole reason the gate is standalone -----
+
+    def test_the_gate_is_wired_into_every_publish_path(self):
+        """AC1's headline: EVERY publish path, not just the one that was audited.
+
+        Source-level because running cmd_fire needs a world. The named callers are the
+        assertion: cmd_fire (the main path), cmd_verify_only (the path v1.93 actually
+        shipped through while the gates lived only in cmd_fire), and cmd_verify_channel
+        (the standalone birth-certificate runner).
+        """
+        source = (_VAULT_TOOLS / "tropo-publish-release.py").read_text(encoding="utf-8")
+        for fn in ("cmd_fire", "cmd_verify_only", "cmd_verify_channel"):
+            start = source.find(f"def {fn}(")
+            self.assertGreater(start, 0, f"{fn} is gone from the publish tool")
+            nxt = source.find("\ndef ", start + 1)
+            body = source[start: nxt if nxt > 0 else len(source)]
+            self.assertIn(
+                "verify_channel(", body,
+                f"{fn} does not call verify_channel. A gate wired into one path is "
+                f"skipped by exactly the other path a deadlocked fire falls back to — "
+                f"that is how v1.93 shipped past every manifest gate.")
+
+    def test_a_red_channel_exits_14_distinctly_from_an_invocation_error(self):
+        """Exit 14 is a FINDING about the channel, not a tool failure. An operational
+        run cannot act on 'nonzero'."""
+        source = (_VAULT_TOOLS / "tropo-publish-release.py").read_text(encoding="utf-8")
+        start = source.find("def cmd_verify_channel(")
+        body = source[start: source.find("\ndef ", start + 1)]
+        self.assertIn("return 14", body,
+                      "cmd_verify_channel no longer carries its distinct red exit code")
 
 
 class TestManifestPublishWeld(unittest.TestCase):

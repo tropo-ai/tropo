@@ -483,12 +483,20 @@ class ArchiveIndexSplitTests(unittest.TestCase):
             self.assertEqual(rebuild_index_module.rebuild_index(root, True), 0)
             current_path = root / "vault" / index_surfaces.CURRENT_INDEX_NAME
             archive_path = root / "vault" / index_surfaces.ARCHIVE_INDEX_NAME
-            self.assertEqual(_uids(current_path), {"00000001"})
+            # Assert the property, not the count: since v1.93 genesis bootstrap
+            # auto-mints a vault-entity + inbox pair into any fresh vault that
+            # lacks one, so the current index carries two uids this fixture
+            # never planted. The split under test is that the planted active
+            # record lands current and the planted archived ones land archive.
+            # (suite-health 2026-09-03)
+            current_uids = _uids(current_path)
+            self.assertIn("00000001", current_uids)
+            self.assertTrue(current_uids.isdisjoint({"00000002", "00000003"}))
             self.assertEqual(_uids(archive_path), {"00000002", "00000003"})
 
             with sqlite3.connect(root / "vault" / "00-index.sqlite") as conn:
                 sqlite_uids = {row[0] for row in conn.execute("SELECT uid FROM entries")}
-            self.assertEqual(sqlite_uids, set(fixtures))
+            self.assertTrue(set(fixtures) <= sqlite_uids)
 
             # Plant the full-vs-incremental sibling-drift class: flip the
             # current source to archived, freshen just that UID, and require

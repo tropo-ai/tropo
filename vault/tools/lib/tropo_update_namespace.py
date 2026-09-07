@@ -41,8 +41,11 @@ and nothing is replaced-by-guess.
 
 import re
 
-_UID_RE = re.compile(r'^[0-9a-f]{8}(-[0-9a-f]{8})?$')  # bare <uid>.md, defensive on doubled uid
-_SLUG_UID_RE = re.compile(r'^[a-z0-9-]+-[0-9a-f]{8}$')  # <slug>-<uid>.md
+# Two filename-shape regexes stood here (bare <uid>.md; <slug>-<uid>.md) with
+# NO caller: classify() decides by namespace (vault/ + tropo- prefix, .tropo/),
+# the manifest, and the hash — never by uid length. Removed 2026-09-05
+# (argus-a171, S5 f0152efa4cd6 AC5): a dead 8-only constant is the next
+# reader's wrong rule. The uid shape has one home, lib/governed_path.
 
 # Matches a MANIFEST.md table row: | path | size | `hexhash` | or `hexhash...` |
 # The REAL shipped format (confirmed against tropo-releases/v1.77.0/builds/tropo-os-v1.77.0/MANIFEST.md,

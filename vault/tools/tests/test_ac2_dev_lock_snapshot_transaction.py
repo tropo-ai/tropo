@@ -85,6 +85,14 @@ class TheDevLockWritesItsSnapshot(unittest.TestCase):
                                  "    verify:",
                                  "      method: automated",
                                  "      command: python3 -m pytest -q vault/tools/tests/test_ac2_dev_lock_snapshot_transaction.py"])
+        # Stage B (3d430852): the lock's composite mints read the
+        # studio-identity manifest and refuse without it — the fixture
+        # studio needs its genesis before any plan can mint.
+        _mspec = importlib.util.spec_from_file_location(
+            "mint_genesis_seed", TOOLS / "tropo-mint-id.py")
+        _mg = importlib.util.module_from_spec(_mspec)
+        _mspec.loader.exec_module(_mg)
+        _mg.mint_studio_identity(root=self.tmp, minted_by='fixture-genesis')
 
     def _plan(self):
         """Called inside a span by the tests that apply it.
@@ -196,11 +204,21 @@ class TheDevLockWritesItsSnapshot(unittest.TestCase):
         self.assertEqual(body["pipeline_version"], "2.0.0")
         self.assertEqual(len(body["declaration_digest"]), 64)
 
-    def test_the_spec_hash_is_of_the_bytes_on_disk(self) -> None:
+    def test_the_snapshot_pins_the_components_not_the_whole_file(self) -> None:
+        """f01519144119 step 2 (talos-t63, 2026-09-06): the whole-file pin
+        hashed the spec BEFORE this same gesture rewrote it, so it never
+        matched the locked file of any run and nothing read it. What the
+        snapshot carries now is the two digests the close compares."""
         plan = self._plan()
-        expected = hashlib.sha256(
-            (self.files / "5ec00001.md").read_bytes()).hexdigest()
-        self.assertEqual(plan.notes["dev_spec_sha256"], expected)
+        self.assertNotIn("dev_spec_sha256", plan.notes,
+                         "the stale-from-birth whole-file pin is back")
+        for key in ("acceptance_criteria_sha256", "committed_substrate_sha256"):
+            self.assertRegex(plan.notes.get(key, ""), r"^[0-9a-f]{64}$", key)
+        op = next(o for o in plan.operations
+                  if Path(o.path).name == "declaration-snapshot.json")
+        body = json.loads(op.content)
+        self.assertNotIn("dev_spec_sha256", body)
+        self.assertIn("acceptance_criteria_sha256", body)
 
     def test_the_activation_root_is_authored(self) -> None:
         """Rule 12 archives the root at close; without one there is nothing to

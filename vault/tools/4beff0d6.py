@@ -86,6 +86,7 @@ from lib.article_readiness import (
     check_source_article_required_fields as _shared_source_check,
     check_wrapper_required_fields as _shared_wrapper_check,
 )
+from lib.governed_path import UID_HEX_PATTERN, is_governed_uid_shape
 
 # Known category UIDs for the web target — used in the wrapper-scaffold output
 # so the user can copy-paste a working wrapper instead of guessing placeholder values.
@@ -194,7 +195,10 @@ def _find_wrappers_for_source(source_uid: str, target: str | None = None) -> lis
         cs = fm.get('canonical_source', '')
         if not cs:
             continue
-        m = re.search(r'([0-9a-f]{8})\.md$', cs)
+        # accepts-both (UID_SHAPES): an 8-only capture matched only the tail
+        # of a composite 12-hex source_uid, so it never equaled the full uid
+        # and wrapper lookup always missed.
+        m = re.search(r'(%s)\.md$' % UID_HEX_PATTERN, cs)
         if not m or m.group(1) != source_uid:
             continue
         if target is not None:
@@ -550,9 +554,9 @@ def main() -> int:
         parser.print_help(sys.stderr)
         return 2
 
-    # Sanity-check UID shape
-    if not re.fullmatch(r'[0-9a-f]{8}', source_uid):
-        print(f'Error: {source_uid!r} is not an 8-hex UID — '
+    # Sanity-check UID shape (accepts-both, UID_SHAPES)
+    if not is_governed_uid_shape(source_uid):
+        print(f'Error: {source_uid!r} is not a governed UID — '
               f'find your article\'s UID by `grep -i "title-keyword" vault/00-index.jsonl` '
               f'or use --slug <slug>', file=sys.stderr)
         return 2
@@ -609,13 +613,13 @@ def main() -> int:
                 if args.category in WEB_CATEGORIES:
                     category_uid, category_desc = WEB_CATEGORIES[args.category]
                     category_name = category_desc.split('(')[0].strip()  # e.g., "Web Category: Articles"
-                elif re.fullmatch(r'[0-9a-f]{8}', args.category):
+                elif is_governed_uid_shape(args.category):
                     category_uid = args.category
                     # Try to resolve human-readable name from one of the known categories
                     matched = [name for slug, (uid, name) in WEB_CATEGORIES.items() if uid == args.category]
                     category_name = matched[0].split('(')[0].strip() if matched else '(unknown category — verify UID is correct)'
                 else:
-                    print(_fail(f'--category {args.category!r} not a valid slug or 8-hex UID'))
+                    print(_fail(f'--category {args.category!r} not a valid slug or governed UID'))
                     print(f'  Valid slugs for target=web: {", ".join(WEB_CATEGORIES.keys())}')
                     return 1
             elif target_for_action == 'web':

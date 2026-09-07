@@ -11,6 +11,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -1112,6 +1113,131 @@ print(json.dumps(event))
                 "a nested call must not even attempt a rebuild",
             )
             self.assertIn("self-heal suppressed by environment", nested.stderr)
+
+    def test_successful_heal_does_not_block_the_next_divergence(self) -> None:
+        """v1.8 (2026-08-29, talos-t53; routed by Vela V76, found by Argus A163).
+
+        A SUCCESS must not arm the cooldown: two agents booting inside one
+        window could both warn and neither rebuild, because an earlier
+        attempt's marker — even a successful one — blocked the next divergent
+        caller for up to 300s. The steady-state storm brake is the completeness
+        pre-check; the cooldown exists only to keep a BROKEN rebuild from
+        being hammered. Curable divergence = deleted rows (the sanctioned full
+        rebuild restores them from the union).
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tools = self._prepare_event_cli_sandbox(root)
+            sqlite_path = root / "vault" / "events" / "00-events-index.sqlite"
+            cooldown = root / event_identity.AUTOHEAL_COOLDOWN_REL
+
+            subprocess.run(
+                [
+                    sys.executable, str(tools / "tropo-emit-event.py"),
+                    "--type", "tropo.message.sent",
+                    "--source", "/agents/argus", "--as", "argus",
+                    "--lifecycle", "evergreen", "--subject", "cdf9b3ad",
+                    "--data", '{"body":"seed"}',
+                ],
+                cwd=root, capture_output=True, text=True, check=True,
+            )
+            self._rebuild_projection(root, tools)
+
+            def diverge() -> None:
+                with sqlite3.connect(sqlite_path) as conn:
+                    conn.execute("DELETE FROM events")
+                    conn.commit()
+
+            # First divergence: heals successfully, marker records success.
+            diverge()
+            cooldown.unlink(missing_ok=True)
+            first = subprocess.run(
+                [sys.executable, str(tools / "tropo-query-events.py"), "--limit", "5"],
+                cwd=root, capture_output=True, text=True, check=True,
+            )
+            self.assertIn("auto-rebuild succeeded", first.stderr)
+            marker = json.loads(cooldown.read_text())
+            self.assertEqual(marker.get("last_outcome"), "success")
+
+            # A NEW divergence inside the same 300s window must ALSO heal —
+            # this is the exact defect: the old success-armed cooldown refused.
+            diverge()
+            second = subprocess.run(
+                [sys.executable, str(tools / "tropo-query-events.py"), "--limit", "5"],
+                cwd=root, capture_output=True, text=True, check=True,
+            )
+            self.assertNotIn("cooldown active", second.stderr)
+            self.assertIn("auto-rebuild succeeded", second.stderr)
+            self.assertEqual(len(json.loads(second.stdout)), 2)
+
+    def test_held_rebuild_lock_skips_with_an_honest_line(self) -> None:
+        """A genuinely concurrent caller neither double-rebuilds nor waits in
+        the dark: it reads on the canonical union and says so."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tools = self._prepare_event_cli_sandbox(root)
+            sqlite_path = root / "vault" / "events" / "00-events-index.sqlite"
+            lock = root / event_identity.AUTOHEAL_LOCK_REL
+
+            subprocess.run(
+                [
+                    sys.executable, str(tools / "tropo-emit-event.py"),
+                    "--type", "tropo.message.sent",
+                    "--source", "/agents/argus", "--as", "argus",
+                    "--lifecycle", "evergreen", "--subject", "cdf9b3ad",
+                    "--data", '{"body":"seed"}',
+                ],
+                cwd=root, capture_output=True, text=True, check=True,
+            )
+            self._rebuild_projection(root, tools)
+            with sqlite3.connect(sqlite_path) as conn:
+                conn.execute("DELETE FROM events")
+                conn.commit()
+
+            lock.mkdir(parents=True)  # fresh: another caller is mid-rebuild
+            held = subprocess.run(
+                [sys.executable, str(tools / "tropo-query-events.py"), "--limit", "5"],
+                cwd=root, capture_output=True, text=True, check=True,
+            )
+            self.assertIn("another caller is rebuilding", held.stderr)
+            self.assertEqual(len(json.loads(held.stdout)), 2)
+            # Delivery truth unaffected; the cache was left divergent by design.
+            lock.rmdir()
+
+    def test_stale_rebuild_lock_is_broken_and_the_heal_proceeds(self) -> None:
+        """A lock older than the TTL guarded a subprocess that has long since
+        timed out — the next caller breaks it and heals."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tools = self._prepare_event_cli_sandbox(root)
+            sqlite_path = root / "vault" / "events" / "00-events-index.sqlite"
+            lock = root / event_identity.AUTOHEAL_LOCK_REL
+
+            subprocess.run(
+                [
+                    sys.executable, str(tools / "tropo-emit-event.py"),
+                    "--type", "tropo.message.sent",
+                    "--source", "/agents/argus", "--as", "argus",
+                    "--lifecycle", "evergreen", "--subject", "cdf9b3ad",
+                    "--data", '{"body":"seed"}',
+                ],
+                cwd=root, capture_output=True, text=True, check=True,
+            )
+            self._rebuild_projection(root, tools)
+            with sqlite3.connect(sqlite_path) as conn:
+                conn.execute("DELETE FROM events")
+                conn.commit()
+
+            lock.mkdir(parents=True)
+            stale = time.time() - (event_identity.AUTOHEAL_LOCK_TTL_SECONDS + 60)
+            os.utime(lock, (stale, stale))
+            healed = subprocess.run(
+                [sys.executable, str(tools / "tropo-query-events.py"), "--limit", "5"],
+                cwd=root, capture_output=True, text=True, check=True,
+            )
+            self.assertIn("broke a stale SQLite auto-rebuild lock", healed.stderr)
+            self.assertIn("auto-rebuild succeeded", healed.stderr)
+            self.assertFalse(lock.exists(), "a completed heal releases its lock")
 
     def test_discarded_reply_is_reported_not_silently_dropped(self) -> None:
         """1f29bcfb Case 5: strictness stays, silence goes.

@@ -448,5 +448,146 @@ class LegacySourceModeTests(unittest.TestCase):
                              "user content changed under legacy-source")
 
 
+class UpdateHistoryWriterTests(unittest.TestCase):
+    """4e9ce4cc row 3 / AC2 — the customer's update history survives and
+    grows: across a bootstrap apply, planted rows survive as a byte-identical
+    prefix plus exactly one appended truthful row (success or failure).
+    Exclusion of the file from every image is T53's landed work; the WRITER
+    is this spec's."""
+
+    PLANTED = [
+        {"version": "1.90.0", "outcome": "success", "mode": "full",
+         "backup_dir": "/prior", "utc": "2026-08-01T00:00:00Z"},
+        {"version": "1.93.0", "outcome": "success", "mode": "full",
+         "backup_dir": "/prior2", "utc": "2026-08-20T00:00:00Z"},
+    ]
+
+    def _studio_with_planted_history(self, root: Path) -> Path:
+        studio = root / "studio"
+        (studio / "vault" / "updates").mkdir(parents=True)
+        planted_bytes = "".join(
+            json.dumps(r) + "\n" for r in self.PLANTED).encode("utf-8")
+        (studio / "vault" / "updates" / "update-history.jsonl").write_bytes(
+            planted_bytes)
+        return studio
+
+    def _image_with_manifest_version(self, root: Path, version: str) -> Path:
+        image = _write_image(root, {"os.py": "new"})
+        (image / "tropo-image-manifest.json").write_text(
+            json.dumps({"schema": "tropo.image-manifest/v1",
+                        "version": version, "file_count": 1,
+                        "files": {"os.py": {"sha256": "0" * 64, "bytes": 3}}}),
+            encoding="utf-8")
+        return image
+
+    def _history_bytes(self, studio: Path) -> bytes:
+        return (studio / "vault" / "updates" / "update-history.jsonl").read_bytes()
+
+    def test_success_appends_one_row_with_the_image_manifest_version(self) -> None:
+        applier = _load_applier()
+        with tempfile.TemporaryDirectory(prefix="v194_hist_") as tmp:
+            root = Path(tmp).resolve()
+            studio = self._studio_with_planted_history(root)
+            (studio / "os.py").write_text("old", encoding="utf-8")
+            image = self._image_with_manifest_version(root, "1.94.0")
+            prior = _prior_manifest(root, {"os.py": "old"})
+
+            receipt = applier.apply(image_dir=image, studio_dir=studio,
+                                    prior_manifest=prior)
+
+            planted_bytes = "".join(
+                json.dumps(r) + "\n" for r in self.PLANTED).encode("utf-8")
+            after = self._history_bytes(studio)
+            self.assertTrue(
+                after.startswith(planted_bytes),
+                "planted rows are not a byte-identical prefix — the "
+                "customer's prior history was damaged")
+            appended = after[len(planted_bytes):]
+            lines = appended.decode("utf-8").splitlines()
+            self.assertEqual(len(lines), 1,
+                             f"expected exactly one appended row, got {len(lines)}")
+            row = json.loads(lines[0])
+            self.assertEqual(row["version"], "1.94.0",
+                             "version must come from the image manifest, "
+                             "not the stamp")
+            self.assertEqual(row["outcome"], "success")
+            self.assertEqual(row["mode"], receipt["mode"])
+            self.assertEqual(row["backup_dir"], receipt["backup_dir"])
+            self.assertIn("utc", row)
+
+    def test_failure_path_appends_a_failed_row(self) -> None:
+        applier = _load_applier()
+        with tempfile.TemporaryDirectory(prefix="v194_histf_") as tmp:
+            root = Path(tmp).resolve()
+            studio = self._studio_with_planted_history(root)
+            (studio / "a.py").write_text("old", encoding="utf-8")
+            image = self._image_with_manifest_version(root, "1.94.0")
+            prior = _prior_manifest(root, {"a.py": "old"})
+            real_write = Path.write_bytes
+
+            def failing_write(self, data):
+                if self.name == "os.py":
+                    raise OSError("planted failure")
+                return real_write(self, data)
+
+            with mock.patch.object(Path, "write_bytes", failing_write):
+                with self.assertRaises(applier.ApplyFailure):
+                    applier.apply(image_dir=image, studio_dir=studio,
+                                  prior_manifest=prior)
+
+            rows = [json.loads(line) for line in
+                    self._history_bytes(studio).decode("utf-8").splitlines()]
+            self.assertEqual(len(rows), len(self.PLANTED) + 1)
+            self.assertEqual(rows[-1]["outcome"], "failed",
+                             "a failed apply must still record its row — "
+                             "the history is the customer's, and a failed "
+                             "attempt is part of it")
+            self.assertEqual(rows[-1]["version"], "1.94.0")
+
+    def test_no_manifest_version_falls_back_to_the_stamp(self) -> None:
+        applier = _load_applier()
+        with tempfile.TemporaryDirectory(prefix="v194_hist stamp".replace(" ", "_")) as tmp:
+            root = Path(tmp).resolve()
+            studio = self._studio_with_planted_history(root)
+            (studio / "os.py").write_text("old", encoding="utf-8")
+            image = _write_image(root, {"os.py": "new"})  # NO image manifest
+            prior = _prior_manifest(root, {"os.py": "old"})
+
+            receipt = applier.apply(image_dir=image, studio_dir=studio,
+                                    prior_manifest=prior, version="20260830T230000")
+
+            rows = [json.loads(line) for line in
+                    self._history_bytes(studio).decode("utf-8").splitlines()]
+            self.assertEqual(rows[-1]["version"], receipt["version"],
+                             "without a manifest version the row must carry "
+                             "the same stamp as the receipt — an honest "
+                             "unknown, never a fabricated semver")
+
+    def test_the_cli_stdout_stays_one_json_document(self) -> None:
+        """bootstrap json.loads the child applier's WHOLE stdout; a stray
+        print anywhere in the apply path breaks it silently far away."""
+        import subprocess
+        import sys as _sys
+        with tempfile.TemporaryDirectory(prefix="v194_histcli_") as tmp:
+            root = Path(tmp).resolve()
+            studio = root / "studio"
+            studio.mkdir()
+            (studio / "os.py").write_text("old", encoding="utf-8")
+            image = self._image_with_manifest_version(root, "1.94.0")
+            prior = _prior_manifest(root, {"os.py": "old"})
+            proc = subprocess.run(
+                [_sys.executable, str(TOOLS / "tropo-apply-image.py"), "apply",
+                 "--image", str(image), "--studio", str(studio),
+                 "--prior-manifest", str(prior)],
+                capture_output=True, text=True, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stderr[-400:])
+            receipt = json.loads(proc.stdout)  # ONE document, whole stdout
+            self.assertEqual(receipt["schema"], "tropo.apply-receipt/v1")
+            rows = [json.loads(line) for line in
+                    (studio / "vault" / "updates" / "update-history.jsonl")
+                    .read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(len(rows), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

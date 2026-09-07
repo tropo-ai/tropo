@@ -107,6 +107,17 @@ def main():
         # Event 1: run_created
         f.write(json.dumps({
             "event": "run_created",
+            # run_uid IS THE CONTRACT, and this row omitted it entirely until
+            # 2026-09-01. loop_metering_gateway.py:335 reads
+            # events[0].get("run_uid") and refuses the whole budget contract when
+            # it is absent -- so a loop activated through THIS sanctioned gate
+            # could never make a metered call, and the refusal named the missing
+            # field rather than the launcher that never wrote it. The value was
+            # minted at :96 and written into run.state.json as "uid"; the event
+            # row simply did not carry it. The studio's own run_created schema
+            # (.tropo/boot-fast-path.md) spells the key run_uid, so the gateway
+            # was right and the writer was wrong. (argus-a165)
+            "run_uid": run_uid,
             "time": now_iso,
             "owner": "mike-maziarz", # Default for now
             "loop": loop['uid'],

@@ -50,6 +50,7 @@ from lib.gardener import (
     safety_net_segment,
     resolve_effective_scope,
 )
+from lib.audience_context import VAULT_UID_RE
 
 # ---------------------------------------------------------------------------
 # The public allowlist (Ruling 2): a versioned CODE-CONSTANT, never config —
@@ -67,7 +68,6 @@ TEAM_BRANCH_DEFAULT = "team-main"
 
 VAULT_MANIFEST_REL = Path(".tropo") / "vault-manifest.md"
 _FRONTMATTER_RE = re.compile(r'^---\n(.*?\n)---\n', re.DOTALL)
-_UID_RE = re.compile(r'^[0-9a-f]{8}$')
 
 # Unicode category prefixes stripped before compare: Cf (format — zero-width
 # space, joiners, bidi controls) and Cc (control chars). Identical pipeline to
@@ -108,13 +108,16 @@ def _split_frontmatter(text: str) -> Optional[str]:
 
 
 def read_vault_manifest_uid(vault_root: Path) -> Optional[str]:
-    """Read <vault_root>/.tropo/vault-manifest.md's own `uid` (or
-    `vault_uid`) — the durable, authored identity of the vault-node that
-    governs everything physically under vault_root. Returns None if no
-    manifest exists at this root, if it fails to parse, or if the uid field
-    is missing/malformed — all of which mean "this is not a standalone
-    vault-node," never an error to raise here (the caller's fallback to case
-    2 handles it)."""
+    """Read <vault_root>/.tropo/vault-manifest.md's `vault_uid`.
+
+    The manifest's governed-record `uid` and ADR-050 vault code are distinct
+    collision domains. Segment identity is the vault code, which is also the
+    compose.lock key; the governed-record UID must never substitute for it.
+    Returns None if no manifest exists at this root, if it fails to parse, or
+    if `vault_uid` is missing/malformed — all of which mean "this is not a
+    standalone vault-node," never an error to raise here (the caller's
+    fallback to case 2 handles it).
+    """
     manifest_path = vault_root / VAULT_MANIFEST_REL
     if not manifest_path.is_file():
         return None
@@ -131,10 +134,10 @@ def read_vault_manifest_uid(vault_root: Path) -> Optional[str]:
         return None
     if not isinstance(fm, dict):
         return None
-    uid = fm.get("uid") or fm.get("vault_uid")
-    if not uid or not _UID_RE.match(str(uid)):
+    uid = fm.get("vault_uid")
+    if not isinstance(uid, str) or not VAULT_UID_RE.fullmatch(uid):
         return None
-    return str(uid)
+    return uid
 
 
 def derive_segment(

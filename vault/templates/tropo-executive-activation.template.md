@@ -1,5 +1,5 @@
 ---
-uid: "[8-char-hex]"
+uid: "[uid as minted by tropo-mint-id.py]"
 agent_name: "[agent-name]"
 type: activation
 owner: "[founder-name]"
@@ -41,5 +41,5 @@ The bounce keeps Tropo's structural primitives (projects / agents / teams / syst
 
 ---
 
-*[Agent Name] activation file | UID: [8-char-hex] | Created [YYYY-MM-DD]*
+*[Agent Name] activation file | UID: [uid as minted] | Created [YYYY-MM-DD]*
 *Rule: this file is short by design. All identity and operations live in the charter and briefing. Do not add content here — add it to the charter if it's identity, to the briefing if it's operations. Exception: the §Routing section is structural (governed by playbook.capsule v2.3 §Subtypes §Concierge-Paths); it belongs here because boot-time agents need it before engaging the founder.*

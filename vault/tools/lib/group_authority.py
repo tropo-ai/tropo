@@ -210,7 +210,12 @@ _FORBIDDEN_ACCEPTANCE = frozenset(
     }
 )
 
-UID_RE = re.compile(r"^[0-9a-f]{8}$")
+# Accepts-both (3d430852 Stage B, 2026-08-31): legacy 8-hex group uids stay
+# first-class forever; every NEW governed mint — a successor generation's
+# uid included, minted through the join ceremony's identity seam — is
+# 12-hex composite. The literal 8 here refused the first composite group
+# uid the join ever minted (found by the W4 gauntlet on first run).
+UID_RE = re.compile(r"^[0-9a-f]{8}(?:[0-9a-f]{4})?$")
 HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 REVISION_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 PRINCIPAL_CLASS_RE = re.compile(r"^(?:human|agent-[a-z0-9]+(?:-[a-z0-9]+)*)$")

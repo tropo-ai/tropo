@@ -1,7 +1,7 @@
 ---
 uid: '<<MINT:uid>>'
 type: dev-spec
-title: "<!-- REQUIRED: human-readable build contract title, ≤100 chars -->"
+title: "<<MINT:title>>"
 description: "<!-- REQUIRED: one-line committed build summary -->"
 status: draft
 state: active
@@ -30,7 +30,7 @@ acceptance_criteria:
       evidence: "<!-- REQUIRED: result or artifact that proves this criterion passed -->"
 ---
 
-# <!-- REQUIRED: title (mirror frontmatter) -->
+# <<MINT:title>>
 
 ## Intent
 <!-- REQUIRED: Explain why this capability matters, who benefits, and what human or operational outcome it serves. State what judgment should optimize for when implementation details force a choice the specification did not anticipate. -->

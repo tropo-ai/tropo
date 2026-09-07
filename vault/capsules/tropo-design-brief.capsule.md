@@ -12,7 +12,7 @@ lifecycle_pairing_amendment_2026_08_16: "v3.4 -> v3.5 amendment 2026-08-16 by ta
 mint_mode: human
 mint_template: vault/capsules/templates/design-brief.template.md
 mint_template_version: '1.0'
-mint_template_sha256: 88c2357f748d00a6cf95e6484330a0f514556b0d3a6b17fb8d060ad9df922abf
+mint_template_sha256: 532a9082275a94cd9ef76cb00fb35b8b20f1cd58237aab1ac2d334fba45a023d
 mint_output_home: vault/files
 template_enforced_from: '2026-07-12'
 template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'

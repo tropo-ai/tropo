@@ -100,8 +100,16 @@ class TestSmokeLocalLibrary(WritePathBase):
         # an AGENT-STAGED single-node selection pulls in the whole unpublished
         # chain — no interactive caller assumed (§Write Library / c27c741b §7).
         self.assertEqual(plan.included_nodes, ("A", "B", "C", "D", "E", "F"))
-        self.assertEqual(len(plan.changeset_uid), 8)
-        self.assertEqual(len(plan.job_uid), 8)
+        # SHAPE, not a frozen width. These pinned len == 8 and went red the moment
+        # the mint actually ran again: composite minting (3d430852) issues 12-hex uids,
+        # so a correct mint reported as a defect. The criterion is that these are
+        # governed uids, which is what accepts-both says — a width is the studio's
+        # business and changed on purpose.
+        for label, value in (("changeset_uid", plan.changeset_uid),
+                             ("job_uid", plan.job_uid)):
+            self.assertRegex(
+                value, r"^[0-9a-f]{8}(?:[0-9a-f]{4})?$",
+                f"{label} is not a governed uid shape: {value!r}")
         # the immutable envelope is durable at the R1-adjacent location
         env = svc.read_envelope(self.root, plan.changeset_uid)
         self.assertEqual(env["job_uid"], plan.job_uid)

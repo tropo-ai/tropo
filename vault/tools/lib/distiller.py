@@ -75,6 +75,7 @@ if str(_TOOLS_DIR) not in sys.path:
 
 # The typed Result convention + the walk's typed errors + the Viewer principal —
 # REUSED, never re-invented (dev-spec: compose, do not fork).
+from lib.governed_path import is_governed_uid_shape  # noqa: E402
 from lib.group_registry import Result  # noqa: E402
 from lib.viewer_projection import (  # noqa: E402
     OS_SEGMENT,
@@ -2439,7 +2440,10 @@ def serve_boot_orientation(
 # Stage C calls a metered model edge, so it SPENDS REAL MONEY. Everything      #
 # below exists to make that spend a decision somebody made, once, in writing.  #
 # --------------------------------------------------------------------------- #
-_GOVERNED_UID_RE = re.compile(r"^[0-9a-f]{8}$")
+# accepts-both (UID_SHAPES): read_body(uid) gated post-flip 12-hex content
+# uids out with a "not a governed 8-hex uid" refusal; routed through the
+# shared shape authority instead of a local 8-only literal (see is_governed_uid_shape
+# usage below).
 
 
 @dataclass(frozen=True)
@@ -2485,8 +2489,8 @@ def governed_body_reader(files_root: "Path | str") -> Callable[[str], bytes]:
         # fire on a caller reaching past it. It stays because the argument
         # crosses into a path join, and a filesystem boundary is the wrong
         # place to rely on someone else's check.
-        if not isinstance(uid, str) or not _GOVERNED_UID_RE.fullmatch(uid):
-            raise ValueError(f"{uid!r} is not a governed 8-hex uid")
+        if not isinstance(uid, str) or not is_governed_uid_shape(uid):
+            raise ValueError(f"{uid!r} is not a governed 8-hex or 12-hex uid")
         return span_guard.match_domain_bytes(root / f"{uid}.md")
 
     return read_body
@@ -2589,6 +2593,17 @@ class SpanOrientation(Orientation):
 
     stage_c: StageCBlock
 
+    @property
+    def egress_report(self) -> tuple:
+        """The independent segment classifications Stage C disclosed.
+
+        W5 changes the egress consequence from an early StageC refusal to this
+        report. The metered edge still owns consent, geography, spend and
+        irreversibility, so exposing the report here does not weaken a gate.
+        """
+
+        return self.stage_c.egress_report
+
 
 def _stage_c_block(
     request: StageCRequest,
@@ -2609,7 +2624,10 @@ def _stage_c_block(
     distinct reasons a run will not produce a block; folding them into
     ``DistillError``'s three codes would round every one of them to the
     nearest familiar answer, and the nearest familiar answer is usually the
-    reassuring one.
+    reassuring one. A successful block carries ``egress_report``; outside
+    origin/segment classification is disclosed there rather than converted to
+    this adapter's own refusal. The metered edge remains free to refuse on its
+    independent consent, geo and spend controls.
     """
 
     if run_binding is None:

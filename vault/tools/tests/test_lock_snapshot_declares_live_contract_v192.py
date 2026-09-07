@@ -104,7 +104,13 @@ REAL_SNAPSHOT_PATH = (
     / "declaration-snapshot.json"
 )
 
-LOCK_MESSAGE_RE = re.compile(r"\bactivation=([0-9a-f]{8})\b")
+# 3d430852 suite migration 6 of 7 (T55): mint-output assertions follow the
+# AUTHORITY mint constant — Stage A mints 8-hex (the lock message regex passes
+# today unchanged); when Stage B flips MINT_HEX_LEN to 12 this follows the
+# flip instead of breaking. Never a second mint-shape definition.
+from lib.governed_path import MINT_HEX_LEN as _MINT_LEN  # noqa: E402
+
+LOCK_MESSAGE_RE = re.compile(r"\bactivation=([0-9a-f]{%d})\b" % _MINT_LEN)
 
 
 def _dev_pipeline_tree_uids() -> list:
@@ -164,6 +170,11 @@ class DevSpecLockDeclaresTheRealPipelineCleanly(unittest.TestCase):
             "      command: python3 -m unittest "
             "vault.tools.tests.test_lock_snapshot_declares_live_contract_v192",
         ])
+
+        # Stage B (3d430852): the lock's composite mints read the
+        # studio-identity manifest — the fixture studio needs its genesis.
+        _mg = self.studio.load("tropo-mint-id.py", "ac2_genesis_seed")
+        _mg.mint_studio_identity(root=self.studio.root, minted_by='fixture-genesis')
 
         self.rt = self.studio.load("9e7003b1.py", "ac2_runtime")
         self.studio.assert_tools_are_rooted_here(self.rt)

@@ -1,6 +1,6 @@
 ---
 # === CHARTER: COMMON FIELDS ===
-uid: "[8-char-hex]"
+uid: "[uid as minted by tropo-mint-id.py]"
 type: charter
 owner: "[founder-name]"
 agent_name: "[agent-name]"

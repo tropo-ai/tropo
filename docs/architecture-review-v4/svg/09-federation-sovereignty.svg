@@ -1,0 +1,207 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 950" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .layer-label { font-size: 15px; font-weight: bold; fill: #ffffff; }
+      .box-title { font-size: 14px; font-weight: bold; fill: #1a2332; }
+      .box-sub { font-size: 11.5px; fill: #44525f; }
+      .seg { font-size: 11px; font-weight: bold; fill: #1a2332; }
+      .seg-sub { font-size: 10px; fill: #5a6a7a; }
+      .flow { font-size: 10.5px; font-weight: bold; fill: #ffffff; opacity: 0.9; }
+      .strip-title { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .chip-title { font-size: 12px; font-weight: bold; fill: #1a2332; }
+      .chip-red { font-size: 12px; font-weight: bold; fill: #9c2b2b; }
+      .chip-green { font-size: 12px; font-weight: bold; fill: #4a8a6b; }
+      .chip-amber { font-size: 12px; font-weight: bold; fill: #b08a4a; }
+      .chip-sub { font-size: 10px; fill: #5a6a7a; }
+      .flow-arrow { font-size: 16px; fill: #5a6a7a; }
+      .caption { font-size: 12px; fill: #5a6a7a; font-style: italic; }
+    </style>
+    <marker id="aw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#dbe4ec"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="950" fill="#fafbfc"/>
+  <text x="40" y="48" class="title">Federation — Segmented Vaults + the Sovereignty Covenant (v1.84)</text>
+  <text x="40" y="72" class="subtitle">Two Studios share a team vault over a plain git remote. Shipped v1.84.0 → v1.84.1 (2026-07-10). Enforcement is entirely client-side; a server hook is never trusted.</text>
+
+  <!-- ===== Band 1: Two studios + team vault ===== -->
+  <rect x="40" y="96" width="1200" height="258" rx="10" fill="#2c4a6e" opacity="0.95"/>
+  <text x="60" y="124" class="layer-label">TWO STUDIOS, ONE TEAM VAULT  ·  segments derive per record; the team remote is a plain bare git repo</text>
+
+  <!-- Studio A -->
+  <rect x="60" y="138" width="310" height="112" rx="6" fill="#ffffff"/>
+  <text x="72" y="158" class="box-title">STUDIO A — full private studio</text>
+  <rect x="72" y="168" width="138" height="42" rx="4" fill="#f6eee2" stroke="#b08a4a"/>
+  <text x="80" y="185" class="seg">private segment</text>
+  <text x="80" y="199" class="seg-sub">unmarked → private</text>
+  <rect x="222" y="168" width="138" height="42" rx="4" fill="#e8eef5" stroke="#2c4a6e"/>
+  <text x="230" y="185" class="seg">os segment</text>
+  <text x="230" y="199" class="seg-sub">scope ∈ {ship, external}</text>
+  <text x="72" y="228" class="box-sub">4,239 records; 15% public-eligible</text>
+  <text x="72" y="243" class="box-sub">segments recompute on every rebuild</text>
+
+  <!-- Team vault -->
+  <rect x="490" y="158" width="300" height="76" rx="6" fill="#ffffff"/>
+  <text x="502" y="178" class="box-title">TEAM VAULT — plain git remote</text>
+  <text x="502" y="196" class="box-sub">bare repo; no server logic; hooks never</text>
+  <text x="502" y="211" class="box-sub">trusted; public-only accumulating history</text>
+  <text x="502" y="226" class="box-sub">audience: team; kind immutable</text>
+
+  <!-- Studio B -->
+  <rect x="910" y="138" width="310" height="112" rx="6" fill="#ffffff"/>
+  <text x="922" y="158" class="box-title">STUDIO B — teammate's studio</text>
+  <rect x="922" y="168" width="138" height="42" rx="4" fill="#f6eee2" stroke="#b08a4a"/>
+  <text x="930" y="185" class="seg">private segment</text>
+  <text x="930" y="199" class="seg-sub">unmarked → private</text>
+  <rect x="1072" y="168" width="138" height="42" rx="4" fill="#e8eef5" stroke="#2c4a6e"/>
+  <text x="1080" y="185" class="seg">os segment</text>
+  <text x="1080" y="199" class="seg-sub">scope ∈ {ship, external}</text>
+  <text x="922" y="228" class="box-sub">same derivation, same gates —</text>
+  <text x="922" y="243" class="box-sub">runs on the teammate's machine</text>
+
+  <!-- Arrows A <-> vault -->
+  <line x1="374" y1="182" x2="484" y2="182" stroke="#dbe4ec" stroke-width="2" marker-end="url(#aw)"/>
+  <text x="429" y="174" class="flow" text-anchor="middle">publish (covenant)</text>
+  <line x1="486" y1="216" x2="378" y2="216" stroke="#dbe4ec" stroke-width="2" marker-end="url(#aw)"/>
+  <text x="429" y="232" class="flow" text-anchor="middle">pull — re-checks all</text>
+
+  <!-- Arrows B <-> vault -->
+  <line x1="906" y1="182" x2="796" y2="182" stroke="#dbe4ec" stroke-width="2" marker-end="url(#aw)"/>
+  <text x="851" y="174" class="flow" text-anchor="middle">publish (covenant)</text>
+  <line x1="794" y1="216" x2="902" y2="216" stroke="#dbe4ec" stroke-width="2" marker-end="url(#aw)"/>
+  <text x="851" y="232" class="flow" text-anchor="middle">pull — re-checks all</text>
+
+  <!-- Model rule chips -->
+  <rect x="60" y="262" width="373" height="80" rx="6" fill="#ffffff"/>
+  <text x="72" y="281" class="box-title">Segments DERIVE — never authored</text>
+  <text x="72" y="298" class="box-sub">Computed from extraction_scope (home) or</text>
+  <text x="72" y="312" class="box-sub">the vault manifest; hand-edits overridden</text>
+  <text x="72" y="326" class="box-sub">on rebuild. Default-deny: the allowlist is</text>
+  <text x="72" y="340" class="box-sub">a frozen code constant {ship, external}.</text>
+
+  <rect x="453" y="262" width="373" height="80" rx="6" fill="#ffffff"/>
+  <text x="465" y="281" class="box-title">D7 — grounding is per-vault</text>
+  <text x="465" y="298" class="box-sub">Every work item traces membership to ITS</text>
+  <text x="465" y="312" class="box-sub">OWN vault's anchor entity — the ownership</text>
+  <text x="465" y="326" class="box-sub">chain resolves identically on every team</text>
+  <text x="465" y="340" class="box-sub">member's machine, whoever computes it.</text>
+
+  <rect x="846" y="262" width="374" height="80" rx="6" fill="#ffffff"/>
+  <text x="858" y="281" class="box-title">member_of lattice (cross-vault refs)</text>
+  <text x="858" y="298" class="box-sub">Up-lattice (equal-or-wider audience) legal ✓</text>
+  <text x="858" y="312" class="box-sub">Down-lattice / incomparable = illegal-but-</text>
+  <text x="858" y="326" class="box-sub">present: excluded from adjacency + authority,</text>
+  <text x="858" y="340" class="box-sub">surfaced as lint — never silently dropped.</text>
+
+  <!-- ===== Band 2: Mount gate + shard index ===== -->
+  <rect x="40" y="372" width="1200" height="168" rx="10" fill="#3a6b8a" opacity="0.95"/>
+  <text x="60" y="400" class="layer-label">THE MOUNT GATE + SHARD INDEX  ·  composition is validated, consented, commit-pinned — and fails closed</text>
+
+  <rect x="60" y="414" width="740" height="112" rx="6" fill="#ffffff"/>
+  <text x="72" y="434" class="box-title">MOUNT GATE — five checks before a foreign vault attaches</text>
+  <text x="72" y="452" class="box-sub">1 · Manifest validation — vault kind is</text>
+  <text x="72" y="466" class="box-sub">     immutable after activation</text>
+  <text x="72" y="480" class="box-sub">2 · compose.lock — every mount pinned to a</text>
+  <text x="72" y="494" class="box-sub">     resolved commit; same lockfile</text>
+  <text x="72" y="508" class="box-sub">     ⇒ same composition, reproducibly</text>
+  <text x="430" y="452" class="box-sub">3 · Executable-consent as a governed write</text>
+  <text x="430" y="466" class="box-sub">4 · Vault-qualified capability names — the</text>
+  <text x="430" y="480" class="box-sub">     dependency-confusion defense (Unicode</text>
+  <text x="430" y="494" class="box-sub">     homograph bypass caught + fixed pre-ship)</text>
+  <text x="430" y="508" class="box-sub">5 · Re-consent on contract narrowing</text>
+
+  <rect x="820" y="414" width="400" height="112" rx="6" fill="#ffffff"/>
+  <text x="832" y="434" class="box-title">SHARD INDEX — incremental, fails closed</text>
+  <text x="832" y="452" class="box-sub">Each mounted vault's index rows cache as a</text>
+  <text x="832" y="466" class="box-sub">shard keyed on the lockfile's commit pin —</text>
+  <text x="832" y="480" class="box-sub">the mount pin IS the dirty-check key.</text>
+  <text x="832" y="494" class="box-sub">Stale shard ⇒ a "cannot-compose" validator</text>
+  <text x="832" y="508" class="box-sub">finding — never a silently-partial index.</text>
+
+  <!-- ===== Band 3: Publish covenant ===== -->
+  <rect x="40" y="558" width="1200" height="178" rx="10" fill="#4a8a6b" opacity="0.95"/>
+  <text x="60" y="586" class="layer-label">THE PUBLISH COVENANT  ·  "no private byte crosses the wire, in either direction"</text>
+
+  <rect x="60" y="600" width="275" height="122" rx="6" fill="#ffffff"/>
+  <text x="72" y="620" class="box-title">Fresh tree, not a filter</text>
+  <text x="72" y="638" class="box-sub">A git push carries a ref + its whole</text>
+  <text x="72" y="652" class="box-sub">history — never a file list, so naive</text>
+  <text x="72" y="666" class="box-sub">filter-then-push leaks. The publisher</text>
+  <text x="72" y="680" class="box-sub">builds a fresh commit tree of exactly</text>
+  <text x="72" y="694" class="box-sub">the passing files, then pushes that</text>
+  <text x="72" y="708" class="box-sub">single ref only.</text>
+
+  <rect x="355" y="600" width="275" height="122" rx="6" fill="#ffffff"/>
+  <text x="367" y="620" class="box-title">Public-only history</text>
+  <text x="367" y="638" class="box-sub">First publish = orphan-root commit</text>
+  <text x="367" y="652" class="box-sub">(no parent). Later publishes parent</text>
+  <text x="367" y="666" class="box-sub">only on the prior public-only tip —</text>
+  <text x="367" y="680" class="box-sub">public history accumulates without</text>
+  <text x="367" y="694" class="box-sub">ever anchoring to private history.</text>
+
+  <rect x="650" y="600" width="275" height="122" rx="6" fill="#ffffff"/>
+  <text x="662" y="620" class="box-title">Committed-tree re-validation</text>
+  <text x="662" y="638" class="box-sub">Re-validates the committed tree,</text>
+  <text x="662" y="652" class="box-sub">walking every reachable commit — not</text>
+  <text x="662" y="666" class="box-sub">just the tip (closes TOCTOU). Walks</text>
+  <text x="662" y="680" class="box-sub">the filesystem, not git's tracked</text>
+  <text x="662" y="694" class="box-sub">list; refuses symlinks, submodules,</text>
+  <text x="662" y="708" class="box-sub">LFS, merge commits, multi-worktree.</text>
+
+  <rect x="945" y="600" width="275" height="122" rx="6" fill="#ffffff"/>
+  <text x="957" y="620" class="box-title">Pull side trusts nothing</text>
+  <text x="957" y="638" class="box-sub">Refuses shallow clones; re-runs every</text>
+  <text x="957" y="652" class="box-sub">boundary check itself. The publisher's</text>
+  <text x="957" y="666" class="box-sub">receipt is informational — never the</text>
+  <text x="957" y="680" class="box-sub">guarantee. Enforcement is entirely</text>
+  <text x="957" y="694" class="box-sub">client-side; a server hook is never</text>
+  <text x="957" y="708" class="box-sub">trusted.</text>
+
+  <!-- ===== Proof strip ===== -->
+  <rect x="40" y="752" width="1200" height="70" rx="10" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="60" y="771" class="strip-title">PROOF RECORD — adversarial, not self-graded</text>
+
+  <rect x="60" y="778" width="262" height="34" rx="5" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="70" y="792" class="chip-title">Red-teamed 2× at spec stage</text>
+  <text x="70" y="806" class="chip-sub">~10 HIGH leak paths folded before build</text>
+  <text x="337" y="800" class="flow-arrow" text-anchor="middle">→</text>
+
+  <rect x="352" y="778" width="262" height="34" rx="5" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="362" y="792" class="chip-red">1st build leaked — 4 of 6 angles</text>
+  <text x="362" y="806" class="chip-sub">heavy 6-attacker fleet forced private bytes</text>
+  <text x="629" y="800" class="flow-arrow" text-anchor="middle">→</text>
+
+  <rect x="644" y="778" width="262" height="34" rx="5" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="654" y="792" class="chip-green">5 HIGH + 6 MEDIUM fixed</text>
+  <text x="654" y="806" class="chip-sub">re-verify fleet: 6/6 FAIL-CLOSED</text>
+  <text x="921" y="800" class="flow-arrow" text-anchor="middle">→</text>
+
+  <rect x="936" y="778" width="284" height="34" rx="5" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="946" y="792" class="chip-title">23-test proof suite · 8 regression plants</text>
+  <text x="946" y="806" class="chip-sub">69/69 federation tests, re-run green by 2 agents</text>
+
+  <!-- ===== Ceilings strip ===== -->
+  <rect x="40" y="834" width="1200" height="70" rx="10" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="60" y="853" class="strip-title" fill="#b08a4a">HONEST CEILINGS — disclosed in the locked spec itself</text>
+
+  <rect x="60" y="860" width="275" height="34" rx="5" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="70" y="874" class="chip-amber">Revocation is forward-only</text>
+  <text x="70" y="888" class="chip-sub">a file reclassified private is already out</text>
+
+  <rect x="355" y="860" width="275" height="34" rx="5" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="365" y="874" class="chip-amber">Platform remote sees metadata</text>
+  <text x="365" y="888" class="chip-sub">publish-occurred + refs visible on GitHub-class</text>
+
+  <rect x="650" y="860" width="275" height="34" rx="5" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="660" y="874" class="chip-amber">Segment gate structural, not crypto</text>
+  <text x="660" y="888" class="chip-sub">forged content + manifest defeats 2nd factor</text>
+
+  <rect x="945" y="860" width="275" height="34" rx="5" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="955" y="874" class="chip-amber">Zero live mounts today</text>
+  <text x="955" y="888" class="chip-sub">proof ran on a simulated 2-machine harness</text>
+
+  <text x="40" y="932" class="caption">The covenant is enforced client-side, proven fail-closed by a red team tasked with making it leak, and honestly ceilinged — production federation use has not yet begun.</text>
+</svg>

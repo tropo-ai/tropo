@@ -181,7 +181,9 @@ class AnEmptyBoundarySaysSo(unittest.TestCase):
     def test_zero_gates_prints_an_explicit_line(self):
         import io
         import contextlib
-        for phase in ("candidate", "pre-freeze", "post-publication-reconcile"):
+        # v1.95 Spine B (f015997f8d8e, 2026-09-05): candidate is no longer empty —
+        # the build's guards register there. These two still are.
+        for phase in ("pre-freeze", "post-publication-reconcile"):
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
                 PREFLIGHT.main(["--phase", phase, "--list"])

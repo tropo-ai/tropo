@@ -1,4 +1,5 @@
 ---
+owner: argus
 uid: afccc0b2
 type: kb-article
 title: Glossary

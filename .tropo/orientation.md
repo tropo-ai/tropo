@@ -14,14 +14,23 @@ migration_note: "2026-08-27 consolidation (Mike-directed, two-canonical-document
 # Tropo-OS — Orientation (kernel thin pointer)
 
 **The canonical orientation surface is [the Studio Map](../docs/tropo-studio-map.md)** —
-capabilities, rules, locations, and the moment index, one hop from everything. Read it at need;
-the boot digest carries the binding find-things rules every boot.
+capabilities, rules, locations, and the moment index, one hop from everything. **Read it in full
+at boot** (boot-fast-path Step 3a, Mike-ruled 2026-08-30 — a whole read, not a §2-only skim);
+reach for it again at need afterward for any specific lookup. The boot digest carries the binding
+find-things rules every boot.
 
 **Degraded floor (canonical unreachable):** current truth is `vault/00-index.jsonl` (FTS +
 relationships at `vault/00-index.sqlite`); capability catalogs sit beside this file
 (`tool-catalog.md` · `skill-catalog.md` · `sa-agent-catalog.md` · `toolbelt.md`); if a capability
 exists, use it; delete only via `vault/tools/tropo-recycle.py`; the L1 canonical entry is
 `vault/files/eca73d77.md`.
+
+**Indexes missing (clean clone):** both index files are per-machine, `.gitignore`d products —
+a fresh clone or first boot on a new machine legitimately has neither. Build them with
+`python3 vault/tools/tropo-rebuild-index.py --apply` (dry-run without `--apply`; add
+`--reconcile` only to force full re-derivation past the verified-archive cache, not needed for a
+first build). That regenerates `vault/00-index.jsonl` + `vault/00-project-tree.jsonl`; the SQLite
+edge/FTS index derives from the same rebuild.
 
 ---
 

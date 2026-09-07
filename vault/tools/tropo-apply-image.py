@@ -29,6 +29,31 @@ from lib import package_state_exclusions  # noqa: E402
 
 IMAGE_MANIFEST_NAME = "tropo-image-manifest.json"
 
+#: 4e9ce4cc row 3 (AC2): the customer's record of what they have applied.
+#: Excluded from every image and package (F7_STATE_REASONS), so it is the
+#: customer's alone — apply APPENDS one row per attempt and never rewrites.
+UPDATE_HISTORY_NAME = "update-history.jsonl"
+
+
+def _append_history_row(studio_dir, *, version, outcome, mode, backup_dir):
+    """AC2: the history grows by exactly one truthful row per apply — success
+    OR failure. Called beside the receipt (and beside the failure raise), it
+    writes nothing to stdout: the receipt is and stays the ONE JSON document
+    the caller parses (bootstrap json.loads that stdout)."""
+    from datetime import datetime, timezone
+
+    row = {
+        "version": str(version),
+        "outcome": outcome,
+        "mode": str(mode),
+        "backup_dir": str(backup_dir),
+        "utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    path = studio_dir / "vault" / "updates" / UPDATE_HISTORY_NAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row) + "\n")
+
 
 def _image_files(image_dir: Path) -> list[str]:
     """The new image's file list: its own emitted manifest when present
@@ -114,6 +139,19 @@ def apply(image_dir, studio_dir, prior_manifest=None, *, version=None):
     stamp = version or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     backup_dir = studio_dir / "vault" / "updates" / "backups" / str(stamp)
 
+    # 4e9ce4cc row 3: the history row's version comes from the IMAGE
+    # MANIFEST (what the customer actually applied), falling back to the
+    # stamp when the manifest carries no version — a stamp in the version
+    # column is the honest 'unknown' shape, never a fabricated semver.
+    history_version = None
+    try:
+        image_manifest_payload = json.loads(
+            (image_dir / IMAGE_MANIFEST_NAME).read_text(encoding="utf-8"))
+        history_version = image_manifest_payload.get("version")
+    except (OSError, ValueError):
+        pass
+    history_version = history_version or stamp
+
     # AC4: capture replace-union-delete BEFORE any mutation.
     operations = (
         [("replace", rel) for rel in result["replace"]]
@@ -138,6 +176,9 @@ def apply(image_dir, studio_dir, prior_manifest=None, *, version=None):
                 if target.is_file():
                     target.unlink()
         except OSError as exc:
+            _append_history_row(
+                studio_dir, version=history_version, outcome="failed",
+                mode=result["mode"], backup_dir=backup_dir)
             raise ApplyFailure(
                 f"operation {index} of {result['total']} ({kind} {rel}) "
                 f"failed: {exc} — halting; the backup at {backup_dir} is "
@@ -162,6 +203,9 @@ def apply(image_dir, studio_dir, prior_manifest=None, *, version=None):
         "warnings": result["warnings"],
         "backup_dir": str(backup_dir),
     }
+    _append_history_row(
+        studio_dir, version=history_version, outcome="success",
+        mode=result["mode"], backup_dir=backup_dir)
     return receipt
 
 

@@ -254,6 +254,10 @@ def load_profile(
     """
     vault_root = Path(vault_root)
     path = vault_root / "vault" / "files" / f"{uid}.md"
+    if not path.is_file():  # Slug-aware (2026-09-03, metis-g118): <slug>-<uid>.md is canonical since 08-31. The bare path is tried first (u...
+        _hits = [p for p in (vault_root / "vault" / "files").glob(f"*-{uid}.md") if p.name.endswith(f"-{uid}.md")]
+        if len(_hits) == 1:
+            path = _hits[0]
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:

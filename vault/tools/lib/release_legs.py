@@ -72,7 +72,11 @@ ATTESTATION_FIELDS = ("attester", "leg", "release_pipeline_run_uid",
                       "tested_commit_sha", "rationale")
 
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
-UID_RE = re.compile(r"^[0-9a-f]{8}$")
+#: Accepts-both (3d430852): legacy 8-hex uids stay first-class forever; every
+#: new governed mint is 12-hex composite since the Stage B flip. The literal
+#: 8 this replaced refused a freshly-minted composite parent-run uid as
+#: "unresolvable" — found by test_release_plan_lock_end_to_end at the flip.
+UID_RE = re.compile(r"^[0-9a-f]{8}(?:[0-9a-f]{4})?$")
 
 
 class LegRefusal(Exception):

@@ -1,5 +1,6 @@
 ---
 uid: dbc1cbbf
+subsystem_home: boards/   # v1.95 A5: the folder this subsystem lives in; the shipped map places it in the layer that folder belongs to
 type: project
 status: evergreen
 state: active

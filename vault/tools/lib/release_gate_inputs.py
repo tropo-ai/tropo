@@ -47,6 +47,11 @@ from typing import Any, Dict, List, Optional
 
 from . import fast_yaml
 
+#: The uid as minted: 12-hex composite since 3d430852 Stage B, 8-hex on legacy
+#: records. ONE authority studio-wide — lib/governed_path (test_uid_shape_has_one_home
+#: refuses a local re-derivation, and rightly caught the first cut of this cure).
+from .governed_path import is_governed_uid_shape as _is_governed_uid_shape
+
 __all__ = [
     "GateInputError",
     "build_context",
@@ -68,7 +73,13 @@ class GateInputError(RuntimeError):
 
 
 def _entry_path(studio_root: Path, uid: str) -> Path:
-    return Path(studio_root) / "vault" / "files" / f"{uid}.md"
+    """Slug-aware (2026-09-03, metis-g118): <slug>-<uid>.md is canonical since 08-31. The bare path is tried first (unchanged behaviour for every bare-named record); a single hyphen-anchored `*-<uid>.md` match is accepted otherwise. Found when the v1.94 plan lock's governance preconditions could not read a slug-named member spec and fell to warn-safe -- a gate that cannot see its subject."""
+    base = Path(studio_root) / "vault" / "files"
+    bare = base / f"{uid}.md"
+    if bare.is_file():
+        return bare
+    hits = [p for p in base.glob(f"*-{uid}.md") if p.name.endswith(f"-{uid}.md")]
+    return hits[0] if len(hits) == 1 else bare
 
 
 def _frontmatter(path: Path) -> Dict[str, Any]:
@@ -91,9 +102,13 @@ def _frontmatter(path: Path) -> Dict[str, Any]:
 
 def plan_frontmatter(studio_root: Path, plan_uid: str) -> Dict[str, Any]:
     """The release plan as data."""
-    if not plan_uid or len(plan_uid) != 8:
+    # Accepts-both (S5, 2026-09-05, argus-a171): the v1.95 plan f015ba71c711 is a
+    # 12-hex composite (3d430852 Stage B) and this refused it as "not an 8-hex
+    # governed uid" on the first real lock-static run — the hard-coded length
+    # class Mike ruled swept, alive on the release path's critical instrument.
+    if not plan_uid or not _is_governed_uid_shape(str(plan_uid)):
         raise GateInputError(
-            f"release plan uid {plan_uid!r} is not an 8-hex governed uid"
+            f"release plan uid {plan_uid!r} is not a governed uid (8-hex legacy or 12-hex composite)"
         )
     plan = _frontmatter(_entry_path(studio_root, plan_uid))
     if plan.get("type") != "release-plan":
@@ -180,10 +195,34 @@ def governed_index(studio_root: Path, members: List[str]) -> Dict[str, Dict[str,
     return index
 
 
+def _tree_commit(root: Path) -> str:
+    """HEAD of the tree at `root`, or '' outside git. Kept here rather than in
+    build_guards so this module stays free of that import."""
+    import subprocess
+    try:
+        result = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
+                                capture_output=True, text=True, timeout=10)
+    except Exception:  # noqa: BLE001
+        return ""
+    return (result.stdout or "").strip() if result.returncode == 0 else ""
+
+
+def _releases_root(root: Path) -> str:
+    """Where built releases live, from the roots seam (S1 f0159f5c5663 owns the
+    derivation; this only reads it). '' when the seam cannot be loaded."""
+    try:
+        from . import tropo_roots
+        return str(tropo_roots.RELEASES_DIR)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def build_context(
     studio_root: Path,
     plan_uid: Optional[str] = None,
     version_string: str = "",
+    activation_uid: Optional[str] = None,
+    force: bool = False,
 ) -> Dict[str, Any]:
     """Every input the lock-static gates declare, read from the vault.
 
@@ -194,6 +233,25 @@ def build_context(
     root = Path(studio_root).resolve()
     context: Dict[str, Any] = {
         "source_tree": str(root),
+        # v1.95 Spine B (f015997f8d8e AC2): the HEAD this context was read at,
+        # so every evidence row can name the tree it judged. Not a gate input
+        # (absent from INPUT_FIRST_AVAILABLE by design — no gate may require
+        # it); a context fact for write_evidence.
+        "tree_commit": _tree_commit(root),
+        # v1.95 Spine B: the two build guards that read the world OUTSIDE the tree.
+        # releases_root and force are context facts, not gate inputs (absent from
+        # INPUT_FIRST_AVAILABLE by design); pipeline_run IS an input — the
+        # activation whose run minted the key — and is None when no activation
+        # is in hand, so build-activation-key reports skipped rather than
+        # guessing.
+        "releases_root": _releases_root(root),
+        "force": bool(force),
+        "pipeline_run": activation_uid or None,
+        # Present with or without a plan: build-overwrite-guard and
+        # build-activation-key key on it, and both must speak for a standalone
+        # build that has no plan in hand. '' reads as absent to run_phase's
+        # None check only if we let it — so None when empty, on purpose.
+        "version_string": str(version_string) if version_string else None,
         # THE STUDIO ROOT, not vault/tools. See the module docstring: the verify
         # commands are studio-relative, and rooting them at vault/tools made the
         # gate refuse on files that exist.

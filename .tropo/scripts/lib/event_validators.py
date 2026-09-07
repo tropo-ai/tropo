@@ -94,6 +94,10 @@ REGISTERED_TYPES = {
     "tropo.agent.activated", "tropo.agent.retired",
     # Cut 4 R4/Q5 bounded usage capture (events.capsule v1.10; dev-spec 8078657b)
     "tropo.distill.usage.recorded",
+    # Concierge Arrival Family (events.capsule v1.14; v1.95 Spine A AC5 f015de6b3a18,
+    # Mike-ruled 2026-09-05 "Q1 of 1, go with option 1."): Po's companion offer
+    # and its decline are records on the bus, not prose.
+    "tropo.concierge.companion_offer_made", "tropo.concierge.companion_offer_declined",
 }
 VALID_LIFECYCLE = {"evergreen", "ephemeral"}  # per events.capsule v1.1 §2 (query-filter; NOT cycle-phase)
 USAGE_EVENT_TYPE = "tropo.distill.usage.recorded"
@@ -108,6 +112,7 @@ USAGE_DATA_KEYS = {
 REPLY_TYPES = {"tropo.message.acked", "tropo.message.replied"}
 ISO8601_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z?$")
 HEX8_RE = re.compile(r"^[0-9a-f]{8}$")
+HEX12_RE = re.compile(r"^[0-9a-f]{12}$")  # 3d430852: composite shape, first-class beside legacy
 MESSAGING_TYPES = {"tropo.message.sent", "tropo.message.replied",
                    "tropo.message.acked", "tropo.broadcast.crew"}
 PARTY_AXIS_CUTOFF = "2026-06-03"  # events.capsule v1.4 amendment date; pre-cutoff agent-root emits grandfathered
@@ -133,7 +138,7 @@ def _registered_party_uids(vault: Path) -> set[str]:
     for p in agents_dir.glob("*.md") if agents_dir.is_dir() else []:
         try:
             txt = p.read_text(encoding="utf-8")
-            m = re.search(r"^party_uid:\s*([0-9a-f]{8})", txt, re.MULTILINE)
+            m = re.search(r"^party_uid:\s*([0-9a-f]{8}(?:[0-9a-f]{4})?)", txt, re.MULTILINE)  # accepts-both
             if m:
                 uids.add(m.group(1))
         except OSError:
@@ -144,7 +149,14 @@ def _registered_party_uids(vault: Path) -> set[str]:
     try:
         text = registry.read_text(encoding="utf-8")
         uids.update(
-            re.findall(r"^\s{2}([0-9a-f]{8}):\s*$", text, re.MULTILINE)
+            # accepts-both (3d430852). This function has TWO sources and the sweep
+            # cured only the first: the crew-identity read three lines above got the
+            # composite shape, this portable-registry read did not. A 12-hex party uid
+            # registered here was therefore invisible to Check 22, which is an ERROR --
+            # so the first user-agent minted under the new shape would have had every
+            # message it ever emitted reported as not-using-its-party-uid. Latent today
+            # (the live registry is all 8-hex) and guaranteed to fire the day it isn't.
+            re.findall(r"^\s{2}([0-9a-f]{8}(?:[0-9a-f]{4})?):\s*$", text, re.MULTILINE)
         )
     except OSError:
         pass
@@ -242,7 +254,7 @@ def run_all_event_checks(vault: Path) -> tuple[list[Finding], int, int]:
     # Check 6: source_uid mandatory 8-hex
     for ev in events:
         uid = ev.get("source_uid", "")
-        if not HEX8_RE.fullmatch(uid):
+        if not HEX8_RE.fullmatch(uid) and not HEX12_RE.fullmatch(uid):  # accepts-both (3d430852)
             findings.append(_warn("event-6", f"event {ev.get('id','?')}", f"source_uid {uid!r} not 8-hex"))
 
     # Check 7: lifecycle in enum
@@ -312,11 +324,11 @@ def run_all_event_checks(vault: Path) -> tuple[list[Finding], int, int]:
         else:
             task_uid = data.get("task_uid")
             viewer_uid = data.get("viewer_principal_uid")
-            if not isinstance(task_uid, str) or not HEX8_RE.fullmatch(task_uid):
+            if not isinstance(task_uid, str) or not (HEX8_RE.fullmatch(task_uid) or HEX12_RE.fullmatch(task_uid)):  # accepts-both
                 problems.append("data.task_uid must be 8-hex")
             if ev.get("subject") != task_uid:
                 problems.append("subject must exactly equal data.task_uid")
-            if not isinstance(viewer_uid, str) or not HEX8_RE.fullmatch(viewer_uid):
+            if not isinstance(viewer_uid, str) or not (HEX8_RE.fullmatch(viewer_uid) or HEX12_RE.fullmatch(viewer_uid)):  # accepts-both
                 problems.append("data.viewer_principal_uid must be 8-hex")
             index_as_of = data.get("index_as_of")
             if (
@@ -406,6 +418,8 @@ def run_all_event_checks(vault: Path) -> tuple[list[Finding], int, int]:
                     )
                 )
 
+    from lib.work_item_types import WORK_ITEM_TYPES
+
     # Check 23 (v1.70): Completion Recording
     # Detects work items closed without a terminal event.
     # Scoped to items modified after the COMPLETION_CUTOFF.
@@ -424,6 +438,15 @@ def run_all_event_checks(vault: Path) -> tuple[list[Finding], int, int]:
             for line in index_path.read_text(encoding="utf-8").splitlines():
                 try:
                     rec = json.loads(line)
+                    # Scope: only types the studio declares as flowing-lifecycle work
+                    # (WORK_ITEM_TYPES, spec 1d14b1bf, read from lib/work_item_types.py —
+                    # one home, never a second copy). Before this, the check walked EVERY
+                    # indexed type and demanded completion events from os-config,
+                    # chat-session, tool and board-definition, which have no close ceremony
+                    # and never will. 41 of its 919 findings were that. (argus-a165,
+                    # 2026-08-31, note bc3925fd.)
+                    if rec.get("type") not in WORK_ITEM_TYPES:
+                        continue
                     if rec.get("state") in ("done", "archived"):
                         mod = rec.get("modified", "")
                         if mod >= COMPLETION_CUTOFF:
@@ -433,13 +456,24 @@ def run_all_event_checks(vault: Path) -> tuple[list[Finding], int, int]:
         
         if work_uids_terminal:
             # Events with data.final: true OR tropo.cycle.closed
+            # A completion is recorded by the CLOSE CEREMONY — tropo.cycle.closed, which
+            # the canonical close tool (9e7003b1.py) already emits through the canonical
+            # emitter. Bare `data.final: true` NO LONGER CLEARS this obligation.
+            #
+            # Why (measured 2026-08-31, argus-a165, note bc3925fd): `data.final: true` is
+            # emitted 1,323 times and 1,232 of those (93%) are messages — it means "this is
+            # my last word in this thread", which the emitter's own --help states. Reading it
+            # as "this work item is complete" let 18 items pass, and SIXTEEN of those were
+            # emitted in a single minute (2026-06-14T16:23) carrying the body "Terminal state
+            # recorded (Check 23 hygiene pass)". The evidence satisfying the gate was
+            # manufactured to satisfy the gate, and said so. Three dev-specs were among them.
+            #
+            # Note 9e7003b1.py's own comment documents tropo.message.replied as an accepted
+            # completion signal; that comment is updated in the same change. One fact, two
+            # readers — withdrawing the path in one place only would be the defect this cure
+            # was filed against.
             terminal_event_refs = set()
             for ev in events:
-                data = ev.get("data")
-                if isinstance(data, dict) and data.get("final") is True:
-                    cid = ev.get("correlationid")
-                    if cid:
-                        terminal_event_refs.add(cid.zfill(8))
                 if ev.get("type") == "tropo.cycle.closed":
                     cid = ev.get("correlationid")
                     if cid:

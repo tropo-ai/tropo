@@ -233,6 +233,26 @@ class PrivacyTests(unittest.TestCase):
                                   segment_inputs=["argo-private"]))
             self.assertEqual(len(rec.drain()), 1)
 
+    def test_a_case_mismatched_tool_uid_cannot_bypass_its_own_floor(self) -> None:
+        """Argus's release-gate negative-control ask, narrowed: UID_HEX_PATTERN
+        (unlike the tight is_governed_uid_shape) accepts uppercase hex. Before
+        routing this gate through is_governed_uid_shape, an uppercase-cased
+        tool_uid passed the shape check, then MISSED the registry's
+        segment_floor dict lookup (keyed by the real lowercase-minted uid) --
+        floor_name came back None, and the under-declaration this producer's
+        floor exists to catch (see the test above) was silently skipped
+        instead of refused. A shape-plausible but case-mismatched uid must
+        still be refused outright, not silently exempted from its floor."""
+        with tool_telemetry.fresh_recorder() as rec:
+            tool_telemetry.record_refused(
+                **_sample_refused(tool_uid="4E8D1C60",
+                                  segment_inputs=["public"]))
+            self.assertEqual(
+                rec.drain(), [],
+                "an uppercase-cased tool_uid must refuse outright, not land "
+                "a record that skipped its registered floor",
+            )
+
     def test_exception_text_cannot_ride_along(self) -> None:
         with tool_telemetry.fresh_recorder() as rec:
             try:

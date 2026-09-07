@@ -127,6 +127,14 @@ class ReleaseLockEndToEnd(unittest.TestCase):
 
     def _build_studio(self) -> None:
         """One release-plan at specify with two done, receipt-backed members."""
+        # Stage B (3d430852): composite mints read the studio-identity
+        # manifest — the fixture studio needs its genesis before locking.
+        import importlib.util as _ilu
+        _mspec = _ilu.spec_from_file_location(
+            "release_lock_genesis_seed", TOOLS / "tropo-mint-id.py")
+        _mg = _ilu.module_from_spec(_mspec)
+        _mspec.loader.exec_module(_mg)
+        _mg.mint_studio_identity(root=self.tmp, minted_by='fixture-genesis')
         # Typed PASSING evidence. A note has no verdict field, so "the ACs
         # passed" and "someone wrote something down" would be the same claim.
         self._write("e0000001", _entry("e0000001", type="completion-report",
@@ -242,6 +250,10 @@ class ReleaseLockEndToEnd(unittest.TestCase):
         refused by the real runtime.
         """
         studio = temp_studio.TempStudio(self.tmp).build()
+        # Stage B (3d430852): composite mints read the studio-identity
+        # manifest — the fixture studio needs its genesis before locking.
+        studio.load("tropo-mint-id.py", f"genesis_seed_{id(studio):x}").mint_studio_identity(
+            root=studio.root, minted_by='fixture-genesis')
         production_before = temp_studio.production_fingerprint()
         script = self.tmp / "release_lock_then_bootstrap.py"
         script.write_text(
@@ -319,6 +331,10 @@ class ReleaseLockEndToEnd(unittest.TestCase):
         in a TempStudio and binds the lock's values across adoption.
         """
         studio = temp_studio.TempStudio(self.tmp).build()
+        # Stage B (3d430852): composite mints read the studio-identity
+        # manifest — the fixture studio needs its genesis before locking.
+        studio.load("tropo-mint-id.py", f"genesis_seed_{id(studio):x}").mint_studio_identity(
+            root=studio.root, minted_by='fixture-genesis')
         production_before = temp_studio.production_fingerprint()
         script = self.tmp / "release_lock_then_real_bootstrap.py"
         script.write_text(
@@ -399,6 +415,10 @@ class ReleaseLockEndToEnd(unittest.TestCase):
         refuses before the first write.
         """
         studio = temp_studio.TempStudio(self.tmp).build()
+        # Stage B (3d430852): composite mints read the studio-identity
+        # manifest — the fixture studio needs its genesis before locking.
+        studio.load("tropo-mint-id.py", f"genesis_seed_{id(studio):x}").mint_studio_identity(
+            root=studio.root, minted_by='fixture-genesis')
         production_before = temp_studio.production_fingerprint()
         real_files = TOOLS.parent / "files"
         for uid in RELEASE_GRAPH_UIDS + ("5a4337ff", "da3f50dc"):
@@ -560,6 +580,10 @@ class ReleaseLockEndToEnd(unittest.TestCase):
         written into the plan, the run and the journal seed like the others.
         """
         studio = temp_studio.TempStudio(self.tmp).build()
+        # Stage B (3d430852): composite mints read the studio-identity
+        # manifest — the fixture studio needs its genesis before locking.
+        studio.load("tropo-mint-id.py", f"genesis_seed_{id(studio):x}").mint_studio_identity(
+            root=studio.root, minted_by='fixture-genesis')
         production_before = temp_studio.production_fingerprint()
         minted = iter(("12345678", "23456789", "34567890", "45678901"))
         original_mint = rl._mint_uid
@@ -604,6 +628,10 @@ class ReleaseLockEndToEnd(unittest.TestCase):
         are synthetic TempStudio replay evidence and execute no release action.
         """
         studio = temp_studio.TempStudio(self.tmp).build()
+        # Stage B (3d430852): composite mints read the studio-identity
+        # manifest — the fixture studio needs its genesis before locking.
+        studio.load("tropo-mint-id.py", f"genesis_seed_{id(studio):x}").mint_studio_identity(
+            root=studio.root, minted_by='fixture-genesis')
         production_before = temp_studio.production_fingerprint()
         real_files = TOOLS.parent / "files"
         for uid in RELEASE_GRAPH_UIDS:
@@ -827,6 +855,49 @@ class ReleaseLockEndToEnd(unittest.TestCase):
         path.write_text(path.read_text().replace(
             "dev_spec_uids:\n  - 5ec00001\n  - 5ec00002", "dev_spec_uids: []"))
         self._assert_refuses_without_touching_anything("lists no dev_spec_uids")
+
+    def test_the_spec_locks_append_lets_the_plan_lock_see_its_members(self) -> None:
+        """f01592dca86d AC4 — the plan lock can see the members the spec lock appended.
+
+        The v1.94 shape: the plan carries `dev_spec_uids: []   # fills at
+        spec-lock` and the lock refuses "lists no dev_spec_uids". After the spec
+        lock's append (AC1) on that literal line, the empty-list refusal no
+        longer fires; the refusal that fires instead is the ROW-level one for an
+        unclosed member, which proves gather_row ran for the appended uid.
+        Verified by calling the module, not by reading the plan back.
+        """
+        import importlib.util as _ilu
+        _sspec = _ilu.spec_from_file_location(
+            "lock_dev_spec_for_ac4", TOOLS / "tropo-lock-dev-spec.py")
+        spec_lock = _ilu.module_from_spec(_sspec)
+        _sspec.loader.exec_module(spec_lock)
+
+        plan = self.files / "b1a00001.md"
+        plan.write_text(plan.read_text().replace(
+            "dev_spec_uids:\n  - 5ec00001\n  - 5ec00002",
+            "dev_spec_uids: []   # fills at spec-lock, per stream"))
+        # One member left unclosed, so the row-level refusal has something to say.
+        member = self.files / "5ec00001.md"
+        member.write_text(member.read_text().replace("status: done", "status: active"))
+
+        # Before the append: the empty-list refusal, and nothing else.
+        self._assert_refuses_without_touching_anything("lists no dev_spec_uids")
+
+        text, changed = spec_lock.append_uid_to_plan_list(plan.read_text(), "5ec00001")
+        self.assertTrue(changed, "the append did not change the plan")
+        plan.write_text(text)
+        head = plan.read_text().split("---")[1]
+        self.assertEqual(head.count("dev_spec_uids:"), 1, "the append wrote a second key")
+
+        # After the append: the plan lock SEES the member and refuses on the
+        # member's own state — the row-level refusal — not on an empty list.
+        code, message = self._lock()
+        self.assertEqual(code, 1, f"expected the row-level refusal, got {code}: {message}")
+        self.assertNotIn("lists no dev_spec_uids", message,
+                         "the plan lock still cannot see the appended member")
+        self.assertIn("not 'done'", message,
+                      "the refusal that fired is not the row-level one for an unclosed spec")
+        self.assertIn("5ec00001", message, "the row-level refusal did not name the appended member")
 
     def test_an_already_locked_plan_refuses_rather_than_opening_a_second_run(self) -> None:
         self.assertEqual(self._lock()[0], 0)

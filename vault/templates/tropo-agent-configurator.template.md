@@ -272,7 +272,7 @@ Before retiring, write your successor's letter — name the open items and where
 
 ## How to use this template
 
-**Before you start:** Read the agent-configurator capsule definition at `vault/capsules/tropo-agent-configurator.capsule.md` (UID 3210818a). It is the governance spec this template fulfills — including its §Required Structure, which this template's Groups 0–5 body predates. The Argo crew configurators (`agents/vela/…`, `agents/metis/…`, `agents/argus/…`) are NOT part of a shipped Studio; the only activation file that ships as an example is `agents/example/example-activation.md`, and it is the end-user three-file pattern, not this one.
+**Before you start:** Read the agent-configurator capsule definition at `vault/capsules/tropo-agent-configurator.capsule.md` (UID 3210818a). It is the governance spec this template fulfills — including its §Required Structure, which this template's Groups 0–5 body predates. The Argo crew configurators (`agents/vela/…`, `agents/metis/…`, `agents/argus/…`) are NOT part of a shipped Studio. For working customer-side identity examples, read the Cal and Darin content templates under `vault/templates/companions/`, then run `python3 vault/tools/tropo-genesis-companions.py` in a fresh Studio so identity is minted locally.
 
 ### Step 1 — Copy the template
 

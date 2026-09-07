@@ -46,6 +46,13 @@ import tempfile
 import unittest
 from unittest import mock
 
+# 3d430852 suite migration: mint-output assertions follow the AUTHORITY mint
+# constant — Stage A mints 8-hex (assertions pass today unchanged); when
+# Stage B flips MINT_HEX_LEN to 12 these assertions follow the flip instead
+# of breaking. Never a second mint-shape definition.
+from lib.governed_path import MINT_HEX_LEN as _MINT_LEN
+_MINT_SHAPE = r'^[0-9a-f]{%d}$' % _MINT_LEN
+
 REPO = pathlib.Path(__file__).resolve().parents[3]
 TOOL = REPO / "vault" / "tools" / "tropo-activate.py"
 
@@ -116,7 +123,7 @@ class TestNothingRefusesABirth(ActivationMintFixture):
         """B-P1. An agent that has never existed. Never once tested before today."""
         code, out, _ = self.activate(agent="brand-new")
         self.assertEqual(code, 0)
-        self.assertRegex(out["activation_uid"], r"^[0-9a-f]{8}$")
+        self.assertRegex(out["activation_uid"], _MINT_SHAPE)
         self.assertEqual(
             out["generation"], "G1",
             "the first generation of a lineage is G1 — genesis is not mentioned "

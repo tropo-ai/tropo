@@ -11,9 +11,9 @@ This folder is part of a Tropo Studio. Before operating, read these files in ord
 
 1. **`.tropo/TROPO-CONTROL.md`** -- OS rules, identity checkpoint, invariants
 2. **`STUDIO.md`** (vault root) -- Organization defaults and constraints
-3. **`.tropo-studio/CAPSULE.md`** (this folder) -- Folder purpose and operating logic
+3. **`CAPSULE.md`** (this folder, if present) -- Folder purpose and operating logic
 
-.tropo-studio/CAPSULE.md may override STUDIO.md defaults. It may not override STUDIO.md
+CAPSULE.md may override STUDIO.md defaults. It may not override STUDIO.md
 constraints or TROPO-CONTROL.md invariants.
 
 Do not modify this file. It is maintained by Tropo through the update pipeline.

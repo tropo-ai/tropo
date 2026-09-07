@@ -89,7 +89,7 @@ These rules are the covenant. Every agent creation satisfies them.
 **Agent-creation rules** (owned by this skill — enforce at every call):
 
 3. Every agent file MUST have valid charter frontmatter per [`.tropo/schema/charter-schema.md`](../schema/charter-schema.md).
-4. Every agent file MUST have a `uid:` in frontmatter (8-char hex, generated with `openssl rand -hex 4` or equivalent).
+4. Every agent file MUST have a `uid:` in frontmatter — the uid as minted by `python3 vault/tools/tropo-mint-id.py` (12-hex composite; §3 below mints all three). Never hand-generate one: `openssl rand -hex 4` produces the legacy 8-hex shape and skips the collision check. *(S5, Mike-ruled 2026-09-05.)*
 5. Every agent file MUST have the `owner:` field set to the founder's name.
 6. Every agent MUST have a `workspace/` folder created inside its agent folder at `agents/<name>/workspace/`.
 7. Every agent MUST have its curated memory surface at `agents/<name>/.tropo-capsule/memory/agent-memory.md`, created from `vault/templates/tropo-memory.template.md`. **That exact path is what the boot playbook reads** (99341618 line 102, the v3.0 single-surface boot-read). A file at `agents/<name>/memory.md` is an ORPHAN: nothing reads it, boot silently creates an empty surface instead, and the concierge's promise that the agent will remember you becomes false with no error anywhere. Found by the v1.93 cold-boot walk; one persona named that promise as his whole reason for choosing Tropo.

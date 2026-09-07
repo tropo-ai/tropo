@@ -394,12 +394,22 @@ class ViewerProjection:
         resolver_error: Optional[AudienceError] = None,
         os_segment: str = OS_SEGMENT,
         legacy_segment_aliases: Optional[Mapping[str, str]] = None,
+        audience_context=None,
     ) -> None:
         self._graph = graph
         self._resolver = resolver
         self._lattice = lattice
         self._resolver_error = resolver_error
         self._os_segment = os_segment
+        # The group -> vault-code join (ADR-050, ruled a-prime by argus-a168
+        # 2026-09-03). `visible_segments` must yield VAULT CODES, because that
+        # is what `derive_segment` yields on the other side of the comparison
+        # in `filter_visible_uids`/`adjacency`. The mapping is not minted here:
+        # audience_context.MountAudienceBinding already pins both grammars on
+        # one validated row — `vault_uid` (ADR-050 code) beside
+        # `resolved_audience_group_uid` (8-hex group). This holds that context
+        # so the join can read it. See `_vault_codes_for_group`.
+        self._audience_context = audience_context
         # `derive_segment` yields the legacy literals (`private`, `os`) while
         # visibility resolves group UIDs. `os` is the reserved constant and
         # matches directly; `private` is an ALIAS whose target lives in the
@@ -421,10 +431,17 @@ class ViewerProjection:
         resolver: GroupResolver,
         *,
         os_segment: str = OS_SEGMENT,
+        audience_context=None,
     ) -> "ViewerProjection":
-        """Bind a synthesised/loaded :class:`GroupResolver` directly."""
+        """Bind a synthesised/loaded :class:`GroupResolver` directly.
 
-        return cls(graph, resolver=resolver, os_segment=os_segment)
+        ``audience_context`` supplies the mount rows that carry the
+        group -> vault-code join. Without it a reachable group contributes no
+        segments, which is correct: an unmounted group has nothing to see.
+        """
+
+        return cls(graph, resolver=resolver, os_segment=os_segment,
+                   audience_context=audience_context)
 
     @classmethod
     def from_policy(
@@ -444,7 +461,10 @@ class ViewerProjection:
         """
 
         return cls(
-            graph, resolver=resolver, lattice=B4aLattice(policy), os_segment=os_segment
+            graph, resolver=resolver, lattice=B4aLattice(policy), os_segment=os_segment,
+            # The policy already binds the verified context; the join reads its
+            # mount rows rather than a second copy of the same fact.
+            audience_context=getattr(policy, "context", None),
         )
 
     @classmethod
@@ -591,15 +611,94 @@ class ViewerProjection:
         except GroupContractError as error:
             return Result.failure(error)  # fail closed
 
-        for segment in self._resolver.active_uids:
+        for group_uid in self._resolver.active_uids:
             for home_segment in home:
-                reach = self._reach(home_segment, segment)
+                reach = self._reach(home_segment, group_uid)
                 if not reach.ok:
                     return Result.failure(reach.error)  # fail closed
                 if reach.value:
-                    visible.add(segment)
+                    # RULED a-prime (argus-a168, 2026-09-03): add the VAULT
+                    # CODES mounted under this group, never the group uid.
+                    # Reachability above is unchanged -- the B4a resolver is
+                    # right about who belongs to what; only this last step
+                    # changes. Previously this added `group_uid` straight into a
+                    # set that `filter_visible_uids` compares against
+                    # `derive_segment` output, and the two grammars are DISJOINT
+                    # BY LENGTH: group uids are 8- or 12-hex (group_contract),
+                    # vault codes are ^[a-z0-9]{4,6}$ (audience_context
+                    # .VAULT_UID_RE). No string is both, so a team node was
+                    # never visible to its own team member. That went unnoticed
+                    # while the manifest read still accepted 8-hex and the two
+                    # namespaces could accidentally coincide -- the same
+                    # forbidden substitution 52d7a9b71 removed from the read,
+                    # sitting one layer out in production.
+                    visible.update(self._vault_codes_for_group(group_uid))
+                    # THE LEGACY REGIME, and it is the other half of the same
+                    # meeting (argus-a168, 2026-09-03, terminal on
+                    # evt_ccf55e8a79d5023d_00000279).
+                    #
+                    # Two regimes are canonical, not one. A MOUNTED vault-node
+                    # derives an ADR-050 vault code from its manifest -- the
+                    # branch above. An UNMOUNTED studio's own records derive the
+                    # literal `private`, and the authority's signed alias table
+                    # maps that to a GROUP uid: group-authority-v1.schema.json
+                    # REQUIRES legacy_aliases.private and types it as a uid,
+                    # with additionalProperties false. So in that regime the
+                    # private segment's identity IS a group uid, by schema.
+                    #
+                    # `_segment_of` (:556) can therefore yield EITHER kind, and
+                    # the invariant is: the visible set must contain exactly what
+                    # `_segment_of` can yield for a reachable group. Shipping the
+                    # mount join alone took the alias path dark and dropped every
+                    # governed-rank project in this studio's own orient -- caught
+                    # by the full 263-suite sweep, not by the seven suites the
+                    # change was aimed at.
+                    #
+                    # The uid is added ONLY where a node can actually resolve to
+                    # it. That is why this does not reintroduce the naive union
+                    # (a uid for every reachable group), which broke the ADR-050
+                    # exact-set assertions: their groups are mounted and are not
+                    # alias targets, so they still receive codes alone.
+                    #
+                    # And it is why this is not "codes if mounted else uid",
+                    # which I proposed and Argus refused: a group that is BOTH
+                    # mounted AND an alias target would emit codes only and take
+                    # its legacy private nodes dark. That configuration does not
+                    # exist in argo today, which is precisely how it would ship
+                    # silently. Both are emitted for such a group here, so the
+                    # overlap is correct by construction rather than by absence.
+                    #
+                    # v1.95 (filed by argus-a168): the alias table migrates to
+                    # vault codes and the group uid leaves this set for good.
+                    # Until then this line is the truth.
+                    if group_uid in set(self._legacy_segment_aliases.values()):
+                        visible.add(group_uid)
                     break
         return Result.success(frozenset(visible))
+
+    def _vault_codes_for_group(self, group_uid: str) -> tuple:
+        """Vault codes mounted under ``group_uid`` (the ADR-050 join).
+
+        Reads ``MountAudienceBinding`` rows, which pin ``vault_uid`` and
+        ``resolved_audience_group_uid`` together on one validated record. A
+        group with no mounted vault yields nothing -- correct, there is nothing
+        to see -- and a mount whose group is unreachable is never asked for.
+        """
+
+        context = self._audience_context
+        if context is None:
+            return ()
+        # `AudienceContext.mounts` is a PROPERTY returning a tuple; read it as
+        # one. An earlier draft called it AND wrapped the call in a bare except,
+        # which turned the resulting TypeError into an empty visibility set --
+        # silently converting a coding error into "nothing is visible", the
+        # exact shape of the defect this change exists to remove. No except, and
+        # no callable() fallback either: a fallback branch no caller exercises is
+        # the same family one hop over. Test doubles mirror the property.
+        return tuple(
+            binding.vault_uid for binding in context.mounts
+            if getattr(binding, "resolved_audience_group_uid", None) == group_uid
+        )
 
     # ---- total arbitrary-UID filtering ---------------------------------- #
     def filter_visible_uids(self, candidates: Iterable, viewer: Viewer) -> Result:

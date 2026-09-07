@@ -26,12 +26,14 @@ decides when they run.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 __all__ = [
     "PHASES",
+    "PREFLIGHT_EVIDENCE_FILENAME",
     "INPUT_FIRST_AVAILABLE",
     "ReleaseGateError",
     "Gate",
@@ -128,6 +130,25 @@ INPUT_FIRST_AVAILABLE: Dict[str, str] = {
 #: be conflated: a refusal treated as operational invites a retry loop around a
 #: real defect, and an operational error treated as a refusal fails a release
 #: that was never actually judged.
+#: THE preflight evidence filename. Declared here, beside the only writer, and
+#: IMPORTED by every reader — never re-typed.
+#:
+#: Why a constant rather than two matching literals: it was two literals, and
+#: they disagreed. `write_evidence` created "preflight.jsonl" while the PREFLIGHT
+#: sequence gate in tropo-release.py checked for "preflight-journal.jsonl" — a
+#: name nothing in the studio ever wrote. The gate refused every run that HAD
+#: passed preflight, and its refusal told the operator to run preflight again,
+#: which wrote the name the gate could not see. A permanent wedge on the release
+#: fire, reachable only by following the refusal's own instructions.
+#:
+#: It survived because the test suite read the WRITER's name and was green: the
+#: tests proved the writer agreed with itself. Two of three readers matching is
+#: what a green suite looks like in this failure family.
+#:
+#: (argus-a165, 2026-08-31, found by a substrate sweep and reproduced from the
+#: shipped source on both sides. Regression: tests/test_preflight_evidence_name_parity.py)
+PREFLIGHT_EVIDENCE_FILENAME = "preflight.jsonl"
+
 FAILURE_REFUSAL = "refusal"
 FAILURE_OPERATIONAL = "operational-error"
 
@@ -348,15 +369,31 @@ class GateRegistry:
 
 
 def write_evidence(
-    run_dir: Path, phase: str, outcomes: Sequence[GateOutcome], registry: GateRegistry
+    run_dir: Path, phase: str, outcomes: Sequence[GateOutcome], registry: GateRegistry,
+    tree_commit: Optional[str] = None,
 ) -> Path:
     """Append this phase's gate evidence to the release run.
 
     Written per phase rather than per release so a run that dies mid-flight
     still shows which boundaries were reached and what each one said.
+
+    `tree_commit` (v1.95 Spine B, f015997f8d8e AC2): the HEAD of the tree the
+    phase ran against, supplied by the caller from its context. The runner
+    refuses to build unless a clean lock-static set names the commit it is
+    about to build (AC3); a row that cannot say which tree it judged cannot
+    be that evidence, so callers that know the tree pass it and callers that
+    do not leave it null rather than guess.
+
+    `ts` (v1.95 Spine B, f015997f8d8e AC5; talos-t62, ruled by argus-a171
+    2026-09-05): the UTC instant the row was written. AC5's live half asserts
+    that a clean lock-static set PRECEDES `candidate_built`, and prints both
+    timestamps when it does not — with no `ts` on these rows there was exactly
+    one timestamp between the two the AC asks for, and the sequencing could not
+    be evaluated at all. Additive: every reader keys by name, so nothing that
+    reads verdict/gate_id/tree_commit changes.
     """
     run_dir.mkdir(parents=True, exist_ok=True)
-    path = run_dir / "preflight.jsonl"
+    path = run_dir / PREFLIGHT_EVIDENCE_FILENAME
     with path.open("a", encoding="utf-8") as handle:
         for outcome in outcomes:
             gate = registry.get(outcome.gate_id)
@@ -375,6 +412,8 @@ def write_evidence(
                         "required_inputs": list(gate.required_inputs),
                         "detail": outcome.detail,
                         "evidence": outcome.evidence,
+                        "tree_commit": tree_commit or None,
+                        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                     },
                     sort_keys=True,
                 )

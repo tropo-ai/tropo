@@ -53,7 +53,7 @@ class DerivedRowTitleTests(unittest.TestCase):
 
     def test_blank_and_whitespace_values_fall_through(self) -> None:
         """An empty `title:` is the absence this exists to fix, not a title."""
-        path = Path("agents/example/example-activation.md")
+        path = Path("agents/cal/cal-activation.md")
         for fm in ('title: ""\n', 'title: "   "\n', 'title: ""\nagent_name: A\n'):
             with self.subTest(fm=fm):
                 got = rebuild._derived_row_title(fm, path)

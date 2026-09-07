@@ -89,6 +89,27 @@ DEFAULT_OUT = str(tropo_roots.VAULT_DIR / 'updates' / 'updates-manifest.json')
 # Mirrors the bucket build-release.py already uploads zips to (storage/v1/object/releases/...).
 MANIFEST_BUCKET_PATH = 'releases/updates-manifest.json'
 
+# D6 per-row URL dialect (4e9ce4cc, v1.94 Stream 1). Three row classes:
+#   BOX rows (>= BOX_CUTOVER_VERSION) carry the box url; LEGACY LIVE-PACKAGE
+#   rows keep the old package url; DEAD rows carry NO url at all (the
+#   verification gate HEADs url-BEARING rows only, so a dead row can never
+#   red the gate forever).
+#
+# BOX_CUTOVER is a PUBLISHING horizon, not an artifact-existence horizon:
+# boxes physically exist from v1.86, but advertising one to an old client
+# HALTS them mid-flow (their installed playbook demands manifest.yaml — the
+# A163 halt-not-skip constraint). The manifest starts speaking the box
+# dialect with v1.94, by which ordering every old-client studio has already
+# upgraded past it via the Po walk.
+BOX_CUTOVER_VERSION = (1, 94, 0)
+
+#: The complete set of LIVE update packages in the bucket, frozen 2026-08-30
+#: by HEADing every one of the 94 union-catalog package urls — exactly these
+#: two answered 200. Every other package url the old dialect emitted was a
+#: dead link. If the bucket truth ever changes, this set and its pin test
+#: (test_update_manifest_box_url.py) change together, in one commit.
+FROZEN_LIVE_PACKAGES: frozenset[str] = frozenset({'1.85.1', '1.86.0'})
+
 
 def _semver_key(v):
     """Sort key for 'X.Y.Z' strings; malformed versions sort first (defensive, never crashes)."""
@@ -178,19 +199,27 @@ def build_manifest(releases, package_url_base=None):
 
     updates = []
     prior_version = None
+    releases_root = _public_releases_root(package_url_base)
     for r in releases:
         version = r.get('release_version', '').lstrip('v')
         # min_compatible: explicit override on the release entry wins; otherwise the
         # immediately-prior release in the chain (linear step-through by default).
         min_compatible = r.get('min_compatible') or prior_version or version
         update_type = r.get('update_type') or _infer_update_type(prior_version, version)
-        updates.append({
+        row = {
             'version': version,
             'type': update_type,
             'description': (r.get('description') or r.get('title') or '')[:200],
-            'url': f'{package_url_base}/tropo-update-v{version}.zip',  # base resolved, never fictional
             'min_compatible': min_compatible,
-        })
+        }
+        if _semver_key(version) >= BOX_CUTOVER_VERSION:
+            row['url'] = f'{releases_root}/v{version}/tropo-os-v{version}.zip'
+        elif version in FROZEN_LIVE_PACKAGES:
+            row['url'] = f'{package_url_base}/tropo-update-v{version}.zip'
+        # else: dead row — no url key at all. The old dialect emitted a package
+        # url for every row, which made 92 of 94 catalog entries dead links
+        # (bucket-verified 2026-08-30). Url-less is the honest shape.
+        updates.append(row)
         prior_version = version
 
     current = releases[-1].get('release_version', '').lstrip('v')
@@ -201,6 +230,17 @@ def build_manifest(releases, package_url_base=None):
         'minimum_supported': minimum_supported,
         'updates': updates,
     }
+
+
+def _public_releases_root(package_url_base):
+    """The public bucket root both URL dialects compose from.
+
+    package_url_base ends '/.../releases/updates' (the package dir); the box
+    dialect addresses '.../releases/v{X}/tropo-os-v{X}.zip' one level up.
+    """
+    if package_url_base and package_url_base.endswith('/updates'):
+        return package_url_base[: -len('/updates')]
+    return package_url_base
 
 
 def _infer_update_type(prior_version, version):
@@ -253,10 +293,20 @@ def render_for_client(manifest, client_version):
     if not pending:
         return {'current': manifest['current'], 'updates': []}
 
+    # A4 (4e9ce4cc): pending collapses to ONE lift entry. The A163 fleet
+    # computed real image manifests for both paths: chained 1.90→…→1.93 and
+    # lift 1.90→1.93 produce IDENTICAL end states (replace 1083, delete 1),
+    # so advertising the chain invites N sequential applies for no different
+    # an outcome. The lift keeps the NEWEST pending row; its min_compatible
+    # becomes the OLDEST pending row's — a client the chain could have served
+    # stepwise is exactly a client the lift can serve, and any client older
+    # than that still falls through to migration_required above.
+    lift = dict(pending[-1])
+    lift['min_compatible'] = pending[0].get('min_compatible', lift.get('min_compatible'))
     return {
         'current': manifest['current'],
         'minimum_supported': manifest['minimum_supported'],
-        'updates': pending,
+        'updates': [lift],
     }
 
 

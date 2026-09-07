@@ -3,16 +3,16 @@ uid: 7a1ca900
 lifecycle: standing
 type: document
 title: Tropo Capabilities
-description: The capability matrix — what Tropo does, organized by 7 subsystems (6 v1.7-anchored + Documentation NEW v1.8). L1 shipped + L2/L3 futures (Tropo-built + ecosystem). Anchor document for first-contact readers.
+description: The capability matrix — what Tropo does, organized by subsystem (six tabled from the v1.7-anchored matrix; nine subsystems today, per the L1 entry). L1 shipped + L2/L3 futures (Tropo-built + ecosystem). Anchor document for first-contact readers.
 stage: specify
 state: active
 status: published
 owner: argus
 priority: p0
 created: 2026-04-20
-modified: 2026-04-21
+modified: 2026-09-05
 created_by: argus-a29
-modified_by: argus-a31
+modified_by: metis-g120
 locked_by: argus-a31
 locked_at: 2026-04-21
 supersedes: c41a5bf0
@@ -45,13 +45,13 @@ refs:
 
 *What Tropo does, organized by subsystem. If you just landed, this is the document that answers **"what is this and what can it do?"** in one scroll. Every cell links to a hub you can navigate to for detail. Every cell is labeled **[committed]** or **[speculative]** so you can tell what's shipping from what's being explored.*
 
-*v1.0 — LOCKED 2026-04-21. Supersedes first-cut v0.1 (`c41a5bf0`, a vendor-internal entry that is not part of this package).*
+*v1.0 — LOCKED 2026-04-21. Supersedes first-cut v0.1 (`c41a5bf0`, a vendor-internal entry that is not part of this package). **v1.1 addendum 2026-09-04 (v1.94 build): the "What shipped since this matrix locked" section below; the six locked tables are unchanged.***
 
 ---
 
 ## How to read this document
 
-**Seven subsystems** (6 v1.7-anchored + Documentation promoted v1.8 mid-cycle per Mike-A46 pair-design 2026-05-05). Each has a table with four columns:
+**Nine subsystems today** (the L1 canonical entry `vault/files/eca73d77.md` §5 carries the current list). The six tabled below are the v1.7-anchored matrix; Documentation was promoted v1.8 mid-cycle per Mike-A46 pair-design 2026-05-05, and Tropo Link and Tropo Test Harness were added since, their tables pending. Each table has four columns:
 
 - **Market Capability.** How a buyer, partner, or practitioner would describe what Tropo does here. Outside-in framing.
 - **Tropo L1.** What's shipped today in the markdown-only zip. No database, no cloud, any LLM, any platform.
@@ -66,6 +66,44 @@ refs:
 **Discipline.** A cell earns `[committed]` ONLY when there's a traceable roadmap artifact or an already-shipped L1 capability behind it. Aspirational features without a named brief stay `[speculative]` until the brief lands. The labels matter because vision sells the speculative and buyers pay for the committed — being honest about which is which is the credibility signal. v1.0 locked with most L2/L3 cells at `[speculative]` reflecting v1.3 state; future releases will promote cells to `[committed]` as roadmap artifacts land.
 
 **Each subsystem also carries a verification footer** — one short paragraph naming how that subsystem specifically contributes to Tropo's verification-first identity. The thesis Tropo locks at v1.3: *as AI drives execution costs toward zero, the binding constraint on economic growth shifts from intelligence to human verification bandwidth.* Every subsystem earns its place by contributing verification surface.
+
+---
+
+## What shipped since this matrix locked — the customer-facing releases, v1.87 → v1.95 — read this first
+
+*Added 2026-09-04 by Metis G118, release driver, at the v1.94 build (task `bb0dc4cd`; the pre-build surface review RELEASING.md requires). The six tables below are the v1.0 matrix, locked 2026-04-21 at v1.3, and their L1 column describes that era. Nothing in them is wrong about what existed then; what is missing is everything since. This section is the honest delta: each row is a shipped capability, the subsystem it belongs to, and the release whose CHANGELOG entry records it. Every row is `[committed]` by the strictest reading: the capability is in the shipped box, or the row says exactly which part is not. This document ships in the box by its own record scope under v1.94's ship manifest (`[1.88.0]` had removed it with RELEASE-NOTES.md, which still does not ship); it is also read here, on the repository. Releases v1.4 through v1.86 are recorded in `CHANGELOG.md` and are not re-listed; the table starts at v1.87, the first release built through the two pipelines. Where a v1.0 cell called something `[speculative]` that is now shipped, this table wins. [re-cited 2026-09-04, metis-g119, against sa.skeptic record 115] [v1.95 rows added 2026-09-06 by orpheus-o38 at the candidate cut, each traceable to `CHANGELOG.md` `[1.95.0]`; v1.94.0 was closed deferred and never published, so a reader arriving from v1.93 receives the v1.94 and v1.95 rows together]*
+
+| Shipped capability | Subsystem | Release | Where the record is |
+|---|---|---|---|
+| **Mounted work in navigation** — external folders and documents (SharePoint, OneDrive, iCloud) receive governed mount identity and appear in the Studio tree without copying or taking ownership of source files. | Library | v1.87 | `CHANGELOG.md` `[1.87.0]`; hub `1aba710c` |
+| **Vault pruning tools** — the Gardener's verdict and body-judge tools ship; the propose step is a metered model call, a human stamps, receipts record every pruned body. The one pruning cycle run to date was on the vendor's own vault (279 stamped, 75 archived) and is not a CHANGELOG entry. | Library | v1.87 | `vault/tools/tropo-gardener-verdict.py`, `tropo-gardener-body-judge.py`; the cycle is recorded in `RELEASE-NOTES.md` v1.87.0 (repository only) |
+| **Compact-Continue** — a compacted session re-anchors the same agent generation, git state, event debt and recent work; no phantom successor is born. | Agents | v1.87 | `[1.87.0]`; `vault/tools/tropo-compact-continue.py` |
+| **Portable first setup** — one documented command derives local indexes, navigation and the mint registry from a fresh zip. | Library | v1.87 | `[1.87.0]` |
+| **Deterministic orientation, `orient()`** — draws wide, ranks what it found, shows its evidence before escalating. (The one-hop neighbourhood disclosed beside the ranked picture is the tool's behaviour today; `[1.90.0]` does not record it.) | Library | v1.90 | `[1.90.0]`; `vault/tools/tropo-orient.py` |
+| **The session librarian** — a small deterministic warm-context tier serving cited retrieval between `orient()` and the substrate; cache, never memory; citations always. | Agents / Library | v1.90 | `[1.90.0]` |
+| **Readable governed filenames** — new governed files are named for what they are (`<slug>-<uid>.md`); the UID stays the address that survives renames. | Library | v1.90 | `[1.90.0]` |
+| **Updating a studio: `plan`, then `apply`, with an honest progress bar** — the plan computes the full extent of the work before it starts. The record after v1.90 is the worst on this page and is stated here: every update package after v1.86.0 returned an error from the live bucket, and the v1.90 apply destroyed 13 customer files. v1.94 rebuilds the channel (row below); the customer upgrade rehearsal is bound to that release's pre-fire checkpoint and had not run when this row was written. | Library | v1.90, rebuilt v1.94 | `[1.90.0]`; `[1.94.0]` preamble and "Not in this build"; `vault/tools/lib/ship_verdict.py` header |
+| **Failure telemetry with a bounded lane** — tool gates that refuse or fail leave evidence on a separate bounded surface. **Telemetry is inert in customer studios** (`[1.90.0]`'s own last sentence; the row does not say why). | Governance | v1.90 | `[1.90.0]` (its last sentence) |
+| **The release fires for real** — the one-prompt release saga publishes; a half-finished publish can be described, resumed or refused, never left ambiguous; a package is frozen only after its own evidence. This is the machinery that ships Tropo; a customer studio cutting its own release with it is the v1.92 first-run case, not a proven customer path. | Playbooks / Governance | v1.90 | `[1.90.0]`; `[1.92.0]` ("a studio that had never cut a release") |
+| **The dev pipeline ships with its ignition** — someone new can go from nothing to a closed spec using only what is in the box; the release preflight gathers its own inputs and reports every unmet precondition in one invocation. | Playbooks / Governance | v1.92 | `[1.92.0]` |
+| **One command drives a release** — the release runner walks the declared step sequence and halts at the first judgment step naming a runnable command. (In v1.93 the verdict line stayed silent; the fire's own verdict arrives in v1.94, row "A release is one gesture".) | Playbooks / Governance | v1.93 | `[1.93.0]`; `vault/tools/tropo-release-run.py` |
+| **Shipped instructions are checked against the shipped box** — `tropo-check-doc-currency.py` reads the release zip directly and reports every path an instruction file tells a reader to open that the box does not contain. | Governance | v1.93 | `[1.93.0]`; `vault/tools/tropo-check-doc-currency.py` |
+| **Boot-time claims read the source, not a projection** — an agent's boot asserts work state from frontmatter and the event bus, never from a machine-local index alone. | Agents / Governance | v1.93 | `[1.93.0]` |
+| **The delivery channel, rebuilt; the box is the update image** — the five surfaces that carried dead update URLs are cured, the channel is verified after any publish on both publish paths, and applying an update no longer wipes the customer's own update history. The box zip is the update image (box-minus-identity, spec `4e9ce4cc`). The customer upgrade rehearsal on a fresh clone and the live upgrade are bound to the pre-fire checkpoint and had not run when this row was written. | Library | v1.94 | `[1.94.0]` Added and "Not in this build"; the checkpoint sheet in the release run folder |
+| **Studio identity at first boot** — genesis mints the studio's identity manifest, its entity name and its founding records through the real collision-checked mint; every new governed identifier is a composite of an issued studio prefix and a random local half, carried in a readable filename. | Library | v1.94 | `[1.94.0]` |
+| **Two colleagues share one vault** — an owner-signed atomic join, an authorship-aware publish boundary, a live merge seam with a gate that can say no; proven against real two-clone git exercises. The first real team-vault mount had not happened when this row was written; the join ceremony's group-generation leg was found refusing at the mount gate on 2026-09-04 and fixed before the build (finding `f015bac58b28`), and the join walk at the pre-fire checkpoint proves it in the box. *(The v1.0 Library row called cross-vault federation `[speculative]`; this is its first shipped increment.)* | Library | v1.94 | `[1.94.0]` Added, Fixed and "Not in this build" |
+| **orient with citations that resolve to files on disk, across your real imported documents** — from the command line in the box (`tropo-orient.py`), and from the cockpit through the dispatch primitive. The cockpit is `tropo-app/`, a separate repository that is not in the box. | Library | v1.94 | `[1.94.0]`; `vault/tools/tropo-orient.py` |
+| **Two shipped companions and Po's first-boot orientation** — Cal and Darin carry crew knowledge from birth; Po renders the studio's own map, walks it once, one gesture escapes. | Agents | v1.94 | `[1.94.0]` |
+| **A release is one gesture** — `fire --authorize` absorbs sign-off, stage and publish; every gate is internal and loud; the fire's own verdict is recorded (fired in one gesture, refused then attested, or failed); a criterion cannot report PASS having run nothing. The ship manifest (DENY / SHADOW / SHIP-AS-IS) is built and armed before every copy, so each path in the box carries one effective verdict and a planted DENY provably never ships; the walk that promotes a new source into the shadow set was named for v1.95 and did not ship in it, so it is still ahead (the drift walk ships now, and re-elects an existing twin). | Playbooks / Governance | v1.94 | `[1.94.0]` (its "Not in this build" said the manifest had no code until corrected 2026-09-04); `vault/tools/lib/ship_verdict.py`; `vault/tools/lib/release_metrics.py`; spec `91d951f4` |
+| **A studio is born on your machine, not in the box** — the build stops minting inside the box; the shipped box carries no identity manifest and no starter records, and the pre-seal guard refuses any box that does, with a negative control; on first boot, genesis mints on the customer's machine (a prefix every new identifier carries, the vault entity, the studio's own inbox). Every agent detects a missing identity; only Po mints. | Library / Agents | v1.95 | `[1.95.0]` Added; Spine A `f015de6b3a18` |
+| **Po's arrival beat** — Po greets, asks the user's name and the studio's name and purpose, mints through that conversation (the founder principal through `vault/tools/tropo-mint-id.py --founder`), and offers a first agent by name: Cal, Darin, or from scratch; the offer and its answer are registered event types. | Agents | v1.95 | `[1.95.0]` Added; `.tropo/concierge/activate.md`; the events capsule v1.14 |
+| **One guard registry, two run points** — every build guard is a registered gate; run point one on the tree reports every failure at once naming the harm each prevents; run point two on the assembled box checks that every path a shipped instruction names resolves in the box (paths and governed identifiers), the shipped principles are complete, the changelog names the version shipped, and no studio identity is present; the runner refuses a build without a clean run-point-one row for the same tree commit. v1.95 is the first release built through it. | Playbooks / Governance | v1.95 | `[1.95.0]` Added; Spine B `f015997f8d8e`; `vault/tools/lib/release_gates.py`; `vault/tools/tropo-check-doc-currency.py` |
+| **Shipped instructions cured to the box** — 101 dead references in shipped playbooks reached zero before the first candidate: repointed to what ships, retired to words, or declared as files the runbook creates; superseded playbooks and the kernel's history companions leave the box by ship-manifest deny rows; a reference rooted in a shell variable is a parameter, not a path. The candidate builder arms the ship manifest as the release build does. | Documentation / Governance | v1.95 | `[1.95.0]` Changed; `vault/tools/tropo-check-doc-currency.py`; `vault/tools/tropo-build-candidate-box.py` |
+| **The Studio Map and the Architecture Review as HTML in the box** — the build renders `boards/po/studio-map.html` inside the box, box-honest by construction: a visual of the studio, five sections derived at render time from the box's own index, hub frontmatter, subsystem registry, kernel invariants and the review, a resources section, and a staleness check that refuses a silently stale render; the review ships with its fifteen figures. | Documentation / Rendering | v1.95 | `[1.95.0]` Added; `vault/tools/tropo-render-studio-map.py`; `docs/architecture-review-v4/` |
+| **The studio smoke test** — one script, five real operations run against the real studio, for the class of failure that fails closed on normal work. | Test Harness | v1.95 | `[1.95.0]` Added; `af6c53df`; `vault/tools/tests/test_tropo_smoke.py` |
+| **Memory sovereignty in the shipped principles** — the shipped operating principles carry the memory principle (a learning goes to Tropo memory, never a harness-private store), and the box-side guard checks the shipped principles against their own declared list. | Governance | v1.95 | `[1.95.0]` Added; `vault/templates/.tropo-studio-skeleton/operating-principles.md` |
+
+**What this table does not do.** It does not re-write the six v1.0 tables, whose lock and provenance stand; it does not promote any L2/L3 cell that has no shipped increment; and every row names its record, which is `CHANGELOG.md` except where the row says otherwise. A reader who wants the full account of any row opens that record.
 
 ---
 
@@ -151,7 +189,7 @@ refs:
 
 ## The Meta-Thesis
 
-Tropo exists because *as AI drives execution costs toward zero, the binding constraint on economic growth shifts from intelligence to human verification bandwidth.* The seven subsystems above (the v1.7-anchored 6 + Documentation promoted v1.8) aren't just a product taxonomy — they're the verification stack.
+Tropo exists because *as AI drives execution costs toward zero, the binding constraint on economic growth shifts from intelligence to human verification bandwidth.* The nine subsystems (the six tabled above, plus Documentation, Tropo Link and Tropo Test Harness) aren't just a product taxonomy — they're the verification stack.
 
 - **Library** provides addressability (you can't verify what you can't locate).
 - **Work** provides typed artifacts (the shape is legible before you read the content).

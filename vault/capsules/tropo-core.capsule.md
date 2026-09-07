@@ -3,13 +3,14 @@ uid: ee814120
 name: core
 type: capsule-definition
 extends: null
-version: 2.1
+version: 2.2
+v2_2_lock_break: "v2.1 -> v2.2 lock-break under Mike-locked v1.94 dev-spec 91d951f4 (B-1, The Ship Manifest; locked 2026-09-02, all seven AC6 rows ratified at Mike's walk), whose committed_substrate explicitly assigns this capsule amendment to the Stream 5 package. Adds the OPTIONAL shadow-edition fields (ships_as, shadow_of, edition_of_body_hash, edition_date, edition_kind), Governance Rule 13, and Validation Check 14 -- the designation and freshness half of the SHADOW verdict, whose other half (ship_verdict) lives on the ship-artifact capsule. Purely additive: absence means not-designated, no existing field, rule, check, or instance changes, and no source is required to carry anything. A source with no frontmatter CANNOT carry ships_as, which is why the root manifest carries path-designated pairs instead -- see Rule 13."
 v2_1_lock_break: "v2.0 -> v2.1 lock-break under Mike-locked v1.89 dev-spec 271d28d7 (locked 2026-08-16; activation 7a47c089), whose committed_substrate explicitly assigns this capsule amendment to the pairing package. Adds the OPTIONAL lifecycle_pairing block (\u00a7Lifecycle Pairing Contract), Governance Rule 12, and Validation Check 13 \u2014 the status/state RELATION that independent enum enforcement structurally cannot see. Purely additive: absence means not-declared/not-checked, no existing field, rule, check, or instance changes, and no global terminal default is introduced anywhere."
 tier: os
 author: tropo
 created: 2026-04-10
-modified: 2026-08-16
-modified_by: talos-t44
+modified: '2026-09-05'
+modified_by: argus-a171
 v2_0_amendment_note: "Mike-approved typed-mint pilot, 2026-08-03. Defines one narrow, explicit subtype-specialization mechanism so a descendant capsule may override only named core fields in `core_field_specializations`. This records existing note/task contracts rather than forcing invented title/status/owner values into legal births. Undeclared omissions remain defects; no instance migration is implied."
 v1_9_lock_break: "v1.8 → v1.9. Adds the OPTIONAL `template_enforced_from:` field (§Optional Frontmatter) + §Governance Rule 11: a capsule carrying a `## §Template` leg declares the date that leg was authored, and the generic instance verifier grandfathers entries created on or before it for section presence. Purely additive: absent is legal; no existing required field, rule, enum, or check changes; no instance is modified. Follows the `enforced_enums` idiom exactly — the capsule declares, the validator reads it straight from the capsule, no derived registry and no runtime git dependency. Written because the Live Template + Body Shape check applied a MINT-TIME contract retroactively: every §Template leg in this vault was authored 2026-07-12..07-18 against a corpus months older, producing 1,089 MISSING-SECTION findings across 363 entries that could not have been minted from the scaffold they were judged against. The pre-existing corpus is on the protect list of the Mike-walked program brief b600698e §6 ('they gain template/verifier legs, nothing migrates') and historical migration is explicitly OUT of scope in S2 (bba40cd7)."
 current_amendment_authority: a286c210
@@ -18,6 +19,7 @@ current_amendment_locked_at: 2026-07-12
 v1_7_lock_break: "v1.6 → v1.7 lock-break under Mike-locked Gardener Pruning dev-spec a286c210 (locked 2026-07-12; committed_substrate explicitly AMENDS vault/capsules/ and assigns the pruning block contract to Argus). Adds the OPTIONAL universal pruning block: an evidence-carrying, body-version-keyed, human-overridable valid-time verdict for governed Markdown bodies. Purely additive: absent is legal; no existing instance changes; mint templates remain untouched. Defines locator/hash/override/staleness semantics before the canonical writer + validator land."
 v1_6_lock_break: v1.5 → v1.6 lock-break Mike-authorized 2026-06-09 (Option A + 'push'). Adds the canonical `state` field declaration to Optional Frontmatter — the universal 2-value visibility flag {active, archived}, the result of the state DISAMBIGUATE (99e52c18, move 3 of the lifecycle knot 9f6a1379). Purely additive (documents the migrated reality — 51 entries migrated to state∈{active,archived}, 0 violations; the universal validator check d2b9c8e6.py:3021 already enforces it at WARN). prior modified argus-a99 2026-06-05.
 status: locked
+s5_uid_rule_sweep_2026_09_05: "Validation check 1 reads 'the uid as minted' (12-hex composite since 3d430852; 8-hex legacy; UID_RE in tropo-validate.py the one authority) instead of a hard-coded ^[0-9a-f]{8}$. Mike-ruled 2026-09-05 at the v1.95 walk, S5 on plan f015ba71c711: 'We tried to catch all the 8hex hard coded rules, you must update that.' Prose-only, one check line; no enum, state, template or version change (the extraction_scope sweep precedent). By argus-a171."
 locked_at: 2026-06-05
 locked_by: argus-a99
 v1_4_lock_break: 'v1.3 -> v1.4 lock-break Mike-A99-signed 2026-06-05 (verbatim ''consider it signed''). Extends enforced_enums to accept the {canonical, aliases} dict form (SKOS canon+alias per doctrine 1573867b) alongside the list form (backward-compatible; list-form capsules unaffected). The validator (c4512bdc Piece 1, built + verified this cycle) three-way classifies each entry value (case-folded): canonical=PASS, alias=NORMALIZABLE (a groomer work-item; separate counter; does NOT touch warnings/fails/exit), unknown=WARN. state alias maps are REJECTED (state is a DISAMBIGUATE target, not a synonym-fold target). Unrecognized enum shapes ERROR. Purely additive. Implements c4512bdc (the alias-map + groomer machinery).'
@@ -88,6 +90,11 @@ A type capsule MAY declare these; entries and descendants that omit them are una
 | `template_enforced_from` | string | OPTIONAL, declared on a **type capsule's** frontmatter; legal only on a capsule that carries a `## §Template` leg. ISO 8601 date (YYYY-MM-DD) recording **when that capsule's §Template leg was authored** — the day the scaffold first existed to be minted from. The §Template leg is a MINT-TIME contract (it describes what `mint file` stamps), so its section-presence obligation can only bind instances that could have been minted from it. An entry whose `created` date is **on or before** this date is **grandfathered**: the generic instance verifier does not report MISSING-SECTION against it. (On-or-before, not strictly-before: the declaration has one-day granularity, so a same-day entry cannot be shown to have had the scaffold available — enforcement begins the day after.) Grandfathering is narrow by construction — it suppresses section presence only; a grandfathered entry remains subject to every other check, including placeholder survival, stray mint tokens, enum compliance, and the whole core floor. Read straight from the capsule like `enforced_enums`: **no derived registry, no runtime `git` dependency** (a shipped customer studio has no git history to re-derive from). A capsule carrying a leg but no `template_enforced_from` cannot date its own scaffold, so section-presence enforcement is inert for that type and the verifier says so at WARN rather than guessing. Per the protect list in the Governed Autonomy program brief ([b600698e](../files/b600698e.md) §6, "they gain template/verifier legs, nothing migrates") and S2's scope boundary ([bba40cd7](../files/bba40cd7.md), historical migration explicitly OUT). |
 | `pruning` | map | OPTIONAL universal valid-time verdict for a governed Markdown body's current normalized content version. Absent is legal and means “no body-grain verdict.” When present it MUST conform to §Pruning Block Contract. Every machine stamp and human override uses the same canonical locked writer; it is never scaffolded by a type's mint template. Distinct from derived-only `decay.*` and from intrinsic lifecycle `status`/visibility `state`. |
 | `lifecycle_pairing` | map | OPTIONAL, declared on a **type capsule's** frontmatter. Declares which intrinsic statuses are terminal for the type, and which statuses may legally coexist with `state: archived`. `status` and `state` are already enforced independently by `enforced_enums`; this block declares the missing *relation* between them, so a type can refuse a combination its own law forbids without flattening per-type vocabulary. When present it MUST conform to §Lifecycle Pairing Contract. **Absence means “not declared / not checked” — never “apply a global default”**: one shared hardcoded terminal set is exactly the folklore this block replaces. |
+| `ships_as` | UID or path | OPTIONAL **shadow designation, source side (v2.2)**. Names the PUBLIC TWIN that ships in this entry's place: the box carries the twin and not the source. Legal on any governed entry that has frontmatter to carry it. **A source with no frontmatter cannot carry this field** — that is the same fact as "it has no uid", seen from the other side — so path-designated pairs live as rows in the release root manifest instead, and adding frontmatter to a principal-owned document purely to feed a manifest inverts which one serves the other (§Governance Rule 13). Absence means not-designated; the entry ships or is denied on its own verdict. |
+| `shadow_of` | UID or path | OPTIONAL **shadow designation, twin side (v2.2)**. The inverse of `ships_as`: names the SOURCE this entry is the public edition of. A UID when the source is a governed entry; a **vault-root-relative path** when the source has no uid (e.g. `operating-agreement/OPERATING-AGREEMENT.md`). Required on any ship-artifact whose `ship_verdict` is `SHADOW` (see the ship-artifact capsule). A twin body **keeps its source's uid refs** — ref-rewriting is ruled OUT for v1.94 and carried as a standing limitation, so a reader following a ref from a twin lands on the source's uid. |
+| `edition_of_body_hash` | string | OPTIONAL, **written by the election walk at election-apply, never hand-authored (v2.2)**. 64 lowercase hex: the source body's `body_sha256` at the moment this twin was last elected as its current edition. The election walk lists a pair when the source's body hash no longer matches this value. Absent means never elected — the walk lists the pair on its first run, which is correct rather than an error. |
+| `edition_date` | string | OPTIONAL, **written by the election walk at election-apply (v2.2)**. ISO 8601 date of that election. Informational beside `edition_of_body_hash`, which is the field the mechanism actually turns on; a date alone cannot say whether the source moved. |
+| `edition_kind` | string | OPTIONAL free-form label for what kind of edition a twin is (`public` is today's only value in use). Descriptive, not enforced: the mechanism keys on `shadow_of` and `edition_of_body_hash`, never on this. |
 
 ## Pruning Block Contract (v1.7 amendment 2026-07-17)
 
@@ -155,6 +162,44 @@ lifecycle_pairing:
 5. **Orthogonality is preserved.** `state: active` is never contradictory merely because `status` is terminal. The block constrains the archived direction only.
 6. **Absence is not a default.** An undeclared type is explicitly unchecked. Inheriting a guessed global rule would falsely reject done-and-current law and miss per-type archive rules.
 
+## Shadow Edition Contract (v2.2 amendment 2026-09-02)
+
+The Mike-locked [Ship Manifest dev-spec](../files/91d951f4.md) establishes SHADOW as one of three
+ship verdicts: a source that does not ship is replaced in the box by a **public twin** — a
+deliberately authored edition, not a redaction. Mike's frame at the lock walk governs how these are
+written: *"The twin is meant to help future tropo-studio owners... PII, privacy are not my concern.
+It is super hard to get people to adopt what we are doing, we are enablers not preventers."* A twin
+is a gift to a stranger. Names in a twin are fine.
+
+The pairing is **two fields pointing at each other**, and either side alone is enough to designate:
+
+```yaml
+# On the source (only if it has frontmatter to carry it):
+ships_as: f0155ddd04f7
+
+# On the twin:
+shadow_of: "operating-agreement/OPERATING-AGREEMENT.md"   # uid, or path when the source has none
+edition_kind: public
+edition_of_body_hash: "<64 lowercase hex>"   # written by the walk, never by hand
+edition_date: '2026-09-02'                   # written by the walk
+```
+
+**Designation by path is first-class, not a fallback.** The seed pair proves why: the source
+`operating-agreement/OPERATING-AGREEMENT.md` opens at `# Operating Agreement v3.0` with no
+frontmatter at all, so it has nowhere to put `ships_as` and no uid to be named by. Its pairing is a
+row in the release root manifest. Four review passes over this spec read *"the source carries
+`ships_as`"* without noticing it cannot; authoring the artefact is what surfaced it.
+
+**Freshness informs; it never blocks.** `edition_of_body_hash` records the source body as it stood
+when the twin was last elected. When the source moves, the election walk lists the pair. It does not
+fail a build, and **zero elections is a legal, stated outcome** — Mike at the walk: *"it's okay if
+they drift for a while, but there should always be a 'beacon home' between the two files and the
+opportunity to update... I do not want blockers, I want awareness of drift."*
+
+**Twin bodies keep their source's uid refs.** Rewriting refs uid-to-uid is ruled OUT for v1.94 and
+recorded as a standing limitation rather than deleted quietly, because a reader following a ref out
+of a twin will land on the source's uid and should find that documented rather than surprising.
+
 ## Title Semantics (v1.2 amendment 2026-05-15)
 
 The `title:` field carries the entry's **human-readable display-name**. It is the surface text that appears wherever the entry is referenced in a rendered context — in another entry's `📥 Cited by` section, in a Navigation block breadcrumb, in a channel post citation, in a chat message link.
@@ -186,9 +231,11 @@ The block carries five sections per [HUMAN-NAVIGATION.md (57a9c11f)](../../.trop
 11. **A mint-time contract binds from its own start date (v1.9).** A capsule carrying a `## §Template` leg SHOULD declare `template_enforced_from:` — the date that leg was authored. The generic instance verifier reads it directly from the capsule and grandfathers every entry `created` on or before it for section presence, because an entry written before the scaffold existed was never minted from it and cannot have "dropped" its sections. The declaration is the capsule's, not the tool's: no derived registry, no runtime `git` lookup, so a shipped studio with no git history enforces identically. Grandfathering is scoped to MISSING-SECTION alone — a grandfathered entry stays subject to every other check. Retroactive application of this contract produced 1,089 findings across 363 entries, burying the 21 genuine ones; that is the standing reason the declaration exists.
 12. **Lifecycle pairing is declared per type, and silence is not consent (v2.1).** A type capsule MAY declare `lifecycle_pairing:` to state which statuses are terminal and which may coexist with `state: archived`. Where a `lifecycle_machine` exists it is the only terminal authority and a fallback list alongside it is an error; where none exists the fallback is required. Declared values resolve through that capsule's own `enforced_enums.status` canon and aliases — no consumer may invent a second status list. An undeclared type is unchecked rather than defaulted. The block says which pairs the type's own law permits; it never grants authority to close, archive, or mutate an entry.
 
+13. **A shadow pair is designated, never inferred (v2.2).** A source ships in its twin's place only when the pair is DECLARED — `ships_as` on the source, `shadow_of` on the twin, or a path-designated row in the release root manifest. No tool may infer a pairing from naming, adjacency, or content similarity. Where a source has no frontmatter it **cannot** carry `ships_as`, and the manifest row is the designation; do not add frontmatter to a principal-owned document to satisfy a field, because that inverts which one serves the other. `edition_of_body_hash` and `edition_date` are WRITTEN BY THE ELECTION WALK at election-apply and are never hand-authored — a hand-set edition hash is a claim that a human compared two bodies, which is exactly what the walk exists to do.
+
 ## Validation Checks (run at check-in)
 
-1. UID matches `^[0-9a-f]{8}$`
+1. UID is the uid as minted through the ADR-050 chokepoint: `^[0-9a-f]{12}$` (composite, since 3d430852 Stage B 2026-08-31) or `^[0-9a-f]{8}$` (legacy records); `UID_RE` in `tropo-validate.py` is the one authority and accepts both. *(S5, Mike-ruled 2026-09-05: "the uid as minted" replaces every hard-coded 8-hex rule; field rows in type capsules that still say "8-hex" defer to this line.)*
 2. UID is not already in use by a different file
 3. Type is in the registered capsule types
 4. Status is valid for the type's state machine (delegated to type-specific definition)
@@ -203,6 +250,8 @@ The block carries five sections per [HUMAN-NAVIGATION.md (57a9c11f)](../../.trop
 
 12. **Pruning-contract compliance** *(v1.7; required implementation in the active Gardener cycle)* — one shared `check_pruning_contract` implementation MUST validate every present block's closed shape, enums, bounded confidence, provenance, current/stale T2 + judge-version disposition, T1 locator, strict evidence resolution, override authority/effect, and no-evidence refusal through both full-validator and targeted `check-one` paths. Evidence-less or unresolvable current blocks FAIL; stale blocks WARN and re-queue; absent blocks PASS silently. Until that implementation lands and its plants pass, this v1.7 amendment is schema-only and the Gardener cycle cannot close.
 
+14. **Shadow-designation coherence** *(v2.2; implemented by the v1.94 Ship Manifest package)* — one shared implementation (`vault/tools/lib/ship_verdict.py`) MUST resolve every designated pair and refuse an INCOHERENT one: a `ships_as` whose target does not exist; a `shadow_of` naming a uid that resolves to nothing (a PATH target is checked for existence on disk, not in the index); a source designated to two different twins; and a twin claiming two different sources. A pair designated on one side only is LEGAL, not a defect — either field alone designates. `edition_of_body_hash` present without `shadow_of` is a defect, because an edition hash with no source to compare against can never change verdict.
+
 ## Inheritance
 
 `core` is the root. It has no parent. All other capsule definitions extend `core` and inherit its rules.
@@ -213,6 +262,7 @@ The block carries five sections per [HUMAN-NAVIGATION.md (57a9c11f)](../../.trop
 
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
+| 2.2 | 2026-09-02 | OPTIONAL shadow-edition fields (`ships_as`, `shadow_of`, `edition_of_body_hash`, `edition_date`, `edition_kind`) + §Shadow Edition Contract, Governance Rule 13, Validation Check 14. The designation half of the SHADOW ship verdict; the verdict itself lives on the ship-artifact capsule. Designation by PATH is first-class rather than a fallback, because the seed pair's source carries no frontmatter and therefore cannot carry `ships_as` — a fact four review passes over the spec read past. Edition fields are walk-written, never hand-authored. Purely additive: absence means not-designated; no instance changes. Lock-break authorized by Mike-locked dev-spec 91d951f4, which assigns this capsule amendment to the Stream 5 package. | talos-t60 |
 | 2.1 | 2026-08-16 | OPTIONAL `lifecycle_pairing:` block + §Lifecycle Pairing Contract, Governance Rule 12, Validation Check 13. Declares the relation between `status` and `state` that independent enum enforcement cannot see: which statuses are terminal, and which may legally coexist with `state: archived`. Terminality comes from `lifecycle_machine` where one exists (a simultaneous fallback is an error) and from a required fallback list where none does; declared values resolve through the capsule's own `enforced_enums.status` canon and aliases. Purely additive — absence means unchecked, never a global default. Lock-break authorized by Mike-locked dev-spec 271d28d7 (activation 7a47c089), which assigns this capsule amendment to the pairing package. | talos-t44 |
 | 2.0 | 2026-08-03 | Added the explicit `core_field_specializations` contract used by typed-mint pilots. Descendants may override only named core defaults; undeclared omissions remain defects. Records the existing note/task schema without migrating instances. | argus-a144 |
 | 1.9 | 2026-07-31 | OPTIONAL `template_enforced_from:` added to §Optional Frontmatter + §Governance Rule 11. A capsule carrying a `## §Template` leg declares the date that leg was authored; the generic instance verifier grandfathers entries `created` on or before it for section presence, because the leg is a mint-time contract and an entry that predates the scaffold was never minted from it. Purely additive (absent is legal; no instance touched; no existing rule changed). Follows the `enforced_enums` idiom: declared on the capsule, read straight from the capsule, no derived registry and no runtime git dependency. Cures 1,089 retroactive MISSING-SECTION findings across 363 entries that were burying 21 genuine ones. Protect-list authority: b600698e §6 + bba40cd7 scope boundary. | cursor-agent |

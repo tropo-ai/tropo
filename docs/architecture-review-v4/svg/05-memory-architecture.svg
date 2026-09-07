@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 950" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .panel-title { font-size: 15px; font-weight: bold; fill: #1a2332; }
+      .node { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .node-sub { font-size: 11px; fill: #5a6a7a; }
+      .label { font-size: 12px; fill: #44525f; }
+      .mono { font-family: Menlo, Consolas, monospace; font-size: 11px; fill: #2c4a6e; }
+      .edge { stroke: #8aa0b5; stroke-width: 1.8; fill: none; }
+      .caption { font-size: 12px; fill: #5a6a7a; font-style: italic; }
+      .sec { font-size: 12px; font-weight: bold; fill: #1a2332; }
+      .red-title { font-size: 15px; font-weight: bold; fill: #9c2b2b; }
+    </style>
+    <marker id="arr5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8aa0b5"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="950" fill="#fafbfc"/>
+  <text x="40" y="48" class="title">Memory Architecture v3.0 — Single Surface + Append-Only Episodic Log</text>
+  <text x="40" y="72" class="subtitle">Cascade complete crew-wide 2026-06-10. One curated read at boot; one append-only write during work; governed, bounded folds between. Nothing deleted.</text>
+
+  <!-- Per-agent memory capsule -->
+  <rect x="40" y="100" width="760" height="360" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="60" y="128" class="panel-title">Per-agent memory capsule  ·  agents/&lt;name&gt;/.tropo-capsule/memory/</text>
+
+  <!-- agent-memory.md -->
+  <rect x="60" y="145" width="330" height="228" rx="8" fill="#2c4a6e"/>
+  <text x="76" y="170" class="node" fill="#ffffff">agent-memory.md — THE boot read</text>
+  <rect x="76" y="184" width="298" height="36" rx="4" fill="#3d5d82"/>
+  <text x="88" y="199" class="sec" fill="#ffffff">§ Top-of-Mind</text>
+  <text x="88" y="214" class="node-sub" fill="#cfe0ee">priority-ordered pins · bound ≤15 entries</text>
+  <rect x="76" y="226" width="298" height="36" rx="4" fill="#3d5d82"/>
+  <text x="88" y="241" class="sec" fill="#ffffff">§ Living Transfer from Predecessor</text>
+  <text x="88" y="256" class="node-sub" fill="#cfe0ee">the handoff, aging policy applied</text>
+  <rect x="76" y="268" width="298" height="36" rx="4" fill="#3d5d82"/>
+  <text x="88" y="283" class="sec" fill="#ffffff">§ History  (pointer)</text>
+  <text x="88" y="298" class="node-sub" fill="#cfe0ee">frozen per-generation snapshots</text>
+  <rect x="76" y="310" width="298" height="36" rx="4" fill="#3d5d82"/>
+  <text x="88" y="325" class="sec" fill="#ffffff">§ Memories  (pointer)</text>
+  <text x="88" y="340" class="node-sub" fill="#cfe0ee">points at the episodic log — never inlined</text>
+
+  <!-- episodic log -->
+  <rect x="430" y="145" width="350" height="130" rx="8" fill="#b08a4a"/>
+  <text x="446" y="170" class="node" fill="#ffffff">agent-memories.jsonl — episodic log</text>
+  <text x="446" y="192" class="node-sub" fill="#f3e8d2">append-only — NEVER cleared. Mid-session</text>
+  <text x="446" y="208" class="node-sub" fill="#f3e8d2">pins, lessons, decisions — one JSON line each.</text>
+  <text x="446" y="224" class="node-sub" fill="#f3e8d2">Folds advance a boundary marker; entries</text>
+  <text x="446" y="240" class="node-sub" fill="#f3e8d2">behind it stay on disk, never removed.</text>
+  <text x="446" y="260" class="node-sub" fill="#f3e8d2">Full arc reconstructable for reconsolidation.</text>
+
+  <rect x="430" y="290" width="350" height="84" rx="8" fill="#eef2f6" stroke="#9db4c8"/>
+  <text x="446" y="314" class="node">history/  — frozen pre-fold snapshots</text>
+  <text x="446" y="332" class="node-sub">every pre-fold surface frozen with a</text>
+  <text x="446" y="348" class="node-sub">SHA-256-verified snapshot — rollback + audit</text>
+
+  <text x="60" y="398" class="label">Boot reads ONE file. Sessions write ONE log. The curated surface routes and</text>
+  <text x="60" y="414" class="label">surfaces; it never restates substance — canonical artifacts hold the content.</text>
+  <text x="60" y="438" class="label">Studio-tier shared memory mirrors this shape for crew-wide doctrine pins;</text>
+  <text x="60" y="454" class="label">every agent inherits it at boot.</text>
+
+  <!-- Curator -->
+  <rect x="830" y="100" width="410" height="360" rx="10" fill="#fdf8ef" stroke="#d8c49a"/>
+  <text x="850" y="128" class="panel-title">sa.memory-curator — the governed fold</text>
+  <text x="850" y="150" class="label">Ephemeral specialist agent dispatched with a trigger:</text>
+
+  <rect x="850" y="162" width="370" height="62" rx="6" fill="#ffffff" stroke="#d8c49a"/>
+  <text x="864" y="182" class="node">trigger: retire   (steady state)</text>
+  <text x="864" y="198" class="node-sub">folds the session's episodic entries into the</text>
+  <text x="864" y="212" class="node-sub">surface; advances boundary; snapshots history</text>
+
+  <rect x="850" y="232" width="370" height="62" rx="6" fill="#ffffff" stroke="#d8c49a"/>
+  <text x="864" y="252" class="node">trigger: boot / catch_up   (insurance)</text>
+  <text x="864" y="268" class="node-sub">staleness gate: ≥3 generations OR ≥50 unfolded</text>
+  <text x="864" y="282" class="node-sub">entries since last fold → catch-up fold at boot</text>
+
+  <rect x="850" y="302" width="370" height="62" rx="6" fill="#ffffff" stroke="#d8c49a"/>
+  <text x="864" y="322" class="node">trigger: migrate   (one-time)</text>
+  <text x="864" y="338" class="node-sub">non-destructive v2→v3 conversion; old files</text>
+  <text x="864" y="352" class="node-sub">kept as rollback — verified crew-wide 2026-06-10</text>
+
+  <text x="850" y="388" class="label">The booting agent ratifies every curator</text>
+  <text x="850" y="404" class="label">recommendation (ACCEPT / REJECT / DEFER) before</text>
+  <text x="850" y="420" class="label">it applies. Since v1.79, an over-bound retirement</text>
+  <text x="850" y="436" class="label">fold REQUIRES curator dispatch — no in-line folds.</text>
+
+  <!-- Bound gate band -->
+  <rect x="40" y="480" width="1200" height="130" rx="10" fill="#fbf1f1" stroke="#9c2b2b"/>
+  <text x="60" y="506" class="red-title">BOUND GATE (v1.79) — the memory bound is structural, not disciplinary</text>
+  <text x="60" y="526" class="label">Measured failure: 8 consecutive in-line folds bypassed the curator; one Top-of-Mind grew to 33 blocks (~48K tokens) → the 30-minute boot.</text>
+
+  <rect x="60" y="540" width="373" height="56" rx="6" fill="#ffffff" stroke="#c9a0a0"/>
+  <text x="74" y="560" class="node">Validator ERROR</text>
+  <text x="74" y="577" class="node-sub">§Top-of-Mind &gt;15 entries OR surface &gt;32KB</text>
+
+  <rect x="453" y="540" width="373" height="56" rx="6" fill="#ffffff" stroke="#c9a0a0"/>
+  <text x="467" y="560" class="node">Mandatory curator dispatch</text>
+  <text x="467" y="577" class="node-sub">over-bound retirement folds cannot fold in-line</text>
+
+  <rect x="846" y="540" width="374" height="56" rx="6" fill="#ffffff" stroke="#c9a0a0"/>
+  <text x="860" y="560" class="node">Fired twice in production — correctly</text>
+  <text x="860" y="577" class="node-sub">folded 60→15 and 26→14 entries</text>
+
+  <!-- OP-14 sovereignty band -->
+  <rect x="40" y="630" width="1200" height="100" rx="10" fill="#2c4a6e"/>
+  <text x="60" y="658" class="panel-title" fill="#ffffff">OP-14 — Memory Sovereignty (new operating principle)</text>
+
+  <rect x="60" y="672" width="575" height="46" rx="6" fill="#ffffff"/>
+  <text x="74" y="690" class="node">Substrate-class pins → Tropo memory paths</text>
+  <text x="74" y="706" class="mono">agents/&lt;slug&gt;/.tropo-capsule/memory/ · .tropo-studio/memory/ · vault/files/</text>
+
+  <rect x="655" y="672" width="565" height="46" rx="6" fill="#ffffff"/>
+  <text x="669" y="690" class="node">NEVER harness-private stores — portability of the whole composite</text>
+  <text x="669" y="706" class="node-sub">incident: 6 substrate pins in a harness store — invisible to successors, non-portable</text>
+
+  <!-- Flow strip -->
+  <rect x="40" y="750" width="1200" height="155" rx="10" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="60" y="778" class="panel-title">The memory loop across a generation</text>
+
+  <rect x="70" y="792" width="210" height="80" rx="8" fill="#2c4a6e"/>
+  <text x="175" y="820" class="node" fill="#ffffff" text-anchor="middle">BOOT</text>
+  <text x="175" y="840" class="node-sub" fill="#cfe0ee" text-anchor="middle">read agent-memory.md —</text>
+  <text x="175" y="856" class="node-sub" fill="#cfe0ee" text-anchor="middle">bound-checked: ≤15 / ≤32KB</text>
+
+  <rect x="330" y="792" width="210" height="80" rx="8" fill="#3a6b8a"/>
+  <text x="435" y="820" class="node" fill="#ffffff" text-anchor="middle">WORK</text>
+  <text x="435" y="840" class="node-sub" fill="#d6e6ef" text-anchor="middle">append pins to the jsonl —</text>
+  <text x="435" y="856" class="node-sub" fill="#d6e6ef" text-anchor="middle">Tropo paths only (OP-14)</text>
+
+  <rect x="590" y="792" width="210" height="80" rx="8" fill="#b08a4a"/>
+  <text x="695" y="820" class="node" fill="#ffffff" text-anchor="middle">RETIRE → FOLD</text>
+  <text x="695" y="840" class="node-sub" fill="#f3e8d2" text-anchor="middle">curator folds; boundary</text>
+  <text x="695" y="856" class="node-sub" fill="#f3e8d2" text-anchor="middle">advances; SHA-256 snapshot</text>
+
+  <rect x="850" y="792" width="210" height="80" rx="8" fill="#4a8a6b"/>
+  <text x="955" y="820" class="node" fill="#ffffff" text-anchor="middle">SUCCESSOR BOOTS</text>
+  <text x="955" y="840" class="node-sub" fill="#dcefe4" text-anchor="middle">one clean read;</text>
+  <text x="955" y="856" class="node-sub" fill="#dcefe4" text-anchor="middle">full arc still on disk</text>
+
+  <path class="edge" d="M 280 832 L 330 832" marker-end="url(#arr5)"/>
+  <path class="edge" d="M 540 832 L 590 832" marker-end="url(#arr5)"/>
+  <path class="edge" d="M 800 832 L 850 832" marker-end="url(#arr5)"/>
+  <rect x="1090" y="792" width="130" height="80" rx="8" fill="#ffffff" stroke="#9db4c8"/>
+  <text x="1155" y="822" class="node" text-anchor="middle">repeat</text>
+  <text x="1155" y="842" class="node-sub" text-anchor="middle">129 generations</text>
+  <text x="1155" y="858" class="node-sub" text-anchor="middle">on one lineage</text>
+  <path class="edge" d="M 1060 832 L 1090 832" marker-end="url(#arr5)"/>
+
+  <text x="40" y="935" class="caption">Takeaway: don't trust the discipline — let the substrate catch the lapse. The log is never cleared, folds are bounded and snapshotted, and memory never leaves Tropo-owned paths.</text>
+</svg>

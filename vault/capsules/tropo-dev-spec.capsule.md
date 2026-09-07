@@ -5,12 +5,13 @@ ship_scope_lock_break: 'extraction_scope: ship ADDED 2026-07-02 per Mike verbati
 name: dev-spec
 type: capsule-definition
 extends: core
-version: 1.9
+version: '1.10'
+v1_10_amendment_note: "v1.9 -> v1.10 amendment 2026-08-29 by argus-a163 under Mike-locked dev-spec f5790777 (activation 035a6437), whose committed_substrate names this capsule AMENDED per capsule-of-capsules 38c63381 Rule 2. Purely additive: NEW Governance Rule 10 (composed-path AC for shared lifecycle surfaces) + NEW optional AC field composed_path + NEW Validation Check 12 (check_dev_spec_composed_path_ac, WARN against a seeded allowlist). No enum, lifecycle, state-machine, transition, rollup, template, or required-heading change; every existing instance and every existing acceptance criterion stays valid; template_enforced_from_version held at 1.8. Answers the v1.93 seam diagnosis (bcce1bb4): spec'd items slid in three-for-three while every costly failure lived at a seam between individually-correct parts. Mike-approved as v1.94 Stream 5 scope via Metis G114's proposal 3c0547d3 ('Yes, do that'). SAME-GESTURE DRIFT CURE: the v1.8->v1.9 bump (67c0bd50c) changed two frontmatter lines and no body surface, leaving six live contradictions -- H1 and footer still reading v1.8, no 1.9 changelog row, changelog rows mis-ordered, Rule 8's check_cascade_disposition_required absent from the Validation Checks list, and the at-a-glance summary listing 7 of 9 rules. All six cured here; a 1.9 changelog row is added retroactively rather than backdated silently. Mint registry regenerated in the same commit."
 lifecycle_pairing_amendment_2026_08_16: "v1.8 -> v1.9 amendment 2026-08-16 by talos-t44 under Mike-locked v1.89 dev-spec 271d28d7 (activation 7a47c089), whose committed_substrate assigns this amendment to the pairing package. Purely additive: adds the OPTIONAL lifecycle_pairing declaration (core.capsule v2.1) so this type's archived-state law is machine-readable. No enum, alias, state-machine, transition, rollup, template, or validation-rule change; every existing instance stays valid. Version bumped 2026-08-16 on Argus A150's ruling (evt_dd132e700471fc5e_00000014, verbatim: 'semantic capsule changes bump all six'), after T44 measured the effect and asked rather than deciding. For dev-spec specifically A150 held template_enforced_from_version at 1.8 in the same ruling, so v1.8+ stable-AC-ID behaviour is unchanged by the bump. Mint registry regenerated in the same commit."
 mint_mode: human
 mint_template: vault/capsules/templates/dev-spec.template.md
 mint_template_version: '1.1'
-mint_template_sha256: 1514c4624a1a4a1d6acd2c2fa2a48e33cee88c13709641e034f84f4babaa7b0d
+mint_template_sha256: 6e887c0dc6b3d1f794c8c67faf3842e40b7364ec6351cdb3db6828337306a10d
 mint_output_home: vault/files
 template_enforced_from: '2026-07-17'
 template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
@@ -29,9 +30,9 @@ v1_1_amendment_note: 'v1.0 → v1.1 amendment 2026-05-28 by Argus A87 captain-mo
 tier: os
 author: argus-a80
 created: 2026-05-23
-modified: '2026-08-16'
+modified: '2026-08-29'
 created_by: argus-a80
-modified_by: talos-t44
+modified_by: argus-a163
 status: locked
 lifecycle_pairing:
   terminal_statuses: [done]
@@ -63,7 +64,7 @@ subsystem_hub:
   - 8dd772a0
 ---
 
-# dev-spec — Capsule Definition v1.8
+# dev-spec — Capsule Definition v1.10
 
 **Relations**
 
@@ -133,6 +134,7 @@ Identity matching is exact. UID equals the same UID. Path/opaque equals the exac
 | `acceptance_evidence` | list of UIDs | UIDs of substrate that ratifies acceptance_criteria met (e.g., release entry, vela-test-plan, ship artifacts) |
 | `build_status` | enum (optional) | **v1.3 (8f15f08d, Talos T25 2026-07-07).** Formalizes a studio convention observed in-substrate since before this field existed (`92093c81`, `8e551957`) into the capsule contract. Enum: `built_pending_verify` (in-flight; build produced, verification not yet converged) \| `mike-signed-accepted` (**terminal** — Mike has signed the build). The terminal set is `{mike-signed-accepted}`; `check_dev_spec_activation_coupling` reads the terminal set from this capsule contract rather than hard-coding the literal, per Rule 9. |
 | `dev_spec_activation_uid` | UID (optional) | **v1.4 (ADR-052 ee0e35ad, Talos T25 2026-07-07).** Written atomically by `vault/tools/tropo-lock-dev-spec.py` alongside `status: locked` — the correlated `type: activation` UID the lock gesture opened (or reused, if one was already correlated) in the same indivisible act. Purely additive discoverability from the dev-spec side; `check_dev_spec_activation_coupling` continues to correlate from the ACTIVATION side (`dev_spec_uid` match, any status) per its own unmodified logic — this field is not read by that check. |
+| `composed_path` (on an `acceptance_criteria` entry) | boolean (optional) | **v1.10 (f5790777, Argus A163 2026-08-29).** Marks the ONE acceptance criterion that carries the end-to-end burden required by Rule 10 when this dev-spec targets a shared lifecycle surface. Additive: absent is legal and means absent; every pre-v1.10 AC stays valid. Machine-checkable so compliance is read from a declared field rather than inferred from command strings. |
 
 ## Body Contract (v1.8)
 
@@ -186,6 +188,53 @@ state:  active → state: archived
 8. **(NEW v1.2) Retroactive anchoring must not bypass the doc/test cascade.** A dev-spec reaching terminal status with EMPTY `triggered_doc_activation_uids` AND `triggered_test_activation_uids` MUST carry `cascade_disposition` covering BOTH doc and test — each either `mode: triggered` (proven via the activation UIDs) or `mode: attested` (proven by another path, with `evidence_ref` + independent `attested_by`). **Exception:** `target_release < 1.66.0` (pre-S5 grandfather) — executor-of-record attestation allowed. Independence uses `_resolve_principal_uid`; `attested_by` must resolve to a registered `type:principal` that is NOT the cycle executor. Closes finding `15c085de`. Engine enforcement in `check_triggered_pipeline_completion`; validator WARN at v1.66, ERROR-ratchet next cycle.
 9. **(NEW v1.3, 8f15f08d; REFINED v1.4 per ADR-052) Activation-Coupling — a dev-spec that has turned its ignition key must have a correlated pipeline activation.** A dev-spec at `status: locked`, and/or carrying a terminal `build_status` (per the enum above), MUST have at least one `type: activation` entry anywhere in `vault/files/` whose `dev_spec_uid` equals this dev-spec's `uid` — of ANY activation `status` (a `retired` activation still proves the pipeline was opened; existence is the gate, not activeness — see `2ffdd9d6`/`35c12763` precedent). Locking a dev-spec (the ignition moment) or reaching a terminal `build_status` (the escalation — work has reached shippable state) **without** ever opening the correlated dev-pipeline activation is the off-pipeline gap this rule closes ([8e8a0962](../../vault/files/8e8a0962.md)). **v1.4 PRIMARY mechanism (ADR-052, `ee0e35ad`, Mike-accepted "I decide on lightweight lock-time coupling"):** lock THROUGH `vault/tools/tropo-lock-dev-spec.py`, which flips `status: locked` and opens (or reuses) the correlated activation as ONE indivisible act, refusing the lock entirely if the activation cannot be opened. This is the correct-by-construction on-ramp — the compliant path and the easy path are the same act. **BACKSTOP (unchanged):** `check_dev_spec_activation_coupling` in [`tropo-validate.py`](../tools/tropo-validate.py) remains the always-on net that catches any escape around the tool (hand-edited `status: locked`, legacy/imported drift). Cure for anything the backstop still catches: open a correlated activation retroactively (feed-the-pipeline, per Mike's ruling on `8e8a0962` — NOT attested-cut) or prospectively (`tropo-lock-dev-spec.py`, or the lower-level `pipeline-activate.py --dev-spec-uid` on-ramp it wraps). WARN at v1.3 (grandfather allowlist `{92093c81, 8e551957}` per `8f15f08d`'s named cure targets), ERROR-ratchet once the vault reaches a genuinely clean pass for this violation class (Talos T25 2026-07-07 verify-before-designing finding: 9 OTHER pre-existing dev-specs were found off-pipeline at the moment the two named UIDs were cured, so the ratchet is keyed on whole-vault cleanliness, not merely the 2-uid allowlist emptying — see the check's own docstring for the full disclosure; flagged to Argus for a broader-cleanup judgment call, still in progress and explicitly out of THIS amendment's scope).
 
+10. **(NEW v1.10, f5790777) Composed-path AC for shared-lifecycle surfaces.** Any dev-spec whose `committed_substrate` targets a **shared lifecycle surface** — the pipeline runtime, receipt writers/readers, gates/checkpoints, the freeze/fire path, or any module two or more lifecycle tools import — MUST carry at least one acceptance criterion whose `verify.command` executes the **whole affected chain end-to-end on a throwaway instance** (a scratch run-dir, disposable candidate, or fixture studio), not merely the unit under change. That criterion declares `composed_path: true`. **The composed-path AC proves the seams; the per-item ACs prove the items.** A dev-spec that targets a shared surface and carries only unit-level ACs is non-compliant.
+
+    **The surface set below is the SINGLE DECLARED SOURCE.** `check_dev_spec_composed_path_ac` parses this block at runtime; it carries no second copy. Do not duplicate this list into code, and do not maintain a parallel list anywhere — one fact in two places that disagree is this studio's dominant defect shape. Derived by AST import-analysis across 24 lifecycle tools (2026-08-29), not by guess: a path qualifies when 2+ lifecycle tools import it, or when it is itself a named lifecycle surface.
+
+<!-- SHARED-LIFECYCLE-SURFACES:BEGIN -->
+vault/tools/lib/release_package.py
+vault/tools/lib/release_verify.py
+vault/tools/lib/release_gates.py
+vault/tools/lib/release_saga.py
+vault/tools/lib/release_closure.py
+vault/tools/lib/release_metrics.py
+vault/tools/lib/release_receipt.py
+vault/tools/lib/release_completion.py
+vault/tools/lib/release_gate_inputs.py
+vault/tools/lib/release_legs.py
+vault/tools/lib/release_site.py
+vault/tools/lib/release_bindings.py
+vault/tools/lib/event_identity.py
+vault/tools/lib/tropo_roots.py
+vault/tools/lib/ignition.py
+vault/tools/lib/tool_telemetry.py
+vault/tools/lib/lock_transaction.py
+vault/tools/lib/fan_in.py
+.tropo/scripts/lib/_identity.py
+.tropo/scripts/lib/event_emitter.py
+.tropo/scripts/lib/release_authorization.py
+.tropo/scripts/lib/release_validators.py
+vault/tools/9e7003b1.py
+vault/tools/e337f1dd.py
+vault/tools/tropo-release.py
+vault/tools/tropo-release-run.py
+vault/tools/tropo-release-preflight.py
+vault/tools/tropo-release-validation-gate.py
+vault/tools/tropo-publish-release.py
+vault/tools/tropo-freeze-release-candidate.py
+vault/tools/tropo-validate.py
+vault/tools/tropo-emit-event.py
+vault/tools/tropo-check-events.py
+vault/tools/tropo-check-harness-receipt.py
+vault/tools/tropo-drain-tool-telemetry.py
+vault/tools/tropo-lock-dev-spec.py
+vault/tools/tropo-lock-release-plan.py
+vault/tools/tropo-verify-release-live.py
+<!-- SHARED-LIFECYCLE-SURFACES:END -->
+
+    **WARN at v1.10** against a seeded allowlist of the non-terminal dev-specs measured non-compliant at authoring time (17 as seeded; the count lives in the constant, not in this sentence — an independent audit on 2026-08-30 found this prose saying 16 against a 17-entry constant, which is the one-fact-two-places shape this very rule's preamble names); **ERROR-ratchet** once the in-flight population is clean. The seed is deliberate and load-bearing: the sibling precedent (Rule 9 / Check 10) derives ERROR from an EMPTY allowlist, so a check that inherited an empty seed would have shipped ERROR on day one against all 59 shared-surface dev-specs and broken the validator for the crew. Existing `done` and `locked` dev-specs are grandfathered (standing pattern, Rule 7's precedent); the rule binds new and `draft` specs.
+
 ---
 
 ## Validation Checks (run at vault rebuild)
@@ -202,6 +251,9 @@ In addition to core checks:
 8. `check_dev_spec_close_invariants` — `status: done` + `state: active` requires `closed_at` + every `triggered_*_spec_uid` at `status: done`; runtime activation completion is checked through the paired `triggered_*_activation_uid` fields (the three-pipeline coupling enforcement)
 9. `check_dev_spec_supersession_bidirectional` — if `superseded_by:` set, the target also has `supersedes:` pointing back (Rule 6)
 10. **(NEW v1.3, 8f15f08d; BACKSTOP, unmodified by v1.4)** `check_dev_spec_activation_coupling` — a dev-spec at `status: locked` and/or terminal `build_status` has at least one correlated `type: activation` entry (`dev_spec_uid` match, any activation status) somewhere in `vault/files/` (Rule 9). WARN at v1.3 against the named `{92093c81, 8e551957}` grandfather allowlist; ERROR-ratchet once the vault is genuinely clean of this violation class. Implemented in [`tropo-validate.py`](../tools/tropo-validate.py); gauntlet-proven in `vault/tools/tests/test_dev_spec_activation_coupling.py` + `test_capability_chain_smoke.py`. Per ADR-052 (v1.4), this check remains the always-on backstop beneath the new PRIMARY lock-time coupling tool (`tropo-lock-dev-spec.py`) — not removed, not weakened.
+
+11. **(CURE, added v1.10 — the check existed; this list did not name it)** `check_cascade_disposition_required` — a dev-spec at terminal status with empty `triggered_doc/test_activation_uids` carries a valid `cascade_disposition` covering both legs (Rule 8); `target_release < 1.66.0` pre-S5 grandfathered. WARN; ERROR-ratchet pending. Implemented in [`tropo-validate.py`](../tools/tropo-validate.py). *Rule 8 has asserted this check since v1.2 while this list ran 1-10 and never enumerated it — the only rule claiming a validator with no listed check. Cured under f5790777.*
+12. **(NEW v1.10, f5790777)** `check_dev_spec_composed_path_ac` — a non-terminal dev-spec whose `committed_substrate` targets a declared shared lifecycle surface carries at least one acceptance criterion with `composed_path: true` (Rule 10). The check PARSES the surface set from this capsule's `SHARED-LIFECYCLE-SURFACES` block — it holds no second copy — and refuses loudly if that block is unreadable rather than silently passing. WARN at v1.10 against the seeded 16-UID allowlist; ERROR-ratchet when the allowlist empties. Implemented in [`tropo-validate.py`](../tools/tropo-validate.py); gauntlet at `vault/tools/tests/test_dev_spec_composed_path_ac.py` (known-positive fires, known-negative passes, verdict changes when the mechanism is removed).
 
 Authoring lane for the validators: Argus (in the v1.51 cycle that authors this capsule); Check 10 built by Talos T25 2026-07-07 per Argus's dev-spec `8f15f08d`. The v1.4 lock-time coupling tool is Talos's build per ADR-052 (`ee0e35ad`) + event `00005883` Item 2.
 
@@ -246,6 +298,9 @@ Extends `core`. Inherits all core rules + frontmatter floor (uid / type / status
 5. **`acceptance_criteria` is stable-ID + standalone** — v1.8 uses unique `AC<number>` objects with behavior + verify method/command/evidence; paired test-spec coverage points at the ID, while legacy criteria keep integer pointers
 6. **Supersession bidirectional** — `supersedes:` ↔ `superseded_by:` pair
 7. **Legacy v1.10–v1.50 grandfathered** — pre-dev-spec-discipline; cycle briefs suffice as historical activation record; v1.51+ enforces
+8. **Retroactive anchoring must not bypass the cascade** — terminal status with empty triggered activation UIDs requires `cascade_disposition` on BOTH doc and test legs, independently attested
+9. **Activation-Coupling** — a `locked` or terminal-`build_status` dev-spec must have a correlated `type: activation`; lock through `tropo-lock-dev-spec.py` and it is correct by construction
+10. **Composed-path AC for shared-lifecycle surfaces** — touching the pipeline runtime, receipts, gates, or the fire path requires ONE acceptance criterion (`composed_path: true`) that runs the whole chain end-to-end on a throwaway
 
 **Pitfalls:**
 - **Fuzzy `committed_substrate`** — Validation Check 2/3 violation; “we'll author capsules” is rejected; name the exact UID, canonical path, or planned identifier
@@ -293,17 +348,19 @@ historical 1-based integer only for legacy pre-v1.8 criteria.
 
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
+| 1.10 | 2026-08-29 | **The Seam Rule (f5790777, Mike-locked; activation 035a6437).** NEW Rule 10: a dev-spec targeting a shared lifecycle surface must carry one acceptance criterion running the whole chain end-to-end on a throwaway. NEW optional AC field `composed_path`. NEW Validation Check 12 (`check_dev_spec_composed_path_ac`), WARN against a seeded 16-UID allowlist — seeded because the sibling precedent derives ERROR from an empty one and would have broken the validator against 59 specs on day one. The surface set is declared ONCE in Rule 10 and parsed from there by the check. Answers the v1.93 seam diagnosis (bcce1bb4). Additive; no enum, lifecycle, template, or heading change. Also cured six drift defects left by the under-applied v1.9 bump: H1, footer, the missing 1.9 row, changelog ordering, Rule 8's unlisted check (now 11), and the at-a-glance summary listing 7 of 9 rules. | argus-a163 |
+| 1.9 | 2026-08-16 | Added the OPTIONAL `lifecycle_pairing` declaration (core.capsule v2.1) so this type's terminal-status and archived-state law is machine-readable. Purely additive; no enum, alias, state-machine, transition, rollup, template, or validation change; `template_enforced_from_version` held at 1.8 per Argus A150's ruling. Mint registry regenerated in the same commit. *(Row added retroactively 2026-08-29 under f5790777 — the v1.9 bump changed frontmatter only and never wrote this row; recorded here rather than backdated silently.)* | talos-t44 |
 | 1.8 | 2026-08-03 | Aligned schema and verifier prose to the parent-authored companion: routing metadata optional; stable-ID acceptance objects with standalone verification; dual legacy/new test pairing; seven required and four optional body sections; lifecycle unchanged. No bulk migration of legacy criteria. | argus-a144 |
 | 1.7 | 2026-08-03 | Mike-approved typed-mint pilot: moved the single scaffold to a visible hash-bound companion and resolved lifecycle vocabulary to `status: draft → locked → done` plus `state: active → archived`. No bulk instance migration. | argus-a144 |
 | 1.6 | 2026-07-17 | Added the generic dev-spec §Template mint scaffold under [Template-Leg Contract](../files/b933eafb.md); no schema/lifecycle/pairing/validator change. | argus-a133 |
-| 1.0 | 2026-05-23 | Initial version locked. Forward-looking activation-input commitment capsule for dev-pipeline cycles. Anti-fuzzy-framing gate on `committed_substrate`. Three-pipeline coupling enforcement at engine close-time (Rule 3 + Validation Check 8). Multi-stream cycles = one dev-spec per stream (Rule 4). Legacy v1.10–v1.50 grandfathered (Rule 7). Authored by Argus A80 per c3dc9f00 v0.2 §1 spec + Mike-A80 rename walk 2026-05-23. First of the *-spec family alongside forthcoming doc-spec + test-spec. | argus-a80 |
-| 1.1 | 2026-05-28 | Formalized `acceptance_criteria` as a list and paired every criterion by 1-based index to test-spec behavior coverage. | argus-a87 |
-| 1.2 | 2026-06-07 | Added independent doc/test cascade-disposition attestations for terminal cycles that legitimately do not fire a pipeline leg. | talos-t13 |
-| 1.3 | 2026-07-07 | **Pipeline-Activation Coupling Gate (8f15f08d).** NEW optional `build_status` field (enum, terminal set `{mike-signed-accepted}`). NEW Rule 9 + Validation Check 10: a locked/terminal-build-status dev-spec must have a correlated `type:activation` entry (any status). WARN at v1.3 against a named `{92093c81, 8e551957}` grandfather allowlist; ERROR-ratchet keyed on whole-vault cleanliness for this violation class (see `v1_3_amendment_note` for the verify-before-designing finding that widened the ratchet bar beyond 8f15f08d's own AC-6 premise). Committed substrate of dev-spec 8f15f08d (`assigned_to: talos`); Argus specs, Talos builds (this amendment + the validator check), Argus verifies two-sided per session lane. | talos-t25 |
-| 1.4 | 2026-07-07 | **Coupling runnable-lock (ADR-052 `ee0e35ad`, event 00005883 Item 2).** NEW optional `dev_spec_activation_uid` field (purely additive discoverability; not read by the validator check). Rule 9 REFINED (not replaced) to name the lock-time coupling tool (`vault/tools/tropo-lock-dev-spec.py`) as the PRIMARY correct-by-construction mechanism — locking a dev-spec through it atomically opens (or reuses) its correlated activation as one indivisible act; `check_dev_spec_activation_coupling` stays the always-on BACKSTOP, unmodified. Validation Check 10 unchanged. Gauntlet-proven in `test_systemic_feed_pipeline_v184.py`. | talos-t25 |
 | 1.5 | 2026-07-17 | Defined the shared spec-family substrate-ref union and exact identity matching used by dev/test pairing: UID, canonical safe path, or exact opaque planned identifier. | argus-a133 |
+| 1.4 | 2026-07-07 | **Coupling runnable-lock (ADR-052 `ee0e35ad`, event 00005883 Item 2).** NEW optional `dev_spec_activation_uid` field (purely additive discoverability; not read by the validator check). Rule 9 REFINED (not replaced) to name the lock-time coupling tool (`vault/tools/tropo-lock-dev-spec.py`) as the PRIMARY correct-by-construction mechanism — locking a dev-spec through it atomically opens (or reuses) its correlated activation as one indivisible act; `check_dev_spec_activation_coupling` stays the always-on BACKSTOP, unmodified. Validation Check 10 unchanged. Gauntlet-proven in `test_systemic_feed_pipeline_v184.py`. | talos-t25 |
+| 1.3 | 2026-07-07 | **Pipeline-Activation Coupling Gate (8f15f08d).** NEW optional `build_status` field (enum, terminal set `{mike-signed-accepted}`). NEW Rule 9 + Validation Check 10: a locked/terminal-build-status dev-spec must have a correlated `type:activation` entry (any status). WARN at v1.3 against a named `{92093c81, 8e551957}` grandfather allowlist; ERROR-ratchet keyed on whole-vault cleanliness for this violation class (see `v1_3_amendment_note` for the verify-before-designing finding that widened the ratchet bar beyond 8f15f08d's own AC-6 premise). Committed substrate of dev-spec 8f15f08d (`assigned_to: talos`); Argus specs, Talos builds (this amendment + the validator check), Argus verifies two-sided per session lane. | talos-t25 |
+| 1.2 | 2026-06-07 | Added independent doc/test cascade-disposition attestations for terminal cycles that legitimately do not fire a pipeline leg. | talos-t13 |
+| 1.1 | 2026-05-28 | Formalized `acceptance_criteria` as a list and paired every criterion by 1-based index to test-spec behavior coverage. | argus-a87 |
+| 1.0 | 2026-05-23 | Initial version locked. Forward-looking activation-input commitment capsule for dev-pipeline cycles. Anti-fuzzy-framing gate on `committed_substrate`. Three-pipeline coupling enforcement at engine close-time (Rule 3 + Validation Check 8). Multi-stream cycles = one dev-spec per stream (Rule 4). Legacy v1.10–v1.50 grandfathered (Rule 7). Authored by Argus A80 per c3dc9f00 v0.2 §1 spec + Mike-A80 rename walk 2026-05-23. First of the *-spec family alongside forthcoming doc-spec + test-spec. | argus-a80 |
 
 ---
 
-*dev-spec capsule definition | LOCKED v1.8 | schema + acceptance + body-contract amendment 2026-08-03 by Argus A144 under the governed parent companion decision | prior locks preserved | First of the *-spec family*
+*dev-spec capsule definition | LOCKED v1.10 | the Seam Rule (composed-path AC for shared lifecycle surfaces) added 2026-08-29 by Argus A163 under Mike-locked dev-spec f5790777, with the v1.9 bump's six drift defects cured in the same gesture | prior locks preserved | First of the *-spec family*
 *"The ignition key for dev-pipeline activations. Commit to what gets built before the engine fires."*

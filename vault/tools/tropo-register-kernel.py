@@ -91,6 +91,14 @@ _mint_spec_rk = _ilu_rk.spec_from_file_location(
 _mint_mod_rk = _ilu_rk.module_from_spec(_mint_spec_rk)
 _mint_spec_rk.loader.exec_module(_mint_mod_rk)
 
+# Shape authority (accepts-both 8/12-hex, UID_SHAPES) rather than a local
+# hardcoded 8-only check.
+_gp_spec_rk = _ilu_rk.spec_from_file_location(
+    "_governed_path_rk", _Path_rk(__file__).resolve().parent / "lib" / "governed_path.py"
+)
+_gp_mod_rk = _ilu_rk.module_from_spec(_gp_spec_rk)
+_gp_spec_rk.loader.exec_module(_gp_mod_rk)
+
 DRY_RUN = '--dry-run' in sys.argv
 
 # Map directory names to kernel_type values
@@ -222,9 +230,11 @@ def main():
 
             fm, content = parse_frontmatter(filepath)
 
-            # Get or generate UID — must match ^[0-9a-f]{8}$ per core capsule validation
+            # Get or generate UID — accepts-both (UID_SHAPES): the old 8-only
+            # check minted a brand-new uid over a file that already carried a
+            # valid composite 12-hex one, orphaning its real identity.
             uid = fm.get('uid', '')
-            if not uid or len(uid) != 8 or not all(c in '0123456789abcdef' for c in uid):
+            if not uid or not _gp_mod_rk.is_governed_uid_shape(uid):
                 uid = generate_uid()
                 while uid in existing_uids:
                     uid = generate_uid()

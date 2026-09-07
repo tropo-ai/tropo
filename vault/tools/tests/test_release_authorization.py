@@ -141,6 +141,54 @@ def main():
         except ra.ReleaseAuthorizationError:
             check("ship WITH human signoff → AUTHORIZED", False)
 
+        # 8b. OWNER EXEMPTION (Metis G114 ruling, evt_823a851052454a86_00000023, 2026-08-29):
+        # found live on v1.93's own real release — its owner (Mike) had executed a step
+        # earlier in the run and was then unable to sign his own release, because the
+        # executor-exclusion set is unscoped across the run's whole history. The run's
+        # recorded owner is now exempt from that set IFF the owner resolves to a HUMAN
+        # principal. Sandboxes ra.VAULT_FILES for just the activation-frontmatter read
+        # (_load_fm(VAULT_FILES/<uid>.md)); principal resolution still reads the REAL vault
+        # via unchanged VAULT_ROOT, so "mike-maziarz"/"argus" resolve to their real, already-
+        # registered principals exactly as every other case in this file relies on.
+        vault_tmp = Path(tempfile.mkdtemp(prefix="owner-exempt-vault-"))
+        real_vault_files = ra.VAULT_FILES
+        try:
+            ra.VAULT_FILES = vault_tmp
+            # 8b-i. Owner is HUMAN and also executed a step -> still signs (exempted).
+            (vault_tmp / "act-owner-human.md").write_text("---\nowner: mike-maziarz\n---\n")
+            _make_run(tmp, "act-owner-human", cascade=True, signoff=True)
+            hfolder = tmp / "dev-pipeline-act-owner-human-2026-06-17"
+            with (hfolder / "run.jsonl").open("a") as f:
+                f.write(json.dumps({"event": "step_completed", "actor": "mike-maziarz",
+                                    "step": "own-work", "trace_id": "act-owner-human",
+                                    "data": {}}) + "\n")
+            ra.mint_key("act-owner-human")
+            try:
+                ra.require_release_authorization("act-owner-human", require_human_signoff=True)
+                check("human owner who also executed a step → still AUTHORIZED (exempted)", True)
+            except ra.ReleaseAuthorizationError:
+                check("human owner who also executed a step → still AUTHORIZED (exempted)", False)
+
+            # 8b-ii. Owner is an AGENT and executed a step -> the hole stays closed: an
+            # agent-owner's own signoff (impossible to construct honestly, but proven via
+            # the exclusion set directly) must NOT be exempted.
+            (vault_tmp / "act-owner-agent.md").write_text("---\nowner: argus\n---\n")
+            _make_run(tmp, "act-owner-agent", cascade=True, signoff=True, signoff_actor="argus")
+            afolder = tmp / "dev-pipeline-act-owner-agent-2026-06-17"
+            with (afolder / "run.jsonl").open("a") as f:
+                f.write(json.dumps({"event": "step_completed", "actor": "argus",
+                                    "step": "own-work", "trace_id": "act-owner-agent",
+                                    "data": {}}) + "\n")
+            ra.mint_key("act-owner-agent")
+            try:
+                ra.require_release_authorization("act-owner-agent", require_human_signoff=True)
+                check("agent owner who also executed a step → still REFUSED (self-cert hole stays closed)", False)
+            except ra.ReleaseAuthorizationError:
+                check("agent owner who also executed a step → still REFUSED (self-cert hole stays closed)", True)
+        finally:
+            ra.VAULT_FILES = real_vault_files
+            shutil.rmtree(vault_tmp, ignore_errors=True)
+
         # 9. DOC-LESS DEV-SPEC: legitimately-authorized skip of the doc trigger (a test-only
         # dev-spec, e.g. mount-gate/409ef1cc's class) → mint MUST succeed. d2f8a91c fix.
         def _make_skip_run(root, activation_uid, *, linked=True, disposition="skip_with_authorization", authorized_by="mike-maziarz"):

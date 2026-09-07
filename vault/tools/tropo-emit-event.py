@@ -93,6 +93,7 @@ from pathlib import Path
 
 from lib import event_identity, fast_yaml
 from lib.capture_segment import verify_segment_attestation
+from lib.governed_path import UID_HEX_PATTERN, is_governed_uid_shape
 
 VAULT_ROOT = Path(__file__).resolve().parents[2]
 EVENTS_DIR = VAULT_ROOT / "vault" / "events"
@@ -139,6 +140,10 @@ REGISTERED_TYPES = {
     "tropo.agent.activated", "tropo.agent.retired",
     # Cut 4 R4/Q5 bounded usage capture (events.capsule v1.10; dev-spec 8078657b)
     "tropo.distill.usage.recorded",
+    # Concierge Arrival Family (events.capsule v1.14; v1.95 Spine A AC5 f015de6b3a18,
+    # Mike-ruled 2026-09-05 "Q1 of 1, go with option 1."): Po's companion offer
+    # and its decline are records on the bus, not prose.
+    "tropo.concierge.companion_offer_made", "tropo.concierge.companion_offer_declined",
 }
 
 VALID_LIFECYCLE = {"evergreen", "ephemeral"}  # per events.capsule v1.1 §2 (query-filter semantics; NOT cycle-phase)
@@ -165,8 +170,10 @@ def _registered_party_uids() -> set[str] | None:
     for p in AGENTS_DIR.glob("*.md") if AGENTS_DIR.is_dir() else []:
         try:
             txt = p.read_text(encoding="utf-8")
-            # Unified entries carry party_uid: <8-hex>
-            m = re.search(r"^party_uid:\s*([0-9a-f]{8})", txt, re.MULTILINE)
+            # Unified entries carry party_uid: <8-or-12-hex>. accepts-both
+            # (UID_SHAPES): unanchored 8-only silently truncated a 12-hex
+            # party_uid to its first 8 characters instead of refusing.
+            m = re.search(r"^party_uid:\s*(%s)" % UID_HEX_PATTERN, txt, re.MULTILINE)
             if m:
                 uids.add(m.group(1))
         except OSError:
@@ -178,7 +185,7 @@ def _registered_party_uids() -> set[str] | None:
             if isinstance(rows, dict):
                 uids.update(
                     str(uid) for uid in rows
-                    if re.fullmatch(r"[0-9a-f]{8}", str(uid))
+                    if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", str(uid))  # accepts-both
                 )
     except (OSError, ValueError, TypeError):
         pass
@@ -202,7 +209,10 @@ def _resolve_identity_by_name(agent_name: str) -> str:
                 continue
             slug = m_slug.group(1).strip().strip('"').strip("'").lower()
             if slug == name_lower:
-                m_party = re.search(r"^party_uid:\s*([0-9a-f]{8})", txt, re.MULTILINE)
+                # accepts-both (UID_SHAPES): same truncation risk as above.
+                m_party = re.search(
+                    r"^party_uid:\s*(%s)" % UID_HEX_PATTERN, txt, re.MULTILINE
+                )
                 if not m_party:
                     print(f"ERROR: agent '{agent_name}' found in {p.name} but has no party_uid",
                           file=sys.stderr)
@@ -228,7 +238,7 @@ def _resolve_identity_by_name(agent_name: str) -> str:
                     or ""
                 ).lower()
                 if name == name_lower or f"/{name_lower}/" in path:
-                    if re.fullmatch(r"[0-9a-f]{8}", str(uid)):
+                    if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", str(uid)):  # accepts-both
                         return str(uid)
     except (OSError, ValueError, TypeError):
         pass
@@ -346,12 +356,13 @@ def _validate_segment_contract(
         )
     task_uid = data.get("task_uid")
     viewer_uid = data.get("viewer_principal_uid")
-    if not isinstance(task_uid, str) or not re.fullmatch(r"[0-9a-f]{8}", task_uid):
-        raise ValueError("usage data.task_uid must be an 8-hex UID")
+    # accepts-both (UID_SHAPES): these governed uids refused any 12-hex value.
+    if not isinstance(task_uid, str) or not is_governed_uid_shape(task_uid):
+        raise ValueError("usage data.task_uid must be a governed UID")
     if subject != task_uid:
         raise ValueError("usage event subject must exactly equal data.task_uid")
-    if not isinstance(viewer_uid, str) or not re.fullmatch(r"[0-9a-f]{8}", viewer_uid):
-        raise ValueError("usage data.viewer_principal_uid must be an 8-hex UID")
+    if not isinstance(viewer_uid, str) or not is_governed_uid_shape(viewer_uid):
+        raise ValueError("usage data.viewer_principal_uid must be a governed UID")
     index_as_of = data.get("index_as_of")
     if (
         not isinstance(index_as_of, str)
@@ -535,8 +546,11 @@ def emit(event_type: str, source: str, source_uid: str, lifecycle: str,
         print(f"WARN: {msg}", file=sys.stderr)
     if lifecycle not in VALID_LIFECYCLE:
         raise ValueError(f"lifecycle must be one of {sorted(VALID_LIFECYCLE)}")
-    if not re.fullmatch(r"[0-9a-f]{8}", source_uid):
-        raise ValueError(f"source_uid must be 8-hex; got {source_uid!r}")
+    # accepts-both (UID_SHAPES): refused every agent with a composite 12-hex
+    # identity (any agent genesis'd since the Stage B flip) the moment it
+    # tried to emit an event via --as <name>.
+    if not is_governed_uid_shape(source_uid):
+        raise ValueError(f"source_uid must be a governed UID; got {source_uid!r}")
     _validate_segment_contract(
         event_type,
         lifecycle,
@@ -598,7 +612,9 @@ def emit(event_type: str, source: str, source_uid: str, lifecycle: str,
         if isinstance(data, dict):
             for key in ("activation_uid", "pipeline_run_uid"):
                 candidate = str(data.get(key) or "")
-                if re.fullmatch(r"[0-9a-f]{8}", candidate):
+                # accepts-both (UID_SHAPES): a 12-hex activation/run uid was
+                # silently excluded from writer-instance derivation.
+                if is_governed_uid_shape(candidate):
                     activation_uid = candidate
                     break
         writer_uid = event_identity.derive_writer_instance_uid(

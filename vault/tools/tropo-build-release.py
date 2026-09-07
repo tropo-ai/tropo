@@ -226,6 +226,13 @@ PIPELINE_BINDINGS = (
 release_package = _load_vault_lib("tropo_release_package", "release_package.py")
 release_legs = _load_vault_lib("tropo_release_legs", "release_legs.py")
 release_bindings = _load_vault_lib("tropo_release_bindings", "release_bindings.py")
+# accepts-both (UID_SHAPES): the shared governed-uid shape authority, needed by
+# the forward-target guard, the vendor-ref manifest builder, and the cascade-
+# pipelines-retired gate below — all three carried local 8-hex-only literals
+# that reject a valid Stage B 12-hex uid.
+_governed_path = _load_vault_lib("tropo_governed_path", "governed_path.py")
+is_governed_uid_shape = _governed_path.is_governed_uid_shape
+UID_HEX_PATTERN = _governed_path.UID_HEX_PATTERN
 
 
 def _step_refusal_text(step_uid, message, harm=None):
@@ -294,6 +301,8 @@ KERNEL_EXCLUDE_PATTERNS = [
     'v030-replace-agents.playbook.md',       # v0.2 → v0.3 — no v0.x users
     'boot-digest.md',                        # v1.74: excluded from ship, per-studio derivation only
     'boot-fast-path.md',                     # v1.74: excluded from ship, per-studio derivation only
+    'boot-digest.history.md',                # 2026-09-04 (f0153984a89f item 3): the derivations' history siblings follow them out of the box
+    'boot-fast-path.history.md',
     'event-streams-v2.enabled',              # v1.86 punch-list item 6 (51dc85ef), talos-t40 2026-08-08.
                                               # Argo's v2-cutover marker, and shipping it BLOCKS the box.
                                               # load_cutover_marker treats presence as an authenticated
@@ -547,7 +556,163 @@ def load_ship_entries(index_path):
 
 resolve_source_path = _engine_resolve_source_path  # signature unchanged
 sha256_file = _engine_sha256_file  # signature unchanged
-copy_file = _engine_copy_file  # signature unchanged
+# ─── The ship-verdict chokepoint (v1.94 Stream 5 / B-1, dev-spec 91d951f4) ───
+#
+# ONE gate, not four hooks. AC1 names four channels that put files in the box -- the
+# manifest walk, the scope copy, the six wholesale emitters, and every bare copy_file
+# call in main(). Every one of them funnels through copy_file, so the verdict is applied
+# HERE and the four channels are covered by construction. That is deliberately stronger
+# than hooking each channel: four hooks are four things that must each be correct and
+# that a fifth channel can be added beside, while one chokepoint makes "a file entered
+# the box without a verdict" unrepresentable.
+#
+# It only works if nothing bypasses it, so that is a measured claim rather than a hope:
+# step_7_create_vault_skeleton used shutil.copytree directly (one of the six wholesale
+# emitters, ~19 files, no per-file hook at all) and was converted to walk through
+# copy_file as part of this change. test_ship_manifest.NoCopyBypass asserts at source
+# level that no new bypass appears.
+
+from lib.ship_verdict import (          # noqa: E402
+    build_resolver as _build_verdict_resolver,
+    Census as _ShipCensus,
+    normalize as _verdict_normalize,
+    SHADOW as _V_SHADOW,
+    GENERATED as _V_GENERATED,
+)
+
+# Populated by init_ship_verdicts() at build start. None means the gate is not armed --
+# which is legal for callers that are not building a release box (the candidate-box
+# builder and the tests import this module), and is reported rather than assumed.
+SHIP_RESOLVER = None
+SHIP_CENSUS = None
+
+
+def init_ship_verdicts(vault_root, index_path=None):
+    """Arm the verdict gate for this build. Returns (resolver, census)."""
+    global SHIP_RESOLVER, SHIP_CENSUS
+    SHIP_RESOLVER = _build_verdict_resolver(vault_root, index_path)
+    SHIP_CENSUS = _ShipCensus()
+    print(f'  Ship verdicts armed: {SHIP_RESOLVER.file_rule_count} file rules, '
+          f'{SHIP_RESOLVER.folder_rule_count} folder rules')
+    return SHIP_RESOLVER, SHIP_CENSUS
+
+
+def copy_file(src, dst, dry_run=False, verdict_exempt=None):
+    """Copy one file into the box, if and only if its verdict says so.
+
+    verdict_exempt: a reason string for a path the build GENERATED rather than copied
+    from a source. Named, never silent -- it lands in the census as GENERATED.
+    """
+    if SHIP_RESOLVER is None:
+        # Gate not armed (candidate-box builder, unit tests). Copy as before; the
+        # release path always arms it, and a test asserts the release path does.
+        return _engine_copy_file(src, dst, dry_run)
+
+    rel = os.path.relpath(str(src), tropo_roots.STUDIO_ROOT)
+    if rel.startswith('..'):
+        # LOUD, never silent. A source outside the Studio root cannot be addressed by
+        # any rule -- every manifest key and every ship-artifact canonical_source is
+        # studio-relative -- so it would normalize into a nonsense key, match nothing,
+        # resolve UNRULED, and be silently denied. That failure looks exactly like a
+        # correct default-deny in the census, which is the worst possible disguise for
+        # a build-integrity bug.
+        #
+        # Found by test_ship_manifest's own fixture: it patched tropo_roots.STUDIO_ROOT
+        # but not the import-time KERNEL_DIR constant, so the kernel channel copied the
+        # REAL studio's .tropo into a fixture box. The census filled with keys like
+        # 'Users/maz/git/.../.tropo/toolbelt.md' and quietly denied the whole channel.
+        # refusal: priced/false-success — the alternative is a box silently missing an
+        # entire channel while the census reports those files as correctly default-denied.
+        raise SystemExit(
+            f'BUILD INTEGRITY: copy source escapes the Studio root and cannot carry a '
+            f'verdict.\n  source : {src}\n  root   : {tropo_roots.STUDIO_ROOT}\n'
+            f'  relpath: {rel}\n'
+            f'Every verdict rule is Studio-relative. A source outside the root matches '
+            f'no rule and would be silently denied. Usual cause: an import-time path '
+            f'constant (KERNEL_DIR, VERSION_PATH, INDEX_PATH) still pointing at a '
+            f'different Studio than tropo_roots.STUDIO_ROOT.'
+        )
+    rel = _verdict_normalize(rel)
+
+    if verdict_exempt:
+        SHIP_CENSUS.record(SHIP_RESOLVER.generated(rel, verdict_exempt))
+        return _engine_copy_file(src, dst, dry_run)
+
+    decision = SHIP_CENSUS.record(SHIP_RESOLVER.resolve(rel))
+    if decision.verdict == _V_SHADOW:
+        # The SOURCE does not ship. The TWIN needs no emitter here: it is a governed
+        # record carrying its own `extraction_scope: ship`, so the scope channel already
+        # ships it at its own vault path. Adding a second emission path for it would be
+        # one fact with two writers -- the defect family this spec exists to end. What
+        # this build DOES owe is proof that both halves happened, which is
+        # verify_shadow_substitutions() below: twin present, source absent, every run.
+        return None
+    if not decision.ships:
+        return None
+    return _engine_copy_file(src, dst, dry_run)
+
+
+def verify_shadow_substitutions(build_dir, resolver=None):
+    """Both halves of every SHADOW pair, checked against the built box.
+
+    A shadow substitution is two claims, and checking only one of them is how a pair
+    that was never wired passes: `source absent` is ALSO what you get when the source
+    never shipped in the first place. So this asserts BOTH -- the twin is in the box and
+    the source is not -- and reports a designation whose twin is missing as a defect
+    rather than as a quiet success.
+
+    Returns (ok, findings).
+    """
+    resolver = resolver or SHIP_RESOLVER
+    findings = []
+    if resolver is None:
+        return True, ['shadow verification skipped: verdict gate not armed']
+
+    pairs = resolver.shadow_pairs()
+    if not pairs:
+        return True, ['no SHADOW designations in this manifest']
+
+    for source_path, twin in pairs:
+        source_in_box = os.path.exists(os.path.join(build_dir, source_path))
+        twin_in_box = False
+        twin_at = None
+        if twin:
+            files_dir = os.path.join(build_dir, 'vault', 'files')
+            if os.path.isdir(files_dir):
+                for fname in os.listdir(files_dir):
+                    if str(twin) in fname:
+                        twin_in_box, twin_at = True, os.path.join('vault/files', fname)
+                        break
+
+        if source_in_box:
+            findings.append(
+                f'  ✗ SHADOW violated: source {source_path} IS in the box; the twin was '
+                f'meant to ship in its place')
+        if twin and not twin_in_box:
+            findings.append(
+                f'  ✗ SHADOW incomplete: {source_path} is designated to twin {twin}, '
+                f'which is NOT in the box — the source was withheld and nothing replaced '
+                f'it, which is a hole, not a substitution')
+        if not source_in_box and twin_in_box:
+            findings.append(f'  ✓ SHADOW {source_path} → {twin_at}')
+
+    ok = not any(f.lstrip().startswith('✗') for f in findings)
+    return ok, findings
+
+
+def report_owed_shadow_designations(resolver=None):
+    """Ratified pairs whose twin does not exist yet. Named on every build.
+
+    Mike ratified three at the 2026-09-02 walk (two exemplar charter-shadows and one
+    real soul letter). Their twins are their source owners' to author -- authoring
+    another agent's voice to satisfy a manifest row is not a thing this build may do --
+    so the designation cannot be written yet without dangling. Silence would let a
+    ratified decision quietly evaporate, so it is reported instead.
+    """
+    print('  Shadow designations OWED (ratified 2026-09-02, twins not yet authored):')
+    print('    · two exemplar charter-shadows — owed by Argus (source owner)')
+    print("    · Metis's soul letter as reading material — owed by Metis (her voice)")
+    print('    See the ROOT MANIFEST section of b2e7d4a9 for the ratification record.')
 
 
 def should_exclude_kernel(filepath):
@@ -590,57 +755,16 @@ def guard_overwrite(new_version, build_dir, testing_dir):
     """
     if DRY_RUN:
         return
-
-    for label, target_dir in [('build', build_dir), ('testing', testing_dir)]:
-        if not os.path.exists(target_dir):
-            continue   # nothing to overwrite — clean
-
-        # Look for version.md in the existing directory
-        candidate_paths = [
-            os.path.join(target_dir, '.tropo', 'version.md'),
-            os.path.join(target_dir, 'version.md'),
-        ]
-        existing_version = None
-        for p in candidate_paths:
-            if os.path.exists(p):
-                existing_version = read_current_version(p)
-                break
-
-        if existing_version is None:
-            if FORCE:
-                print(f'  ⚠ {label} dir exists but has no version.md — proceeding (--force)')
-                continue
-            print(f'\n=== BUILD GUARD: REFUSING OVERWRITE ({label} dir) ===', file=sys.stderr)
-            print(f'  Target: {target_dir}', file=sys.stderr)
-            print(f'  Issue:  directory exists but contains no version.md stamp.', file=sys.stderr)
-            print(f'          Cannot verify content-version agreement; refusing overwrite.', file=sys.stderr)
-            print(f'  Recovery:', file=sys.stderr)
-            print(f'    - If this is intended: re-run with --force flag', file=sys.stderr)
-            print(f'    - If this is unexpected: inspect {target_dir} contents.', file=sys.stderr)
-            print(f'      Move/archive before retrying.', file=sys.stderr)
-            # refusal: priced/deletion-of-governed-substrate — an unidentifiable existing release tree is handed to an unconditional rmtree, destroying content that lives outside git with no way to tell afterward what version was deleted
-            sys.exit(2)
-
-        if existing_version != new_version:
-            if FORCE:
-                print(f'  ⚠ {label} dir version.md = {existing_version} ≠ build target '
-                      f'{new_version} — proceeding (--force)')
-                continue
-            print(f'\n=== BUILD GUARD: REFUSING OVERWRITE ({label} dir) ===', file=sys.stderr)
-            print(f'  Target: {target_dir}', file=sys.stderr)
-            print(f'  Issue:  existing directory has version.md = {existing_version}', file=sys.stderr)
-            print(f'          but build target version is {new_version}.', file=sys.stderr)
-            print(f'          Overwriting would clobber {existing_version} working content', file=sys.stderr)
-            print(f'          (the V36 2026-04-30 scenario — caught by luck last time).', file=sys.stderr)
-            print(f'  Recovery:', file=sys.stderr)
-            print(f'    - If source .tropo/version.md is stale: update source first, then re-run.', file=sys.stderr)
-            print(f'    - If you intentionally want to overwrite the existing {existing_version}', file=sys.stderr)
-            print(f'      content with a {new_version} build: run with --force flag.', file=sys.stderr)
-            print(f'    - If unsure: archive {target_dir} to a safe location before proceeding.', file=sys.stderr)
-            # refusal: priced/deletion-of-governed-substrate — a bump computed from a stale version.md would rmtree a different version's completed build and testing trees, which are outside version control and unrecoverable
-            sys.exit(2)
-        # version matches — content-mismatch check is too expensive for v0.1; deferred to v0.2.
-        # The version-stamp match is sufficient defense for the V36 retrospective scenario.
+    releases_dir = Path(build_dir).parent.parent.parent
+    problems = _build_guards.overwrite_problems(new_version, releases_dir, force=FORCE)
+    if problems:
+        print('\n=== BUILD GUARD: REFUSING OVERWRITE ===', file=sys.stderr)
+        for problem in problems:
+            print(f'  - {problem}', file=sys.stderr)
+        # refusal: priced/deletion-of-governed-substrate — an existing release tree that is unidentifiable or belongs to another version is handed to an unconditional rmtree, destroying content that lives outside git
+        sys.exit(2)
+    if FORCE:
+        print('  ⚠ --force: existing build/testing dirs for this version are overwritten deliberately')
 
 
 def step_2_create_output(new_version):
@@ -651,10 +775,10 @@ def step_2_create_output(new_version):
     dist_dir = os.path.join(tropo_roots.RELEASES_DIR, f'v{new_version}', 'dist')
 
     if not DRY_RUN:
-        # Pre-write guard — added 2026-05-01 (vela-v37, Stream 2 task 87e3b4d6).
-        # Catches V36's 2026-04-30 retrospective scenario (--bump patch from
-        # stale source clobbering existing different-version output dir).
-        guard_overwrite(new_version, build_dir, testing_dir)
+        # The pre-write overwrite guard (vela-v37, task 87e3b4d6) runs as gate
+        # build-overwrite-guard in the lock-static phase at Step 0.4 (v1.95 Spine
+        # B), before anything is written; guard_overwrite() below is the wrapper
+        # its own tests call, and the build no longer calls it here.
         # Every build is a clean-room projection. Reusing a partial prior tree
         # makes --force/retry output depend on stale files and can silently
         # inflate the manifest. The version-level provenance/verdict files stay
@@ -856,10 +980,12 @@ def build_from_manifest(build_dir, entries):
     return files_emitted
 
 
-PER_STUDIO_BOOT_DERIVATIONS = (
-    '.tropo/boot-digest.md',
-    '.tropo/boot-fast-path.md',
-)
+# ONE home (talos-t63, 2026-09-06, G122's candidate #2 ruling): the tuple lives in
+# lib/package_state_exclusions.py beside the other never-ship state, and
+# tropo-check-doc-currency reads the same object, so a shipped instruction's
+# link to a derivation is never called dead by a tool that did not know the
+# build excludes it. Re-exported under the name every reader in this file uses.
+PER_STUDIO_BOOT_DERIVATIONS = package_state_exclusions.PER_STUDIO_BOOT_DERIVATIONS
 PER_STUDIO_BOOT_DERIVATION_UIDS = frozenset({
     '266b0b56',
     'a993f079',
@@ -1229,6 +1355,29 @@ def step_3_copy_kernel(build_dir):
     return copied
 
 
+def _applier_wired_migrations():
+    """A2 (4e9ce4cc): the migration strip's allow-list comes from the ENFORCEMENT
+    point itself. tropo-apply-image.py's WIRED_MIGRATIONS is the declaration the
+    bootstrap gate refuses against; a second copy here would be one fact with
+    two readers — the studio's costliest defect family. Load the applier module
+    (import-safe: its CLI is __main__-guarded) and read its set. A load failure
+    REFUSES the build rather than stripping blind: a strip that cannot ask the
+    applier what is wired must not guess.
+    """
+    applier_path = Path(__file__).resolve().with_name('tropo-apply-image.py')
+    spec = importlib.util.spec_from_file_location('_applier_wired_migrations', applier_path)
+    if spec is None or spec.loader is None:
+        # refusal: misuse — could not load the applier for the migration strip
+        raise ImportError("tropo-apply-image.py could not be loaded for the migration strip")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    wired = getattr(module, 'WIRED_MIGRATIONS', None)
+    if not isinstance(wired, frozenset):
+        # refusal: misuse — the applier's contract shape changed under us
+        raise ImportError("applier WIRED_MIGRATIONS is missing or reshaped; the strip cannot proceed")
+    return wired
+
+
 def step_4_copy_ship_entries(build_dir, entries):
     """Step 4d-e: Copy scope:ship vault entries and build the output index."""
     dst_files = os.path.join(build_dir, 'vault', 'files')
@@ -1240,11 +1389,30 @@ def step_4_copy_ship_entries(build_dir, entries):
     copied = 0
     missing = 0
     index_rows = []
+    wired_migrations = _applier_wired_migrations()
 
     for entry in entries:
         # Skip kernel entries — they're already copied via the kernel directory
         if entry.get('type') == 'kernel':
             continue
+
+        # A2 (4e9ce4cc): the migration strip at the SHIP-ENTRY surface. The
+        # kernel copy has excluded migration playbooks since v1.12-era
+        # KERNEL_EXCLUDE_PATTERNS, but a ship-scoped index row that ADDRESSES
+        # the same playbook by path (3ca544f2 →
+        # .tropo/playbooks/migrations/migrate-file-status.playbook.md) rides
+        # the box anyway — the second path into a package, and the one the
+        # fleet RAN: v1.90–v1.93 boxes shipped the undeclared migration, so
+        # bootstrap's assert_migration_contract refuses on every one of them
+        # (MigrationContractError). The strip mirrors the applier's own rule:
+        # a migration playbook ships only if its stem is WIRED_MIGRATIONS.
+        entry_path = entry.get('path', '')
+        if entry_path.startswith('.tropo/playbooks/migrations/') and entry_path.endswith('.playbook.md'):
+            stem = Path(entry_path).stem
+            if stem not in wired_migrations:
+                print(f'    migration strip (A2): {entry["uid"]} — {entry_path} rides undeclared; '
+                      f'not in the applier\'s WIRED_MIGRATIONS, excluded from the box')
+                continue
 
         src = resolve_source_path(entry, tropo_roots.STUDIO_ROOT)
         if not os.path.exists(src):
@@ -1466,16 +1634,47 @@ def step_3d_copy_vault_playbooks(build_dir):
         os.makedirs(dst_playbooks, exist_ok=True)
 
     copied = 0
+    superseded = []
     for fname in sorted(os.listdir(src_playbooks)):
         src_file = os.path.join(src_playbooks, fname)
         if not os.path.isfile(src_file):
+            continue
+        # v1.95 (Metis G121 ruling 2026-09-05 23:51Z on Orpheus O38's classification,
+        # landed by Argus A172): SUPERSEDED PLAYBOOKS DO NOT SHIP. Exclusion by the
+        # file's own `status: superseded` declaration, never a widened skip list.
+        # Three superseded playbooks (7f2efd7c, f4a81b29, 71f186cf) carried 20 of
+        # the 55 dead shipped instruction paths the doc-currency gate found on the
+        # v1.94 box: a superseded procedure's dead references are not content to
+        # cure, they are a file that should not be in a stranger's download. The
+        # manifest channel already refused them (status-gated); this wholesale
+        # channel was the one shipping them.
+        if _playbook_status(src_file) == 'superseded':
+            superseded.append(fname)
             continue
         dst_file = os.path.join(dst_playbooks, fname)
         copy_file(src_file, dst_file, DRY_RUN)
         copied += 1
 
-    print(f'  vault/playbooks/: {copied} files copied (playbook targets)')
+    print(f'  vault/playbooks/: {copied} files copied (playbook targets); '
+          f'{len(superseded)} superseded excluded by declaration'
+          + (': ' + ', '.join(superseded) if superseded else ''))
     return copied
+
+
+def _playbook_status(path):
+    """The `status:` a playbook declares in its own frontmatter ('' if none) -- read
+    from the file, never from the index: a build must not depend on a per-machine
+    projection to decide what ships."""
+    try:
+        with open(path, encoding='utf-8') as fh:
+            head = fh.read(4096)
+    except OSError:
+        return ''
+    if not head.startswith('---'):
+        return ''
+    fm = head.split('\n---', 1)[0]
+    m = re.search(r'^status:\s*[\'"]?([A-Za-z_-]+)', fm, re.MULTILINE)
+    return m.group(1).strip().lower() if m else ''
 
 
 def step_3e_copy_vault_updates(build_dir):
@@ -1511,16 +1710,33 @@ def step_3e_copy_vault_updates(build_dir):
         os.makedirs(dst_updates, exist_ok=True)
 
     copied = 0
+    skipped_manifest_copy = False
     for root, dirs, files in os.walk(src_updates):
         prune_bytecode(dirs, files)
         dirs[:] = sorted(dirs)
         for fname in sorted(files):
             src_file = os.path.join(root, fname)
             rel = os.path.relpath(src_file, src_updates)
+            # A7 (4e9ce4cc, v1.94 Stream 1): the box must NOT carry the
+            # discovery manifest. It is a dev copy that names its own version
+            # current, so a fresh install reading it believes it is one
+            # release behind on day one — a customer-visible defect measured
+            # on the shipped v1.93 box. The box's version truth is
+            # .tropo/version.md plus the FIRST manifest fetch (update-source
+            # addresses it); no shipped copy is the cure. Only the manifest:
+            # the rest of vault/updates/ is the apply state machine this step
+            # exists to ship.
+            if rel == 'updates-manifest.json':
+                skipped_manifest_copy = True
+                continue
             dst_file = os.path.join(dst_updates, rel)
             copy_file(src_file, dst_file, DRY_RUN)
             copied += 1
 
+    if skipped_manifest_copy:
+        print('  updates-manifest.json: EXCLUDED from the box (A7 — a shipped dev '
+              'copy makes fresh installs believe they are behind; version truth is '
+              '.tropo/version.md + the fetched manifest)')
     print(f'  vault/updates/: {copied} files copied recursively (update apply state machine)')
     return copied
 
@@ -1539,7 +1755,9 @@ def step_3c_assert_forward_targets(build_dir):
     Added: v1.63 P0 fix (Talos T12) per ruling fdef56ea + directive 03b17aaa.
     """
     import re as _re
-    _UID_PATTERN = _re.compile(r'vault/tools/([0-9a-f]{8})\.py')
+    # accepts-both (UID_SHAPES): Stage B mints 12-hex tool uids; a shim referencing
+    # vault/tools/<12-hex-uid>.py must still be resolved by this forward-target guard.
+    _UID_PATTERN = _re.compile(r'vault/tools/(%s)\.py' % UID_HEX_PATTERN)
 
     scripts_dir = os.path.join(build_dir, '.tropo', 'scripts')
     tools_dir = os.path.join(build_dir, 'vault', 'tools')
@@ -1615,15 +1833,26 @@ def step_7_create_vault_skeleton(build_dir):
         # Remove any pre-existing destination to ensure clean copy
         if os.path.exists(vault_dst):
             shutil.rmtree(vault_dst)
-        shutil.copytree(skeleton_src, vault_dst,
-                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '*.pyo'))
 
-    # Count what got copied for the log line
+    # v1.94 Stream 5 (B-1): this used shutil.copytree, which walked straight past the
+    # verdict chokepoint. It is one of the six wholesale emitters AC1 names, so the
+    # census was structurally blind to every file in it -- a hole of exactly the shape
+    # the spec describes as "a census that cannot see 749 files is not a census."
+    # Converted to a per-file walk through copy_file so the skeleton is ruled like
+    # everything else. The ignore-patterns behaviour is preserved by prune_bytecode.
     file_count = 0
-    for root, _, files in os.walk(skeleton_src):
-        file_count += len(files)
+    for root, dirs, files in os.walk(skeleton_src):
+        prune_bytecode(dirs, files)
+        for fname in sorted(files):
+            src_file = os.path.join(root, fname)
+            rel = os.path.relpath(src_file, skeleton_src)
+            dst_file = os.path.join(vault_dst, rel)
+            if not DRY_RUN:
+                os.makedirs(os.path.dirname(dst_file), exist_ok=True)
+            copy_file(src_file, dst_file, DRY_RUN)
+            file_count += 1
 
-    print(f'  .tropo-studio/: skeleton copied from template ({file_count} files)')
+    print(f'  .tropo-studio/: skeleton copied from template ({file_count} files, verdict-ruled)')
 
 
 def step_8_write_version(build_dir, new_version):
@@ -1647,15 +1876,32 @@ def step_8_write_version(build_dir, new_version):
 #
 # Added 2026-04-22 by Vela V33 as v1.3.1 Stream 1 D1.1 deliverable.
 VERSION_STAMP_SITES = [
-    ('README.md', r'Tropo-OS v\d+\.\d+\.\d+', 'Tropo-OS v{version}'),
-    ('START-TROPO.md', r'Tropo-OS v\d+\.\d+\.\d+', 'Tropo-OS v{version}'),
     ('AGENTS.md', r'tropo_version:\s*"\d+\.\d+\.\d+"', 'tropo_version: "{version}"'),
-    ('boards/CAPSULE.md', r'Tropo-OS v\d+\.\d+\.\d+', 'Tropo-OS v{version}'),
     ('operating-agreement.md', r'Tropo-OS v\d+\.\d+\.\d+', 'Tropo-OS v{version}'),
     ('.tropo/TROPO-CONTROL.md', r'tropo_version:\s*"\d+\.\d+\.\d+"', 'tropo_version: "{version}"'),
-    ('.tropo/TROPO-CONTROL.md', r'\| Tropo-OS version \| \d+\.\d+\.\d+ \|', '| Tropo-OS version | {version} |'),
+    (
+        '.tropo/TROPO-CONTROL.md',
+        r'(\| Tropo-OS version \| )\d+\.\d+\.\d+',
+        r'\g<1>{version}',
+    ),
     ('.tropo/concierge/activate.md', r'\*Tropo Concierge \| Tropo-OS v\d+\.\d+\.\d+\*', '*Tropo Concierge | Tropo-OS v{version}*'),
+    # package.json ships (D2: `npm test` runs in the box) and carried
+    # "version": "1.33.0" in the sealed v1.95 candidate #2 -- Vela's harness
+    # record f015570b8fd9, a false claim in what ships (G123, 2026-09-06 B1).
+    ('package.json', r'"version":\s*"\d+\.\d+\.\d+"', '"version": "{version}"'),
 ]
+# f015450313f2/f015f5391494 (2026-09-01): README.md and START-TROPO.md no
+# longer carry a "Tropo-OS vX.Y.Z" claim — README.md carries none at all,
+# START-TROPO.md points readers at the canonical `.tropo/version.md` instead
+# of duplicating the number, which is the drift-proof shape this stamp step
+# exists to approximate elsewhere. Both removed as sites: stamping them
+# would either match nothing forever (a check that cannot return healthy)
+# or reintroduce the duplicate-claim class this step is meant to prevent.
+# `boards/CAPSULE.md` never existed at this path in the repo's history —
+# a dead entry from the start, not a rotted one. The TROPO-CONTROL.md table
+# row's pattern is widened (capture + backreference) to survive the
+# parenthetical explanation already living in that cell, rather than
+# clobbering it on stamp.
 
 
 def step_8b_stamp_versions(build_dir, new_version):
@@ -1668,11 +1914,13 @@ def step_8b_stamp_versions(build_dir, new_version):
     for rel_path, pattern, replacement_tmpl in VERSION_STAMP_SITES:
         path = os.path.join(build_dir, rel_path)
         if not os.path.exists(path):
+            print(f'  WARN: version stamp site missing: {rel_path}', file=sys.stderr)
             continue
         try:
             with open(path, 'r') as f:
                 text = f.read()
-        except Exception:
+        except Exception as exc:
+            print(f'  WARN: version stamp site unreadable: {rel_path} ({exc})', file=sys.stderr)
             continue
         replacement = replacement_tmpl.replace('{version}', new_version)
         new_text, n = re.subn(pattern, replacement, text)
@@ -1682,7 +1930,16 @@ def step_8b_stamp_versions(build_dir, new_version):
                     f.write(new_text)
             total += n
             print(f'  Version stamp: {rel_path} — {n} sites -> v{new_version}')
-    print(f'  Version stamping: {total} total stamps at v{new_version}')
+        else:
+            print(
+                f'  WARN: version stamp site matched nothing: {rel_path} '
+                f'(pattern: {pattern})',
+                file=sys.stderr,
+            )
+    print(
+        f'  Version stamping: {total} total stamps at v{new_version} '
+        f'(of {len(VERSION_STAMP_SITES)} configured sites)'
+    )
     return total
 
 
@@ -1742,8 +1999,14 @@ def step_9b_regenerate_tropo_nav(build_dir):
 
     # 9b.1: rebuild-vault.py against build dir (writes 00-index.jsonl + 00-project-tree.jsonl
     # from the shipped vault files only — eats our own dogfood for v1.5 S5 ports)
+    # --no-genesis (v1.95 Spine A AC1, f015de6b3a18): this rebuild runs INSIDE the
+    # assembled box. Without the flag it minted .tropo/studio-identity.md and the
+    # starter vault-entity + 01-studio-inbox pair into the box, which is why every
+    # v1.94 zip shipped studio_id b4e250caf19a. The box ships no identity; the
+    # customer genesises their own at first boot (Mike ruled 2026-09-05,
+    # f015e5ee0ede §RULED). assert_no_studio_identity() below proves it before the zip.
     result = subprocess.run(
-        ['python3', rebuild_path, '--apply', '--vault-path', build_dir],
+        ['python3', rebuild_path, '--apply', '--no-genesis', '--vault-path', build_dir],
         cwd=build_dir,
         capture_output=True,
         text=True,
@@ -1801,7 +2064,10 @@ def step_9b_regenerate_tropo_nav(build_dir):
 # — it's excluded from the manifest, so customer-mode will still [FAIL] it.
 
 _VENDOR_MANIFEST_FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
-_VENDOR_MANIFEST_UID_RE = re.compile(r'^[0-9a-f]{8}$')
+# accepts-both (UID_SHAPES): a 12-hex studio-internal uid was wrongly excluded
+# from the vendor-ref manifest by this 8-only literal, so customer-mode then
+# failed it as a defect instead of recognizing it as a legitimate unshipped ref.
+_VENDOR_MANIFEST_UID_RE = re.compile(r'^(?:%s)$' % UID_HEX_PATTERN)
 _VENDOR_MANIFEST_IDENTITY_FIELDS = frozenset({'tropo_agent_id', 'registry_uid'})
 _VENDOR_MANIFEST_EXCLUDE_TOP = {'node_modules', '.git', 'archive', 'recycle', 'releases'}
 
@@ -1915,6 +2181,53 @@ def _vendor_manifest_collect_referenced_uids(root):
         refs.update(hits)
     return refs
 
+
+
+def step_9b2_render_studio_map(build_dir):
+    """v1.95 Spine A AC8, build-step half (f015de6b3a18; plan f015ba71c711 row A5,
+    Mike: "I want it shipped. If we ship it with a release, it should be clean.").
+
+    Render the Studio Map INSIDE the box, with the box's own renderer, against the
+    box's own index (rebuilt by Step 9b with --no-genesis), in --box mode: no
+    overlay, no identity, no absolute path from this machine. The output lands at
+    boards/po/studio-map.html in the box; boards/ ships explicit-children only, so
+    nothing else puts it there. The render is derived, never copied from this
+    studio: a copied render would carry Argo's counts and Argo's fingerprint.
+
+    Refuses the build on a failed render. The harm in one sentence: the plan's
+    Definition of Done claims a map that ships with a visual and a resources
+    section, and a box without the file makes that a false claim in what ships.
+    A stale or missing map is not itself irreversible; a shipped false claim is
+    the class the freeze rule blocks (metis pin 13).
+    """
+    print('Step 9b2 — Render the Studio Map inside the box (v1.95 AC8)')
+    renderer = os.path.join(build_dir, 'vault', 'tools', 'tropo-render-studio-map.py')
+    if not os.path.exists(renderer):
+        print(f'\n  ✗ BUILD REFUSED — Studio Map renderer not in the box at {renderer}; '
+              f'the box would ship without its first human surface (AC8)')
+        sys.exit(1)
+    result = subprocess.run(
+        ['python3', renderer, '--box', '--vault-path', build_dir],
+        capture_output=True, text=True,
+    )
+    out_path = os.path.join(build_dir, 'boards', 'po', 'studio-map.html')
+    if result.returncode != 0 or not os.path.exists(out_path):
+        tail = (result.stderr or result.stdout or '').strip().splitlines()[-6:]
+        print('\n  ✗ BUILD REFUSED — Studio Map render failed inside the box (AC8): '
+              'the plan claims a shipped map with a visual and resources; without '
+              'the file that claim is false in what ships.')
+        for line in tail:
+            print(f'      {line}')
+        sys.exit(1)
+    check = subprocess.run(
+        ['python3', renderer, '--box', '--vault-path', build_dir, '--check-stale'],
+        capture_output=True, text=True,
+    )
+    verdict = (check.stdout or check.stderr or '').strip().splitlines()
+    print(f'  Rendered {os.path.relpath(out_path, build_dir)} '
+          f'({os.path.getsize(out_path):,} B); '
+          f'{verdict[-1] if verdict else "check-stale produced no verdict"}')
+    return out_path
 
 def step_9c_generate_vendor_ref_manifest(build_dir, new_version):
     """S1 (v1.80 re-build): generate the vendor-ref manifest that ships in the box.
@@ -2037,6 +2350,15 @@ def step_9_generate_manifest(build_dir, new_version):
         for fname in files:
             fpath = os.path.join(root, fname)
             rel = os.path.relpath(fpath, build_dir)
+            if rel == 'MANIFEST.md':
+                # The slip cannot list itself: the row would carry the size and
+                # hash of the PREVIOUS generation (regen after sanitize is
+                # unconditional), a stale self-claim the shipped README says
+                # cannot exist. Sealed v1.95 candidate #2 listed itself at
+                # 146,401 / 2f52f265 while on disk it was 193,373 / 227b314e
+                # (G123, 2026-09-06 B2). The image manifest (Step 9d) still
+                # fingerprints MANIFEST.md, as it always did.
+                continue
             size = os.path.getsize(fpath)
             checksum = sha256_file(fpath)
             entries.append((rel, size, checksum))
@@ -2173,6 +2495,20 @@ def step_3j_copy_vault_schema(build_dir):
     return copied
 
 
+def _box_probe_env():
+    """Environment for probing a BUILT BOX as a customer would stand in it.
+
+    The builder's own PYTHONPATH points at this studio's tree. Any probe that
+    inherits it can satisfy a box's missing dependency from outside the box —
+    which is the one thing an in-box collection gate exists to catch. Everything
+    else (PATH, HOME, the interpreter's own config) a customer also has, so only
+    the import path is scrubbed.
+    """
+    env = dict(os.environ)
+    env.pop('PYTHONPATH', None)
+    return env
+
+
 def step_10b_assert_shipped_tests_collect(build_dir):
     """Step 10b (F1 part 2, v1.90.1): every shipped test module must COLLECT
     in-box before the build passes.
@@ -2209,7 +2545,25 @@ def step_10b_assert_shipped_tests_collect(build_dir):
             # 36 and 90 tests. The box root is also the only cwd that MEANS
             # anything -- it is where a customer stands. (T48's gate, cwd fixed by
             # metis-g110 2026-08-22; the gate itself is right and stays fail-closed.)
-            cwd=build_dir, capture_output=True, text=True, timeout=120)
+            cwd=build_dir, capture_output=True, text=True, timeout=120,
+            # argus-a166, 2026-09-01 (Mike-directed: "fix the gates that stopped
+            # gating"). The probe inherited the BUILDER'S environment, PYTHONPATH
+            # included. tropo-run-suites.py deliberately puts the studio root and
+            # vault/tools on PYTHONPATH for every suite (_suite_env, curing seven
+            # suites that died at import) — so under the harness this gate probed
+            # the box while the MAINTAINER'S TREE was still on the import path.
+            # A module whose dependency ships missing then resolves from outside
+            # the box and collects clean, and the gate passes a box that would
+            # fail for a customer. Measured: the F1-part-2 negative
+            # (test_missing_import_dependency_refuses_naming_module) PASSES with
+            # no PYTHONPATH and FAILS under the harness env — the gate was fine on
+            # a bare shell and blind in the run that actually gates a release.
+            #
+            # A customer standing in the box has no PYTHONPATH pointing at our
+            # tree, so neither may the probe. cwd=build_dir was already the right
+            # instinct (metis-g110's fix); this completes it — the box is the
+            # whole environment, not just the working directory.
+            env=_box_probe_env())
         # pytest exit codes: 0 = collected, 5 = collected nothing (a module with
         # no pytest-discoverable tests is not a COLLECTION failure and must not
         # refuse a release -- 11 shipped modules exit 5 legitimately). Anything
@@ -2594,13 +2948,10 @@ def assert_shipped_surfaces(build_dir):
     in Mike's v1.74 release-walk — nav-regen pointed at a moved rehydrate path (RT1)
     and the workspace folders had no manifest entry (RT2). A release that cannot
     produce a declared surface must FAIL the build, not ship a quiet hole.
-    Same silent-failure class as the F19/P0 transformation body-drop. (Finding 1ee11d09.)"""
-    required = ['00-tropo-nav', '01-studio-inbox', '02-outbox', '03-design',
-                '04-external-work', '99-recycle']
-    missing = [d for d in required if not os.path.isdir(os.path.join(build_dir, d))]
-    nav = os.path.join(build_dir, '00-tropo-nav')
-    if os.path.isdir(nav) and not os.listdir(nav):
-        missing.append('00-tropo-nav (present but EMPTY — nav regen produced nothing)')
+    Same silent-failure class as the F19/P0 transformation body-drop. (Finding 1ee11d09.)
+    Wrapper since v1.95 Spine B: the decision is lib/build_guards.shipped_surfaces_problems
+    and the build runs it as gate build-shipped-surfaces at the candidate phase."""
+    missing = _build_guards.shipped_surfaces_problems(build_dir)
     if missing:
         print('  ✗ SHIP-SURFACE GUARD FAILED — release is missing declared surface(s):', file=sys.stderr)
         for d in missing:
@@ -2624,26 +2975,10 @@ def assert_no_stale_system_dir(build_dir):
       a3d7b248 + b94e3d72 now output_path: vault/tropo-vault-steward/.
 
     Inverse-checks vault/updates/ is present — the two must move together or a
-    fresh box lands on neither the old layout nor the new one."""
-    stale_dir = os.path.join(build_dir, 'system')
-    updates_dir = os.path.join(build_dir, 'vault', 'updates')
-
-    problems = []
-    if os.path.isdir(stale_dir):
-        contents = []
-        for root, _, files in os.walk(stale_dir):
-            for f in files:
-                contents.append(os.path.relpath(os.path.join(root, f), build_dir))
-        if contents:
-            problems.append(f"system/ shipped ({len(contents)} file(s)) — dissolved by "
-                             f"ADR-045 One Home (system/updates/ at Gate 2; system/vault-steward/ "
-                             f"at v1.80 S3). Check c5f8a193 + e7c2a851 are source_mode:skip and "
-                             f"a3d7b248 + b94e3d72 output_path is vault/tropo-vault-steward/. "
-                             f"Sample: {contents[:5]}")
-    if not os.path.isdir(updates_dir) or not os.listdir(updates_dir):
-        problems.append("vault/updates/ missing or empty — the Gate-2 update apply state "
-                         "machine did not ship (see step_3e_copy_vault_updates).")
-
+    fresh box lands on neither the old layout nor the new one.
+    Wrapper since v1.95 Spine B: the decision is lib/build_guards.stale_system_dir_problems
+    and the build runs it as gate build-no-stale-system-dir at the candidate phase."""
+    problems = _build_guards.stale_system_dir_problems(build_dir)
     if problems:
         print('  ✗ ONE-HOME RETIREMENT GUARD FAILED (all system/ must be absent):', file=sys.stderr)
         for p in problems:
@@ -2656,19 +2991,13 @@ def assert_no_stale_system_dir(build_dir):
           '(system/ fully re-homed per ADR-045).')
 
 
-# Argo-internal markers that must never appear in the shipped mission-brief boot slot.
-# Drawn from the leak's own content (task 2ffda37e defect #1 §Verification) — the phrases
-# a customer studio was reading as its OWN mission before the slot was repointed at the
-# generic template.
-_MISSION_BRIEF_LEAK_MARKERS = ('argo', 'metis', 'hollow economy', 'agentic builders',
-                               'culture is the moat')
-
-# Word-boundary matched, not substring: a bare `'argo' in body` also fires on "cargo",
-# "embargo" and "Argonaut", which would fail a release build with a confidentiality
-# message about a word the template is entitled to use.
-_MISSION_BRIEF_LEAK_RE = re.compile(
-    r'\b(?:' + '|'.join(re.escape(m) for m in _MISSION_BRIEF_LEAK_MARKERS) + r')\b',
-    re.IGNORECASE)
+# The markers and the decision live in vault/tools/lib/build_guards.py since
+# 2026-09-05 (v1.95 Spine B, f015997f8d8e): the release preflight registers the
+# same check as a candidate-phase Gate, and a guard whose markers are listed
+# here AND there is the two-readers defect that spine removes. This wrapper
+# keeps the build's print-and-exit shape until Step 11 runs the candidate
+# phase through the registry and the direct call below goes with it.
+_build_guards = _load_vault_lib("tropo_build_guards", "build_guards.py")
 
 
 def assert_mission_brief_slot(build_dir):
@@ -2686,30 +3015,12 @@ def assert_mission_brief_slot(build_dir):
     writes into the box — Step 7's rmtree+recreate of .tropo-studio/ and Step 10's
     sanitize pass both run over this path — so a later step silently clobbering the slot
     cannot ship. Same posture as assert_shipped_surfaces: a declared surface the build
-    cannot produce correctly must FAIL the build rather than ship a quiet hole."""
-    slot = os.path.join(build_dir, '.tropo-studio', 'mission-brief.md')
-    if not os.path.isfile(slot):
-        print('  ✗ MISSION-BRIEF SLOT GUARD FAILED — .tropo-studio/mission-brief.md absent '
-              'from the build.', file=sys.stderr)
-        print('    It is a Required:Yes boot read (99341618 Step 2.3 + cf8c3be9 Tier 2); a box '
-              'without it breaks first boot for every customer agent. Check Step 7.1 and that '
-              'Step 7 did not clobber it.', file=sys.stderr)
-        # refusal: warn — unpriced: a missing Required:Yes boot read fails loudly at first boot rather than being believed green, and is reversible by rebuild
-        sys.exit(9)
-
-    body = Path(slot).read_text(encoding='utf-8')
-    problems = []
-    if '<FILL:' not in body:
-        problems.append('no <FILL: …> placeholders — the slot is not the generic template. '
-                        'Whatever is in it becomes the mission every agent in a customer '
-                        'studio boots on.')
-    hits = sorted({m.group(0).lower() for m in _MISSION_BRIEF_LEAK_RE.finditer(body)})
-    if hits:
-        problems.append(f'Argo-internal marker(s) present: {hits}')
-
+    cannot produce correctly must FAIL the build rather than ship a quiet hole.
+    The decision itself is lib/build_guards.mission_brief_slot_problems."""
+    problems = _build_guards.mission_brief_slot_problems(build_dir)
     if problems:
-        print('  ✗ MISSION-BRIEF SLOT GUARD FAILED — .tropo-studio/mission-brief.md is not a '
-              'generic template:', file=sys.stderr)
+        print('  ✗ MISSION-BRIEF SLOT GUARD FAILED — .tropo-studio/mission-brief.md is absent '
+              'or is not a generic template:', file=sys.stderr)
         for p in problems:
             print(f'      - {p}', file=sys.stderr)
         print('    Step 7.1 must source vault/templates/root-docs/mission-brief.template.md. '
@@ -2719,6 +3030,225 @@ def assert_mission_brief_slot(build_dir):
         sys.exit(9)
     print('  ✓ Mission-brief slot guard: .tropo-studio/mission-brief.md is the generic '
           '<FILL: …> template (no Argo-internal content).')
+
+
+def assert_no_studio_identity(build_dir):
+    """No-shipped-identity guard (v1.95 Spine A AC1, dev-spec f015de6b3a18).
+
+    Every v1.94 box shipped the SAME studio_id (b4e250caf19a), because Step 9b runs
+    the shipped rebuilder inside the assembled box and the rebuilder's two genesis
+    gates are presence-only: no manifest -> mint one; no vault-entity -> mint the
+    starter pair. Two customers unzipping two boxes therefore started life as the
+    same Studio. Mike ruled 2026-09-05 (f015e5ee0ede §RULED): the build stops minting
+    inside the box; genesis is unchanged, only WHEN it runs changed -- it runs on the
+    customer's machine at first boot.
+
+    Step 9b now passes --no-genesis. This asserts the outcome rather than trusting the
+    flag, in both clauses:
+      1. .tropo/studio-identity.md must not exist in the box;
+      2. the box's vault/00-index.jsonl must carry no type: entity / subtype:
+         vault-entity record.
+
+    ORDERING IS LOAD-BEARING: this must run BEFORE step_10_2_purge_run_local_artifacts,
+    which deletes vault/00-index.jsonl and its siblings -- after the purge clause 2
+    has nothing to read and would pass vacuously. Same posture as
+    assert_mission_brief_slot: a surface the build cannot produce correctly FAILS the
+    build rather than shipping quietly. Wrapper since v1.95 Spine B: the decision is
+    lib/build_guards.studio_identity_problems, run as gate build-no-studio-identity.
+    """
+    offenders = _build_guards.studio_identity_problems(build_dir)
+    if offenders:
+        print('  ✗ NO-SHIPPED-IDENTITY GUARD FAILED — the box carries Studio identity '
+              'that must be minted on the customer\'s machine, not here:', file=sys.stderr)
+        for offender in offenders:
+            print(f'      - {offender}', file=sys.stderr)
+        print('    Step 9b must invoke tropo-rebuild-vault.py with --no-genesis so the '
+              'in-box rebuild regenerates 00-tropo-nav/ without minting a manifest or a '
+              'starter pair (v1.95 Spine A AC1; Mike ruled 2026-09-05, f015e5ee0ede '
+              '§RULED).', file=sys.stderr)
+        # refusal: priced/outward-publication-and-egress — every customer who unzips this box
+        # begins life as the SAME Studio (one studio_id, one vault-entity uid), so their
+        # records collide with each other's on any federation and the collision cannot be
+        # recalled once the box is downloaded
+        sys.exit(10)
+    print('  ✓ No-shipped-identity guard: no .tropo/studio-identity.md and no '
+          'vault-entity record in the box (the customer genesises at first boot).')
+
+
+def _load_release_preflight():
+    """tropo-release-preflight.py — the one gate roster (lib/release_gates.py).
+    Loaded by path like the publisher does; the registry lives there and nowhere
+    else (v1.95 Spine B: register, do not reinvent)."""
+    path = Path(__file__).resolve().with_name('tropo-release-preflight.py')
+    if not path.is_file():
+        # refusal: misuse — the gate roster is absent; the build cannot judge its own box
+        raise ImportError(f'{path} not found — the release-gate roster lives there')
+    existing = sys.modules.get('_tropo_build_release_preflight')
+    if existing is not None:
+        return existing
+    spec = importlib.util.spec_from_file_location('_tropo_build_release_preflight', path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules['_tropo_build_release_preflight'] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _release_run_folder(activation_uid):
+    """The release run folder for this activation, or None when it cannot be
+    resolved (standalone invocation). Same resolution stage6 uses; never a guess."""
+    if not activation_uid:
+        return None
+    try:
+        runtime = _load_pipeline_runtime()
+        identity = release_package.resolve_release_run(
+            activation_uid,
+            Path(tropo_roots.VAULT_DIR) / "files",
+            Path(tropo_roots.VAULT_DIR) / "pipeline-runs",
+        )
+        run_entry = runtime.read_vault_entry(identity.run_uid) or {}
+        run_folder = str((run_entry.get("frontmatter") or {}).get("run_folder") or "")
+        return Path(tropo_roots.STUDIO_ROOT) / run_folder if run_folder else None
+    except Exception:  # noqa: BLE001 — resolution failure is not a verdict
+        return None
+
+
+def _release_run_identity(activation_uid):
+    """(run_folder, release_plan_uid) for this activation, or (None, None) when
+    it cannot be resolved (standalone invocation). Never a guess."""
+    if not activation_uid:
+        return None, None
+    try:
+        runtime = _load_pipeline_runtime()
+        identity = release_package.resolve_release_run(
+            activation_uid,
+            Path(tropo_roots.VAULT_DIR) / "files",
+            Path(tropo_roots.VAULT_DIR) / "pipeline-runs",
+        )
+        fm = (runtime.read_vault_entry(identity.run_uid) or {}).get("frontmatter") or {}
+        run_folder = str(fm.get("run_folder") or "")
+        return (Path(tropo_roots.STUDIO_ROOT) / run_folder if run_folder else None,
+                str(fm.get("release_plan_uid") or "") or None)
+    except Exception:  # noqa: BLE001 — resolution failure is not a verdict
+        return None, None
+
+
+def step_0_4_lock_static_gates(activation_uid, version_string):
+    """v1.95 Spine B: the build runs the registry's lock-static phase itself,
+    before any write. Context from the same builder the CLI uses
+    (release_gate_inputs.build_context) with the activation as pipeline_run and
+    --force as a context fact; evidence appended to the run folder when the
+    activation resolves to one. Refuses on refused or operational-error;
+    skipped-inputs-absent is honest at lock-static."""
+    preflight = _load_release_preflight()
+    # release_gate_inputs uses package-relative imports, so it cannot be loaded
+    # by path as a top-level module; the preflight already imported it as a
+    # package member and carries it.
+    gate_inputs = preflight.gate_inputs
+    registry = preflight.build_registry()
+    run_folder, plan_uid = _release_run_identity(activation_uid)
+    try:
+        context = gate_inputs.build_context(
+            Path(tropo_roots.STUDIO_ROOT), plan_uid, version_string=str(version_string),
+            activation_uid=activation_uid, force=FORCE)
+    except gate_inputs.GateInputError as exc:
+        print(f'  ✗ Build REFUSED — lock-static inputs could not be read: {exc}', file=sys.stderr)
+        # refusal: misuse — an input the gates declare could not be read; operational, retryable
+        sys.exit(3)
+    # The build is the one caller for which "no activation" is a VERDICT, not
+    # an absence: run_phase skips a gate whose input is None, and a standalone
+    # invocation with no --activation-uid must be refused by build-activation-key
+    # (no key, no build; the attested-build fallback stays the one narrower
+    # source), never waved through as skipped. '' is judged; None is skipped.
+    context['pipeline_run'] = activation_uid or ''
+    print('Step 0.4 — Lock-static phase (release-gate registry; every pre-build guard, one report):')
+    outcomes = registry.run_phase('lock-static', context)
+    for outcome in outcomes:
+        mark = '✓' if outcome.verdict == preflight.VERDICT_PASS else ('·' if outcome.verdict == preflight.VERDICT_SKIPPED else '✗')
+        print(f'  {mark} [{outcome.verdict.upper()}] {outcome.gate_id} — {outcome.detail}')
+    if run_folder is not None:
+        try:
+            path = preflight.write_evidence(run_folder, 'lock-static', outcomes, registry,
+                                            tree_commit=context.get('tree_commit'))
+            print(f'  · evidence: {path}')
+        except OSError as exc:
+            print(f'  ⚠ could not write lock-static evidence: {exc}', file=sys.stderr)
+    bad = [o for o in outcomes if o.verdict not in (preflight.VERDICT_PASS, preflight.VERDICT_SKIPPED)]
+    if bad:
+        print('\n  ✗ Build REFUSED — the lock-static phase did not pass clean:', file=sys.stderr)
+        for o in bad:
+            print(f'      - {o.gate_id} [{o.verdict}]: {o.detail}', file=sys.stderr)
+        print('    Cure every named gate (the driver\'s `--phase lock-static` preflight reports the '
+              'same set), then re-run the build.', file=sys.stderr)
+        # refusal: priced/unreconstructable-identity-or-lineage — a box built past a refused activation key or over another version's working tree is believed to have passed gates that never ran, or destroys content outside git
+        sys.exit(3)
+    print(f'  ✓ Lock-static phase clean — {len(outcomes)} gate(s)\n')
+
+
+PRE_SEAL_CLAIMS_FILENAME = 'pre-seal-claims.json'
+
+
+def step_10_9_candidate_gates(build_dir, activation_uid, dist_dir, *, version_string=None, force=None):
+    """v1.95 Spine B (f015997f8d8e AC4): run every candidate-phase gate against the
+    assembled box through the release-gate registry; write every outcome to
+    <run_dir>/pre-seal-claims.json (dist_dir when the run cannot be resolved);
+    print them as the first section of the seal; refuse the seal on any verdict
+    that is not PASS — refused, operational error, AND skipped-inputs-absent,
+    because GateOutcome.ok treats skipped as OK and a candidate gate whose
+    input the build failed to supply must not seal the box by silence.
+    --force does not bypass this phase (it is the overwrite guard's flag only).
+    """
+    preflight = _load_release_preflight()
+    registry = preflight.build_registry()
+    studio_root = str(tropo_roots.STUDIO_ROOT)
+    context = {
+        'source_tree': studio_root,
+        'extracted_tree': str(build_dir),
+        'tree_commit': _build_guards.git_tree_commit(studio_root),
+        # The version being cut, as Step 0.4 receives it. Candidate #1 of v1.95
+        # (2026-09-06) carried '' here: build-changelog-names-version compared the
+        # box against `## []` and refused a CHANGELOG that named the version at
+        # line 10 -- declared inputs, unwired value (argus-a172; driver evt _00000160).
+        'version_string': str(version_string or ''),
+    }
+    print('Step 10.9 — Candidate phase (release-gate registry; every box guard, one report):')
+    outcomes = registry.run_phase('candidate', context)
+    expected = len(registry.gates_for_phase('candidate'))
+    rows = []
+    for outcome in outcomes:
+        gate = registry.get(outcome.gate_id)
+        rows.append({
+            'gate_id': outcome.gate_id, 'verdict': outcome.verdict,
+            'refusal_class': gate.refusal_class, 'description': gate.description,
+            'detail': outcome.detail, 'evidence': outcome.evidence,
+            'tree_commit': context['tree_commit'],
+        })
+        mark = '✓' if outcome.verdict == preflight.VERDICT_PASS else '✗'
+        print(f'  {mark} [{outcome.verdict.upper()}] {outcome.gate_id} — {outcome.detail}')
+    run_dir = _release_run_folder(activation_uid) or Path(dist_dir)
+    claims_path = Path(run_dir) / PRE_SEAL_CLAIMS_FILENAME
+    try:
+        claims_path.parent.mkdir(parents=True, exist_ok=True)
+        claims_path.write_text(json.dumps({
+            'phase': 'candidate', 'build_dir': str(build_dir),
+            'tree_commit': context['tree_commit'], 'gates_expected': expected,
+            'outcomes': rows,
+        }, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+        print(f'  · pre-seal claims: {claims_path} ({len(rows)}/{expected} gate(s))')
+    except OSError as exc:
+        print(f'  ⚠ could not write {claims_path}: {exc}', file=sys.stderr)
+    bad = [o for o in outcomes if o.verdict != preflight.VERDICT_PASS]
+    if len(outcomes) != expected:
+        bad.append(preflight.GateOutcome('candidate-phase', preflight.VERDICT_ERROR,
+                   f'{len(outcomes)} outcome(s) for {expected} registered candidate gate(s)'))
+    if bad:
+        print('\n  ✗ Build REFUSED — the candidate phase did not pass clean:', file=sys.stderr)
+        for o in bad:
+            print(f'      - {o.gate_id} [{o.verdict}]: {o.detail}', file=sys.stderr)
+        print('    A skipped gate is a refusal at the seal: the box is not sealed by silence. '
+              'Cure every named gate, then re-run the build.', file=sys.stderr)
+        # refusal: priced/false-success — a box that failed or silently skipped any candidate gate would be zipped and its digest frozen, and every downstream receipt would attest bytes no gate judged
+        sys.exit(12)
+    print(f'  ✓ Candidate phase PASS — {len(outcomes)} gate(s) clean\n')
 
 
 def stage6_package_authority(activation_uid):
@@ -2992,6 +3522,19 @@ def _write_publish_pending_marker(new_version):
     """
     path = Path(tropo_roots.STUDIO_ROOT) / PUBLISH_PENDING_REL
     path.parent.mkdir(parents=True, exist_ok=True)
+    # S2 (f0155dd8ab09): the marker is STUDIO state — tracked, read by boot —
+    # so it is written only when the publish state actually changes. A rebuild
+    # of the same version that is still not-staged leaves the file byte-for-
+    # byte alone; otherwise every build attempt from whichever clone built
+    # rewrote it and the founder's fast-forward refused on a timestamp.
+    if path.is_file():
+        try:
+            existing = json.loads(path.read_text(encoding='utf-8')) or {}
+        except (OSError, ValueError):
+            existing = {}
+        if (str(existing.get("version")) == str(new_version)
+                and existing.get("publish_state") == "not-staged"):
+            return path
     body = {
         "version": str(new_version),
         "publish_state": "not-staged",
@@ -3400,35 +3943,19 @@ def main():
             # refusal: misuse — the release-leg check could not complete; PackageRefusal is caught above, so this arm is never the verdict
             sys.exit(1)
 
+    # Step 0.4 — THE LOCK-STATIC PHASE, the build's own pass (v1.95 Spine B,
+    # f015997f8d8e AC1). The activation-key check and the overwrite guard were
+    # direct calls here and in step_2_create_output; both are registered gates
+    # now (build-activation-key, build-overwrite-guard), beside the covenant
+    # floor, the absolute-path scan, the python floor and the governance
+    # preconditions. The driver runs this phase clean before the runner will
+    # invoke this tool (AC3); the build runs it AGAIN here, before any write,
+    # so a standalone invocation is guarded by the same registry and never by
+    # a second list. Refuses on any refusal or operational error; skipped is
+    # honest at lock-static (the box does not exist yet). DRY_RUN skips it, as
+    # it skipped the two direct calls it replaces.
     if not DRY_RUN:
-        try:
-            _key = require_release_authorization(activation_uid, 'produce-release-folder')
-            print(f'  ✓ Pipeline Activation Key verified (activation {activation_uid}, '
-                  f'fingerprint {_key.get("fingerprint","")[:12]}…)\n')
-        except ReleaseAuthorizationError as e:
-            # Attested-build fallback (argus-a129-attested-build-gate spec, Mike-approved
-            # 2026-07-11): an attested-close release (8c8ca68c-class) has no pipeline-run to
-            # key against — the pipeline-key path will ALWAYS refuse it, correctly. This is a
-            # SEPARATE, narrower authorization source for THIS gate only; it never touches the
-            # outward ship gate below (require_release_authorization + require_human_signoff
-            # stays the sole path to a public push). Resolves by --target, not --activation-uid
-            # — attested builds have no run.
-            _attested = None
-            if target_version:
-                try:
-                    _attested = attested_build_authorization(target_version)
-                except ReleaseAuthorizationError:
-                    _attested = None
-            if _attested:
-                print(f'  ✓ Attested-Build Authorization verified (release {_attested["release_uid"]}, '
-                      f'version {_attested["version"]}, attestation {_attested["attestation_uid"]})\n')
-            else:
-                print(f'  ✗ Build REFUSED — no valid Pipeline Activation Key: {e}', file=sys.stderr)
-                print('    A release is produced through the pipeline runtime, which mints the key', file=sys.stderr)
-                print('    at the produce-release-folder gate. Drive the cycle via pipeline-runtime.py —', file=sys.stderr)
-                print('    do not invoke build-release standalone. (No key, no build.)', file=sys.stderr)
-                # refusal: priced/unreconstructable-identity-or-lineage — a box built by invoking this script standalone is indistinguishable from a pipeline-produced one and is believed to have passed activation and every pipeline gate that never ran
-                sys.exit(3)
+        step_0_4_lock_static_gates(activation_uid, _changelog_target)
 
     # ── Step 0.5 — Publish-state pre-flight (Release Coupling, fbe50871) ─────
     _publish_state_provenance = {"publish_state": "UNKNOWN"}
@@ -3703,7 +4230,10 @@ def main():
         from lib.release_validators import check_cascade_pipelines_retired
         # Find the active dev-spec for this activation (from dev-spec index or env)
         _dev_spec_uid = os.environ.get('DEV_SPEC_UID', '')
-        if _dev_spec_uid and re.match(r'^[0-9a-f]{8}$', _dev_spec_uid):
+        # accepts-both (UID_SHAPES): an 8-only literal here made the gate fail
+        # open — a 12-hex DEV_SPEC_UID would fall through this condition and the
+        # cascade-pipelines-retired check would silently never run.
+        if _dev_spec_uid and is_governed_uid_shape(_dev_spec_uid):
             print('Step 1c — v1.59 Lane B: cascade-pipelines-retired gate:')
             _casc_findings, _all_retired = check_cascade_pipelines_retired(
                 tropo_roots.STUDIO_ROOT, _dev_spec_uid
@@ -3762,6 +4292,12 @@ def main():
     # Load ship entries from index
     entries = load_ship_entries(INDEX_PATH)
     print(f'  Scope:ship entries: {len(entries)}')
+
+    # Arm the ship-verdict chokepoint BEFORE any copy happens (v1.94 Stream 5 / B-1).
+    # Order is the whole contract: a file copied before this line carries no verdict and
+    # is invisible to the census, so arming late is the same defect as not arming.
+    init_ship_verdicts(tropo_roots.STUDIO_ROOT, INDEX_PATH)
+    report_owed_shadow_designations()
     print()
 
     # Step 3: Copy kernel
@@ -3888,7 +4424,15 @@ def main():
             f'Path-base / tier-reachability failure — halting rather than silent-skipping, '
             f'per ADR-032 amendment 2026-04-19.'
         )
-    copy_file(_mb_src, _mb_dst, DRY_RUN)
+    # The slot is GENERATED from the template, not a copy of a shipped path: the template's
+    # own ship-artifact (d340faf1) is DENY so the template never ships at its template path,
+    # and without a named exemption the resolver refused this copy on every v1.94 build attempt
+    # (census: deny-pruned by d340faf1) while this step still printed success; the end guard
+    # assert_mission_brief_slot then failed the build. Named exemption, never silent (GENERATED
+    # in the census); the guard still verifies the slot IS the generic template. metis-g119, 2026-09-04.
+    copy_file(_mb_src, _mb_dst, DRY_RUN,
+              verdict_exempt='mission-brief boot slot seeded from the generic template (task 2ffda37e); '
+                             'the template path stays DENY by d340faf1; assert_mission_brief_slot checks the content')
     print(f'  Mission-brief slot: template → build root/.tropo-studio/mission-brief.md')
 
     # Step 8: Version file
@@ -3899,6 +4443,33 @@ def main():
     # publish_state UNKNOWN"). tropo-publish-release.py's STAGE step reads this.
     _write_build_provenance(new_version, _enforcement_bypassed, _publish_state_provenance,
                             studio_health_ran=_studio_health_on)
+
+    # Step 7.9 — THE SHIP CENSUS (v1.94 Stream 5 / B-1, dev-spec 91d951f4).
+    # Runs after every copying step and before the manifest, so it reports on the box as
+    # copied. Loud by construction: every path that resolved, every DENY prune by rule,
+    # every unruled path named, every shadow substitution checked on BOTH halves.
+    # Silence is not a report -- "nothing unruled" is stated, never implied by absence.
+    if SHIP_CENSUS is not None:
+        SHIP_CENSUS.render()
+        # Folder-SHIP vs record-withholding collisions. Each is a question only a human
+        # can settle: does the folder's ruling govern, or the record's? While unsettled
+        # the safe direction wins (DENY -- never leak), and this report is what stops
+        # that being silent. Six of these were found on the first real run and settled
+        # with explicit file rows under Argus A92's atomic-infrastructure ruling; had
+        # they stayed silent, six tools would have quietly left the box.
+        _collisions = SHIP_RESOLVER.folder_ship_collisions(
+            d.path for d in SHIP_CENSUS.decisions)
+        if _collisions:
+            print(f'  ⚠ {len(_collisions)} folder-SHIP / record-withholding '
+                  f'collision(s), denied pending an explicit file-grain row:')
+            for _path, _rule in _collisions:
+                print(f'    unsettled: {_path}  (folder row {_rule} says SHIP; the '
+                      f'record withholds)')
+        # SHADOW verification moved to the candidate phase (v1.95 Spine B,
+        # f015997f8d8e AC1): gate build-shadow-substitutions in the release-gate
+        # registry runs it against the sealed box at Step 10.9 with every other
+        # box guard, one report, never first-failure. verify_shadow_substitutions()
+        # above stays as the wrapper its own tests call; the build no longer calls it.
 
     # Step 8b: Version stamping across stranger-facing files (v1.3.1 D1.1)
     step_8b_stamp_versions(build_dir, new_version)
@@ -3919,6 +4490,11 @@ def main():
     # Closes Mike Maziarz cold-boot finding 2026-05-03 ("you did ship a 00-tropo-nav/ that was stale").
     step_9b_regenerate_tropo_nav(build_dir)
 
+    # Step 9b2 (v1.95 Spine A AC8, build-step half): render the Studio Map inside
+    # the box from the box's own index, --box mode. After 9b (the index it reads),
+    # before Step 10 (the sanitize walk) and the final manifest passes.
+    step_9b2_render_studio_map(build_dir)
+
     # Step 9c: Generate the vendor-ref manifest (S1, v1.80) — the box now carries
     # data for customer-mode classification instead of relying on guesswork.
     step_9c_generate_vendor_ref_manifest(build_dir, new_version)
@@ -3934,130 +4510,15 @@ def main():
     # is evidence about surfaces this package does not ship (evt 114), and the
     # recipient seals the generation its own first rebuild creates.
 
-    # Step 10.5: Release Test-Harness — mechanical regression GATE (new layer; brief f13cc214,
-    # Mike-A115 2026-06-17). A release that fails its own regression does NOT ship. Runs the
-    # self-contained harness against the produced+sanitized artifact; FAIL → refuse (no zip,
-    # no upload). Composes with the Pipeline Activation Key: a release that can't pass its own
-    # checks can't be shipped. (Mechanical layer only — the guided/stranger walk is dispatched
-    # by the reasoning layer / run by a human; this is the deterministic gate.)
-    if not DRY_RUN:
-        print('Step 10.5 — Release Test-Harness (mechanical regression gate):')
-        _harness = os.path.join(tropo_roots.STUDIO_ROOT, '.tropo', 'scripts', 'test-harness-check.py')
-        if not os.path.exists(_harness):
-            print(f'  ⚠ Test-harness not found at {_harness} — gate SKIPPED (surface this; do not treat as pass).')
-        else:
-            try:
-                _hr = subprocess.run(['python3', _harness, '--release-dir', build_dir],
-                                     capture_output=True, text=True, cwd=tropo_roots.STUDIO_ROOT, timeout=120)
-                print('  ' + (_hr.stdout or '').strip().replace('\n', '\n  '))
-                if _hr.returncode != 0:
-                    print('\n  ✗ Build REFUSED — release failed its own test-harness regression.', file=sys.stderr)
-                    print(f'    A release that cannot pass its own checks does not ship. See test-report.md in', file=sys.stderr)
-                    print(f'    {build_dir} — fix the failures and re-run.', file=sys.stderr)
-                    # refusal: priced/false-success — the build prints green and freezes a package digest every downstream receipt binds to, for a box that just failed its own mechanical regression suite
-                    sys.exit(4)
-                print('  ✓ Test-harness regression PASS\n')
-            except subprocess.TimeoutExpired:
-                print('  ✗ Test-harness timed out after 120s. Investigate.', file=sys.stderr)
-                # refusal: misuse — the test-harness subprocess timed out; operational and retryable
-                sys.exit(4)
-
-    # Step 10.5a — S2 (v1.80): Shipped self-test passes in the box.
-    # S2 (cbe4f7bd R11 class, dev-spec be1979b6): the ship gate runs the shipped self-test surface
-    # INSIDE the built box pre-ship and verifies registry-row regeneration actually landed by reading
-    # the box, not just checking the call ran. A failing shipped test refuses the build.
-    # Folds the un-archived R11 item (cbe4f7bd).
-    if not DRY_RUN:
-        print('Step 10.5a — S2: Shipped self-test in-box gate (v1.80 S2):')
-        _box_test = os.path.join(build_dir, 'vault', 'tools', 'tropo-test.py')
-        if not os.path.exists(_box_test):
-            print(f'  ✗ Build REFUSED — tropo-test.py not found in built box at {_box_test}. '
-                  f'The shipped test surface must be present in the box.', file=sys.stderr)
-            # refusal: warn — unpriced: a wholly missing entry point is loud rather than believed green, and is reversible by rebuild
-            sys.exit(4)
-        else:
-            try:
-                _tr = subprocess.run(['python3', _box_test, '--quick'],
-                                     capture_output=True, text=True, cwd=build_dir,
-                                     timeout=300, env={**os.environ, 'VAULT_ROOT': build_dir})
-                _tr_out = (_tr.stdout or '') + (_tr.stderr or '')
-                print('  ' + _tr_out.strip()[:500].replace('\n', '\n  '))
-                # v0.1 fix (vela-v63, 2026-07-05): tropo-test.py's own exit-code contract is
-                # 0=GREEN, 1=YELLOW (passes, warnings present), 2=RED (real failures, ship-blocker).
-                # This gate was refusing on ANY nonzero code, including YELLOW — meaning a release
-                # with zero test failures but any warning could never pass. Only RED (>=2) blocks.
-                if _tr.returncode >= 2:
-                    print('\n  ✗ Build REFUSED — shipped self-test (tropo-test.py) FAILED (RED) in the built box.', file=sys.stderr)
-                    print('    A release whose own test surface fails inside the box does not ship (S2).', file=sys.stderr)
-                    # refusal: priced/false-success — a box whose own shipped self-test reports real failures when run inside the box is frozen and green-lit, and every receipt afterwards attests those exact bytes as verified
-                    sys.exit(4)
-                elif _tr.returncode == 1:
-                    print('  ⚠ Shipped self-test in-box YELLOW (warnings present, 0 failures) — proceeding\n')
-                else:
-                    print('  ✓ Shipped self-test in-box PASS (GREEN)\n')
-            except subprocess.TimeoutExpired:
-                print('  ✗ Shipped self-test timed out after 300s. Investigate.', file=sys.stderr)
-                # refusal: misuse — the shipped self-test subprocess timed out; operational and retryable
-                sys.exit(4)
-
-        # Verify registry-row regeneration actually landed (read the box, not just check the call ran)
-        _registry = os.path.join(build_dir, 'vault', '.tropo-studio', 'registries', 'subsystem-registry.jsonl')
-        if not os.path.exists(_registry):
-            _registry = os.path.join(build_dir, '.tropo-studio', 'registries', 'subsystem-registry.jsonl')
-        if os.path.exists(_registry):
-            import json as _json_s2
-            _rows = [l for l in open(_registry).read().splitlines() if l.strip()]
-            if len(_rows) == 0:
-                print('\n  ✗ Build REFUSED — subsystem-registry.jsonl in built box has 0 rows. '
-                      'Registry-row regeneration did not land; the box is incomplete (S2).', file=sys.stderr)
-                # refusal: warn — unpriced: registry-row content is substrate bookkeeping, and this file treats the strictly worse case of the registry being absent entirely as non-blocking four lines below
-                sys.exit(4)
-            print(f'  ✓ subsystem-registry.jsonl: {len(_rows)} row(s) in box — regeneration confirmed')
-        else:
-            print(f'  ⚠ subsystem-registry.jsonl not found in box at {_registry} — '
-                  f'registry-row verification skipped (non-blocking at v1.80; surface for next build)')
-
-    # Step 10.7 — Covenant Gate: THE FLOOR TEST as a BLOCKING build gate (ADR-049 layer 2;
-    # dev-spec fc4874f4, Mike-approved lock-amendment 2026-07-01 "Let's build. Let's go!").
-    # A release whose update path would violate zero-user-churn cannot be built, and
-    # therefore cannot ship. Same posture as Step 10.5 (mechanical regression gate):
-    # hard sys.exit on failure, unconditional — this blocks the BUILD itself, not any
-    # downstream publish action. Governance wrapper: vault/playbooks/d2efcac9.md.
-    if not DRY_RUN:
-        print('Step 10.7 — Covenant Gate (THE FLOOR TEST, ADR-049 layer 2):')
-        _floor_test = os.path.join(tropo_roots.VAULT_DIR, 'tools', 'tests', 'test_clean_update_floor.py')
-        if not os.path.exists(_floor_test):
-            print(f'  ✗ Build REFUSED — floor test not found at {_floor_test}. '
-                  f'The covenant gate cannot be skipped by absence.', file=sys.stderr)
-            # refusal: priced/false-success — the covenant gate is silently disabled by the absence of its own test file, so the build reports the zero-user-churn covenant satisfied for an update path it never evaluated
-            sys.exit(7)
-
-        # Sub-step 1: gauntlet — plant a covenant violation, assert the gate catches it.
-        # If the gate can't catch a planted violation, it's not a real gate; refuse to
-        # trust its PASS on the real run below.
-        _gr = subprocess.run(['python3', _floor_test, '--gauntlet'],
-                              capture_output=True, text=True, cwd=tropo_roots.STUDIO_ROOT, timeout=60)
-        print('  ' + (_gr.stdout or '').strip().replace('\n', '\n  '))
-        if _gr.returncode != 0:
-            print('\n  ✗ Build REFUSED — the covenant gate failed its own gauntlet '
-                  '(a planted violation was NOT detected). The gate is not trustworthy '
-                  'as-is; fix vault/tools/tests/test_clean_update_floor.py before shipping.',
-                  file=sys.stderr)
-            # refusal: priced/false-success — the covenant gate's PASS is trusted while the gate provably cannot see a violation placed directly in front of it, so a release that churns user files sails through a blind instrument
-            sys.exit(7)
-
-        # Sub-step 2: the real run — must show zero user-file churn against the current
-        # update path (namespace predicate + apply-update playbook Rules).
-        _fr = subprocess.run(['python3', _floor_test],
-                              capture_output=True, text=True, cwd=tropo_roots.STUDIO_ROOT, timeout=60)
-        print('  ' + (_fr.stdout or '').strip().replace('\n', '\n  '))
-        if _fr.returncode != 0:
-            print('\n  ✗ Build REFUSED — THE FLOOR TEST failed: the update path would '
-                  'touch user files. Fix the namespace predicate or the apply-update '
-                  'playbook before shipping (ADR-049 covenant).', file=sys.stderr)
-            # refusal: priced/the-update-covenant — an OS update built from this box overwrites or moves files a customer authored in their own studio, destroying working-tree substrate the update path cannot restore
-            sys.exit(7)
-        print('  ✓ Covenant gate PASS — gauntlet caught the planted violation, real run shows zero churn.\n')
+    # Steps 10.5 (release test-harness), 10.5a (shipped self-test in the box,
+    # registry rows) and 10.7 (THE FLOOR TEST) are REGISTERED GATES since v1.95
+    # Spine B (f015997f8d8e AC1): build-release-harness, build-box-self-test and
+    # build-box-registry-rows run at the candidate phase in Step 10.9 below;
+    # build-covenant-floor reads only the source tree, so the registry computes
+    # it to LOCK-STATIC — it now speaks in the driver's preflight BEFORE a build
+    # is attempted, and the runner refuses to invoke this tool without that row
+    # (AC3). Their decisions live in vault/tools/lib/build_guards.py. Eight v1.94
+    # attempts stopped at the first failing guard; the registry reports them all.
 
     # Step 10.8 — Generate the Update API static manifest (task f1d4b9e6; transport-lean
     # per the A122 walk: no live server, a stable-URL JSON manifest). Release Coupling
@@ -4147,17 +4608,17 @@ def main():
                   'is an AC7 Verify instrument bound to the frozen package digest '
                   '(0a0a6777).')
 
-        # RT1/RT2 ship-surface guard (argus-a118, v1.74): FAIL before the zip if the
-        # release is missing its declared nav + workspace surfaces (finding 1ee11d09).
-        assert_shipped_surfaces(build_dir)
-
-        # One Home retirement guard (G2, Gate 2): FAIL before the zip if the dissolved
-        # system/ tree still shipped, or if vault/updates/ didn't.
-        assert_no_stale_system_dir(build_dir)
-
-        # Mission-brief boot-slot guard (task 2ffda37e defect #1): FAIL before the zip if
-        # the slot is missing or carries anything other than the generic <FILL: …> template.
-        assert_mission_brief_slot(build_dir)
+        # Step 10.9 — THE CANDIDATE PHASE (v1.95 Spine B, f015997f8d8e AC4): every
+        # box guard that used to be a direct call here — shipped surfaces, One Home
+        # layout, mission-brief slot, no shipped identity, shadow pairs, the
+        # harness, the in-box self-test, registry rows — runs through the
+        # release-gate registry against this box, in one pass, every outcome
+        # reported. The seal refuses on any refusal AND on any skipped gate: a
+        # candidate gate whose input the build failed to supply must not seal the
+        # box by silence. MUST run before the purge below — build-no-studio-identity
+        # reads vault/00-index.jsonl, which the purge deletes.
+        step_10_9_candidate_gates(build_dir, activation_uid, dist_dir,
+                                  version_string=new_version)
 
     # FINAL PORTABLE FREEZE (Argus, evt 112/113). The in-box mechanical gates
     # above RUN the box — they import its tools and may compose its index — so
@@ -4166,8 +4627,20 @@ def main():
     # the shipped bytes portable, and the manifest is regenerated afterwards so
     # it cannot list files the freeze removed.
     if not DRY_RUN:
-        if step_10_2_purge_run_local_artifacts(build_dir):
-            step_9_generate_manifest(build_dir, new_version)
+        step_10_2_purge_run_local_artifacts(build_dir)
+        # UNCONDITIONAL, as 9d already is (f015b6182652, argus-a172). This rode
+        # on the purge's return until now, so on a QUIET build — nothing for
+        # 10.2 to remove — every file step_10_sanitize_argo_identity had
+        # rewritten shipped with a hash stamped BEFORE the rewrite. MANIFEST.md
+        # is what lib/tropo_update_namespace.classify reads on a customer's disk
+        # to decide replace-vs-preserve, so those untouched shipped files would
+        # read as USER_MODIFIED_SHIPPED and Po would ask the customer to approve
+        # overwriting files they never touched. The regeneration was gated on
+        # another step's litter: 10b runs the box, leaves bytecode, and the
+        # purge's non-zero count was doing the work. 9d's own comment already
+        # names the shape — gating on a purge that may legitimately be a no-op
+        # leaves exactly the same hole on the quiet path.
+        step_9_generate_manifest(build_dir, new_version)
 
     # Step 9d (ea09fc6e), MOVED HERE by F1 (33d5bca1, argus-a155 2026-08-24).
     # The IMAGE MANIFEST must be the LAST thing written before the zip, because

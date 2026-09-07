@@ -553,7 +553,7 @@ def _recover_unmount_move_intent(root: Path) -> None:
     if (
         not isinstance(payload, dict)
         or payload.get("schema_version") != 1
-        or not re.fullmatch(r"[0-9a-f]{8}", str(payload.get("mount_uid") or ""))
+        or not re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", str(payload.get("mount_uid") or ""))
         or not isinstance(payload.get("moves"), list)
     ):
         raise FolderMountError(f"unmount move intent {intent_path} has invalid shape")
@@ -576,7 +576,7 @@ def _recover_unmount_move_intent(root: Path) -> None:
         digest = str(entry.get("sha256") or "")
         if (
             source.parent != (root / "vault" / "files").resolve()
-            or not re.fullmatch(r"[0-9a-f]{8}\.md", source.name)
+            or not re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?\.md", source.name)
             or recycle_dir not in destination.parents
             or not destination.name.startswith(source.stem)
             or destination.suffix != ".md"
@@ -1123,7 +1123,7 @@ def ensure_mount_identity(
 
     Mount Identity 7b1e0ae5 §3.2: identity at MOUNT time, before adopt/ingest.
     """
-    if not re.fullmatch(r"[0-9a-f]{8}", mount_uid or ""):
+    if not re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", mount_uid or ""):
         raise FolderMountError(
             f"mount identity requires an 8-hex mount_uid, got {mount_uid!r}"
         )
@@ -1422,7 +1422,7 @@ def _mount_authority_snapshot(folder: Path) -> dict[str, dict]:
     for path in authoritative:
         metadata = walker.parse_frontmatter(path)
         uid = str(metadata.get("uid") or "")
-        if not re.fullmatch(r"[0-9a-f]{8}", uid):
+        if not re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", uid):
             continue
         snapshot[uid] = {
             key: metadata[key]
@@ -1463,7 +1463,7 @@ def _is_verified_mount_projection(
     """Accept current derived-only or the complete live legacy projection proof."""
     uid = projection.stem
     if (
-        not re.fullmatch(r"[0-9a-f]{8}", uid)
+        not re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", uid)
         or str(front.get("uid") or "") != uid
         or str(front.get("mount_uid") or "") != mount_uid
     ):
@@ -1547,11 +1547,11 @@ def _mount_projection_authority(
     if isinstance(raw_metadata, dict):
         for uid, metadata in raw_metadata.items():
             uid = str(uid)
-            if re.fullmatch(r"[0-9a-f]{8}", uid):
+            if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", uid):
                 authority[uid] = metadata if isinstance(metadata, dict) else {}
     for uid in raw.get("projection_uids") or ():
         uid = str(uid)
-        if re.fullmatch(r"[0-9a-f]{8}", uid):
+        if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", uid):
             authority.setdefault(uid, {})
 
     recorded_folder = Path(str(raw.get("path") or ""))
@@ -1599,7 +1599,7 @@ def _indexed_mount_uids(root: Path, mount_uid: str) -> set[str]:
             for row in index_writer.index_surfaces.read_jsonl_strict(path):
                 if str(row.get("mount_uid") or "") == mount_uid:
                     uid = str(row.get("uid") or "")
-                    if re.fullmatch(r"[0-9a-f]{8}", uid):
+                    if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", uid):
                         owned.add(uid)
     sqlite_path = root / "vault" / "00-index.sqlite"
     if sqlite_path.is_file():
@@ -1614,7 +1614,7 @@ def _indexed_mount_uids(root: Path, mount_uid: str) -> set[str]:
                     continue
                 if str(front.get("mount_uid") or "") == mount_uid:
                     uid = str(uid)
-                    if re.fullmatch(r"[0-9a-f]{8}", uid):
+                    if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", uid):
                         owned.add(uid)
     return owned
 
@@ -2060,7 +2060,7 @@ def _freshen_projection_index(
     uids = {
         projection.stem
         for projection in staged
-        if re.fullmatch(r"[0-9a-f]{8}", projection.stem)
+        if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", projection.stem)
     }
     if not uids:
         return 0
@@ -2199,7 +2199,7 @@ def _preflight_mount_uid_collisions(
             continue
         front = walker.parse_frontmatter(sidecar)
         uid = str(front.get("uid") or "")
-        if re.fullmatch(r"[0-9a-f]{8}", uid):
+        if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", uid):
             source = (
                 sidecar.parent / str(front.get("source_path") or "")
             ).resolve()
@@ -2210,7 +2210,7 @@ def _preflight_mount_uid_collisions(
     for marker in sorted(folder.rglob(".tropo-studio/.tropo-folder.md")):
         front = walker.parse_frontmatter(marker)
         uid = str(front.get("uid") or "")
-        if re.fullmatch(r"[0-9a-f]{8}", uid):
+        if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", uid):
             claims.append(
                 (
                     uid,
@@ -2489,7 +2489,7 @@ def _mark_mount_projections_unavailable(
         }
     owned_uids = {
         str(uid) for uid in authoritative_uids
-        if re.fullmatch(r"[0-9a-f]{8}", str(uid))
+        if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", str(uid))
     }
     for uid in sorted(owned_uids):
         projection = files / f"{uid}.md"

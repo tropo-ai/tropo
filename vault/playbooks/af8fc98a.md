@@ -54,7 +54,7 @@ subsystem_hub:
 
 # Run Release Test Plan — v1.4.2 Ship Gauntlet Orchestrator
 
-*Sprint 4 first-instance test-harness orchestrator. Pulls dispatch-walker.playbook v0.2 + dispatch-cold-boot.playbook v0.2 together as the executable form of [release-test-plan v2 (f4a8c2d6)](../files/f4a8c2d6.md). Per [The Patient Honing Doctrine](../../.tropo-studio/memory/entries/a9d7c364.md): the workshop IS the system; the system compensates for forgetting. The ship gauntlet is workshop primitive from v1.4.2 forward.*
+*Sprint 4 first-instance test-harness orchestrator. Pulls dispatch-walker.playbook v0.2 + dispatch-cold-boot.playbook v0.2 together as the executable form of release-test-plan v2 (f4a8c2d6). Per The Patient Honing Doctrine (a9d7c364): the workshop IS the system; the system compensates for forgetting. The ship gauntlet is workshop primitive from v1.4.2 forward.*
 
 ---
 
@@ -68,7 +68,7 @@ Orchestrate the 3-stage release ship gauntlet end-to-end against a target releas
 - [`dispatch-walker.playbook` v0.2 (`7579f894`)](7579f894.md) — Stage 3.1
 - [`dispatch-cold-boot.playbook` v0.2 (`a5fb24a6`)](a5fb24a6.md) — Stages 3.2-strict + 3.3-skeptic
 
-**Spec implemented:** [release-test-plan v2 (f4a8c2d6)](../files/f4a8c2d6.md). Sprint 5 amends v1 → v2 to formalize the Stage 3.2-strict / 3.3-skeptic split + cite this orchestrator as canonical executable form.
+**Spec implemented:** release-test-plan v2 (f4a8c2d6). Sprint 5 amends v1 → v2 to formalize the Stage 3.2-strict / 3.3-skeptic split + cite this orchestrator as canonical executable form.
 
 **Transitional invocation mode (until Sprint 4-orchestrator usage settles).** This is the first orchestrator-class playbook in the vault. Eat-own-dog-food test against v1.4.2 itself produces the first exemplar run; pre-eat-dog-food, expect operational refinement.
 
@@ -400,13 +400,13 @@ The TARGET-side verification is each Stage's job; the dispatcher's verification 
 
 ### Knowledge Base
 
-- [release-test-plan v2 (f4a8c2d6)](../files/f4a8c2d6.md) — the spec this orchestrator implements as executable form. v2 amendment (Sprint 5 task `1f5b3a9d`) formalizes Stage 3.2-strict / 3.3-skeptic split.
+- release-test-plan v2 (f4a8c2d6) — the spec this orchestrator implements as executable form. v2 amendment (Sprint 5 task `1f5b3a9d`) formalizes Stage 3.2-strict / 3.3-skeptic split.
 - [dispatch-walker.playbook v0.2 (7579f894)](7579f894.md) — Stage 3.1 sub-playbook.
 - [dispatch-cold-boot.playbook v0.2 (a5fb24a6)](a5fb24a6.md) — Stages 3.2-strict + 3.3-skeptic sub-playbook.
 - [release.capsule v3.1 (b19e8d43)](../capsules/tropo-release.capsule.md) — Rule 10 declares walker + cold-boot required pre-ship.
 - [build.capsule v1.1 (b3d7e5a1)](../capsules/tropo-build.capsule.md) — build entry schema for Stage 2.
 - [agents/sa/commission-quickref.md (8c3b8017)](../../agents/sa/commission-quickref.md) — sa.* spawn protocol.
-- [The Patient Honing Doctrine](../../.tropo-studio/memory/entries/a9d7c364.md) — doctrinal grounding; Rule 11 + §Escalation Heuristics operationalize the doctrine for the orchestrator's meta-decision-maker role.
+- The Patient Honing Doctrine (a9d7c364) — doctrinal grounding; Rule 11 + §Escalation Heuristics operationalize the doctrine for the orchestrator's meta-decision-maker role.
 - [Strict-vs-Skeptic Test-Harness Modes brief (f7b3e2a1)](../files/f7b3e2a1.md) — informs Stage 3.2/3.3 split.
 
 ### Sub-Playbooks Called

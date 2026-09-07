@@ -7,6 +7,7 @@ target:
   - release
 canonical_source: argo-os/vault/tools/lib
 source_mode: recursive-ship-all
+ship_verdict: SHIP-AS-IS
 extraction_scope: ship
 parent: 79cca015
 output_path: vault/tools/lib/

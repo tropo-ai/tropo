@@ -87,6 +87,23 @@ EXIT_MISUSE = 4
 #: the whole mechanism behind stoppage 1, so it is named rather than described.
 VACUOUS_ON_MISSING = ("pytest",)
 
+#: Metis's release-wide measurement (2026-08-31): 41 of 92 v1.94 criteria name
+#: `python3 <suite> -v -k <selector>` verify commands, and BOTH -k forms
+#: report "Ran 0 tests ... OK" with exit 0 when the selector matches nothing —
+#: a typo'd pattern, a renamed method, or a criterion nobody reached all read
+#: as PASS having executed nothing. Partial builds report finished. The
+#: selector's vacuity is statically checkable against the suite's own test
+#: names, which is what _selector_is_vacuous does (offline, no execution).
+_K_SELECTOR_RE = re.compile(
+    r"""(?:^|\s)-k\s+(?:'([^']+)'|"([^"]+)"|(\S+))""")
+# Three alternatives, not one backreference: a quoted selector may
+# contain SPACES (-k 'genesis_pair_scopes or derivation'), and the
+# optional-quote-plus-non-greedy form mis-captured those — the empty
+# quote group let \S+? swallow the opening apostrophe, the captured
+# pattern carried a leading quote, matched no test name, and the guard
+# reported VACUOUS on a command that runs fine (Metis, 2026-08-31 — a
+# false finding in a governance check trains people to skip it).
+
 #: What a file reference looks like: a path ending in a short extension. Prose
 #: containing a slash is not a path, and treating it as one produced seven false
 #: PHANTOM-TARGETs on real specs.
@@ -104,6 +121,41 @@ RELEASE_ARTIFACT_PHRASES = (
     "released box",
     "shipped box",
 )
+
+
+def _selector_is_vacuous(command: str, target_path: Path) -> bool:
+    """True when a -k selector in `command` matches no test in the suite.
+
+    unittest's -k matches substrings/fnmatch against test ids; a conservative
+    approximation (substring OR fnmatch over `def test_*` names and class
+    names) catches every real mismatch without executing anything. Only
+    inspects the named suite file itself — a selector deliberately matching a
+    test imported from elsewhere would false-positive, and no such criterion
+    exists in this corpus (measured against the v1.94 specs).
+
+    SEMANTICS BOUNDARY: unittest's -k is ONE pattern — no or-expressions.
+    `-k 'a or b'` under unittest matches nothing and the runner reports
+    "Ran 0 tests OK", so the guard firing VACUOUS on it is CORRECT for the
+    python3-file -k family this corpus uses (bb3911f5's six commands among
+    them). Pytest's -k dialect DOES parse or/and — a spec whose commands run
+    under pytest with expression selectors could false-fire here; none exists
+    in this corpus, and the moment one does, teach this function the dialect
+    rather than widening the pattern blindly.
+    """
+    m = _K_SELECTOR_RE.search(command)
+    if not m:
+        return False
+    import fnmatch
+    pattern = next(g for g in m.groups() if g is not None)
+    try:
+        source = target_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    names = (re.findall(r"def\s+(test_\w+)", source)
+             + re.findall(r"class\s+(\w+)", source))
+    return not any(
+        pattern in name or fnmatch.fnmatch(name, f"*{pattern}*")
+        for name in names)
 
 
 @dataclass
@@ -205,6 +257,26 @@ def _cd_roots(command: str) -> List[str]:
     tokens = str(command or "").split()
     return [tokens[i + 1] for i, tk in enumerate(tokens)
             if tk == "cd" and i + 1 < len(tokens)]
+
+
+def _resolve_target_path(studio_root: Path, target: str,
+                         command: str = "") -> Optional[Path]:
+    """The path a target resolves to, in either shape — _resolves' locator
+    half, extracted so selector-vacuity can read the SAME file the criterion
+    names (two checks, one resolution rule)."""
+    if "/" in target:
+        if (studio_root / target).exists():
+            return studio_root / target
+        for d in _cd_roots(command):
+            if (studio_root / d / target).exists():
+                return studio_root / d / target
+        return None
+    parts = target.split(".")
+    for cut in range(len(parts), 0, -1):
+        candidate = studio_root / (Path(*parts[:cut]).as_posix() + ".py")
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def _resolves(studio_root: Path, target: str, command: str = "") -> bool:
@@ -350,6 +422,22 @@ def check_spec(path: Path, studio_root: Path,
                 if at != AT_CLOSE:
                     continue  # a locked spec may name what is not built yet
                 if _resolves(studio_root, target, command):
+                    # The target EXISTS — but a -k selector that matches
+                    # nothing in it still passes vacuously (Ran 0 tests, OK).
+                    # At close, a criterion whose command executes nothing has
+                    # not been verified, whatever the exit code said.
+                    if target.endswith(".py") and _selector_is_vacuous(
+                            command,
+                            _resolve_target_path(studio_root, target)):
+                        report.findings.append(
+                            Finding(
+                                report.uid, cid, "SELECTOR-VACUOUS",
+                                f"-k selector in the verify command matches no "
+                                f"test in {target} — the runner reports "
+                                f"'Ran 0 tests ... OK' and this criterion "
+                                f"passes having executed nothing",
+                            )
+                        )
                     continue
                 vacuous = any(v in command for v in VACUOUS_ON_MISSING)
                 report.findings.append(

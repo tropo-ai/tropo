@@ -67,7 +67,12 @@ def _git(*args, cwd: Path) -> str:
     return result.stdout.strip()
 
 
-def _init_team_vault(tmp: Path, name: str, vault_uid: str = "aaaabbbb") -> Path:
+def _init_team_vault(
+    tmp: Path,
+    name: str,
+    manifest_uid: str = "aaaabbbb",
+    vault_uid: str = "team01",
+) -> Path:
     """A fresh git-initted fixture team-vault root with a COMPLETE, schema-
     valid vault-manifest.md (required fields per tropo-validate.py's
     _VAULT_MANIFEST_REQUIRED_FIELDS + the sibling-boundary prefix_policy
@@ -81,7 +86,8 @@ def _init_team_vault(tmp: Path, name: str, vault_uid: str = "aaaabbbb") -> Path:
 
     manifest = (
         "---\n"
-        f"uid: {vault_uid}\n"
+        f"uid: {manifest_uid}\n"
+        f"vault_uid: {vault_uid}\n"
         "kind: team\n"
         "owner: mike\n"
         "audience: 12345678\n"
@@ -259,7 +265,7 @@ class TestTwoMachineSovereignty44badb55(unittest.TestCase):
         # legitimate ship-scope claim IS honored on ITS OWN merits (a
         # per-file authored extraction_scope is the intended trust root;
         # see lib/segment.py's module docstring) precisely BECAUSE the
-        # segment agrees with this vault's own manifest UID.
+        # segment agrees with this manifest's own vault code.
         fp = team / "vault" / "files" / "b0000001.md"
         fp.write_text(
             "---\nuid: b0000001\ntype: note\nextraction_scope: ship\nsegment: some-other-vault\n---\ncontent\n",
@@ -269,18 +275,40 @@ class TestTwoMachineSovereignty44badb55(unittest.TestCase):
 
         rec = {"uid": "b0000001", "extraction_scope": "ship", "path": "vault/files/b0000001.md"}
         derived = segment_lib.derive_segment(rec, team)
-        self.assertEqual(derived, "aaaabbbb", "derive_segment must ignore the hand-edited segment: field entirely")
+        self.assertEqual(derived, "team01", "derive_segment must ignore the hand-edited segment: field entirely")
+
+    def test_ac3_composite_manifest_uid_preserves_vault_segment(self) -> None:
+        """A composite record UID cannot replace the manifest's vault code."""
+        team = _init_team_vault(
+            self.tmp,
+            "team-composite",
+            manifest_uid="f015aaaabbbb",
+            vault_uid="cmp12",
+        )
+        rec = {
+            "uid": "f015ccccdddd",
+            "extraction_scope": "ship",
+            "path": "vault/files/f015ccccdddd.md",
+        }
+        self.assertEqual(
+            segment_lib.read_vault_manifest_uid(team),
+            "cmp12",
+        )
+        self.assertEqual(
+            segment_lib.derive_segment(rec, team),
+            "cmp12",
+        )
 
     def test_ac3_foreign_vault_uid_is_refused(self) -> None:
-        """derive_segment resolves to the vault_root's OWN manifest uid,
+        """derive_segment resolves to the vault_root's OWN vault code,
         never a foreign one — a foreign vault claiming the team's UID
         cannot make this function agree, because it derives strictly from
         the vault_root actually passed in."""
-        team_a = _init_team_vault(self.tmp, "team-a", vault_uid="aaaaaaaa")
-        team_b = _init_team_vault(self.tmp, "team-b", vault_uid="bbbbbbbb")
+        team_a = _init_team_vault(self.tmp, "team-a", vault_uid="vaaaa")
+        team_b = _init_team_vault(self.tmp, "team-b", vault_uid="vbbbb")
         rec = {"uid": "c0000001", "extraction_scope": "ship", "path": "vault/files/c0000001.md"}
-        self.assertEqual(segment_lib.derive_segment(rec, team_a), "aaaaaaaa")
-        self.assertEqual(segment_lib.derive_segment(rec, team_b), "bbbbbbbb")
+        self.assertEqual(segment_lib.derive_segment(rec, team_a), "vaaaa")
+        self.assertEqual(segment_lib.derive_segment(rec, team_b), "vbbbb")
         self.assertNotEqual(segment_lib.derive_segment(rec, team_a), segment_lib.derive_segment(rec, team_b))
 
     # -- AC "UN-FORGEABLE NEGATIVE" (file-level, covenant) ---------------
@@ -441,7 +469,7 @@ class TestTwoMachineSovereignty44badb55(unittest.TestCase):
             fm = yaml.safe_load(m.group(1))
             return dict(fm) if isinstance(fm, dict) else None
 
-        records = shard_index.derive_mounted_shard_records(team, process_file, "aaaabbbb")
+        records = shard_index.derive_mounted_shard_records(team, process_file, "team01")
         self.assertEqual({r["uid"] for r in records}, {"10000004"})
 
     # -- AC: REFLOG + SERVER-TRUST -----------------------------------------
@@ -483,7 +511,7 @@ class TestTwoMachineSovereignty44badb55(unittest.TestCase):
         (fixture_studio / ".tropo-studio").mkdir(parents=True)
         (fixture_studio / ".tropo-studio" / "compose.lock").write_text(json.dumps({
             "schema_version": 1,
-            "vaults": {"aaaabbbb": {"vault_uid": "aaaabbbb", "resolved_commit": "x", "mount_path": str(team), "remote": str(remote)}},
+            "vaults": {"team01": {"vault_uid": "team01", "resolved_commit": "x", "mount_path": str(team), "remote": str(remote)}},
         }))
         findings, checked, violations = check_publish_boundary(fixture_studio)
         self.assertEqual(checked, 1)
@@ -578,7 +606,7 @@ class TestBounceRegressions44badb55(unittest.TestCase):
             fm = yaml.safe_load(m.group(1))
             return dict(fm) if isinstance(fm, dict) else None
 
-        records = shard_index.derive_mounted_shard_records(clone_dir, process_file, "aaaabbbb")
+        records = shard_index.derive_mounted_shard_records(clone_dir, process_file, "team01")
         self.assertEqual(
             {r["uid"] for r in records}, {"60000001"},
             "manifest-less mount must fail CLOSED (exclude everything not provably public), "
@@ -646,7 +674,7 @@ class TestBounceRegressions44badb55(unittest.TestCase):
     def test_bounce4_frontmatter_segment_mismatch_refuses(self) -> None:
         """Finding #4 'tautological segment gate': a record's own
         frontmatter `segment:` field, if present, must AGREE with the
-        vault's actual uid — a disagreement is the tamper signature and
+        vault's actual code — a disagreement is the tamper signature and
         must refuse loudly (AC3), never get silently resolved either way."""
         team = _init_team_vault(self.tmp, "team")
         remote = _init_bare_remote(self.tmp)
@@ -666,7 +694,7 @@ class TestBounceRegressions44badb55(unittest.TestCase):
         mismatch, caught on the read/compose side too, not just publish."""
         from lib import shard_index
 
-        team = _init_team_vault(self.tmp, "team", vault_uid="aaaabbbb")
+        team = _init_team_vault(self.tmp, "team")
         fp = team / "vault" / "files" / "90000002.md"
         fp.write_text(
             '---\nuid: "90000002"\ntype: note\nextraction_scope: ship\nsegment: deadbeef\n---\nmismatched claim\n',
@@ -684,7 +712,7 @@ class TestBounceRegressions44badb55(unittest.TestCase):
             return dict(fm) if isinstance(fm, dict) else None
 
         with self.assertRaises(ValueError) as ctx:
-            shard_index.derive_mounted_shard_records(team, process_file, "aaaabbbb")
+            shard_index.derive_mounted_shard_records(team, process_file, "team01")
         self.assertIn("DISAGREES", str(ctx.exception))
 
     def test_bounce5_expect_vault_uid_refuses_foreign_claim(self) -> None:
@@ -692,7 +720,7 @@ class TestBounceRegressions44badb55(unittest.TestCase):
         claims a UID the caller does NOT expect must be refused —
         --expect-vault-uid is the authenticated cross-check, independent
         of anything the manifest itself asserts."""
-        team = _init_team_vault(self.tmp, "team", vault_uid="aaaaaaaa")
+        team = _init_team_vault(self.tmp, "team", vault_uid="vaulta")
         remote = _init_bare_remote(self.tmp)
         _write_governed_file(team, "a1000001", "ship")
         _commit_all(team)
@@ -702,7 +730,7 @@ class TestBounceRegressions44badb55(unittest.TestCase):
                 team_vault_root=team, remote=str(remote), branch="team-main", apply=True,
                 committer_name=tropo_publish.FEDERATION_COMMITTER_NAME,
                 committer_email=tropo_publish.FEDERATION_COMMITTER_EMAIL,
-                expect_vault_uid="bbbbbbbb",
+                expect_vault_uid="vaultb",
             )
         self.assertIn("foreign-vault-uid-claim", str(ctx.exception))
 
@@ -711,7 +739,7 @@ class TestBounceRegressions44badb55(unittest.TestCase):
             team_vault_root=team, remote=str(remote), branch="team-main", apply=True,
             committer_name=tropo_publish.FEDERATION_COMMITTER_NAME,
             committer_email=tropo_publish.FEDERATION_COMMITTER_EMAIL,
-            expect_vault_uid="aaaaaaaa",
+            expect_vault_uid="vaulta",
         )
         self.assertTrue(receipt["applied"])
 

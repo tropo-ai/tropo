@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tropo.local/schema/one-prompt-release-scorecard.schema.json",
-  "title": "Tropo One-Prompt Release Scorecard v1",
+  "title": "Tropo One-Prompt Release Scorecard v1/v2",
   "description": "Closed schema (draft 2020-12) for the rehearsal and real-fire scorecards written by dev-spec 2fae6312 step 8. Every object is closed (additionalProperties:false) and every metric is required, because the spec's rule is that missing or invalid metrics make the acceptance criterion NON-PASSING. A scorecard that can omit a field is a scorecard that can report a release it did not measure.",
   "type": "object",
   "additionalProperties": false,
@@ -19,7 +19,11 @@
   ],
   "properties": {
     "schema_version": {
-      "const": 1
+      "enum": [
+        1,
+        2
+      ],
+      "description": "v2 (3d8d4351): mode-dependent verdict domain, actor-aware gestures, checkpoints_performed on rehearsal, derivation block on real-fire. v1 cards stay readable forever; validators branch on this field."
     },
     "mode": {
       "enum": [
@@ -55,31 +59,52 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "input",
-              "at"
-            ],
-            "properties": {
-              "input": {
-                "enum": [
-                  "release_scope_locked",
-                  "release_orchestrator_invoked",
-                  "release_fire_authorized",
-                  "manual_resume",
-                  "manual_reinvocation"
-                ]
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "input",
+                  "at"
+                ],
+                "properties": {
+                  "input": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "type": "string"
+                  }
+                }
               },
-              "at": {
-                "type": "string",
-                "minLength": 1
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "event",
+                  "at"
+                ],
+                "properties": {
+                  "event": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
               }
-            }
+            ],
+            "description": "v1 rows carry the principal-input name; v2 rows carry the journal event class (3d8d4351)."
           }
         },
         "target": {
-          "const": 3
+          "enum": [
+            2,
+            3
+          ],
+          "description": "3 = the classic rehearsal target; 2 = REAL_FIRE's ratchet (the lock and the go/no-go \u2014 3d8d4351 \u00a74)."
         },
         "met": {
           "type": "boolean"
@@ -126,10 +151,9 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "lock_to_all_targets_live_seconds",
         "active_machine_seconds"
       ],
-      "description": "Wall-clock from lock to all targets live INCLUDES human waits, retries, provider latency and process loss \u2014 it is the number an operator actually experiences. Active machine time is reported separately so the two are never conflated.",
+      "description": "v1 measures lock->all-targets-live; v2 measures lock->primary-live (all-targets is the completion verifier's fact). Exactly one anchor is expected per version; the validator's v2 branch asserts it.",
       "properties": {
         "lock_to_all_targets_live_seconds": {
           "type": [
@@ -144,6 +168,13 @@
             "null"
           ],
           "minimum": 0
+        },
+        "lock_to_primary_live_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "v2: lock to primary live; all-targets is the completion verifier's fact, not the predicate's."
         }
       }
     },
@@ -218,9 +249,34 @@
     "verdict": {
       "enum": [
         "pass",
-        "fail"
+        "fail",
+        "fired-one-gesture",
+        "refused-then-attested",
+        "failed"
       ],
-      "description": "pass requires the three-gesture target met, every timestamp present, elapsed measured, and no unknown refusal class."
+      "description": "v1/v2 rehearsal: pass|fail. v2 real-fire: the journal-derived triple."
+    },
+    "checkpoints_performed": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "v2 rehearsal: the checkpoint count actually exercised (\u00a77's gate reads it)."
+    },
+    "verdict_derivation": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "v2 real-fire: which rows produced the verdict \u2014 a verdict a human cannot audit is the opacity this schema exists to remove.",
+      "additionalProperties": true
+    },
+    "principal_gesture_rows": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "description": "v2 real-fire: the span_ids of the counted principal gestures."
     }
   }
 }

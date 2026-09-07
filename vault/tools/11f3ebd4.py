@@ -68,6 +68,7 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 # ─── lib/ship_extract/ engine (v1.43.0 Stream C; substrate UID c47b9d82) ────
 # v1.56 Lane S: script relocated to vault/tools/; lib/ imports from .tropo/scripts/
@@ -83,6 +84,7 @@ from lib.ship_extract import (
     copy_file,
 )
 from lib.ship_extract.output_writer import write_content
+from lib.governed_path import UID_HEX_PATTERN
 
 
 # ─── Configuration ───────────────────────────────────────────────────────────
@@ -437,7 +439,10 @@ def main():
             try:
                 with open(filepath) as fh:
                     content = fh.read()
-                m = _re.search(r'^uid:\s*([0-9a-f]{8})\s*$', content, _re.MULTILINE)
+                # accepts-both (UID_SHAPES): was 8-hex-only, so this broke the
+                # website kb-content mirror step outright for any post-flip
+                # (12-hex, Stage B composite) article.
+                m = _re.search(r'^uid:\s*(%s)\s*$' % UID_HEX_PATTERN, content, _re.MULTILINE)
                 return m.group(1) if m else None
             except Exception:
                 return None

@@ -138,6 +138,8 @@ from pathlib import Path
 # moved too. Load via same-dir UID-based importlib per v1.56 single-file-truth doctrine;
 # matches the pattern used in tropo-extract.py (561d3c75) for the import-walker dependency.
 import importlib.util as _importlib_util  # noqa: E402
+from lib import content_class as content_class_policy  # noqa: E402
+
 _OS_PATH = Path(__file__).parent / 'tropo-office-styles.py'
 if not _OS_PATH.exists():
     raise SystemExit(
@@ -400,7 +402,7 @@ def _parse_scalar(value):
     # Existing sidecars historically emitted UIDs unquoted. Keep an all-numeric
     # UID such as ``01234567`` textual: integer coercion would drop the leading
     # zero, change its filename, and violate mounted identity continuity.
-    if re.fullmatch(r'[0-9a-f]{8}', value):
+    if re.fullmatch(r'[0-9a-f]{8}(?:[0-9a-f]{4})?', value):  # accepts-both
         return value
     try:
         return int(value)
@@ -622,6 +624,22 @@ def _yaml_str(s):
     return json.dumps(s)
 
 
+def _external_content_class(source_path, frontmatter):
+    """Classify import admission through the shared origin-evidence policy.
+
+    ``frontmatter`` must be the REAL fields being authored for this record.
+    A fresh literal built fresh per call always trips the classifier's first
+    branch and answers ``imported-external`` regardless of what is actually
+    written — wiring the general five-class policy to one pinned answer (W5
+    AC5 Part 2, Argus A166 ruling evt_b51c083be28ac6fe_00000350).
+    """
+    return content_class_policy.infer_content_class(
+        frontmatter,
+        Path(source_path),
+        Path('.'),
+    )
+
+
 def write_sidecar(sidecar_path, uid, source_filename, source_path_rel, original_path,
                   size_bytes, mtime_iso, source_hash, hash_function, folder_uid,
                   governance='tier-1-sidecar', title=None, description='',
@@ -637,11 +655,16 @@ def write_sidecar(sidecar_path, uid, source_filename, source_path_rel, original_
         _serialize_original_styles_yaml(original_styles) + '\n'
         if original_styles else ''
     )
+    sidecar_content_class = _external_content_class(
+        source_path_rel,
+        {'type': 'external-artifact', 'source_hash': source_hash},
+    )
     content = f"""---
 uid: {_yaml_str(uid)}
 type: external-artifact
 status: active
 title: {_yaml_str(title)}
+content_class: {sidecar_content_class}
 owner: {TOOL_NAME}-v{TOOL_VERSION}
 source_filename: {_yaml_str(source_filename)}
 source_path: {_yaml_str(source_path_rel)}
@@ -692,7 +715,7 @@ def resolve_mirror_parent_member(
     if marker.is_file():
         fm = parse_frontmatter(marker)
         uid = fm.get('uid')
-        if isinstance(uid, str) and re.fullmatch(r'[0-9a-f]{8}', uid):
+        if isinstance(uid, str) and re.fullmatch(r'[0-9a-f]{8}(?:[0-9a-f]{4})?', uid):  # accepts-both
             return uid
     if mount_uid:
         return mount_uid
@@ -975,6 +998,9 @@ def append_projection_index_row(studio_root, uid, title, member_of_uid,
         row['mount_uid'] = mount_uid
         if mount_relpath is not None:
             row['mount_relpath'] = mount_relpath
+    # Classified from the row's own real fields, computed after they are all
+    # set so the classifier sees exactly what is about to be written.
+    row['content_class'] = _external_content_class(source_relpath, row)
     with index_path.open('a') as f:
         f.write(json.dumps(row, separators=(',', ':')) + '\n')
         f.flush()
@@ -1188,6 +1214,9 @@ def render_unavailable_projection(metadata, mount_uid, availability):
     status = str(metadata.get('status') or 'active')
     owner = str(metadata.get('owner') or f'{TOOL_NAME}-v{TOOL_VERSION}')
     description = str(metadata.get('description') or '')
+    content_class = content_class_policy.infer_content_class(
+        metadata, Path('.'), Path('.')
+    )
     created = str(metadata.get('created') or now_date())
     created_by = str(metadata.get('created_by') or owner)
     modified = str(metadata.get('modified') or created)
@@ -1199,6 +1228,7 @@ uid: {_yaml_str(uid)}
 type: {entry_type}
 status: {status}
 title: {_yaml_str(title)}
+content_class: {content_class}
 owner: {owner}
 description: {_yaml_str(description)}
 availability: {availability}
@@ -1350,7 +1380,9 @@ def render_vault_projection(uid, sidecar_relpath, source_relpath, title,
         'modified': modified or created or now_date(),
         'modified_by': modified_by or f'{TOOL_NAME}-v{TOOL_VERSION}',
         'schema_version': schema_version,
+        'source_hash': source_hash,
     }
+    metadata['content_class'] = _external_content_class(source_relpath, metadata)
     if availability != 'available':
         return render_unavailable_projection(metadata, mount_uid, availability)
 
@@ -1370,6 +1402,7 @@ uid: {_yaml_str(uid)}
 type: external-artifact
 status: {status}
 title: {_yaml_str(title)}
+content_class: {metadata['content_class']}
 owner: {metadata['owner']}
 source_sidecar: {_yaml_str(sidecar_relpath)}
 source_filename: {_yaml_str(source_filename)}

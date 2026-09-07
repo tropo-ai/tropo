@@ -27,9 +27,13 @@ LEGACY_EVENTS_REL = Path("vault") / "events" / "00-events.jsonl"
 STREAMS_REL = Path("vault") / "events" / "streams"
 SQLITE_PROJECTION_REL = Path("vault") / "events" / "00-events-index.sqlite"
 AUTOHEAL_COOLDOWN_REL = Path("vault") / "events" / ".sqlite-autorebuild-cooldown.json"
+AUTOHEAL_LOCK_REL = Path("vault") / "events" / ".sqlite-autorebuild-lock"
 REBUILD_SCRIPT_REL = Path("vault") / "tools" / "tropo-rebuild-events-sqlite.py"
 AUTOHEAL_COOLDOWN_SECONDS = 300
 AUTOHEAL_TIMEOUT_SECONDS = 120
+# A rebuild lock older than this is stale (the subprocess itself times out at
+# AUTOHEAL_TIMEOUT_SECONDS) and may be broken by the next caller.
+AUTOHEAL_LOCK_TTL_SECONDS = AUTOHEAL_TIMEOUT_SECONDS + 60
 # Set in the rebuild subprocess's environment so a nested import can never
 # re-enter the heal and fork a rebuild storm.
 AUTOHEAL_ACTIVE_ENV = "TROPO_SQLITE_AUTOHEAL_ACTIVE"
@@ -42,7 +46,8 @@ CUTOVER_MAIN_REFS = (
     "refs/remotes/origin/main",
     "refs/heads/main",
 )
-HEX8_RE = re.compile(r"^[0-9a-f]{8}$")
+# HEX8_RE (^[0-9a-f]{8}$) stood here with no caller; removed 2026-09-05
+# (argus-a171, S5 f0152efa4cd6 AC5). Shape checks route through lib/governed_path.
 LOCAL_INSTANCE_RE = re.compile(r"^[0-9a-f]{16}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -347,11 +352,11 @@ def current_activation_for_source(vault_root: Path, source_uid: str) -> str:
         return ""
     for path in agents_dir.glob("*.md"):
         text = path.read_text(encoding="utf-8", errors="replace")
-        party = re.search(r"^party_uid:\s*([0-9a-f]{8})", text, re.MULTILINE)
+        party = re.search(r"^party_uid:\s*([0-9a-f]{8}(?:[0-9a-f]{4})?)", text, re.MULTILINE)  # accepts-both (3d430852)
         if not party or party.group(1) != source_uid:
             continue
         activation = re.search(
-            r"^current_activation_uid:\s*['\"]?([0-9a-f]{8})",
+            r"^current_activation_uid:\s*['\"]?([0-9a-f]{8}(?:[0-9a-f]{4})?)",
             text,
             re.MULTILINE,
         )
@@ -493,22 +498,84 @@ def _autoheal_cooldown_active(
     now: datetime,
     log: Callable[[str], None],
 ) -> bool:
+    """True when the last attempt inside the window FAILED.
+
+    A SUCCESS never arms the cooldown (v1.8, 2026-08-29, talos-t53): the
+    completeness pre-check in ensure_sqlite_projection is the storm brake for
+    the steady state — after a successful rebuild every later caller sees a
+    complete projection and never reaches the heal. A success-armed cooldown
+    instead blocked the NEXT divergence's repair for up to the whole window,
+    which is how two agents booting inside 300s could both warn and neither
+    rebuild (routed by Vela V76, found by Argus A163 at boot). Only a FAILED
+    attempt arms the cooldown — a broken rebuild must not be hammered. Markers
+    from the pre-v1.8 shape (last_attempt with no outcome) block, preserving
+    the old conservative behavior; they age out inside one window.
+    """
     if not cooldown_path.is_file():
         return False
     try:
-        last = datetime.fromisoformat(
-            json.loads(cooldown_path.read_text())["last_attempt"]
-        )
+        marker = json.loads(cooldown_path.read_text())
+        last = datetime.fromisoformat(marker["last_attempt"])
+        outcome = str(marker.get("last_outcome") or "failure")
     except (json.JSONDecodeError, KeyError, ValueError, OSError):
         return False  # an unreadable marker never blocks a repair attempt
     elapsed = (now - last).total_seconds()
     if elapsed >= AUTOHEAL_COOLDOWN_SECONDS:
         return False
+    if outcome == "success":
+        return False
     log(
-        f"INFO: SQLite auto-rebuild skipped (cooldown active, last attempt "
-        f"{elapsed:.0f}s ago; {AUTOHEAL_COOLDOWN_SECONDS}s window)"
+        f"INFO: SQLite auto-rebuild skipped (cooldown active after a failed "
+        f"attempt {elapsed:.0f}s ago; {AUTOHEAL_COOLDOWN_SECONDS}s window). "
+        f"The canonical JSONL union remains delivery truth."
     )
     return True
+
+
+def _autoheal_lock_acquire(lock_path: Path, now: datetime, log: Callable[[str], None]) -> bool:
+    """Serialize genuinely simultaneous rebuilds; honest skip when held.
+
+    mkdir is atomic, so exactly one concurrent caller wins. A lock older than
+    AUTOHEAL_LOCK_TTL_SECONDS is stale (the subprocess it guarded has timed
+    out) and is broken by this caller. The loser does not wait: the winner's
+    rebuild completes momentarily, the next touch of the log sees a complete
+    projection, and this read proceeds on the canonical union meanwhile.
+    """
+    try:
+        lock_path.mkdir(parents=True, exist_ok=False)
+        return True
+    except FileExistsError:
+        try:
+            age = (now - datetime.fromtimestamp(lock_path.stat().st_mtime, tz=timezone.utc)).total_seconds()
+        except OSError:
+            return False
+        if age > AUTOHEAL_LOCK_TTL_SECONDS:
+            try:
+                lock_path.rmdir()
+            except OSError:
+                pass
+            log(
+                f"INFO: broke a stale SQLite auto-rebuild lock ({age:.0f}s old, "
+                f"beyond the {AUTOHEAL_LOCK_TTL_SECONDS}s TTL); proceeding."
+            )
+            try:
+                lock_path.mkdir(parents=True, exist_ok=False)
+                return True
+            except FileExistsError:
+                return False
+        log(
+            "INFO: another caller is rebuilding the SQLite projection right "
+            "now; this read proceeds on the canonical JSONL union and the "
+            "cache will be current on the next touch."
+        )
+        return False
+
+
+def _autoheal_lock_release(lock_path: Path) -> None:
+    try:
+        lock_path.rmdir()
+    except OSError:
+        pass
 
 
 def heal_sqlite_projection(
@@ -530,40 +597,59 @@ def heal_sqlite_projection(
         return False
 
     cooldown_path = vault_root / AUTOHEAL_COOLDOWN_REL
+    lock_path = vault_root / AUTOHEAL_LOCK_REL
     now = datetime.now(timezone.utc)
     if _autoheal_cooldown_active(cooldown_path, now, emit):
         return False
-
-    try:
-        cooldown_path.parent.mkdir(parents=True, exist_ok=True)
-        cooldown_path.write_text(
-            json.dumps({"last_attempt": now.strftime("%Y-%m-%dT%H:%M:%S.%f+00:00")})
-        )
-    except OSError as exc:
-        emit(f"WARN: SQLite auto-rebuild could not record its cooldown marker: {exc}")
-
-    env = dict(os.environ)
-    env[AUTOHEAL_ACTIVE_ENV] = "1"
-    try:
-        result = subprocess.run(
-            [sys.executable, str(vault_root / REBUILD_SCRIPT_REL)],
-            capture_output=True,
-            text=True,
-            timeout=AUTOHEAL_TIMEOUT_SECONDS,
-            env=env,
-        )
-    except Exception as exc:
-        emit(f"WARN: SQLite auto-rebuild failed to launch: {exc}")
+    if not _autoheal_lock_acquire(lock_path, now, emit):
         return False
+    try:
+        try:
+            cooldown_path.parent.mkdir(parents=True, exist_ok=True)
+            cooldown_path.write_text(
+                json.dumps({
+                    "last_attempt": now.strftime("%Y-%m-%dT%H:%M:%S.%f+00:00"),
+                    "last_outcome": "failure",  # flipped to success on exit 0
+                })
+            )
+        except OSError as exc:
+            emit(f"WARN: SQLite auto-rebuild could not record its cooldown marker: {exc}")
 
-    if result.returncode == 0:
-        emit(f"INFO: SQLite auto-rebuild succeeded ({result.stdout.strip()})")
-        return True
-    emit(
-        f"WARN: SQLite auto-rebuild exited {result.returncode}: "
-        f"{result.stderr.strip()}"
-    )
-    return False
+        env = dict(os.environ)
+        env[AUTOHEAL_ACTIVE_ENV] = "1"
+        try:
+            result = subprocess.run(
+                [sys.executable, str(vault_root / REBUILD_SCRIPT_REL)],
+                capture_output=True,
+                text=True,
+                timeout=AUTOHEAL_TIMEOUT_SECONDS,
+                env=env,
+            )
+        except Exception as exc:
+            emit(f"WARN: SQLite auto-rebuild failed to launch: {exc}")
+            return False
+
+        if result.returncode == 0:
+            try:
+                cooldown_path.write_text(
+                    json.dumps({
+                        "last_attempt": now.strftime("%Y-%m-%dT%H:%M:%S.%f+00:00"),
+                        "last_outcome": "success",
+                        "last_success": datetime.now(timezone.utc).strftime(
+                            "%Y-%m-%dT%H:%M:%S.%f+00:00"),
+                    })
+                )
+            except OSError:
+                pass  # the marker is advisory; the rebuild itself succeeded
+            emit(f"INFO: SQLite auto-rebuild succeeded ({result.stdout.strip()})")
+            return True
+        emit(
+            f"WARN: SQLite auto-rebuild exited {result.returncode}: "
+            f"{result.stderr.strip()}"
+        )
+        return False
+    finally:
+        _autoheal_lock_release(lock_path)
 
 
 def ensure_sqlite_projection(

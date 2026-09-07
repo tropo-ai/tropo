@@ -19,7 +19,7 @@ spawnable_by:
 input:
   type: object
   properties:
-    uid: {type: string, description: "8-hex UID of the entry to archive or unarchive"}
+    uid: {type: string, description: "Governed UID of the entry to archive or unarchive"}
     reason: {type: string, description: "Why this entry is being archived (required unless unarchiving)"}
     superseded_by: {type: string, description: "UID of the entry that supersedes this one (optional)"}
     unarchive: {type: boolean, description: "Reverse a prior archive — flip state:archived → active"}
@@ -66,7 +66,14 @@ TODAY = __import__("datetime").date.today().isoformat()
 # Per-type archival rules (v1.68 S1; one-way = refuse --unarchive without --force-with-reason)
 ONE_WAY_TYPES = frozenset({"working-copy", "document", "ship-artifact"})
 
-UID_RE = re.compile(r"^[0-9a-f]{8}$")
+# Governed UID shape and filename resolution have one shared authority.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.governed_path import (  # noqa: E402
+    AmbiguousGovernedPath,
+    is_governed_uid_shape,
+    resolve_governed_path,
+)
+
 
 # ── YAML helpers ──────────────────────────────────────────────────────────────
 
@@ -77,14 +84,29 @@ except ImportError:
     sys.exit(2)
 
 
+
+def _chokepoint_hex() -> str:
+    """3d430852 (archive row): the event id token routes through mint()."""
+    import importlib.util as _ilu
+    from pathlib import Path as _P
+    _spec = _ilu.spec_from_file_location(
+        "_arch_mint_chokepoint", _P(__file__).resolve().parent / "tropo-mint-id.py")
+    _mod = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    return _mod.mint(1, kind="file", studio_root=_P(__file__).resolve().parents[2])[0]
+
 def _split_frontmatter(text: str):
     m = re.match(r"^---\r?\n(.*?\r?\n)---\r?\n?", text, re.DOTALL)
     return (m.group(1), text[m.end():]) if m else (None, text)
 
 
 def _read_entry(uid: str):
-    fp = VAULT_FILES / f"{uid}.md"
-    if not fp.exists():
+    try:
+        fp = resolve_governed_path(uid, VAULT_ROOT, home="vault/files")
+    except AmbiguousGovernedPath as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return None, None, None
+    if fp is None:
         return None, None, None
     text = fp.read_text(encoding="utf-8", errors="replace")
     fm_str, body = _split_frontmatter(text)
@@ -115,7 +137,7 @@ def _emit(event_type: str, uid: str, actor: str, reason: str, superseded_by=None
         events_path = VAULT_ROOT / "vault" / "events.jsonl"
         import secrets, time
         event = {
-            "id": f"archive-{secrets.token_hex(4)}",
+            "id": f"archive-{_chokepoint_hex()}",
             "type": event_type,
             "source": "/tools/archive",
             "source_uid": "6cc9dcdb",
@@ -182,7 +204,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="archive() — flip entry state active↔archived with provenance + event"
     )
-    parser.add_argument("uid", help="8-hex UID of the entry to archive or unarchive")
+    parser.add_argument("uid", help="Governed UID of the entry to archive or unarchive")
     parser.add_argument("--reason", help="Why this entry is being archived")
     parser.add_argument("--superseded-by", metavar="UID", help="UID of the superseding entry")
     parser.add_argument("--unarchive", action="store_true", help="Reverse: state:archived → active")
@@ -192,8 +214,8 @@ def main() -> int:
     args = parser.parse_args()
 
     uid = args.uid.strip()
-    if not UID_RE.match(uid):
-        print(f"ERROR: {uid!r} is not a valid 8-hex UID", file=sys.stderr)
+    if not is_governed_uid_shape(uid):
+        print(f"ERROR: {uid!r} is not a valid governed UID", file=sys.stderr)
         return 1
 
     fm, body, fp = _read_entry(uid)
@@ -241,16 +263,16 @@ def main() -> int:
         print(f"[WARN] {uid} ({title!r}) — already state:archived; no-op")
         return 0
 
-    superseded_by = args.superseded_by
-    if superseded_by and not UID_RE.match(superseded_by.strip()):
-        print(f"ERROR: --superseded-by {superseded_by!r} is not a valid 8-hex UID", file=sys.stderr)
+    superseded_by = args.superseded_by.strip() if args.superseded_by else None
+    if superseded_by and not is_governed_uid_shape(superseded_by):
+        print(f"ERROR: --superseded-by {superseded_by!r} is not a valid governed UID", file=sys.stderr)
         return 1
 
     fm["state"] = "archived"
     fm["archived_at"] = TODAY
     fm["archived_by"] = args.actor
     if superseded_by:
-        fm["superseded_by"] = superseded_by.strip()
+        fm["superseded_by"] = superseded_by
     fm["modified"] = TODAY
     fm["modified_by"] = args.actor
     _write_entry(fp, fm, body or "")

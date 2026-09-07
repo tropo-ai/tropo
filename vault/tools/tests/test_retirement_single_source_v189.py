@@ -151,8 +151,16 @@ class SingleSourceTests(unittest.TestCase):
 
     def test_canonical_teaches_only_flags_the_tool_accepts(self):
         legal = lineage_flags("retire") | {"--root", "--help", "--agent"}
-        cited = set(re.findall(r"(--[a-z][a-z-]+)",
-                               self.canonical + self.pointer))
+        # Scope the scan to lines that invoke tropo-lineage.py. The playbook's
+        # "Drain events" step legitimately cites tropo-emit-event.py's
+        # --correlationid/--final; a whole-document scan attributed those to
+        # the retire tool and failed on a flag it never taught.
+        # (suite-health 2026-09-03)
+        lineage_lines = "\n".join(
+            line for line in (self.canonical + self.pointer).splitlines()
+            if "tropo-lineage.py" in line
+        )
+        cited = set(re.findall(r"(--[a-z][a-z-]+)", lineage_lines))
         illegal = cited - legal
         self.assertEqual(
             illegal, set(),
@@ -376,6 +384,11 @@ class WarnOnlyCompletenessTests(TempStudio):
 
     def _check(self):
         import importlib.util
+        tools = str(REPO / "vault" / "tools")
+        if tools not in sys.path:
+            # in-process exec of tropo-validate.py inherits this sys.path; the
+            # tool does `from lib...` at top level since 2026-08-31.
+            sys.path.insert(0, tools)
         spec = importlib.util.spec_from_file_location(
             "tv_ac5", REPO / "vault" / "tools" / "tropo-validate.py")
         mod = importlib.util.module_from_spec(spec)

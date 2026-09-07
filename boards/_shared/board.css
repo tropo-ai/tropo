@@ -1,0 +1,185 @@
+/* ============================================================================
+   Tropo — Shared Board Stylesheet  ·  boards/_shared/board.css
+   ----------------------------------------------------------------------------
+   THE canonical visual primitive for agent-authored rich boards (the "beautiful
+   board" render half). Closes the duplicated-board-CSS DRY gap (bcc5c943, Vela
+   V58): Argus / Vela / Metis / Cosmo each hand-rolled near-identical inline CSS;
+   this is the single source they pull from instead.
+
+   LIGHT palette on the Tropo brand tokens (Mike-G66 "light everywhere" call +
+   Rendered-Surface Styling Standard v1.3, 58a42127). Self-contained: defines its
+   own :root so a static HTML board renders standalone in the bare L1 zip — no
+   server, no build (HUMAN-NAVIGATION v1.2 — agents author L1-native surfaces).
+
+   The component classes are the UNION of the two proven de-facto patterns:
+     · release TRACK + gate tracker + size/lane tags  (Argus roadmap-board)
+     · tier model + stage grid + badges + ledger       (Metis L2-design-status)
+
+   USAGE (an agent rendering a board):
+     <link rel="stylesheet" href="../_shared/board.css">   (relative to boards/<agent>/)
+   then fill the section components below. Status colors read the AUTHORITATIVE
+   lifecycle state (status-is-arbiter doctrine) — a badge is the real status, not
+   a guess.
+   ============================================================================ */
+
+:root{
+  /* brand + neutrals (light) — the --tropo-* light palette */
+  --tropo-surface:#FFFFFF; --tropo-bone:#F4F2EC; --tropo-bg:#EDEBE5;
+  --tropo-ink:#14181D; --tropo-ink70:#3A4049; --tropo-ink50:#6B7280;
+  --tropo-ink20:#C9CCD2; --tropo-ink10:#E2E4E8; --tropo-ink05:#EDEBE5;
+  --tropo-accent:#FF5E1A; --tropo-accent-ink:#9A3D08; --tropo-accent-tint:#FFD8C4;
+  /* lifecycle / status semantics */
+  --tropo-done:#3F5E22;   --tropo-done-bg:#E7F0DD;
+  --tropo-flight:#9A3D08; --tropo-flight-bg:#FFE9D6;
+  --tropo-next:#7A5600;   --tropo-next-bg:#FFF3D6;
+  --tropo-fenced:#3A4049; --tropo-fenced-bg:#E2E4E8;
+  --tropo-blocked:#9B1C1C;--tropo-blocked-bg:#FBE3E3;
+  --tropo-launch:#7A5600; --tropo-launch-bg:#FFEFC2;
+  /* type */
+  --tropo-display:"Space Grotesk","Inter Tight",system-ui,sans-serif;
+  --tropo-body:"Inter",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+  --tropo-mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+
+/* ── base ─────────────────────────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--tropo-bone);color:var(--tropo-ink);
+  font-family:var(--tropo-body);font-size:15px;line-height:1.5;
+  padding:34px 30px 50px;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:1280px;margin:0 auto;}
+a{color:var(--tropo-accent);text-decoration:none;} a:hover{text-decoration:underline;}
+code{font-family:var(--tropo-mono);font-size:.9em;}
+
+/* ── header ───────────────────────────────────────────────────────────────── */
+header{border-bottom:1px solid var(--tropo-ink10);padding-bottom:20px;margin-bottom:26px;}
+.eyebrow{color:var(--tropo-accent);font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;font-size:11px;}
+h1{font-family:var(--tropo-display);font-size:30px;font-weight:700;margin:6px 0 8px;letter-spacing:-.01em;}
+.thesis{color:var(--tropo-ink50);font-style:italic;font-size:15px;max-width:760px;}
+h2{font-family:var(--tropo-display);font-size:13px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--tropo-ink70);margin:32px 0 14px;font-weight:700;
+  border-bottom:1px solid var(--tropo-ink10);padding-bottom:6px;}
+h3{font-family:var(--tropo-display);font-size:14px;margin-bottom:3px;}
+.sub{color:var(--tropo-ink50);font-size:12px;margin-bottom:14px;}
+
+/* ── state pills (statebar) ───────────────────────────────────────────────── */
+.statebar{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
+.pill{background:var(--tropo-surface);border:1px solid var(--tropo-ink10);border-radius:20px;
+  padding:5px 13px;font-size:12.5px;color:var(--tropo-ink50);}
+.pill b{color:var(--tropo-ink);font-weight:600;}
+.pill.good{border-color:#BFD8A8;} .pill.good b{color:var(--tropo-done);}
+.pill.live{border-color:var(--tropo-accent-tint);} .pill.live b{color:var(--tropo-flight);}
+
+/* ── release / cycle TRACK ────────────────────────────────────────────────── */
+.track{display:flex;gap:0;align-items:stretch;overflow-x:auto;padding-bottom:6px;}
+.rel{flex:1 1 0;min-width:185px;background:var(--tropo-surface);border:1px solid var(--tropo-ink10);
+  border-top:3px solid var(--tropo-ink20);border-radius:11px;padding:15px 14px 16px;
+  position:relative;margin-right:22px;}
+.rel:last-child{margin-right:0;}
+.rel::after{content:"\203A";position:absolute;right:-17px;top:50%;transform:translateY(-50%);
+  color:var(--tropo-ink20);font-size:22px;font-weight:700;}
+.rel:last-child::after{content:"";}
+.rel.flight{border-top-color:var(--tropo-accent);box-shadow:0 6px 22px #FF5E1A14;}
+.rel.next{border-top-color:#D8A93A;}
+.rel.done{border-top-color:var(--tropo-done);}
+.rel.launch{border-top-color:var(--tropo-launch);background:linear-gradient(170deg,#FFF8E8,#FFFFFF);
+  box-shadow:0 8px 26px #FBBF2418;}
+.ver{font-family:var(--tropo-display);font-size:18px;font-weight:700;letter-spacing:-.01em;}
+.rel.launch .ver{color:var(--tropo-launch);}
+.theme{font-weight:600;font-size:14px;margin:11px 0 9px;line-height:1.35;}
+.delivers{list-style:none;font-size:12.5px;color:var(--tropo-ink50);}
+.delivers li{padding-left:14px;position:relative;margin-bottom:4px;}
+.delivers li::before{content:"";position:absolute;left:0;top:8px;width:5px;height:5px;
+  border-radius:50%;background:var(--tropo-accent);opacity:.6;}
+.lanes{margin-top:11px;display:flex;flex-wrap:wrap;gap:4px;}
+.lane{font-size:10.5px;background:var(--tropo-bg);border:1px solid var(--tropo-ink10);
+  border-radius:5px;padding:2px 7px;color:var(--tropo-ink50);}
+.lane.done{border-color:#BFD8A8;color:var(--tropo-done);}
+.debttag{margin-top:11px;font-size:11px;color:var(--tropo-accent-ink);
+  border-top:1px dashed var(--tropo-ink10);padding-top:8px;}
+.debttag span{color:var(--tropo-ink50);}
+
+/* ── status chips (on a track card) ───────────────────────────────────────── */
+.status{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;padding:2px 8px;border-radius:6px;margin-top:7px;}
+.s-flight{background:var(--tropo-flight-bg);color:var(--tropo-flight);}
+.s-next{background:var(--tropo-next-bg);color:var(--tropo-next);}
+.s-planned{background:var(--tropo-bg);color:var(--tropo-ink50);}
+.s-done{background:var(--tropo-done-bg);color:var(--tropo-done);}
+.s-launch{background:var(--tropo-launch-bg);color:var(--tropo-launch);}
+
+/* ── tier model (L1 / L2 / hosted style row) ──────────────────────────────── */
+.tiers{display:flex;gap:10px;align-items:stretch;}
+.tier{flex:1;background:var(--tropo-surface);border:1px solid var(--tropo-ink10);
+  border-radius:10px;padding:14px;}
+.tier b{font-family:var(--tropo-display);font-size:14px;}
+.tier .lbl{font-size:11px;color:var(--tropo-ink50);text-transform:uppercase;letter-spacing:.05em;}
+.tier.here{border:2px solid var(--tropo-accent);}
+.arrow{align-self:center;color:var(--tropo-accent);font-size:20px;font-weight:700;}
+
+/* ── stage grid ───────────────────────────────────────────────────────────── */
+.stages{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;}
+@media(max-width:880px){.stages{grid-template-columns:repeat(2,1fr);}}
+.stage{background:var(--tropo-surface);border:1px solid var(--tropo-ink10);border-radius:8px;
+  padding:10px;font-size:12px;color:var(--tropo-ink50);}
+.stage b{display:block;font-family:var(--tropo-display);font-size:12.5px;margin-bottom:4px;color:var(--tropo-ink);}
+
+/* ── badges (done / in-flight / next / fenced) ────────────────────────────── */
+.badge{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;
+  text-transform:uppercase;letter-spacing:.04em;}
+.b-done{background:var(--tropo-done-bg);color:var(--tropo-done);}
+.b-flight{background:var(--tropo-flight-bg);color:var(--tropo-flight);}
+.b-next{background:var(--tropo-next-bg);color:var(--tropo-next);}
+.b-fenced{background:var(--tropo-fenced-bg);color:var(--tropo-fenced);}
+.b-blocked{background:var(--tropo-blocked-bg);color:var(--tropo-blocked);}
+
+/* ── panels / two-column ──────────────────────────────────────────────────── */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:8px;}
+@media(max-width:880px){.cols{grid-template-columns:1fr;}}
+.card{background:var(--tropo-surface);border:1px solid var(--tropo-ink10);border-radius:11px;
+  padding:18px 18px 16px;margin-bottom:12px;}
+
+/* ── gate tracker ─────────────────────────────────────────────────────────── */
+.gate{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--tropo-ink10);}
+.gate:last-child{border-bottom:none;}
+.dot{flex:none;width:17px;height:17px;border-radius:50%;margin-top:2px;font-size:11px;
+  text-align:center;line-height:17px;font-weight:700;}
+.d-done{background:var(--tropo-done-bg);color:var(--tropo-done);border:1px solid #BFD8A8;}
+.d-prog{background:var(--tropo-flight-bg);color:var(--tropo-flight);border:1px solid var(--tropo-accent-tint);}
+.d-open{background:var(--tropo-bg);color:var(--tropo-ink50);border:1px solid var(--tropo-ink10);}
+.gate .g-label{font-size:13px;color:var(--tropo-ink);}
+.gate .g-when{color:var(--tropo-ink50);font-size:11.5px;}
+.grp{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--tropo-accent);
+  margin:14px 0 4px;font-weight:700;}
+.grp:first-of-type{margin-top:0;}
+
+/* ── tables ───────────────────────────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--tropo-surface);
+  border:1px solid var(--tropo-ink10);border-radius:10px;overflow:hidden;}
+th{text-align:left;color:var(--tropo-ink70);font-family:var(--tropo-display);font-weight:600;
+  font-size:11px;letter-spacing:.05em;text-transform:uppercase;
+  padding:9px 12px;background:var(--tropo-ink05);border-bottom:1px solid var(--tropo-ink10);}
+td{padding:9px 12px;border-bottom:1px solid var(--tropo-ink10);color:var(--tropo-ink50);vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+td.item{color:var(--tropo-ink);}
+.sz{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;}
+.sz.L{background:var(--tropo-blocked-bg);color:var(--tropo-blocked);}
+.sz.M{background:var(--tropo-next-bg);color:var(--tropo-next);}
+.sz.S{background:var(--tropo-done-bg);color:var(--tropo-done);}
+.lands{color:var(--tropo-accent-ink);font-weight:600;white-space:nowrap;}
+.uid{font-family:var(--tropo-mono);font-size:11px;color:var(--tropo-ink50);}
+
+/* ── ledger lists (frame / decisions / in-flight) ─────────────────────────── */
+.ledger{list-style:none;}
+.ledger li{margin-bottom:6px;font-size:13px;padding-left:16px;position:relative;}
+.ledger li::before{content:"·";position:absolute;left:2px;color:var(--tropo-accent);font-weight:700;}
+.ledger b{font-family:var(--tropo-display);}
+
+/* ── footer / legend ──────────────────────────────────────────────────────── */
+footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--tropo-ink10);
+  display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;
+  color:var(--tropo-ink50);font-size:11.5px;}
+.legend{display:flex;gap:16px;flex-wrap:wrap;}
+.legend span{display:flex;align-items:center;gap:6px;}
+.sw{width:11px;height:11px;border-radius:3px;display:inline-block;}
+.note{max-width:560px;line-height:1.55;}

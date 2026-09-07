@@ -242,9 +242,16 @@ class BuiltBoxCase(unittest.TestCase):
         `tropo-smoke.py`, which ship at their real path — come through
         `step_4_copy_ship_entries`, index-driven. Asserting the box from only
         one of the two would call a tool missing when the other step ships it.
+
+        v1.94 (4e9ce4cc row 7): step_3e runs TOO. Without it, an A7 box pin
+        ("no updates-manifest.json in the box") passes VACUOUSLY — nothing
+        copies vault/updates/ at all, so the pin proves nothing about the
+        exclusion. Running the step that would carry the manifest is what
+        makes its absence mean something.
         """
         cls.builder.DRY_RUN = False
         cls.builder.build_from_manifest(str(build_dir), entries)
+        cls.builder.step_3e_copy_vault_updates(str(build_dir))
         if ship_entries:
             cls.builder.step_4_copy_ship_entries(
                 str(build_dir), cls.builder.load_ship_entries(cls.builder.INDEX_PATH)
@@ -918,7 +925,14 @@ class UpdateSourceResolutionTests(unittest.TestCase):
             "the resolver returns nothing even though tracked publication "
             "evidence exists — a candidate box cannot be walked without an address",
         )
-        self.assertTrue(resolved.endswith("updates-manifest.json"), resolved)
+        # Re-pinned v1.94 (4e9ce4cc row 7): the composed address must end at
+        # the releases bucket's manifest path — '/releases/updates-manifest.json'
+        # — proving the address composes through the bucket root the box and
+        # package dialects also compose from, not merely that it ends with a
+        # filename that happens to match.
+        self.assertTrue(
+            resolved.endswith("/releases/updates-manifest.json"), resolved
+        )
 
     def test_disagreement_between_env_and_tracked_evidence_refuses(self):
         builder = self.builder()
@@ -935,6 +949,79 @@ class UpdateSourceResolutionTests(unittest.TestCase):
         self.assertEqual(builder._reconcile_update_origins(same, same), same)
 
 
+class BoxCarriagePins(BuiltBoxCase):
+    """4e9ce4cc rows 7/8 — the A2 migration strip and the A7 manifest-copy
+    exclusion, pinned against the EMITTED box (emit() runs step_3e, so both
+    pins have a real subject; see the emit docstring for the vacuous-pass
+    hazard this closes)."""
+
+    def test_a2_no_undeclared_migration_rides_the_box(self) -> None:
+        migrations = self.build_dir / ".tropo" / "playbooks" / "migrations"
+        riders = sorted(p.name for p in migrations.glob("*.playbook.md")) if migrations.is_dir() else []
+        self.assertEqual(
+            riders,
+            [],
+            "an unwired migration playbook rode the box — bootstrap's "
+            "assert_migration_contract refuses the whole image on it",
+        )
+
+    def test_a2_the_strip_had_a_real_subject(self) -> None:
+        """The vacuity guard: 3ca544f2 is in the fixture's ship entries, so
+        the pin above passed against a strip that actually stripped. If this
+        ever fails because the entry left the catalog, the pin above lost its
+        subject and needs a replacement subject, not deletion."""
+        ship_entries = self.builder.load_ship_entries(self.builder.INDEX_PATH)
+        subjects = [e for e in ship_entries
+                    if str(e.get("path", "")).startswith(".tropo/playbooks/migrations/")]
+        self.assertTrue(
+            subjects,
+            "no migration-path ship entry reached step_4 in this fixture — "
+            "the A2 pin above is vacuous",
+        )
+
+    def test_a2_the_strip_is_revert_sensitive(self) -> None:
+        """Mutation proof, live: with the strip's allow-list opened to the
+        playbook's stem, it SHIPS — proving the strip (not some other step)
+        is what keeps it out. Emit into a scratch box, not the shared one."""
+        ship_entries = self.builder.load_ship_entries(self.builder.INDEX_PATH)
+        subject = next(e for e in ship_entries
+                       if str(e.get("path", "")).startswith(".tropo/playbooks/migrations/"))
+        stem = Path(subject["path"]).stem
+        scratch = self.tmp / "strip-mutation-box"
+        scratch.mkdir(exist_ok=True)
+        original = self.builder._applier_wired_migrations
+        self.builder._applier_wired_migrations = lambda: frozenset({stem})
+        try:
+            self.emit(ship_entries, scratch)
+        finally:
+            self.builder._applier_wired_migrations = original
+        migrations = scratch / ".tropo" / "playbooks" / "migrations"
+        self.assertTrue(
+            any(migrations.glob("*.playbook.md")) if migrations.is_dir() else False,
+            "with the stem wired, the playbook still did not ship — the strip "
+            "test above is not testing the strip",
+        )
+
+    def test_a7_the_box_carries_no_updates_manifest(self) -> None:
+        self.assertFalse(
+            self.box("vault/updates/updates-manifest.json").is_file(),
+            "the shipped dev manifest names its own version current — a fresh "
+            "install reading it believes it is a release behind on day one",
+        )
+
+    def test_a7_the_exclusion_had_a_real_subject(self) -> None:
+        """Non-vacuity both ways: the SOURCE studio carries the tracked
+        manifest (so step_3e had something to exclude), and the box still
+        ships the apply state machine around it (so the exclusion did not
+        accidentally take the tree with it)."""
+        self.assertTrue(
+            (self.studio / "vault" / "updates" / "updates-manifest.json").is_file(),
+            "fixture source has no tracked manifest — the A7 pin above is vacuous",
+        )
+        shipped = [p for p in (self.build_dir / "vault" / "updates").rglob("*") if p.is_file()]
+        self.assertTrue(shipped, "vault/updates/ did not ship at all — the exclusion over-reached")
+
+
 class CustomerModeRebuildTests(unittest.TestCase):
     """AC2 — the argv the validator actually receives, in two Studio shapes."""
 
@@ -945,6 +1032,10 @@ class CustomerModeRebuildTests(unittest.TestCase):
         (tmp / "vault" / "files").mkdir(parents=True)
         (tmp / ".tropo").mkdir(parents=True)
         shutil.copy2(REBUILD_VAULT, tmp / "vault" / "tools" / REBUILD_VAULT.name)
+        # rebuild-vault imports `lib.governed_path` at module scope; without the package
+        # copied in it dies on ImportError BEFORE it can invoke the validator, and the
+        # assertion below then blames the tool for the fixture's own gap.
+        shutil.copytree(TOOLS / "lib", tmp / "vault" / "tools" / "lib")
         # A validator stub that records the argv it was handed. Real subprocess,
         # real argument construction, no Argo validation run.
         (tmp / "vault" / "tools" / "tropo-validate.py").write_text(
@@ -1037,6 +1128,11 @@ class SkillUidCollisionTests(unittest.TestCase):
             "tropo-rebuild-index.py",
             "tropo-navblock-strip.py",
             "tropo-generate-relations-header.py",
+            "tropo-mint-id.py",  # 5854773a: genesis now mints the
+            # studio-identity manifest + composite pair through this sibling
+            # script (loaded by path, not import) -- a studio with only the
+            # rebuilder now refuses at genesis, one dependency later than
+            # the comment above already anticipated for this exact class.
         ):
             source = TOOLS / name
             if source.is_file():

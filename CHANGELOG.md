@@ -7,6 +7,189 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.95.0] - 2026-09-06
+
+The arrival release. v1.94 was closed deferred and will never be used: the box it built carried a
+concrete studio identity from the studio that built it, the sharpest instance of one family, a
+declaration that nothing compared to the world. v1.95 exists so that the box can prove its own
+claims about itself before it is sealed, and so that a stranger's first hour works without anyone
+from Tropo in the room. Two spines, identity and arrival on the customer's side and the compiler
+loop on the build's side, plus three small adjacents from the v1.94 close. Small, by the founder's
+constraint, and the first release built through its own guard registry.
+
+### Added
+- **A studio is born on your machine, not in the box.** The build no longer mints inside the box:
+  the shipped box carries no identity manifest and no starter records, and the pre-seal guard
+  refuses any box that does, with a negative control proving the defect cannot come back. On first
+  boot, genesis mints on your machine: a random prefix that every new identifier carries, the vault
+  entity, your studio's own inbox. Every agent detects a missing identity; only Po mints; nothing
+  mints silently.
+- **Po's arrival beat.** Po greets, notices the studio has no name yet, asks your name and the
+  studio's name and purpose, mints through that conversation (your founder principal goes through
+  the same governed mint every identifier does), and offers a first agent by name: Cal, Darin, or
+  one from scratch. The offer and its answer are events on the bus, two new registered types in the
+  events capsule, so the arrival is auditable afterwards.
+- **One guard registry, two run points.** Every build guard is now a registered gate in the same
+  release-gate registry the release runner reads. Run point one, on the tree before the word
+  "build": every tree-checkable guard runs and reports all of its failures at once, each naming in
+  one line the harm it prevents. Run point two, on the assembled box before the zip closes: every path
+  the shipped playbooks and the concierge script tell a reader to open resolves inside the box
+  (both arms, paths and governed identifiers; prose in other shipped documents is not yet in the
+  gate's reading set), the shipped principles are complete, the changelog names the version
+  shipped, and no concrete studio identity is in the box. A test walks the registry against both
+  run points and fails on asymmetry; the runner refuses a build without a clean run-point-one row
+  for the same tree commit. The v1.95 build is the first to pass through it.
+- **The studio smoke test ships.** One script, five real operations, run against the real studio,
+  for the class of failure that cost the most weeks: a gate that fails closed on normal work.
+- **The Studio Map and the Architecture Review ship as HTML.** The build renders the map inside the
+  box, box-honest by construction, with a visual of the studio (three layers, the subsystems, live
+  counts) and a curated resources section. Five derived sections read the index, each hub's own
+  frontmatter, the subsystem registry, the kernel invariants and the review itself at render time,
+  and the render refuses to stay silently stale when any of those inputs moves. The review ships
+  with its fifteen figures. A render on your own machine adds an overlay of your studio's agents,
+  projects and boards.
+- **Memory sovereignty reaches every agent you create.** The shipped operating principles now carry
+  the memory principle (a learning goes to Tropo memory, never to a harness-private store), and the
+  box-side guard checks the shipped principles against their own declared list so the baseline
+  cannot regress without a refusal.
+
+### Changed
+- **Shipped instructions are cured to the box, not to the studio that wrote them.** Before the
+  first candidate, 101 dead references in shipped playbooks (26 paths, 75 governed identifiers)
+  reached zero: repointed to what ships, retired to plain words, or declared as files the runbook
+  itself creates; superseded playbooks and the kernel's history companions leave the box by
+  ship-manifest deny rows; a reference rooted in a shell variable is read as a parameter, not a
+  path. Nobody widened a skip list.
+- **The ship manifest decides, and it is armed for candidates too.** The candidate builder now arms
+  the ship-verdict resolver exactly as the release build does. Until this release no deny row had
+  ever applied to a candidate.
+- **Machine-local state left git.** The dirty counter and the per-reader event cursors and receipts
+  are untracked, so a founder's fast-forward no longer refuses on them.
+
+### Fixed
+- **A missing studio identity is a warning, not a fatal floor.** The studio status tool reported a
+  fresh box as broken; found by the arrival-walk harness on a candidate and cured under the freeze
+  rule, re-walked to zero findings.
+- **Birth leaves no stale retirement stamp.** A new generation's unified entry no longer carries its
+  predecessor's `retired_at`.
+- **The retirement driver refused every retirement for a day** because its registry pinned a
+  pre-ruling playbook; cured and verified on live runs.
+- **The smoke test's negative arm could not see its own plant** after a legacy-alias change; the
+  fixture now removes visibility as intended, and the suite was re-verified by a non-author.
+
+### Not in this build, stated so nothing above reads as more than it is
+- **Four carries to v1.96, each recorded on the plan.** (1) Shipped templates and capsules hard-code
+  the authoring studio's inbox identifier as the fallback parent for minted tasks, so a task you
+  mint may parent to an inbox your studio never has until the mint resolves your own
+  (`f015167671b3`). (2) A full index rebuild drops hub frontmatter keys that a single-entry rebuild
+  keeps (`f015c688b6c0`); the shipped map reads the hub files and shows the right picture, but
+  another reader of the index row may see the key missing. (3) The plan-lock tool and the release
+  preflight disagree on which plan statuses are lockable, and only `design` satisfies both; a studio
+  cutting its own release locks from `design` until the pair agree. (4) `extraction_scope` on an
+  entry does not decide whether it ships; the ship manifest does, and your studio's inbox is
+  withheld from the box by design because genesis mints your own.
+- **Refusal scoping is cut to v1.96** by ruling; the compiler loop stays half-cured for one release,
+  knowingly. Also out by decision, each named on the plan: the re-targets of six specs locked
+  against shipped releases, the derived documentation site (the review as narrative, a rendered
+  release-by-subsystem index, hubs retired), the v1.94 close-out defects, the upgrade-walk findings
+  on the v1.93 applier, and Po's prototype tools.
+- **The release's own acceptance had not run when this was written.** The cold-stranger arrival walk
+  on the shipped box, the join-ceremony walk that v1.94 deferred with its fire, the release-mode
+  validator compare, the harness pass, the founder's external test and the cold-boot walk all run on
+  the first sealed candidate, and the fire waits on them. This entry is the record of what is built;
+  those runs are the record of whether it works where it is going.
+
+## [1.94.0] - 2026-09-04
+
+The team release. Every release before this one shipped to the studio that built it. This one goes
+to a customer studio and the two or three colleagues who work in it, federated: their own studio
+identity, their own team vault, a real merge path when two of them edit the same governed file, and
+a first hour that does not assume they know any of this. The founder's own standing milestone rides
+inside it — *the dashboard and orient usable, then the upgrade* — and the discovery that reshaped
+the plan was that the delivery channel itself was broken: every update package after v1.86.0
+returned an error from the live bucket, and the customer studio was stranded mid-upgrade with its
+history uncommitted. Nothing in this release reaches anyone until that channel works.
+
+### Added
+- **You can ask orient a question from the cockpit and get a cited answer.** The question goes
+  through the dispatch primitive, into the engine, across the extracted text of your real imported
+  documents, and comes back with citations that resolve to files on disk. The refusal that used to
+  reject imported documents is gone; before any provider call you see the count, the names, the
+  token estimate and the dollar estimate, and you approve or you don't. Every record now carries a
+  content classification, stamped at origin and backfilled with an honest `unclassified` wherever
+  origin cannot be known, so the visibility surface reports what is true now rather than what was
+  true in July. Proven end to end, negative control included: disconnect the cache and the same
+  question returns nothing.
+- **A studio gets its own identity the first time it boots.** Genesis mints the studio's identity
+  manifest, its entity name, and its founding pair of records through the real collision-checked
+  mint — not fixed placeholders — so no two studios share an anchor. Every new governed identifier
+  is now a composite: an issued prefix that says which studio minted it plus a random local half,
+  and governed files carry the whole identifier in a readable name, `<slug>-<uid>.md`.
+- **Two colleagues can share one vault.** A colleague joins by one owner-signed, atomic gesture;
+  the publish boundary opens so a teammate-authored record can cross it; and the merge seam is
+  wired live rather than sitting built and unreachable: `merge=tropo` on governed paths, a
+  pre-commit gate that refuses a broken governed file by name, and a delete/change race that is
+  detected and surfaced rather than silently resolved git's way. Proven against real two-clone git
+  exercises with a local bare remote, not fixtures.
+- **A new studio ships with two companions and a first-boot orientation.** Cal and Darin are
+  fully formed crew members — charter, soul, a few true memories about working in a studio —
+  shipped as content and minted as identity per studio at genesis, so a companion in your studio
+  is yours. On first boot Po walks the new owner through a rendered map of the studio; the walk
+  can be escaped in one gesture and does not repeat. The boards render kit ships, `mint --type
+  project` works from a bare install, and the dependency preflight runs at both repair entries so
+  a missing package is named with its cure instead of a stack trace.
+- **A release is one gesture.** `fire --authorize` absorbs sign-off, stage and publish; every gate
+  is internal and loud; the actor is a UID and a display name is refused, so the founder's word
+  cannot be forged at the closed layer. The delivery channel behind it is rebuilt: the five
+  surfaces that carried dead update URLs are cured, the channel is verified after any publish on
+  both publish paths (the path the previous version actually shipped through had never touched
+  it), and applying an update no longer wipes the customer's own update history.
+
+### Changed
+- **An acceptance criterion can no longer report PASS having run nothing.** A test selector that
+  matched no tests printed "Ran 0 tests / OK" and exited clean, so implementing three of nine
+  behaviors let six report complete. Forty-one of ninety-two criteria across this release's locked
+  specs could do that; a static selector check now refuses the shape, and every automated
+  criterion names a fully-qualified test that fails loudly on absence.
+- **Retirement notices name the letter.** An agent's retirement broadcast now points to its
+  handoff letter and reflection; before this, thirty-seven of a hundred and one ever had.
+
+### Fixed
+- **Team-vault visibility: a member of a mounted team vault can see their own team's nodes.** ADR-050 a-prime with the legacy-alias half (`a8d21fc76`; Argus A168's ruling, Talos T61's build, three negative controls firing). **Included after the plan lock, on Mike's word 2026-09-04, verbatim "include it"** — it sits under no locked member spec, so by scope discipline alone it was v1.95; it fixes the release's own headline scenario and the join walk at the pre-fire checkpoint exercises it live. Verified three ways before the ruling (seven suites clean, the eighth at its one pre-existing failure). Disclosed here, on the checkpoint sheet in the release run folder, and on the release board; the plan's fan-in digest binds the fourteen member specs and is untouched.
+- **The join ceremony's group-generation leg is persisted where the finalizer reads it, and the draft's home is ruled.** Rehearsing the join walk against a scratch studio before the box existed found that `tropo-join-teammate.py apply` journaled a group-generation leg it never persisted, so the first ceremony's output could not be mounted (`GROUP_NOT_FOUND` at the mount gate; finding `f015bac58b28`). **Included after the plan lock on Mike's word 2026-09-04, verbatim "1. Fix it"**: the leg lands at the finalizer's own source (Talos T61), the draft's home is ruled as the studio-root `groups/` that every other reader of the chain resolves (Argus A169, proven both ways against a fixture authority genesis: ruling on, the mount lands; ruling off, `GROUP_NOT_FOUND`), the join-a-teammate playbook's Step 5 is rewritten to the sequence that landed, and the AC1 suite carries the negative control. Re-verified as a non-author by the release driver after the constant landed (record `f0154d8c078c`: AC1–AC6 each one test, the full suite eight for eight). The join walk at the pre-fire checkpoint proves it in the box.
+- **Minting a titled governed file works with readable filenames on.** Three independent guards
+  disagreed about what a new titled file's name should be, and the last of them predated readable
+  names entirely; every titled mint was refused. Each fix was proven by reverting it and watching
+  the original refusal return.
+- **First boot no longer refuses its own genesis.** Two sibling gates that guard against building
+  an index from uncommitted inputs were refusing the very files genesis had just minted.
+- **Identifiers resolve case-sensitively on macOS.** Three readers accepted an uppercase
+  identifier through a case-insensitive filesystem; one of them was a telemetry segment-floor check
+  that a case-mismatched identifier silently skipped.
+- **The pre-commit governance hook validates on stock macOS.** It used a bash 4 builtin; macOS
+  ships bash 3.2 as `/bin/bash`, so on every stock Mac the hook reported itself installed and
+  validated nothing.
+
+### Not in this build, stated so nothing above reads as more than it is
+- **The shadow election walk informs and does not yet promote.** The ship manifest (DENY /
+  SHADOW / SHIP-AS-IS) is built and armed before every copy in this build; every path in the box
+  carries one effective verdict and a planted DENY provably never ships. What is not built is the
+  election that promotes a NEW source, such as a real soul letter, into the shadow set as reading
+  material for new owners: the drift walk ships, says which twins have moved, and re-elects an
+  existing twin; promotion is v1.95. *(This
+  bullet said the manifest had no code until 2026-09-04; the tree armed it on 2026-09-02.)*
+- **Eleven acceptance criteria on locked specs are honest reds.** Their suites are named and not
+  yet written. They are red on purpose: a red, fully-qualified selector is the build queue, and
+  this release does not convert a decidable criterion to a manual walk to make red go away.
+- **Two criteria are carried to v1.95 by ruling.** A legacy-corpus stability proof whose
+  before/after baseline cannot be reconstructed now that the change has landed, and a build-time
+  warning for scope promotion whose detection heuristic has never been specified.
+- **The release's own acceptance has not run.** The rehearsal of the customer upgrade on a fresh
+  clone, the live upgrade, the first real team-vault mount, the companions rehearsal from the
+  shipped box, and the stranger's cold read of that box all happen on the founder's machine and
+  have not happened yet. This entry is the record of what is built; those runs are the record of
+  whether it works where it is going.
+
 ## [1.93.0] - 2026-08-27
 
 One question, one member, one number. v1.92 proved the gates and moved the cost to the operator's
@@ -412,7 +595,11 @@ live dashboard: boards/v1.91-release-dashboard.html).
 
 Versions prior to 1.69.0 shipped before Tropo's public release; their detailed history is preserved in the project's internal records.
 
-[Unreleased]: https://github.com/tropo-ai/tropo/compare/v1.90.0...HEAD
+[Unreleased]: https://github.com/tropo-ai/tropo/compare/v1.94.0...HEAD
+[1.94.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.94.0
+[1.93.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.93.0
+[1.92.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.92.0
+[1.91.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.91.0
 [1.90.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.90.0
 [1.88.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.88.0
 [1.87.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.87.0

@@ -279,6 +279,16 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+# 3d430852 suite migration 5 of 7 (T55): mint-output assertions follow the
+# AUTHORITY mint constant — Stage A mints 8-hex (assertion passes today
+# unchanged); when Stage B flips MINT_HEX_LEN to 12 this follows the flip
+# instead of breaking. Never a second mint-shape definition.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.governed_path import MINT_HEX_LEN as _MINT_LEN  # noqa: E402
+from lib.audience_context import VAULT_UID_RE  # noqa: E402
+
+_MINT_FILENAME_SHAPE = r"[0-9a-f]{%d}\.md" % _MINT_LEN
+
 TESTS_DIR = Path(__file__).resolve().parent
 TOOLS_DIR = TESTS_DIR.parent
 LIVE_STUDIO = TOOLS_DIR.parent.parent
@@ -1228,6 +1238,20 @@ def break_everything_rotten_except(studio: Path, keep: str) -> RotPlant:
 # quietly became a granted segment would turn the plant into a no-op.
 UNGRANTED_VAULT_NODE_UID = "5eb00002"
 
+# The ADR-050 vault CODE this fixture's manifest declares - a distinct
+# collision domain from the governed-record uid above (lib/segment.py's
+# ``read_vault_manifest_uid`` reads THIS field, ``vault_uid``, and validates
+# it against ``VAULT_UID_RE`` = ``^[a-z0-9]{4,6}$``; an 8-hex governed uid
+# never matches that grammar). No ``compose.lock`` mount binds this code to
+# any group in this fixture, so a segment equal to it is granted to nobody -
+# that absence, not a lookup in the group registry, is what makes the plant
+# a real "no principal's audience reaches here" state.
+UNGRANTED_VAULT_CODE = UNGRANTED_VAULT_NODE_UID[:6]
+assert VAULT_UID_RE.fullmatch(UNGRANTED_VAULT_CODE), (
+    f"{UNGRANTED_VAULT_CODE!r} must satisfy the ADR-050 vault-code grammar "
+    "or read_vault_manifest_uid will reject it and the plant no-ops again"
+)
+
 
 class AudiencePlant(typing.NamedTuple):
     """What the audience plant moved: which vault-node the studio now declares
@@ -1257,13 +1281,26 @@ def break_everything_out_of_the_audience(studio: Path) -> AudiencePlant:
 
     So the audience is emptied through the OTHER branch of the one true segment
     source. ``lib.segment.derive_segment`` case 1: when the vault root carries
-    a ``.tropo/vault-manifest.md``, EVERY node under it derives that
-    vault-node's uid as its segment, ahead of any ``extraction_scope``
-    reasoning. A studio that declares itself a vault-node the installed group
-    authority does not grant is a real state - a forked or newly-minted
-    vault-node before the authority is regenerated to cover it - and in it not
-    one node of the studio is inside any principal's audience. This is also the
-    same lever the walk's own suites use to place a node in a segment
+    a ``.tropo/vault-manifest.md`` whose frontmatter parses to a valid
+    ``vault_uid`` (``lib.segment.read_vault_manifest_uid``, ADR-050 vault-code
+    grammar ``^[a-z0-9]{4,6}$`` - a DIFFERENT collision domain from the
+    governed-record ``uid`` field also in that frontmatter), EVERY node under
+    the root derives that vault CODE as its segment, ahead of any
+    ``extraction_scope`` reasoning and ahead of the ``private`` legacy alias
+    entirely - the alias only ever fires inside case 2's os/private
+    discriminator. A manifest carrying only ``uid`` (no ``vault_uid``) fails
+    ``read_vault_manifest_uid``'s validation and falls straight back through
+    to case 2, which is exactly the no-op this plant used to be (measured
+    2026-09-05, task ``f015cf968e3f``): the alias re-landed, ``private``
+    resolved to a segment the widest principal reads, and the plant never
+    reached case 1 at all.
+
+    With a real ``vault_uid`` in place, this fixture's ``compose.lock`` binds
+    no group to that vault code (there is no mount for it), so a segment
+    equal to it is granted to nobody - a forked or newly-minted vault-node
+    before the authority is regenerated to cover it - and in it not one node
+    of the studio is inside any principal's audience. This is also the same
+    lever the walk's own suites use to place a node in a segment
     (``test_viewer_projection._RootFactory.manifest_root``), so the plant and
     the code under test agree about what a segment is.
 
@@ -1309,6 +1346,7 @@ def break_everything_out_of_the_audience(studio: Path) -> AudiencePlant:
     manifest.write_text(
         "---\n"
         f"uid: {UNGRANTED_VAULT_NODE_UID}\n"
+        f"vault_uid: {UNGRANTED_VAULT_CODE}\n"
         "type: vault\n"
         "title: a vault-node this authority does not grant\n"
         "---\n\n"
@@ -2201,7 +2239,7 @@ class AC2NonDestructiveTests(SmokeCase):
         )
         self.assertTrue(
             all(
-                re.fullmatch(r"[0-9a-f]{8}\.md", Path(t).name)
+                re.fullmatch(_MINT_FILENAME_SHAPE, Path(t).name)
                 and "recycle" in Path(t).parts[0]
                 for t in tombstones
             ),

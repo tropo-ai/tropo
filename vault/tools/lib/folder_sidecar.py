@@ -51,7 +51,7 @@ RECORD_NAMESPACE: Final = ".tropo/folder-sidecars/v1/records"
 GRAPH_HASH_DOMAIN: Final[bytes] = b"tropo.c0-graph.v1\n"
 
 FILE_UID_RE: Final = re.compile(
-    r"^(?:[0-9a-f]{8}|[a-z0-9]{4,6}-[0-9a-f]{8})$"
+    r"^(?:[0-9a-f]{8}(?:[0-9a-f]{4})?|[a-z0-9]{4,6}-[0-9a-f]{8}(?:[0-9a-f]{4})?)$"  # accepts-both, both arms
 )
 VAULT_CODE_RE: Final = re.compile(r"^[a-z0-9]{4,6}$")
 HASH_RE: Final = re.compile(r"^[0-9a-f]{64}$")

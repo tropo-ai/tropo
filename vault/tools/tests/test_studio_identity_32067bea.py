@@ -21,6 +21,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
+# 3d430852 suite migration: mint-output assertions follow the AUTHORITY mint
+# constant incl. studio_id — Stage A passed unchanged; the Stage B flip is
+# followed, not broken. The team-segment parked-seam cases assert their
+# refusal exactly as before.
+_TOOLS = Path(__file__).resolve().parents[1]
+if str(_TOOLS) not in sys.path:
+    sys.path.insert(0, str(_TOOLS))
+from lib.governed_path import MINT_HEX_LEN as _MINT_LEN  # noqa: E402
+_MINT_SHAPE = r'^[0-9a-f]{%d}$' % _MINT_LEN
+
 ROOT = Path(__file__).resolve().parents[3]
 TOOLS = ROOT / 'vault' / 'tools'
 sys.path.insert(0, str(TOOLS))
@@ -61,12 +71,14 @@ class TestAC1ManifestShape(unittest.TestCase):
             manifest_path = fx.root / '.tropo' / 'studio-identity.md'
             self.assertTrue(manifest_path.exists())
             for field in ('studio_id', 'mint_prefix', 'created', 'minted_by',
-                          'hq_registered', 'schema_version'):
+                          'hq_registered', 'schema_version', 'entity_name'):
                 self.assertIn(field, identity, f'missing required field {field!r}')
-            self.assertRegex(identity['studio_id'], r'^[0-9a-f]{8}$')
+            self.assertRegex(identity['studio_id'], _MINT_SHAPE)  # follows the authority constant
             self.assertRegex(identity['mint_prefix'], r'^[a-z0-9]{4,6}$')
             self.assertIs(identity['hq_registered'], False)
             self.assertEqual(identity['minted_by'], 'test-suite')
+            # 5854773a AC3: silent folder-name default, never blank.
+            self.assertEqual(identity['entity_name'], fx.root.resolve().name)
         finally:
             fx.cleanup()
 
@@ -136,41 +148,49 @@ class TestAC3GenesisIdempotent(unittest.TestCase):
 
 
 class TestAC4SegmentAwareShapes(unittest.TestCase):
-    """AC4 — same tool, two segments, two UID shapes on the SAME studio."""
+    """AC4 at the Stage B flip (3d430852): private/default mints are COMPOSITE
+    — the studio's issued 4-hex prefix + 8 local hex, no separator — and the
+    team segment PARKS with a loud refusal: the hyphenated
+    <mint_prefix>-<hex> identifier retired when composites became the mint."""
 
-    def test_team_prefixed_private_bare_same_studio(self):
+    def test_team_parks_private_mints_composite_same_studio(self):
         fx = StudioFixture()
         try:
             identity = MINT.mint_studio_identity(root=fx.root)
+            prefix = identity['mint_prefix']
+            self.assertRegex(prefix, r'^[0-9a-f]{4}$',
+                             'the issued prefix is exactly 4-hex at the flip')
             private_uid = MINT.mint(1, kind='file', segment='private', studio_root=fx.root)[0]
-            team_uid = MINT.mint(1, kind='file', segment='team', studio_root=fx.root)[0]
-
-            self.assertRegex(private_uid, r'^[0-9a-f]{8}$',
-                              'private-segment mint must stay bare 8-hex')
-            self.assertRegex(team_uid, rf"^{identity['mint_prefix']}-[0-9a-f]{{8}}$",
-                              'team-segment mint must be <mint_prefix>-<8hex>')
-            self.assertNotEqual(private_uid, team_uid)
+            self.assertRegex(private_uid, rf"^{prefix}[0-9a-f]{{8}}$",
+                             'private-segment mint is composite: issued prefix + 8 local, no separator')
+            with self.assertRaises(ValueError) as parked:
+                MINT.mint(1, kind='file', segment='team', studio_root=fx.root)
+            self.assertIn('PARKED', str(parked.exception),
+                          'the team park names itself')
         finally:
             fx.cleanup()
 
-    def test_agent_kind_also_segment_aware(self):
+    def test_agent_kind_composite_and_team_parks_too(self):
         fx = StudioFixture()
         try:
             identity = MINT.mint_studio_identity(root=fx.root)
             private_uid = MINT.mint(1, kind='agent', segment='private', studio_root=fx.root)[0]
-            team_uid = MINT.mint(1, kind='agent', segment='team', studio_root=fx.root)[0]
-            self.assertRegex(private_uid, r'^[0-9a-f]{8}$')
-            self.assertTrue(team_uid.startswith(identity['mint_prefix'] + '-'))
+            self.assertTrue(private_uid.startswith(identity['mint_prefix']))
+            self.assertRegex(private_uid, rf"^[0-9a-f]{{12}}$")
+            with self.assertRaises(ValueError):
+                MINT.mint(1, kind='agent', segment='team', studio_root=fx.root)
         finally:
             fx.cleanup()
 
-    def test_default_segment_is_private(self):
+    def test_default_segment_mints_composite(self):
         fx = StudioFixture()
         try:
-            MINT.mint_studio_identity(root=fx.root)
+            identity = MINT.mint_studio_identity(root=fx.root)
             default_uid = MINT.mint(1, kind='file', studio_root=fx.root)[0]
-            self.assertRegex(default_uid, r'^[0-9a-f]{8}$',
-                              'default segment must remain private/bare (no regression)')
+            self.assertRegex(default_uid,
+                             rf"^{identity['mint_prefix']}[0-9a-f]{{8}}$",
+                             'the default mint carries the issued prefix — '
+                             'every new bare mint is composite (no regression to flat random)')
         finally:
             fx.cleanup()
 
@@ -180,6 +200,22 @@ class TestAC4SegmentAwareShapes(unittest.TestCase):
             MINT.mint_studio_identity(root=fx.root)
             with self.assertRaises(ValueError):
                 MINT.mint(1, kind='file', segment='team', prefix='manual', studio_root=fx.root)
+        finally:
+            fx.cleanup()
+
+    def test_explicit_prefix_parks_at_the_flip(self):
+        """The S8 --prefix seam retired with the hyphen (3d430852): found live
+        by Metis at the flip verify — `--prefix abcd` produced
+        abcd-f015b0743329, a ruled-out hyphen wrapped around an
+        already-namespaced composite. Substitution was considered and refused:
+        an explicit foreign prefix would mint identity in a namespace this
+        studio cannot assign (the issued-prefix ruling cuts both ways)."""
+        fx = StudioFixture()
+        try:
+            MINT.mint_studio_identity(root=fx.root)
+            with self.assertRaises(ValueError) as parked:
+                MINT.mint(1, kind='file', prefix='abcd', studio_root=fx.root)
+            self.assertIn('PARKED', str(parked.exception))
         finally:
             fx.cleanup()
 
@@ -193,9 +229,13 @@ class TestAC4SegmentAwareShapes(unittest.TestCase):
 
 
 class TestAC5FailLoudOnMissingOrCorruptManifest(unittest.TestCase):
-    """AC5 — a team-segment write with a MISSING or CORRUPT manifest FAILS LOUD.
+    """AC5 at the Stage B flip — the manifest-reading mint FAILS LOUD.
 
-    Never silently falls back to an unprefixed or fabricated identity.
+    The team segment parked, so the fail-loud contract rides the BARE mint:
+    composite generation reads the studio-identity manifest, and a missing or
+    corrupt one raises StudioIdentityError — never silently falls back to a
+    flat-random or fabricated identity (Metis-ruled: a studio never
+    self-assigns a prefix; refuse-if-absent is the design).
     """
 
     def test_missing_manifest_raises_studio_identity_error(self):
@@ -203,7 +243,7 @@ class TestAC5FailLoudOnMissingOrCorruptManifest(unittest.TestCase):
         try:
             # No mint_studio_identity() call — the manifest genuinely does not exist.
             with self.assertRaises(MINT.StudioIdentityError):
-                MINT.mint(1, kind='file', segment='team', studio_root=fx.root)
+                MINT.mint(1, kind='file', studio_root=fx.root)
         finally:
             fx.cleanup()
 
@@ -212,8 +252,8 @@ class TestAC5FailLoudOnMissingOrCorruptManifest(unittest.TestCase):
         fx = StudioFixture()
         try:
             try:
-                MINT.mint(1, kind='file', segment='team', studio_root=fx.root)
-                self.fail('team-segment mint with no manifest must raise, not return a UID')
+                MINT.mint(1, kind='file', studio_root=fx.root)
+                self.fail('composite mint with no manifest must raise, not return a UID')
             except MINT.StudioIdentityError:
                 pass
         finally:
@@ -226,7 +266,7 @@ class TestAC5FailLoudOnMissingOrCorruptManifest(unittest.TestCase):
             manifest_path.parent.mkdir(parents=True)
             manifest_path.write_text('---\nstudio_id: [unterminated\n---\n', encoding='utf-8')
             with self.assertRaises(MINT.StudioIdentityError):
-                MINT.mint(1, kind='file', segment='team', studio_root=fx.root)
+                MINT.mint(1, kind='file', studio_root=fx.root)
         finally:
             fx.cleanup()
 
@@ -237,7 +277,7 @@ class TestAC5FailLoudOnMissingOrCorruptManifest(unittest.TestCase):
             manifest_path.parent.mkdir(parents=True)
             manifest_path.write_text('# Not a manifest at all\n', encoding='utf-8')
             with self.assertRaises(MINT.StudioIdentityError):
-                MINT.mint(1, kind='file', segment='team', studio_root=fx.root)
+                MINT.mint(1, kind='file', studio_root=fx.root)
         finally:
             fx.cleanup()
 
@@ -251,7 +291,7 @@ class TestAC5FailLoudOnMissingOrCorruptManifest(unittest.TestCase):
                 encoding='utf-8',
             )
             with self.assertRaises(MINT.StudioIdentityError):
-                MINT.mint(1, kind='file', segment='team', studio_root=fx.root)
+                MINT.mint(1, kind='file', studio_root=fx.root)
         finally:
             fx.cleanup()
 
@@ -272,7 +312,7 @@ class TestAC5FailLoudOnMissingOrCorruptManifest(unittest.TestCase):
                 encoding='utf-8',
             )
             with self.assertRaises(MINT.StudioIdentityError):
-                MINT.mint(1, kind='file', segment='team', studio_root=fx.root)
+                MINT.mint(1, kind='file', studio_root=fx.root)
         finally:
             fx.cleanup()
 
@@ -293,17 +333,20 @@ class TestAC5FailLoudOnMissingOrCorruptManifest(unittest.TestCase):
                 encoding='utf-8',
             )
             with self.assertRaises(MINT.StudioIdentityError):
-                MINT.mint(1, kind='file', segment='team', studio_root=fx.root)
+                MINT.mint(1, kind='file', studio_root=fx.root)
         finally:
             fx.cleanup()
 
-    def test_private_segment_unaffected_by_missing_manifest(self):
-        """The fail-loud rule is scoped to team writes — private must keep working
-        with no manifest at all (today's default single-Studio behavior, unchanged)."""
+    def test_private_segment_requires_the_manifest_at_the_flip(self):
+        """Doctrine INVERTED at the Stage B flip: private (bare composite) mints
+        READ the manifest and refuse without it — a studio must never
+        self-assign a random prefix (Metis-ruled, 3d430852). This row asserted
+        the retired single-Studio behavior until the flip; it now pins the
+        refuse-if-absent contract that makes the composite seam honest."""
         fx = StudioFixture()
         try:
-            uid = MINT.mint(1, kind='file', segment='private', studio_root=fx.root)[0]
-            self.assertRegex(uid, r'^[0-9a-f]{8}$')
+            with self.assertRaises(MINT.StudioIdentityError):
+                MINT.mint(1, kind='file', segment='private', studio_root=fx.root)
         finally:
             fx.cleanup()
 

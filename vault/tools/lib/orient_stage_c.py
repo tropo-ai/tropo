@@ -83,12 +83,16 @@ K stays replay-tunable on recall@K. Do NOT re-derive it from cost.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import re
+import stat
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Optional
 
+from lib import governed_path
 from lib import metered_model, span_guard
 from lib.distiller_model_policy import MODEL_ROUTES, SEGMENT_CLASSES
 from lib.viewer_projection import OS_SEGMENT
@@ -106,6 +110,7 @@ __all__ = [
     "BODY_ROT_SCREENED",
     "FIRST_SCALE_REHEARSAL_REQUIRED",
     "RESPONSE_MAX_BYTES",
+    "capped_body",
     "FENCE_PROHIBITION",
     "C1_SYSTEM_PROMPT",
     "C2_SYSTEM_PROMPT",
@@ -125,6 +130,11 @@ __all__ = [
     "ReplayArtifact",
     "ReplayMetric",
     "CaptureLog",
+    "BodySourceError",
+    "StageCBodySource",
+    "StudioBodyReader",
+    "studio_body_reader",
+    "EgressDisclosure",
     "StageCBlock",
     "parse_model_json",
     "most_restricted_segment",
@@ -284,7 +294,7 @@ _RESPONSE_FIELDS = {"c1": "brief", "c2": "spans"}
 _C1_FIELD = "c1"
 _C2_FIELD = "c2"
 
-_UID_RE = re.compile(r"^[0-9a-f]{8}$")
+_UID_RE = re.compile(r"^[0-9a-f]{8}(?:[0-9a-f]{4})?$")  # accepts-both (3d430852): without this, orient silently drops 12-hex citations from model responses
 _FENCE = "```"
 _JSON_FENCE_OPEN = "```json\n"
 _TRAILING_PARTIAL_WORD = re.compile(r"\S*\Z")
@@ -347,6 +357,197 @@ class CaptureLog:
     segment: str
 
 
+class BodySourceError(ValueError):
+    """A mounted body could not be read without lying about its availability."""
+
+    def __init__(self, code: str, uid: str, message: str) -> None:
+        super().__init__(f"{code}: {uid}: {message}")
+        self.code = code
+        self.uid = uid
+        self.message = message
+
+
+@dataclass(frozen=True)
+class StageCBodySource:
+    """The exact bytes Stage C reads and the real path they came from."""
+
+    uid: str
+    body: bytes
+    citation_path: str
+    source_kind: str
+
+
+_EXTRACTOR = None
+_EXTRACTOR_UNAVAILABLE = False
+
+
+def _extractor_module():
+    """Load the existing extraction/cache authority; never duplicate its rules."""
+
+    global _EXTRACTOR, _EXTRACTOR_UNAVAILABLE
+    if _EXTRACTOR is not None or _EXTRACTOR_UNAVAILABLE:
+        return _EXTRACTOR
+    path = Path(__file__).resolve().parent.parent / "tropo-extract-text.py"
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "tropo_extract_text_stage_c_reader", path
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(f"no loader for {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        for name in (
+            "EXTRACTABLE",
+            "SF_DATALESS",
+            "cache_read",
+            "is_current",
+            "sha256_of",
+        ):
+            if not hasattr(module, name):
+                raise ImportError(f"{path} has no {name}")
+    except Exception:
+        _EXTRACTOR_UNAVAILABLE = True
+        return None
+    _EXTRACTOR = module
+    return module
+
+
+class StudioBodyReader:
+    """Read governed Markdown or a current mounted extracted-text cache.
+
+    The cache is the existing ``tropo-extract-text`` cache. This reader never
+    extracts and never hydrates a cloud placeholder. Missing, stale and
+    ``SF_DATALESS`` states are typed failures so an unsynced mount cannot look
+    like an honest search miss.
+    """
+
+    def __init__(
+        self,
+        studio_root: "Path | str",
+        files_root: "Path | str",
+        records: Mapping[str, Mapping[str, Any]],
+    ) -> None:
+        self.studio_root = Path(studio_root)
+        self.files_root = Path(files_root)
+        self.records = records
+        self._sources: dict[str, StageCBodySource] = {}
+
+    def _mounted_source(
+        self, uid: str, record: Mapping[str, Any]
+    ) -> Optional[StageCBodySource]:
+        source_value = record.get("source_path")
+        if not isinstance(source_value, str) or not source_value.strip():
+            return None
+        extractor = _extractor_module()
+        source = Path(source_value).expanduser()
+        if not source.is_absolute():
+            source = self.studio_root / source
+        suffix = source.suffix.lower()
+        if extractor is None:
+            if suffix in {".docx", ".pptx", ".xlsx", ".pdf"}:
+                raise BodySourceError(
+                    "EXTRACTOR_UNAVAILABLE",
+                    uid,
+                    "the mounted document needs the shipped text extractor",
+                )
+            return None
+        if suffix not in extractor.EXTRACTABLE:
+            return None
+
+        cached = extractor.cache_read(self.studio_root, uid)
+        if not isinstance(cached, dict):
+            raise BodySourceError(
+                "EXTRACT_CACHE_UNSYNCED",
+                uid,
+                "no extracted body is cached; run tropo-extract-text.py sync",
+            )
+        try:
+            st = source.lstat()
+        except OSError as exc:
+            raise BodySourceError(
+                "MOUNTED_SOURCE_MISSING", uid, f"{source} is unavailable"
+            ) from exc
+        if getattr(st, "st_flags", 0) & extractor.SF_DATALESS:
+            raise BodySourceError(
+                "MOUNTED_SOURCE_DATALESS",
+                uid,
+                f"{source} is a cloud placeholder; make it available locally",
+            )
+        if not stat.S_ISREG(st.st_mode):
+            raise BodySourceError(
+                "MOUNTED_SOURCE_NOT_REGULAR", uid, f"{source} is not a regular file"
+            )
+        content_hash = extractor.sha256_of(source)
+        if not extractor.is_current(cached, content_hash):
+            raise BodySourceError(
+                "EXTRACT_CACHE_UNSYNCED",
+                uid,
+                f"cached text is stale for {source}; run tropo-extract-text.py sync",
+            )
+        status = cached.get("status")
+        text = cached.get("text")
+        if status == "empty" and text in ("", None):
+            text = ""
+        elif status != "ok" or not isinstance(text, str) or not text:
+            raise BodySourceError(
+                "EXTRACT_CACHE_UNUSABLE",
+                uid,
+                f"cached extraction for {source} has status {status!r}",
+            )
+        return StageCBodySource(
+            uid=uid,
+            body=text.encode("utf-8"),
+            citation_path=str(source),
+            source_kind="extracted-cache",
+        )
+
+    def source(self, uid: str) -> StageCBodySource:
+        if not isinstance(uid, str) or not governed_path.is_governed_uid_shape(uid):
+            raise ValueError(f"{uid!r} is not a governed UID")
+        cached = self._sources.get(uid)
+        if cached is not None:
+            return cached
+        record = self.records.get(uid) or {}
+        mounted = self._mounted_source(uid, record)
+        if mounted is not None:
+            self._sources[uid] = mounted
+            return mounted
+        path = self.files_root / f"{uid}.md"
+        body = span_guard.match_domain_bytes(path)
+        source = StageCBodySource(
+            uid=uid,
+            body=body,
+            citation_path=str(path),
+            source_kind="governed-body",
+        )
+        self._sources[uid] = source
+        return source
+
+    def __call__(self, uid: str) -> bytes:
+        return self.source(uid).body
+
+    def citation_path(self, uid: str) -> str:
+        return self.source(uid).citation_path
+
+
+def studio_body_reader(
+    studio_root: "Path | str",
+    files_root: "Path | str",
+    records: Mapping[str, Mapping[str, Any]],
+) -> StudioBodyReader:
+    """Build Stage C's composed governed-body/extracted-cache reader."""
+
+    return StudioBodyReader(studio_root, files_root, records)
+
+
+@dataclass(frozen=True)
+class EgressDisclosure:
+    """One candidate and the independently resolved egress class it carried."""
+
+    uid: str
+    segment_class: str
+
+
 @dataclass(frozen=True)
 class StageCBlock:
     """The ephemeral Stage C block (I5).
@@ -368,6 +569,7 @@ class StageCBlock:
     replay_artifacts: tuple[Any, ...]
     model_calls: tuple[metered_model.ModelReceipt, ...]
     rehearsal_receipt: Optional[Mapping[str, Any]]
+    egress_report: tuple[EgressDisclosure, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -608,8 +810,15 @@ class _ModelEdge:
         system: str,
         max_tokens: int,
         segment_classes: tuple[str, ...],
+        approved_ceiling_nano_usd: int | None = None,
     ) -> str:
-        """One metered call; the response text, or a typed Stage C refusal."""
+        """One metered call; the response text, or a typed Stage C refusal.
+
+        ``approved_ceiling_nano_usd``, when given, is the worst-case figure
+        the human already approved at preview time (W5 AC5) — admission binds
+        to that exact value, tightening the route ceiling rather than
+        re-realizing a bounded preview figure against a live one.
+        """
         if len(self.receipts) >= MODEL_CALL_CEILING:
             raise _refuse(
                 REASON_CALL_CEILING,
@@ -628,6 +837,7 @@ class _ModelEdge:
             clock=self.clock,
             reservation_id_factory=self.reservation_id_factory,
             environment=self.environment,
+            approved_ceiling_nano_usd=approved_ceiling_nano_usd,
         )
         if isinstance(result, metered_model.ModelRefusal):
             raise _refuse(
@@ -701,7 +911,7 @@ def _read_body(body_reader: Callable[[str], bytes], uid: str) -> bytes:
     return bytes(source)
 
 
-def _capped_body(source_bytes: bytes) -> str:
+def capped_body(source_bytes: bytes) -> str:
     """One survivor body, capped at the per-body input budget.
 
     Cut back to a whitespace boundary when it truncates, so the model is never
@@ -820,6 +1030,7 @@ def run_stage_c(
     environment: Optional[Mapping[str, str]] = None,
     corpus_scale: bool = False,
     rehearsal_receipt: Optional[Mapping[str, Any]] = None,
+    c2_approved_ceiling_nano_usd: Optional[int] = None,
 ) -> StageCBlock:
     """Run C1, C2 and C3 and return the ephemeral block.
 
@@ -886,25 +1097,18 @@ def run_stage_c(
             "Stage C was handed no visible survivor to distill",
         )
 
-    # AC5 — egress is a SECOND gate, not the same one. Visibility decides what
-    # this viewer may see; egress decides what may cross to a provider, and
-    # today only the OS segment may. A ranked survivor that is team- or
-    # private-segment refuses by name instead of being dropped: Stage B ranked
-    # it, so its presence is an upstream projection failure and silently
-    # discarding it would hide that.
+    # W5 AC5 — classification survives as a report, not an early refusal.
+    # Visibility still decides what this viewer may resolve, and the independent
+    # segment resolver still classifies every survivor. The metered edge below
+    # remains the authority for consent, geo, spend and irreversibility; this
+    # stage does not add a second gate in front of it.
     survivor_segments = {
         uid: _segment_class(segment_class_of, uid) for uid in survivors
     }
-    denied = sorted(
-        uid for uid, segment in survivor_segments.items() if segment != OS_SEGMENT
+    egress_report = tuple(
+        EgressDisclosure(uid=uid, segment_class=survivor_segments[uid])
+        for uid in survivors
     )
-    if denied:
-        raise _refuse(
-            REASON_SEGMENT_EGRESS,
-            f"survivors {denied} are not OS-segment; a team- or private-segment "
-            "chunk may not reach the model edge, and cost approval is not "
-            "egress approval",
-        )
 
     edge = _ModelEdge(
         run_binding=run_binding,
@@ -948,7 +1152,7 @@ def run_stage_c(
     # the locator already derived from the first.
     bodies = {uid: _read_body(body_reader, uid) for uid in survivors}
     payload_bodies = [
-        {"uid": uid, "body": _capped_body(bodies[uid])} for uid in survivors
+        {"uid": uid, "body": capped_body(bodies[uid])} for uid in survivors
     ]
     c2_segments = tuple(sorted({survivor_segments[uid] for uid in survivors}))
 
@@ -991,6 +1195,7 @@ def run_stage_c(
             system=C2_SYSTEM_PROMPT,
             max_tokens=C2_MAX_OUTPUT_TOKENS,
             segment_classes=c2_segments,
+            approved_ceiling_nano_usd=c2_approved_ceiling_nano_usd,
         )
         parsed = parse_model_json(text, field=_C2_FIELD)
         artifacts.append(
@@ -1067,4 +1272,5 @@ def run_stage_c(
         replay_artifacts=tuple(artifacts),
         model_calls=tuple(edge.receipts),
         rehearsal_receipt=rehearsal_receipt,
+        egress_report=egress_report,
     )

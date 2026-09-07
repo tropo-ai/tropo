@@ -10,7 +10,7 @@ lifecycle_pairing_amendment_2026_08_16: "v4.7 -> v4.8 amendment 2026-08-16 by ta
 mint_mode: human
 mint_template: vault/capsules/templates/task.template.md
 mint_template_version: '1.0'
-mint_template_sha256: a0084736a74e36d7fc071b5f8cfa08a9e8bfa574815590c12552dbb0f3611d75
+mint_template_sha256: cf7dd1ad42866e48beadb25198d0751451a73a9c853fdb09f2de79c4e389a998
 mint_output_home: vault/files
 core_field_specializations:
   owner:

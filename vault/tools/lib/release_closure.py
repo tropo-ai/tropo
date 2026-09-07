@@ -36,6 +36,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
+from lib.governed_path import is_governed_uid_shape
+
 #: Machine-local recovery state, gitignored on purpose: one studio's in-flight
 #: transaction is not another studio's substrate.
 CLOSE_JOURNAL_DIR = Path(".tropo-studio") / "pipeline-close"
@@ -52,9 +54,6 @@ STEPS = (
     "reservations_released",
     "closure_event_emitted",
 )
-
-_UID = re.compile(r"^[0-9a-f]{8}$")
-
 
 class ClosureRefusal(Exception):
     """Closure cannot proceed and the evidence is preserved untouched.
@@ -149,7 +148,11 @@ def open_or_resume_journal(
     different receipt means two publications are in play, and picking either
     one would be a guess dressed as a decision.
     """
-    if not _UID.match(release_run_uid or ""):
+    # accepts-both (UID_SHAPES): legacy 8-hex uids stay first-class forever;
+    # every new governed mint is 12-hex composite since the Stage B flip
+    # (2026-08-31). The literal 8-only regex this replaced refused a
+    # freshly-minted composite release_run_uid as "not a governed run uid".
+    if not is_governed_uid_shape(release_run_uid or ""):
         raise ClosureRefusal(f"{release_run_uid!r} is not a governed run uid")
 
     existing = read_journal(vault_root, release_run_uid)

@@ -12,25 +12,26 @@ Continue means this same agent session keeps going. Nothing is born, retired, or
 permanent lineage. Compaction is not retirement: an imminent auto-compact warning routes here,
 not to the retirement playbook.
 
-## First setup after unzip (run once)
+## First setup after unzip
 
-Before opening your AI tool, run this command from the extracted Studio root:
+There is nothing to run by hand. Open your AI tool in the extracted Studio folder and say hello:
+**Po, the concierge, sets the Studio up at her first greeting** — she builds your local index and
+navigation and mints this Studio's own identity, on your machine, in about a minute. *(Until v1.95
+this section told you to run `tropo-rebuild-index.py` yourself before opening anything; Po runs it
+now — v1.95 Spine A, Mike-ruled 2026-09-05.)*
 
-```bash
-python3 vault/tools/tropo-rebuild-index.py --apply --vault-path .
-```
+Release packages omit machine-local derived indexes and carry no Studio identity, so the same zip
+is portable across macOS, Linux and Windows, and two people who unzip it become two different
+Studios. Po derives your local index and navigation from the shipped source files and mints this
+Studio's identity (`.tropo/studio-identity.md`) on your machine. Normal first-time setup, not a
+repair — and hers to run, not yours.
 
-Release packages omit machine-local derived indexes so the same zip is portable across macOS,
-Linux, and Windows. This command derives your local index and navigation from the shipped source
-files. It is normal first-time setup, not a repair.
-
-**Expect a large block of `[WARN] mentions parser: dead link to <uid>` lines — roughly 1,200 of
-them on a fresh box.** Nothing is wrong. Those warnings report prose mentions of Tropo's own
-internal UIDs that were not part of the shipped set. They are informational, the command still
-completes, and your index is written correctly. Look at the end of the output instead: a
-successful run prints `Wrote vault/00-index.jsonl`, `Wrote vault/00-index.sqlite`, and `Wrote
-vault/00-project-tree.jsonl`, and finishes with `✓ rehydrate.py succeeded` and `✓ mint registry
-generated`. If you see those, setup worked.
+**If you watch her do it, expect a large block of `[WARN] mentions parser: dead link to <uid>`
+lines — roughly 1,200 on a fresh box.** Nothing is wrong. Those warnings report prose mentions of
+Tropo's own internal UIDs that were not part of the shipped set; they are informational and the
+index is written correctly. A successful run ends with `Wrote vault/00-index.jsonl`, `Wrote
+vault/00-index.sqlite`, `Wrote vault/00-project-tree.jsonl`, `✓ rehydrate.py succeeded` and
+`✓ mint registry generated`. If Po reports those, setup worked.
 
 ## Checking your Studio's health (optional)
 
@@ -42,7 +43,7 @@ python3 vault/tools/tropo-validate.py --customer
 
 **Always pass `--customer`.** The flagless form additionally runs vendor-development checks that
 do not apply to your Studio — it treats Tropo's own internal cross-references, which by design
-were never shipped to you, as failures. On a pristine box the flagless form reports 30 failures
+were never shipped to you, as failures. On a pristine box the flagless form reports failures
 and `--customer` reports 0; both are looking at the same, healthy Studio. Genuine problems inside
 your box still fail loudly under `--customer`, so nothing real is hidden.
 
@@ -65,7 +66,7 @@ Once the concierge greets you, say: **"I want to create my first agent."** The A
 
 ## Want the technical overview first?
 
-For engineers, architects, or anyone evaluating Tropo as infrastructure: read [the L1 canonical entry](vault/files/eca73d77.md) — what Tropo is, the typing system, the seven subsystems, the boot path. ~2,500 words; designed for the technically-curious. **Operators can skip this and come back later** — you don't need it to ship your first agent.
+For engineers, architects, or anyone evaluating Tropo as infrastructure: read [the L1 canonical entry](vault/files/eca73d77.md) — what Tropo is, the typing system, the nine subsystems, the boot path. ~2,500 words; designed for the technically-curious. **Operators can skip this and come back later** — you don't need it to ship your first agent.
 
 **The one-line frame engineers tend to trust:** *Markdown is the API.* Tropo's runtime is the LLM you're already running — no separate daemon, no SDK, no client library. The substrate is files; the contract is YAML frontmatter; standard Unix tools work. (Full answer in the Engineer FAQ below.)
 

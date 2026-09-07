@@ -36,6 +36,7 @@ if str(_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOLS_DIR))
 
 from lib import release_package as _pkg  # noqa: E402
+from lib import governed_path as gp  # noqa: E402
 
 __all__ = [
     "RELEASE_EVENTS",
@@ -84,6 +85,13 @@ ENVELOPE_NULLABLE: Tuple[str, ...] = (
     "step",
     "stage",
     "parent_span_id",
+    # 3d8d4351 §4: HOW the row came to exist — "fire-authorize" on the
+    # engine's own stamp path, "bare" on the diagnostic path. The verdict
+    # tally's actor-awareness needs it: machine-authored rows carry it so a
+    # principal gesture can never be forged by a machine writer claiming a
+    # human actor. Nullable at the envelope layer; required in the data of
+    # the classes the engine stamps.
+    "invoked_via",
 )
 
 
@@ -138,7 +146,16 @@ RELEASE_EVENTS: Dict[str, EventContract] = {
         ),
         _c(
             "tropo.release.orchestrator_invoked",
-            ("saga_id", "pipeline_run_uid", "invocation_uid"),
+            ("saga_id", "pipeline_run_uid", "invocation_uid", "invoked_via"),
+            dedup=("invocation_uid",),
+        ),
+        _c(
+            # 3d8d4351 §6: the verify-only path journals its invocation — no
+            # run-resolving publish path escapes measurement. Reader: the
+            # scorecard tally (AC5) counts it; cmd_verify_only writes it.
+            "tropo.release.verify_only_invoked",
+            ("saga_id", "pipeline_run_uid", "invocation_uid", "version", "reason",
+             "invoked_via"),
             dedup=("invocation_uid",),
         ),
         _c(
@@ -389,7 +406,7 @@ _LEGACY_STEP_LIST_KEYS = ("children", "steps", "nodes")
 
 
 def _snapshot_step_uids(snapshot: Any) -> set:
-    """Every 8-hex step UID declared in the run's immutable snapshot."""
+    """Every governed-shape step UID declared in the run's immutable snapshot."""
     found = set()
 
     def walk(node: Any) -> None:
@@ -416,7 +433,11 @@ def _snapshot_step_uids(snapshot: Any) -> set:
                 walk(item)
 
     walk(snapshot)
-    return {u for u in found if isinstance(u, str) and len(u) == 8}
+    # accepts-both (UID_SHAPES): legacy 8-hex uids stay first-class forever;
+    # every new governed mint is 12-hex composite since the Stage B flip
+    # (2026-08-31). The literal `len(u) == 8` this replaced silently dropped
+    # any composite step uid from the declared set.
+    return {u for u in found if gp.is_governed_uid_shape(u)}
 
 
 def _read_journal(path: Path) -> List[Dict[str, Any]]:
@@ -488,6 +509,20 @@ def authorize(
     if unknown:
         return _refuse(
             REFUSAL_ENVELOPE, "envelope has unknown key(s) %s" % ", ".join(sorted(unknown))
+        )
+    # 3d8d4351 §4: `actor` carries the PRINCIPAL UID, never a display name
+    # (Mike-ruled 2026-08-30: "a UID should always be referenced"). Shape-
+    # guarded here at the closed layer so no writer can forge a human-seeming
+    # machine row again — the :206 "actor": "mike" class dies at authorization,
+    # not just at the one cured writer. Flat 8/12-hex like every governed uid.
+    import re as _re
+    _actor = envelope.get("actor")
+    if not isinstance(_actor, str) or not _re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", _actor):
+        return _refuse(
+            REFUSAL_ENVELOPE,
+            "actor %r must be a flat-hex UID (principal UID for humans, "
+            "engine UID for machine rows) — names are for humans, UIDs for "
+            "records; actor_label_resolved carries the readable name" % (_actor,),
         )
     if envelope.get("schema_version") != 2:
         return _refuse(REFUSAL_ENVELOPE, "schema_version must be 2")

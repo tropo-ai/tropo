@@ -44,6 +44,33 @@ def _load_event_identity():
 event_identity = _load_event_identity()
 
 
+def _load_governed_path():
+    """Load the co-located governed-uid shape authority without ``lib`` ambiguity.
+
+    Mirrors ``_load_event_identity``/``_load_release_receipt`` above: this module
+    can be exec'd by file path (tropo-validate.py's ``_load_public_snapshot_contract``)
+    after ``.tropo/scripts`` has already claimed ``sys.modules['lib']`` as the
+    separate namespace package, so ``from lib.governed_path import ...`` would
+    resolve against the wrong ``lib`` and fail with a missing submodule.
+    """
+    module_name = "tropo_public_snapshot_governed_path"
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
+    spec = importlib.util.spec_from_file_location(
+        module_name, Path(__file__).resolve().with_name("governed_path.py")
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError("could not load canonical governed_path module")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+governed_path = _load_governed_path()
+
+
 def _load_release_receipt():
     """Load the co-located receipt contract without relying on ``lib`` paths."""
     module_name = "tropo_public_snapshot_release_receipt"
@@ -124,7 +151,6 @@ HELD_BACK_POLICY = {
 
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-UID8_RE = re.compile(r"^[0-9a-f]{8}$")
 PUBLIC_FACT_ID_RE = re.compile(r"^rf_[0-9a-f]{64}$")
 AGENT_SLUG_RE = re.compile(r"^[a-z][a-z0-9.-]{0,63}$")
 AGENT_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9 .'-]{0,79}$")
@@ -365,7 +391,7 @@ def load_agent_identities(vault_root: Path) -> dict[str, AgentIdentity]:
         party_uid = frontmatter.get("party_uid")
         if party_uid is None or party_uid == "" or party_uid == "null":
             continue
-        if not isinstance(party_uid, str) or not UID8_RE.fullmatch(party_uid):
+        if not isinstance(party_uid, str) or not governed_path.is_governed_uid_shape(party_uid):
             raise SnapshotContractError(f"agent has malformed party_uid: {path.name}")
         generation = frontmatter.get("generation")
         if not isinstance(generation, str) or not GENERATION_RE.fullmatch(generation):
@@ -767,7 +793,7 @@ def _validate_exact_source(value: Any) -> str:
         raise SnapshotContractError("override source.path_or_uid must be exact")
     if any(char in value for char in "*?[]{}") or "\\" in value:
         raise SnapshotContractError("wildcard override sources are forbidden")
-    if UID8_RE.fullmatch(value):
+    if governed_path.is_governed_uid_shape(value):
         return value
     path = PurePosixPath(value)
     if (
@@ -855,8 +881,8 @@ def validate_override_descriptor(
         subject="override descriptor",
     )
     override_id = top["override_id"]
-    if not isinstance(override_id, str) or not UID8_RE.fullmatch(override_id):
-        raise SnapshotContractError("override_id must be an 8-hex UID")
+    if not isinstance(override_id, str) or not governed_path.is_governed_uid_shape(override_id):
+        raise SnapshotContractError("override_id must be an 8- or 12-character hex UID")
 
     source = _exact_keys(
         top["source"],

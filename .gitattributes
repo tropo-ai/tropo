@@ -27,7 +27,21 @@
 # tropo-validate.py's git-filter-install check (6ec30708 AC5) fails loud if either
 # half is missing — a missing install is the same silent-poison failure class as a
 # missing merge driver, and must be detected, not silently accepted.
-vault/files/*.md filter=navblockstrip
+#
+# v1.94 Stream 2 (266edea6, LOCKED, W7) — the field-aware merge driver (D2,
+# vault/tools/federation/tropo_merge.py) goes live on the same governed
+# paths. Same two-part gap: this line declares WHICH files use it, and the
+# actual `merge.tropo.driver` PROGRAM lives in the LOCAL, never-committed
+# `.git/config` — every clone runs, once:
+#
+#     python3 -c "import sys; sys.path.insert(0,'vault/tools'); from lib import governance_gate as gg; from pathlib import Path; gg.install_merge_driver(Path('.'))"
+#
+# A clone that declares merge=tropo here without configuring the driver
+# locally is not broken — git falls back to its own default merge, and
+# governance_gate.unconfigured_driver_warning() names exactly that state
+# (warn-first, per the studio's warn-safe default) rather than a hard
+# refusal, because an ungated clone is a risk, not a catastrophe.
+vault/files/*.md filter=navblockstrip merge=tropo
 
 # Coordination Protocol v1 (7ecb60c7, metis-g92 2026-07-23) — append-only logs
 # merge by union: independent timestamped lines, order-insensitive. Closes the
@@ -39,3 +53,8 @@ recycle/**/recycle.log merge=union
 # merge without a conflict; union concatenates and the reader tolerates order.
 # Same shape as recycle.log above (metis-g102, 2026-08-06).
 agents/**/lineage.jsonl merge=union
+
+# studio-ops v2.0 — the deterministic orientation subsystem (design brief 756a70a9)
+# append-only run-state log; timestamps are the only truth; reader tolerates disorder.
+# see vault/studio-ops/README.md
+vault/studio-ops/log.jsonl merge=union

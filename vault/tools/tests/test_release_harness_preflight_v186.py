@@ -52,6 +52,53 @@ class ReleaseHarnessPreflightV186(unittest.TestCase):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
 
+    @staticmethod
+    def _write_shipped_shape_index(release_root: Path) -> None:
+        """Regenerate the index from THIS box's ledger, as the build does.
+
+        The real build does not copy the maintainer's index into the box. Step
+        9b.1 of tropo-build-release.py runs rebuild-vault.py against the build
+        dir, so the shipped index is derived "from the SHIPPED ledger (the
+        build's vault/files/ — only entries that survived the scope walker)".
+        Only the SQLite database is withheld; the JSONL pair ships.
+
+        This fixture used to copy `vault/00-index.jsonl` from the studio, which
+        made its box carry ~3,700 rows of the MAINTAINER's index — including
+        external-artifact rows whose titles and descriptions hold absolute
+        /Users/... paths that the scope walker removes from a real box. The
+        `no maintainer machine paths` check shells out to
+        tropo-validate-no-absolute-paths.py, which flagged them correctly: the
+        check was right, the box shape was wrong, and for as long as that
+        validator was missing from the copy list above the check reported
+        "cannot verify" instead of saying so.
+
+        Derived, not hand-written: a hand-kept row list is a second home for
+        the ledger's contents and goes stale the moment a file is added above.
+        """
+        import json
+
+        files_dir = release_root / "vault" / "files"
+        rows = []
+        for entry in sorted(files_dir.glob("*.md")):
+            front = {}
+            text = entry.read_text(encoding="utf-8", errors="replace")
+            if text.startswith("---"):
+                _, _, rest = text.partition("---")
+                block, _, _ = rest.partition("\n---")
+                for line in block.splitlines():
+                    key, sep, value = line.partition(":")
+                    if sep and not key.startswith((" ", "\t", "-")):
+                        front[key.strip()] = value.strip().strip("'\"")
+            rows.append({
+                "uid": front.get("uid") or entry.stem,
+                "type": front.get("type") or "unknown",
+                "title": front.get("title") or entry.stem,
+            })
+        index = release_root / "vault" / "00-index.jsonl"
+        index.parent.mkdir(parents=True, exist_ok=True)
+        index.write_text(
+            "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
     def _source_shaped_release(self, release_root: Path) -> None:
         root_docs = ROOT / "vault/templates/root-docs"
         for name in ("AGENTS.md", "README.md", "START-TROPO.md", "CLAUDE.md"):
@@ -71,7 +118,9 @@ class ReleaseHarnessPreflightV186(unittest.TestCase):
             ".tropo/orientation.md",
             ".tropo/concierge/activate.md",
             ".tropo/playbooks/test-harness.playbook.md",
-            "vault/00-index.jsonl",
+            # vault/00-index.jsonl is DELIBERATELY NOT COPIED — see
+            # _write_shipped_shape_index below. Copying the maintainer's studio
+            # index is what made this fixture unrepresentative of the box.
             "vault/tools/tropo-generate-relations-header.py",
             "vault/tools/tropo-rebuild-index.py",
             # the shipped harness requires the REBUILDER (index-free box,
@@ -79,6 +128,20 @@ class ReleaseHarnessPreflightV186(unittest.TestCase):
             # tool — required set changed 2026-08-15, fixture follows.
             "vault/tools/tropo-rebuild-vault.py",
             "vault/tools/tropo-validate.py",
+            # The `no maintainer machine paths` check SHELLS OUT to this second
+            # validator (test-harness-check.py:209) and treats its absence as a
+            # FAIL — "cannot verify" is not "clean". It was added to the check
+            # after this fixture's copy list was written, and the list is
+            # hand-kept, so the check gained a dependency that the surface
+            # feeding it never got. Green here has never meant the box is
+            # clean of machine paths; it meant the check could not look.
+            #
+            # The real box DOES ship it. Verified by composition rather than by
+            # reading the manifest: ship_verdict.build_resolver(".").resolve(...)
+            # returns SHIP-AS-IS via root-manifest (folder) ruled_by=vault/tools/,
+            # the identical verdict as tropo-validate.py one line above. So the
+            # source-shaped fixture was the only thing missing it.
+            "vault/tools/tropo-validate-no-absolute-paths.py",
         ):
             self._copy(ROOT / relative, release_root / relative)
         shutil.copytree(
@@ -93,6 +156,7 @@ class ReleaseHarnessPreflightV186(unittest.TestCase):
             ROOT / "vault/capsules/tropo-release.capsule.md",
             release_root / "vault/files/b19e8d43.md",
         )
+        self._write_shipped_shape_index(release_root)
 
         with patch.object(build, "DRY_RUN", False):
             build.step_9_generate_manifest(str(release_root), "1.86.0")
@@ -140,7 +204,14 @@ class ReleaseHarnessPreflightV186(unittest.TestCase):
                 encoding="utf-8",
             )
             checks = self._by_name(harness.run_checks(release_root)[0])
-            self.assertFalse(checks["no private/reference-only content leaked"])
+            # The check's emitted name, not a paraphrase of it. It was renamed
+            # to "...scope leaked into vault/files" and this lookup was not
+            # visited, so the assertion raised KeyError instead of testing the
+            # leak — and nobody saw it, because the assertTrue(all(...)) above
+            # failed first and this line was never reached. Fixing the first
+            # red is what exposed it.
+            self.assertFalse(
+                checks["no private/reference-only scope leaked into vault/files"])
 
     def test_real_ship_filter_contains_no_private_scope(self):
         entries = build.load_ship_entries(str(ROOT / "vault/00-index.jsonl"))

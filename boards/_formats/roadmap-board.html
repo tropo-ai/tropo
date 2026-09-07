@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<!-- ============================================================================
+     TROPO BOARD FORMAT · roadmap-board
+     ----------------------------------------------------------------------------
+     SHAPE (the "shape" half of the board primitive; pairs with boards/_shared/board.css
+     for the "style" half). This is a FILL-IN TEMPLATE, not a finished board.
+
+     WHEN TO USE: a forward-looking, multi-cycle roadmap / "where do we stand on the
+     road to <target>" / post-ship "yesterday + what's next" orientation for Mike.
+     This is Mike's locked 7-section Roadmap-Board Format (eb94fa08). Trigger phrases:
+     "board of our roadmap to v...", "where do we stand on the cycle", "clear picture
+     of the arc", "summary of yesterday + what's next".
+     NOT for: a single design's status (use design-status-board) · what ships this one
+     cycle (use release-board) · a per-decision walk (use Walk Format Doctrine, prose).
+
+     HOW TO FILL (the agent IS the engine — you supply judgment + real content):
+       1. Copy this file to boards/<you>/<slug>-<date>.html
+       2. The stylesheet link below is ALREADY correct for boards/<you>/ — leave it.
+       3. Replace every {{FILL: ...}} with real content read from the roadmap +
+          live vault. Delete sections only if the ask explicitly precludes one.
+       4. STATUS IS THE ARBITER: every status badge/pill reflects the item's
+          AUTHORITATIVE status/state field in the vault — never a guess, never a
+          stale tag. done/in-flight/next/fenced/blocked map to b-done / b-flight /
+          b-next / b-fenced / b-blocked.
+       5. Hand-link files as [readable name](path); no bare UIDs in human-facing text.
+       6. No em-dashes in rendered text (hyphens or restructure).
+       7. Footer: stamp author + date + "A snapshot; regenerate when work moves."
+     ============================================================================ -->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{FILL: short board title, e.g. "Tropo — Road to v2.0"}}</title>
+<link rel="stylesheet" href="../_shared/board.css">
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ── HEADER ─────────────────────────────────────────────────────────────
+       eyebrow = context line · h1 = the board's question · thesis = one italic
+       sentence naming the through-line · statebar = 3-4 at-a-glance pills. -->
+  <header>
+    <div class="eyebrow">{{FILL: context, e.g. "Tropo-OS · Roadmap to v2.0"}}</div>
+    <h1>{{FILL: the board's headline question/state}}</h1>
+    <div class="thesis">{{FILL: one italic sentence — the through-line that makes the arc make sense}}</div>
+    <div class="statebar">
+      <span class="pill good">{{FILL: a good-state fact}} <b>{{value}}</b></span>
+      <span class="pill live">In flight: <b>{{FILL: what is shipping now}}</b></span>
+      <span class="pill">{{FILL: a neutral state fact}} <b>{{value}}</b></span>
+    </div>
+  </header>
+
+  <!-- ── 1 · BIG PICTURE (one paragraph, ~100 words, no bullets) ───────────── -->
+  <h2>1 · Big Picture</h2>
+  <div class="card" style="color:var(--tropo-ink70);font-size:14px;line-height:1.6">
+    {{FILL: where we are, how many cycles to the next major surface, what just
+    happened, the thesis-state in one sentence. Reads like a smart colleague catching
+    Mike up over coffee. No jargon density.}}
+  </div>
+
+  <!-- ── 2 · CYCLE LADDER (visual; Mike scans this in 5s) ──────────────────── -->
+  <h2>2 · Cycle Ladder</h2>
+  <div class="track">
+    <!-- one .rel per cycle. Add .flight (current) / .next / .done / .launch (target). -->
+    <div class="rel flight">
+      <div class="ver">{{FILL: version}}</div><span class="status s-flight">In flight</span>
+      <div class="theme">{{FILL: cycle theme}}</div>
+      <ul class="delivers"><li>{{FILL: delivers}}</li><li>{{FILL: delivers}}</li></ul>
+      <div class="lanes"><span class="lane">{{FILL: owner}}</span></div>
+    </div>
+    <div class="rel next">
+      <div class="ver">{{FILL: version}}</div><span class="status s-next">Next</span>
+      <div class="theme">{{FILL: cycle theme}}</div>
+      <ul class="delivers"><li>{{FILL: delivers}}</li></ul>
+      <div class="lanes"><span class="lane">{{FILL: owner}}</span></div>
+    </div>
+    <div class="rel launch">
+      <div class="ver">{{FILL: target version}}</div><span class="status s-launch">{{FILL: e.g. Public launch}}</span>
+      <div class="theme">{{FILL: what the target means}}</div>
+      <ul class="delivers"><li>{{FILL: delivers}}</li></ul>
+      <div class="lanes"><span class="lane">Whole crew</span></div>
+    </div>
+  </div>
+
+  <!-- ── 3 · CYCLE TABLE (the "why" column differentiates roadmap from status) ─ -->
+  <h2>3 · Cycle Table — why each earns a slot</h2>
+  <table>
+    <tr><th>Cycle</th><th>Status</th><th>Theme</th><th>Why it exists</th></tr>
+    <tr><td class="item">{{FILL: version}}</td><td><span class="badge b-flight">in flight</span></td><td>{{FILL: theme}}</td><td>{{FILL: the one-line reason this earns a release slot}}</td></tr>
+    <tr><td class="item">{{FILL: version}}</td><td><span class="badge b-next">next</span></td><td>{{FILL: theme}}</td><td>{{FILL: why}}</td></tr>
+    <tr><td class="item">{{FILL: target}}</td><td><span class="badge b-fenced">launch</span></td><td>{{FILL: theme}}</td><td>{{FILL: why}}</td></tr>
+  </table>
+
+  <!-- ── 4 · GATE TRACKER (only if the target ships against explicit gates) ──── -->
+  <h2>4 · Gate Tracker</h2>
+  <div class="cols">
+    <div class="card">
+      <div class="grp">{{FILL: gate group, e.g. Substrate readiness}}</div>
+      <div class="gate"><span class="dot d-done">✓</span><div><div class="g-label">{{FILL: gate}}</div><div class="g-when">{{FILL: when cleared}}</div></div></div>
+      <div class="gate"><span class="dot d-prog">◐</span><div><div class="g-label">{{FILL: gate}}</div><div class="g-when">{{FILL: ongoing/when}}</div></div></div>
+      <div class="gate"><span class="dot d-open">◯</span><div><div class="g-label">{{FILL: gate}}</div><div class="g-when">{{FILL: target cycle}}</div></div></div>
+    </div>
+    <div class="card">
+      <div class="grp">{{FILL: gate group, e.g. Structural enforcement}}</div>
+      <div class="gate"><span class="dot d-open">◯</span><div><div class="g-label">{{FILL: gate}}</div><div class="g-when">{{FILL: target cycle}}</div></div></div>
+    </div>
+  </div>
+
+  <!-- ── 5 · YESTERDAY / WHAT LANDED (split visible-shape vs substrate-work) ──
+       If no recent ship, retitle "Where We Came From" or delete this section. -->
+  <h2>5 · {{FILL: "Yesterday" or "This Session" or "Where We Came From"}} — What Landed</h2>
+  <div class="cols">
+    <div class="card">
+      <h3>The few things you can see</h3>
+      <div class="sub">user-visible shape</div>
+      <ul class="ledger">
+        <li><b>{{FILL}}</b> <span class="badge b-done">done</span> — {{FILL: one line}}</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>The substrate work</h3>
+      <div class="sub">engine-layer — changes the discipline, not the surface</div>
+      <ul class="ledger">
+        <li><b>{{FILL}}</b> <span class="badge b-done">done</span> — {{FILL: one line}}</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── 6 · WHERE YOU STAND (operational snapshot) ────────────────────────── -->
+  <h2>6 · Where You Stand</h2>
+  <div class="card">
+    <ul class="ledger">
+      <li><b>Crew:</b> {{FILL: who's active / incoming / retiring}}</li>
+      <li><b>Substrate state:</b> {{FILL: validator counts / pristine streak / cycle-in-flight}}</li>
+      <li><b>Binding constraint:</b> {{FILL: what's the real constraint right now}}</li>
+    </ul>
+  </div>
+
+  <!-- ── 7 · STRONG LEAN (ONE recommendation; close agree-or-redirect) ──────── -->
+  <h2>7 · Strong Lean — the immediate next move</h2>
+  <div class="card" style="border-left:3px solid var(--tropo-accent)">
+    <p style="font-size:14px;line-height:1.6"><b>Lean:</b> {{FILL: ONE recommendation, plain English}}<span class="sub" style="display:block;margin-top:8px">Agree, or other direction?</span></p>
+  </div>
+
+  <footer>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--tropo-done)"></i>done</span>
+      <span><i class="sw" style="background:var(--tropo-flight)"></i>in flight</span>
+      <span><i class="sw" style="background:var(--tropo-ink20)"></i>planned</span>
+      <span><i class="sw" style="background:var(--tropo-launch)"></i>launch</span>
+    </div>
+    <div class="note">{{FILL: author + date}} · roadmap-board format · L1-native render, pulls boards/_shared/board.css. A snapshot; regenerate when work moves.</div>
+  </footer>
+
+</div>
+</body>
+</html>

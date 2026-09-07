@@ -97,6 +97,27 @@ def main() -> int:
         except ra.ReleaseAuthorizationError:
             check("package_frozen (real step ref) post-mint -> AUTHORIZED", False)
 
+        # 2b. THE v1.93 DEFECT, REPRODUCED THEN PROVEN FIXED (argus-a162,
+        # 2026-08-29): a legitimate reverify-step reopen of a VERIFIED/SKIPPED
+        # instrument step must not read as tampering -- same class as
+        # step_redeclared above, found on v1.93's own real stage attempt, the
+        # first release run to ever reach this gate having used reverify-step.
+        folder = _make_run(tmp, "act-reverified")
+        ra.mint_key("act-reverified")
+        with (folder / "run.jsonl").open("a") as f:
+            f.write(json.dumps({
+                "event": "step_reverify_opened", "step": FREEZE_STEP,
+                "trace_id": "act-reverified",
+                "data": {"step_uid": FREEZE_STEP, "instrument": "full-validator",
+                         "previous_status": "verified", "superseded_candidates": [],
+                         "active_candidate_sha256": "e" * 64},
+            }) + "\n")
+        try:
+            ra.require_release_authorization("act-reverified")
+            check("step_reverify_opened (real step ref) post-mint -> AUTHORIZED", True)
+        except ra.ReleaseAuthorizationError:
+            check("step_reverify_opened (real step ref) post-mint -> AUTHORIZED", False)
+
         # 3. DERIVED, NOT RE-ASSERTED: tropo.release.scope_locked was declared
         # in RELEASE_EVENTS by an EARLIER commit this cycle (3cddb767f) with NO
         # corresponding edit to this function. If it authorizes with zero

@@ -75,6 +75,80 @@ __all__ = [
 #: The release-pipeline root. Its leaves are what a binding may address.
 PIPELINE_ROOT_UID = "634913c2"
 
+#: 3d8d4351 §3 — the macro-sequence as DATA. The runner's DAG stays the
+#: micro-order authority (leaf uids live there, not here); this names the
+#: STAGES a fire --authorize walks, and for each: the evidence STORE that
+#: answers "did it happen" and the owning subsystem's DECLARED READER that
+#: answers it. Evidence functions call these readers — never re-parse
+#: another subsystem's file (the discipline tropo-release-run.py models at
+#: its _requires_orchestrator_invoked D-9 note).
+#:
+#: The divergence predicate, concrete (the suite pins it):
+#:   * FIRE's `never_invoked_uid` names the runner's NEVER_INVOKED uid —
+#:     one fact, two homes, asserted equal so they cannot drift;
+#:   * the ORCHESTRATOR->FIRE edge's `precondition_key` names the runner's
+#:     precondition ("orchestrator") — the edge IS the precondition.
+#: Exactly one production consumer: the fire's --authorize preconditions
+#: (tropo-release.py). It re-lists no leaf uids by design.
+MACRO_SEQUENCE: Tuple[Dict[str, str], ...] = (
+    {
+        "stage": "LOCK",
+        "evidence_store": "canonical event bus (scope_locked never appears in run journals; joined on pipeline_run_uid)",
+        "reader_module": "tropo-release.py",
+        "reader": "_journal_timestamps",
+    },
+    {
+        "stage": "BOOTSTRAP",
+        "evidence_store": "run.state.json (activation present)",
+        "reader_module": "tropo-release-run.py",
+        "reader": "run_is_walkable",
+    },
+    {
+        "stage": "STEPS",
+        "evidence_store": "run.state.json step_status",
+        "reader_module": "tropo-release-run.py",
+        "reader": "step_status",
+    },
+    {
+        "stage": "BUILD",
+        "evidence_store": "run journal (package_frozen event) + frozen artifact digest",
+        "reader_module": "release_package.py",
+        "reader": "active_frozen_payload",
+    },
+    {
+        "stage": "STAGE",
+        "evidence_store": "staged publish-state (publish-pending.json)",
+        "reader_module": "tropo-publish-release.py",
+        "reader": "_run_publish_state",
+    },
+    {
+        "stage": "PREFLIGHT",
+        "evidence_store": "preflight journal (PRE_OUTWARD_FIRE_ROSTER verdicts)",
+        "reader_module": "tropo-release-preflight.py",
+        "reader": "PRE_OUTWARD_FIRE_ROSTER",
+    },
+    {
+        "stage": "ORCHESTRATOR",
+        "evidence_store": "run journal + canonical bus (orchestrator_invoked, joined)",
+        "reader_module": "tropo-release-run.py",
+        "reader": "_requires_orchestrator_invoked",
+    },
+    {
+        "stage": "FIRE",
+        # the one stage whose gate is AUTHORIZATION + completion, not occurrence:
+        "evidence_store": "publish_state live + release object on the remote",
+        "reader_module": "tropo-verify-release-live.py",
+        "reader": "clear_publish_pending",
+        "never_invoked_uid": "3dd817cb",
+        "reaches_via_precondition": "ORCHESTRATOR",
+    },
+)
+
+#: The ORCHESTRATOR-before-FIRE edge as data: the precondition key the fire
+#: must see satisfied. Named beside the sequence it constrains.
+ORCHESTRATOR_PRECONDITION_KEY = "orchestrator"
+
+
 #: The module-level name a tool uses to declare its own bindings.
 DECLARATION_ATTR = "PIPELINE_BINDINGS"
 
@@ -339,6 +413,10 @@ def _walk(uid: str, root: Path, seen: set) -> List[Tuple[str, Optional[str]]]:
         )
     seen = seen | {uid}
     path = root / "vault" / "files" / f"{uid}.md"
+    if not path.exists():  # Slug-aware (2026-09-03, metis-g118): <slug>-<uid>.md is canonical since 08-31. The bare path is tried first (u...
+        _hits = [p for p in (root / "vault" / "files").glob(f"*-{uid}.md") if p.name.endswith(f"-{uid}.md")]
+        if len(_hits) == 1:
+            path = _hits[0]
     if not path.exists():
         raise BindingError(
             "pipeline node %s is declared as a child but has no entry at %s"

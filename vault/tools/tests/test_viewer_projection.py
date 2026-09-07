@@ -53,6 +53,7 @@ def _load(name: str, path: Path):
 MODULE_PATH = TOOLS / "lib" / "viewer_projection.py"
 vp = _load("viewer_projection_under_test", MODULE_PATH)
 
+from lib.audience_context import MountAudienceBinding  # noqa: E402
 from lib.group_contract import (  # noqa: E402
     GroupContractError,
     GroupErrorCode,
@@ -77,17 +78,67 @@ GraphErrorCode = vp.GraphErrorCode
 
 
 # --------------------------------------------------------------------------- #
-# Principals + segment UIDs (all 8-hex; segment UIDs double as manifest UIDs).  #
+# TWO COLLISION DOMAINS. A team needs an identifier in EACH, and the MOUNT is   #
+# what ties them together (ADR-050; ruled a-prime by argus-a168 2026-09-03,     #
+# f0151314da71 + evt_b51c083be28ac6fe_00000419).                                #
+#                                                                               #
+#   governed-record UID : 8-hex / composite 12-hex. Principals, GROUPS.         #
+#   ADR-050 vault code  : ^[a-z0-9]{4,6}$. SEGMENT identity, and what           #
+#                         derive_segment yields from a vault manifest.          #
+#                                                                               #
+# They are DISJOINT BY LENGTH -- accepted lengths [8,12] vs [4,5,6] -- so no    #
+# string is both. This block used to hold one 8-hex value per team and spend it #
+# as both, and visible_segments returned GROUP UIDS into a set that             #
+# filter_visible_uids compares against vault codes. A team node was therefore   #
+# never visible to its own team member; the suite only passed while the         #
+# manifest read still accepted 8-hex and the two namespaces could coincide.     #
+#                                                                               #
+# The names below keep TEAM/NARROW bound to the VAULT CODE, because that is     #
+# what visible_segments now returns and what every segment assertion means.     #
+# The group records get *_GROUP, and base_context() carries the mount rows      #
+# that join the two -- the same MountAudienceBinding production uses.           #
 # --------------------------------------------------------------------------- #
 ALICE = "a1a1a1a1"
 BOB = "b2b2b2b2"
 CAROL = "c3c3c3c3"  # a second ROLE of the same human as ALICE; member of nothing
 
-TEAM = "7ea70001"        # the shared team/vault segment
-NARROW = "4a4a0001"      # a narrower group that TEAM (wider) includes
-PRIV_ALICE = "b1a70001"  # alice's own private segment (a private vault-node)
-PRIV_BOB = "b1a70002"    # bob's own private segment
+TEAM_GROUP = "7ea70001"    # the team's governed GROUP record
+NARROW_GROUP = "4a4a0001"  # the narrower group's governed GROUP record
+
+TEAM = "team1"           # the shared team's VAULT CODE (its segment)
+NARROW = "narrw"         # the narrower group's VAULT CODE
+PRIV_ALICE = "palice"    # alice's own private segment (a private vault-node)
+PRIV_BOB = "pbob"        # bob's own private segment
 OS = vp.OS_SEGMENT       # "os" — the reserved always-readable top constant
+
+#: The group -> vault-code join, as production carries it: one validated mount
+#: row per vault pinning `vault_uid` beside `resolved_audience_group_uid`.
+MOUNTS = ((TEAM_GROUP, TEAM), (NARROW_GROUP, NARROW))
+
+
+class _MountContext:
+    """The slice of AudienceContext the ADR-050 join reads: mounts()."""
+
+    def __init__(self, pairs=MOUNTS) -> None:
+        self._bindings = tuple(
+            MountAudienceBinding(
+                vault_uid=vault_uid,
+                manifest_path=f"{vault_uid}/.tropo/vault-manifest.md",
+                manifest_sha256="0" * 64,
+                resolved_audience_group_uid=group_uid,
+            )
+            for group_uid, vault_uid in pairs
+        )
+
+    @property
+    def mounts(self):
+        # A PROPERTY, exactly as AudienceContext exposes it. A double whose
+        # shape differs from the real thing tests the double, not the contract.
+        return self._bindings
+
+
+def base_context(pairs=MOUNTS) -> _MountContext:
+    return _MountContext(pairs)
 
 REVISION = "sha256:" + ("a" * 64)
 
@@ -144,7 +195,7 @@ def base_resolver() -> GroupResolver:
     """TEAM with alice + bob as DIRECT members (both peers of each other)."""
 
     resolver, _ = build_resolver(
-        [_group(TEAM, "team", members=[ALICE, BOB])],
+        [_group(TEAM_GROUP, "team", members=[ALICE, BOB])],
         [_principal(ALICE), _principal(BOB)],
     )
     return resolver
@@ -176,7 +227,9 @@ class _RootFactory:
             root = self.base / segment_uid
             (root / ".tropo").mkdir(parents=True, exist_ok=True)
             (root / ".tropo" / "vault-manifest.md").write_text(
-                f"---\nuid: {segment_uid}\n---\n", encoding="utf-8"
+                # vault_uid:, not uid: — lib/segment.py reads only vault_uid:
+                # since 52d7a9b71 (ADR-050). (suite-health 2026-09-03)
+                f"---\nvault_uid: {segment_uid}\n---\n", encoding="utf-8"
             )
             self._roots[segment_uid] = root
         return root
@@ -262,7 +315,8 @@ class _ProjectionCase(unittest.TestCase):
 # =========================================================================== #
 class AC1VisibleSegmentsResolutionAndFailClosed(_ProjectionCase):
     def test_visible_set_is_os_union_team_union_own_private(self) -> None:
-        proj = ViewerProjection.from_resolver(_GraphBuilder(self.roots).build(), base_resolver())
+        proj = ViewerProjection.from_resolver(_GraphBuilder(self.roots).build(), base_resolver(),
+            audience_context=base_context())
         result = proj.visible_segments(alice())
         self.assertTrue(result.ok, msg=result.error)
         self.assertEqual(result.value, frozenset({OS, TEAM, PRIV_ALICE}))
@@ -275,12 +329,13 @@ class AC1VisibleSegmentsResolutionAndFailClosed(_ProjectionCase):
         # NARROW.members=[ALICE]; TEAM (wider) includes NARROW, members=[BOB].
         resolver, _ = build_resolver(
             [
-                _group(NARROW, "narrow", members=[ALICE]),
-                _group(TEAM, "team", members=[BOB], includes=[NARROW]),
+                _group(NARROW_GROUP, "narrow", members=[ALICE]),
+                _group(TEAM_GROUP, "team", members=[BOB], includes=[NARROW_GROUP]),
             ],
             [_principal(ALICE), _principal(BOB)],
         )
-        proj = ViewerProjection.from_resolver(_GraphBuilder(self.roots).build(), resolver)
+        proj = ViewerProjection.from_resolver(_GraphBuilder(self.roots).build(), resolver,
+            audience_context=base_context())
         # A NARROW member reads NARROW *and* the wider TEAM (equal-or-wider).
         self.assertEqual(
             proj.visible_segments(alice()).value,
@@ -293,7 +348,8 @@ class AC1VisibleSegmentsResolutionAndFailClosed(_ProjectionCase):
 
     def test_two_role_human_resolves_distinct_visibility_per_role(self) -> None:
         # One human, two roles: ALICE (a TEAM member) and CAROL (member of none).
-        proj = ViewerProjection.from_resolver(_GraphBuilder(self.roots).build(), base_resolver())
+        proj = ViewerProjection.from_resolver(_GraphBuilder(self.roots).build(), base_resolver(),
+            audience_context=base_context())
         role_a = Viewer(principal_uid=ALICE, private_segment_uid=PRIV_ALICE)
         role_b = Viewer(principal_uid=CAROL, private_segment_uid="c0000001")
         va = proj.visible_segments(role_a).value
@@ -304,7 +360,7 @@ class AC1VisibleSegmentsResolutionAndFailClosed(_ProjectionCase):
 
     def test_fail_closed_on_stale_authority(self) -> None:
         _, projection = build_resolver(
-            [_group(TEAM, "team", members=[ALICE, BOB])],
+            [_group(TEAM_GROUP, "team", members=[ALICE, BOB])],
             [_principal(ALICE), _principal(BOB)],
         )
         # A resolver pinned to a different revision than the JSONL is stale.
@@ -347,12 +403,14 @@ class AC1VisibleSegmentsResolutionAndFailClosed(_ProjectionCase):
     def test_reachability_fails_closed_group_not_found(self) -> None:
         # The reachability path visible_segments relies on refuses an absent group
         # with a typed GROUP_NOT_FOUND — never a permissive True.
-        proj = ViewerProjection.from_resolver(_GraphBuilder(self.roots).build(), base_resolver())
+        proj = ViewerProjection.from_resolver(_GraphBuilder(self.roots).build(), base_resolver(),
+            audience_context=base_context())
         reach = proj._reach(TEAM, "dead0001")  # dead0001 is not in the corpus
         self.assert_err(reach, GroupErrorCode.GROUP_NOT_FOUND)
 
     def test_missing_role_principal_refuses(self) -> None:
-        proj = ViewerProjection.from_resolver(_GraphBuilder(self.roots).build(), base_resolver())
+        proj = ViewerProjection.from_resolver(_GraphBuilder(self.roots).build(), base_resolver(),
+            audience_context=base_context())
         self.assert_err(
             proj.visible_segments(Viewer(principal_uid="")),
             GroupErrorCode.GROUP_RESOLUTION_UNAVAILABLE,
@@ -374,7 +432,8 @@ class AC2AdjacencyBoundaryLaw(_ProjectionCase):
         g.biedge("t_node", "t_other")
         g.biedge("t_node", "p_a1")
         g.biedge("t_node", "p_a2")
-        return ViewerProjection.from_resolver(g.build(), base_resolver())
+        return ViewerProjection.from_resolver(g.build(), base_resolver(),
+            audience_context=base_context())
 
     def test_peer_sees_team_only_and_deterministically_ordered(self) -> None:
         proj = self._graph()
@@ -422,7 +481,8 @@ class AC3NoExistenceOrCardinalityLeak(_ProjectionCase):
             g.node(uid, PRIV_ALICE)
             g.biedge("t_node", uid)  # both directions: out-edge AND private->team back-edge
             hidden.append(uid)
-        return ViewerProjection.from_resolver(g.build(), base_resolver()), g, hidden
+        return ViewerProjection.from_resolver(g.build(), base_resolver(),
+            audience_context=base_context()), g, hidden
 
     def test_peer_output_byte_identical_across_0_1_and_N_hidden(self) -> None:
         peer = bob()
@@ -476,7 +536,8 @@ class Cut4ATotalUidFiltering(_ProjectionCase):
             g.node(uid, PRIV_ALICE)
             hidden.append(uid)
         g.edge_only("edgeonly", TEAM)
-        return ViewerProjection.from_resolver(g.build(), base_resolver()), hidden
+        return ViewerProjection.from_resolver(g.build(), base_resolver(),
+            audience_context=base_context()), hidden
 
     def test_unknown_invisible_and_edge_only_candidates_vanish_before_observables(self):
         baseline = None
@@ -539,7 +600,8 @@ class AC4SegmentLocalAuthority(_ProjectionCase):
             g.node("p_back2", PRIV_ALICE)
             g.edge("p_back1", "t_node")  # private->team back-edges: must NOT count
             g.edge("p_back2", "t_node")
-        return ViewerProjection.from_resolver(g.build(), base_resolver())
+        return ViewerProjection.from_resolver(g.build(), base_resolver(),
+            audience_context=base_context())
 
     def test_team_rank_excludes_private_to_team_back_edges(self) -> None:
         without = self._graph(with_private_back_edges=False)
@@ -599,7 +661,8 @@ class AC4SegmentLocalAuthority(_ProjectionCase):
         self.assertEqual(len(graph.inbound_sources("target00")), 8)
         self.assertIsNone(graph.record("edgeonly"))
 
-        result = ViewerProjection.from_resolver(graph, base_resolver()).authority("target00")
+        result = ViewerProjection.from_resolver(graph, base_resolver(),
+            audience_context=base_context()).authority("target00")
         self.assertTrue(result.ok, msg=result.error)
         self.assertEqual(result.value, 3)
 
@@ -628,7 +691,8 @@ class AC5OneStorageProjectedAtRead(_ProjectionCase):
         g.node("p_a1", PRIV_ALICE)
         g.biedge("t_node", "t_peer")
         g.biedge("t_node", "p_a1")
-        proj = ViewerProjection.from_resolver(g.build(), base_resolver())
+        proj = ViewerProjection.from_resolver(g.build(), base_resolver(),
+            audience_context=base_context())
 
         before = self._snapshot(self.roots.base)
         # Exercise every primitive, for two distinct viewers.
@@ -766,7 +830,8 @@ class AC6TransitiveSafeBoundedWalk(_ProjectionCase):
         # a hidden private branch off the start (invisible to bob).
         g.node("w_hidden", PRIV_ALICE)
         g.biedge("w_s", "w_hidden")
-        return ViewerProjection.from_resolver(g.build(), base_resolver())
+        return ViewerProjection.from_resolver(g.build(), base_resolver(),
+            audience_context=base_context())
 
     def test_walk_uses_adjacency_per_hop_never_crossing_the_boundary(self) -> None:
         proj = self._graph()
@@ -853,15 +918,20 @@ class AC7B4aIsSoleVisibilityAuthority(_ProjectionCase):
         # The mount/validator integration path: a VERIFIED AudiencePolicy wrapped
         # in B4aLattice drives equal-or-wider reachability. Proves B4aLattice is
         # genuinely wired, not a dead import.
-        policy, resolver, mike_group, mike_principal = _build_verified_policy()
+        policy, resolver, mike_vault, mike_principal = _build_verified_policy()
         g = _GraphBuilder(self.roots)
         proj = ViewerProjection.from_policy(g.build(), policy, resolver)
-        viewer = Viewer(principal_uid=mike_principal, private_segment_uid="d0000001")
+        viewer = Viewer(principal_uid=mike_principal, private_segment_uid="dpriv")
         visible = proj.visible_segments(viewer)
         self.assertTrue(visible.ok, msg=visible.error)
         self.assertIn(OS, visible.value)
-        self.assertIn(mike_group, visible.value)      # resolved via the B4a lattice
-        self.assertIn("d0000001", visible.value)
+        # The VAULT CODE mounted under the reachable group, not the group uid.
+        # This asserted the group uid until 2026-09-03, which is the production
+        # half of the ADR-050 substitution: filter_visible_uids compares this
+        # set against derive_segment output, and the two grammars are disjoint
+        # by length, so a group uid in here could never match anything.
+        self.assertIn(mike_vault, visible.value)      # resolved via the B4a lattice
+        self.assertIn("dpriv", visible.value)
 
     def test_from_policy_refuses_a_non_policy(self) -> None:
         _, resolver, _, _ = _build_verified_policy()
@@ -884,7 +954,8 @@ def _build_verified_policy():
     )
     authority_uid = "a1b2c3d4"
     signing_key_uid = "e5f6a7b8"
-    mike_group = "11111111"
+    mike_group = "11111111"        # the GROUP record (8-hex)
+    mike_vault = "mikev"           # the vault MOUNTED under it (ADR-050 code)
     mike_principal = "7b921d17"
 
     priv = Ed25519PrivateKey.from_private_bytes(seed)
@@ -954,6 +1025,19 @@ def _build_verified_policy():
         verified=verified,
         private_alias_group_uid=mike_group,
         reserved_os_always_readable=True,
+        # The group -> vault-code join, on the REAL context rather than a stub:
+        # visible_segments yields vault codes, and this row is what says which
+        # code the group's vault answers to. Without a mount the group resolves
+        # to nothing visible, which is correct -- an unmounted group has nothing
+        # to see -- but it would leave this integration test proving only that.
+        mount_bindings=(
+            ac.MountAudienceBinding(
+                vault_uid=mike_vault,
+                manifest_path=f"{mike_vault}/.tropo/vault-manifest.md",
+                manifest_sha256="0" * 64,
+                resolved_audience_group_uid=mike_group,
+            ),
+        ),
     )
     # ONE resolver, pinned to the verified corpus revision, used both for
     # membership (in ViewerProjection) and inside the policy adapter.
@@ -971,7 +1055,7 @@ def _build_verified_policy():
     )
     resolver = GroupResolver.from_projection(projection)
     policy = context.adapter(resolver)
-    return policy, resolver, mike_group, mike_principal
+    return policy, resolver, mike_vault, mike_principal
 
 
 if __name__ == "__main__":

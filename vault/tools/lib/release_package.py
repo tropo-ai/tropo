@@ -40,6 +40,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from lib.governed_path import is_governed_uid_shape
+
 #: The release pipeline root. A run whose pipeline is anything else is a dev
 #: run, and a dev run may not authorise a release package.
 RELEASE_PIPELINE_UID = "634913c2"
@@ -48,8 +50,6 @@ RELEASE_PIPELINE_UID = "634913c2"
 #: build script so every reader imports the same string.
 PACKAGE_FROZEN_EVENT = "tropo.release.package_frozen"
 PACKAGE_SUPERSEDED_EVENT = "tropo.release.package_superseded"
-
-_UID = re.compile(r"^[0-9a-f]{8}$")
 
 
 class PackageRefusal(RuntimeError):
@@ -304,8 +304,12 @@ def resolve_release_run(
             "any receipt written afterwards (0a0a6777 AC6-final)."
         )
     activation_uid = str(activation_uid).strip()
-    if not _UID.match(activation_uid):
-        # refusal: misuse — the activation argument is not an 8-hex governed uid
+    # accepts-both (UID_SHAPES): legacy 8-hex uids stay first-class forever;
+    # every new governed mint is 12-hex composite since the Stage B flip
+    # (2026-08-31). The literal 8-only regex this replaced refused a
+    # freshly-minted composite activation uid as "not a governed uid".
+    if not is_governed_uid_shape(activation_uid):
+        # refusal: misuse — the activation argument is not a governed uid shape
         raise PackageRefusal(
             f"{activation_uid!r} is not a governed uid; refusing rather than "
             f"searching for something that resembles it"

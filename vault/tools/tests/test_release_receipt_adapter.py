@@ -1060,6 +1060,13 @@ class PublisherReceiptTests(unittest.TestCase):
             # answers stay mocked below); and the badge endpoint observer is
             # patched to keep this suite hermetic — no live network here.
             (root / "staged-clone").mkdir()
+            # _saga() loads release_saga.py by file path through the
+            # tropo_roots.VAULT_DIR seam (never a walk up from __file__), and
+            # that seam is patched below to point at this temp root — so the
+            # fixture must actually carry the file, or the load 404s.
+            saga_lib = root / "vault" / "tools" / "lib"
+            saga_lib.mkdir(parents=True)
+            shutil.copy2(TOOLS / "lib" / "release_saga.py", saga_lib / "release_saga.py")
             state = {
                 **self._state(),
                 "activation_uid": "deadbeef",
@@ -1067,7 +1074,9 @@ class PublisherReceiptTests(unittest.TestCase):
                 "remote": publisher.DEFAULT_REMOTE,
             }
 
-            def fake_git(arguments, cwd, check=True, timeout=120):
+            def fake_git(arguments, cwd, check=True, timeout=120, env=None):
+                # _git grew an env= kwarg (site_ref_cas_push's push call passes
+                # one); this stub's signature had not been updated to match.
                 if arguments == ["rev-parse", "HEAD"]:
                     stdout = f"{REMOTE_SHA}\n"
                 elif arguments == ["remote", "get-url", "origin"]:

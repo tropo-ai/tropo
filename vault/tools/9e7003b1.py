@@ -120,7 +120,7 @@ EXIT_ARGS = 3
 EXIT_CONTRACT = 4
 EXIT_SKIP_AUTH = 5
 
-_PIPELINE_EMIT_UID_RE = re.compile(r"^[0-9a-f]{8}$")
+_PIPELINE_EMIT_UID_RE = re.compile(r"^[0-9a-f]{8}(?:[0-9a-f]{4})?$")  # accepts-both (3d430852)
 _PIPELINE_SANDBOX_ENV = "TROPO_PIPELINE_RUNTIME_SANDBOX"
 
 
@@ -190,8 +190,12 @@ def _emit_pipeline_event(event_type: str, lifecycle: str, data: dict) -> None:
 # The durable-closure weld archives an activation root (state:archived). Check 32 —
 # Completion Recording Enforcement (2fe61817, tropo-validate.py check_completion_recording)
 # — reads the derived event surface and FAILs (ERROR) any state:done/archived work-item
-# whose uid has NO correlated completion event: a tropo.cycle.closed (or
-# tropo.message.replied) whose correlationid == that uid. So archiving a root WITHOUT
+# whose uid has NO correlated completion event: a tropo.cycle.closed whose
+# correlationid == that uid. (The `or tropo.message.replied` clause that stood here was
+# WITHDRAWN 2026-08-31 by argus-a165 — see note bc3925fd. `data.final: true` is a
+# message-thread terminator, 93% of its emissions are messages, and reading it as a work
+# completion let a 16-event "Check 23 hygiene pass" silence the gate in one minute. Only
+# the ceremony this file emits counts now.) So archiving a root WITHOUT
 # emitting its correlated completion event would make every real ship trip Check 32.
 # These helpers record that event through the canonical emitter and rebuild the derived
 # events-sqlite. Idempotent (no duplicate on re-close); fire only on the archive path.
@@ -520,7 +524,7 @@ def resolve_workflow_node_tree(root_uid: str) -> dict:
                 # dropping them from the step set. Coerce before the isinstance check.
                 if isinstance(child_uid, int):
                     child_uid = str(child_uid)
-                if isinstance(child_uid, str) and re.fullmatch(r"[0-9a-f]{8}", child_uid):
+                if isinstance(child_uid, str) and re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", child_uid):  # accepts-both (3d430852)
                     queue.append(child_uid)
     return nodes
 
@@ -635,6 +639,48 @@ def make_event(event_type: str, actor: str, *,
 
 # ---------------------- state derivation (§6) ----------------------
 
+# 77ec1d61 (v1.94 Stream 5): the cutover before which the exit-code shortcut
+# still confers 'verified' (historical runs keep their grades — v1.93's freeze
+# was attested under Mike's authority and must not retroactively re-grade),
+# and after which a verification_receipt is the only grantor. ISO-Z strings
+# compare lexicographically in this schema's uniform format; events with no
+# parseable timestamp default to the pre-cutover side (conservative: preserve
+# the old grade rather than silently un-verify a legacy row).
+RECEIPT_PARITY_CUTOVER_TS = "2026-08-30T00:00:00Z"
+
+
+def _pre_receipt_parity_cutover(ev: dict, era: dict | None = None) -> bool:
+    """77ec1d61's cutover, BOUNDED per 38a0e0a5 — both timestamp gaps, one helper.
+
+    - STREAM POSITION beats the stamp: an event appended after the first
+      post-cutover event in its run is post-cutover regardless of its stamp.
+      Closes the ts-inversion sibling — a late-appended step_completed
+      carrying a forged pre-cutover stamp no longer reopens the exit-code
+      shortcut (reproduced by the property suite's generator at sequence 15
+      when the honest-sort is removed; that mask retires with this cure).
+    - The ts-LESS branch is bounded by RUN ERA: an absent stamp inherits the
+      pre-cutover shortcut only when the run itself predates the cutover —
+      evidence: the earliest ts-bearing event folded so far. A ts-less
+      step_completed in a post-cutover run earns nothing; the writer
+      forgetting the stamp is the validator's warning to raise, never a
+      grade to keep. 30 of 472 real v1.93-era rows are ts-less in
+      pre-cutover runs — they keep their grades (why the absent-field
+      default stayed lenient until it could be bounded like this).
+    - `era=None` (no context) is the degenerate pre-38a0e0a5 shape kept for
+      direct callers/tests: no position evidence, no era evidence.
+    """
+    era = era or {}
+    if era.get("saw_post_cutover_event"):
+        return False
+    ts = str(ev.get("ts") or "")
+    if ts:
+        return ts < RECEIPT_PARITY_CUTOVER_TS
+    earliest = str(era.get("earliest_ts") or "")
+    if earliest:
+        return earliest < RECEIPT_PARITY_CUTOVER_TS
+    return True
+
+
 def derive_state(events: list[dict]) -> dict:
     """Fold events left-to-right into current state.
 
@@ -652,15 +698,43 @@ def derive_state(events: list[dict]) -> dict:
         "current_step": None,
         "last_event_ts": None,
         "pause_resumed_pending": set(),
+        # 38a0e0a5 era context (stream position + run era, folded as-we-go):
+        # earliest_ts is the strongest pre-cutover evidence a run can show;
+        # saw_post_cutover is the position bound that beats any stamp.
+        "era_earliest_ts": None,
+        "era_saw_post_cutover": False,
     }
     for i, ev in enumerate(events):
         et = ev.get("event")
         step = ev.get("step")
         state["last_event_ts"] = ev.get("ts")
+        # Era snapshot AS-OF-BEFORE this event: the cutover decision at the
+        # step_completed branch below must not see the event's own stamp as
+        # prior-stream evidence (an event is never "after itself").
+        era = {"earliest_ts": state["era_earliest_ts"],
+               "saw_post_cutover_event": state["era_saw_post_cutover"]}
         if et == "step_declared":
             sid = ev["data"].get("step_id")
             if sid:
                 state["step_status"][sid] = "declared"
+        elif et == "step_reverify_opened" and step:
+            # v1.93 (argus-a161): the reader for reverify-step. Returns an
+            # instrument step whose AC7 receipt named a SUPERSEDED candidate to
+            # 'declared' so the verification RE-EXECUTES through the unchanged
+            # start/complete/verify path. Deliberately 'declared', not
+            # 'completed': re-verification must run, never inherit. The action
+            # that writes this event refuses unless the step is verified or
+            # skipped (v1.93 endgame, argus-a162), is an instrument node, and
+            # holds NO receipt naming the active candidate — so no current green
+            # can reach this branch.
+            #
+            # I emitted this event before writing this reader and the state
+            # machine silently ignored it: a writer with no reader, which is the
+            # exact defect class this studio spent v1.93 removing. Caught by the
+            # step refusing to become eligible.
+            state["step_status"][step] = "declared"
+            state["step_spans"].pop(step, None)
+            state["pause_resumed_pending"].discard(step)
         elif et == "step_started" and step:
             state["step_status"][step] = "started"
             state["step_spans"].setdefault(step, {})["started"] = ev.get("span_id")
@@ -677,7 +751,21 @@ def derive_state(events: list[dict]) -> dict:
                 # by the engine's command runner). A bare natural_verdict=pass with
                 # no engine evidence stays at 'completed'; it must earn 'verified'
                 # via a subsequent verification_receipt (Argus A102 ed04d931 §b).
-                if "verification_command_exit_code" in ev_data:
+                #
+                # v1.94 Stream 5 (77ec1d61, argus-a163 spec, talos-t53 build): the
+                # exit-code signal is engine-sourced but never proved a RECEIPT was
+                # emitted — action_step_complete's command path wrote step_completed
+                # with an exit code and no verification_receipt, so state said
+                # 'verified' while the bus held no receipt. Three live
+                # manifestations in v1.93; two were patched narrowly; the third
+                # (a vc:true command-passed step) was left for this root fix.
+                # Grade-through-receipt chosen: 'verified' has ONE grantor — the
+                # verification_receipt fold below. This branch still promotes for
+                # PRE-CUTOVER events so historical runs (v1.93's attested freeze
+                # among them) do not re-grade; post-cutover, the WRITER emits the
+                # receipt in the same transaction, so the fold confers the grade
+                # the shortcut used to grant unilaterally.
+                if "verification_command_exit_code" in ev_data and _pre_receipt_parity_cutover(ev, era):
                     state["step_status"][step] = "verified"
                 else:
                     state["step_status"][step] = "completed"
@@ -706,6 +794,28 @@ def derive_state(events: list[dict]) -> dict:
                     state["step_status"][invalidated] = "declared"
                     state["step_spans"].pop(invalidated, None)
             state["current_step"] = None
+        elif et == "step_reopened" and step:
+            # reopen-step (action_reopen_step): the produce step returns to
+            # 'declared' ONLY if the journal, up to this row, shows its candidate
+            # retired: a tropo.release.candidate_invalidated row after the step's
+            # latest completion/receipt, and no candidate_built after that
+            # invalidation. A hand-authored reopen over a live candidate leaves
+            # the green standing -- the replay guard, same shape as redeclare's.
+            _prior_rows = events[:i]
+            _last_done = max((i for i, e in enumerate(_prior_rows)
+                              if e.get("step") == step
+                              and e.get("event") in ("step_completed", "verification_receipt")),
+                             default=-1)
+            _last_inv = max((i for i, e in enumerate(_prior_rows)
+                             if e.get("event") == "tropo.release.candidate_invalidated"),
+                            default=-1)
+            _built_after = any(e.get("event") == "tropo.release.candidate_built"
+                               for e in _prior_rows[_last_inv + 1:]) if _last_inv >= 0 else True
+            if step == "8654900a" and _last_inv > _last_done and not _built_after \
+                    and state["step_status"].get(step) in ("verified", "completed"):
+                state["step_status"][step] = "declared"
+                state["step_spans"].pop(step, None)
+                state["current_step"] = None
         elif et == "step_redeclared" and step:
             # GUARDRAIL 1, second half -- CORRECTED 2026-08-28 after four
             # independent verifiers refuted the first version of this block AND
@@ -787,6 +897,14 @@ def derive_state(events: list[dict]) -> dict:
             new_status = (ev.get("data") or {}).get("status")
             if new_status:
                 state["run_status"] = new_status
+        # 38a0e0a5 era fold — AFTER the branches, so this event's own ts is
+        # only ever evidence for the events that FOLLOW it in the stream.
+        _era_ts = str(ev.get("ts") or "")
+        if _era_ts:
+            if state["era_earliest_ts"] is None or _era_ts < state["era_earliest_ts"]:
+                state["era_earliest_ts"] = _era_ts
+            if _era_ts >= RECEIPT_PARITY_CUTOVER_TS:
+                state["era_saw_post_cutover"] = True
         if step:
             state["last_step_event"][step] = ev
     return state
@@ -909,7 +1027,13 @@ def get_step_declarations(events: list[dict]) -> dict[str, dict]:
                 amended = dict(decls[sid])
                 amended["exit_criteria"] = data.get("exit_criteria", amended.get("exit_criteria", []))
                 if "verification_command" in data:
-                    amended["verification_command"] = data["verification_command"]
+                    if data["verification_command"]:
+                        amended["verification_command"] = data["verification_command"]
+                    else:
+                        # 3d8d4351 AC6: explicit empty is a CLEAR — the key
+                        # leaves the declaration, it does not linger as a
+                        # command that runs nothing and satisfies everything.
+                        amended.pop("verification_command", None)
                 decls[sid] = amended
     return decls
 
@@ -1051,7 +1175,7 @@ def build_snapshot(criteria: list[str], context_uids: dict) -> dict:
 
 def resolve_uid_ref(ref: str, context: dict) -> str | None:
     """Resolve a DSL uid-ref via context handles per §10."""
-    if re.fullmatch(r"[0-9a-f]{8}", ref):
+    if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", ref):  # accepts-both
         return ref
     return context.get(ref)
 
@@ -1381,6 +1505,8 @@ def build_run_context_uids(pipeline_run_entry: dict, activation_uid: str) -> dic
       release_plan         — (release-opened legs ONLY) the parent locked release-plan UID
       release_pipeline_run — (release-opened legs ONLY) the parent release pipeline-run UID
       triggering_release_activation — (release-opened legs ONLY) the release activation UID
+      run_folder           — the run entry's own run_folder (vault-root-relative path)
+      candidate_path       — (release runs) the active candidate_built package path
     Plus any literal 8-hex UID resolves directly.
 
     §10 DSL rider fix (Talos 2026-07-04, 4f87d056/0fa72100): a doc/test-pipeline's OWN
@@ -1401,6 +1527,38 @@ def build_run_context_uids(pipeline_run_entry: dict, activation_uid: str) -> dic
     members = fm.get("members") or []
     if isinstance(members, list) and members:
         ctx["activation_root"] = members[0]
+
+    # PATH handles, beside the UID handles (talos-t63, 2026-09-06; driver-ruled
+    # post-lock inclusion on v1.95). The freeze step 7de2c49f has declared
+    # `--run-dir {run_folder} --candidate {candidate_path}` since v1.89 and
+    # this map never carried either, so the command reached subprocess with
+    # the braces intact and every receipt read exit=4. v1.90, v1.93 and v1.94
+    # each amended the step by hand to a shell script. Both values come from
+    # data the engine already owns: the run entry's own `run_folder:` and the
+    # live candidate_built row in that run's journal.
+    #   run_folder      — vault-root-relative, exactly as the entry declares it
+    #                     (verdict_cwd resolves to the vault root for these steps)
+    #   candidate_path  — the active candidate's package path; absent when no
+    #                     candidate is live, so the placeholder stays visible
+    #                     and the receipt says so instead of guessing a file
+    _rf = fm.get("run_folder")
+    if _rf:
+        ctx["run_folder"] = str(_rf)
+        try:
+            _rf_abs = Path(str(_rf))
+            if not _rf_abs.is_absolute():
+                _rf_abs = VAULT_ROOT / _rf_abs
+            if _rf_abs.is_dir():
+                from lib import release_package as _rp
+                _rows = read_events(_rf_abs)
+                _run_uid = str(fm.get("uid") or "")
+                _cand = _rp.active_candidate(_rows, _run_uid) if _run_uid else None
+                _cp = (_cand or {}).get("package_path") or (_cand or {}).get("candidate_path")
+                if _cp:
+                    ctx["candidate_path"] = str(_cp)
+        except Exception as _exc:  # noqa: BLE001 — a handle we cannot resolve stays unresolved, visibly
+            print(f"[WARN] candidate_path handle not resolved for run {fm.get('uid')}: "
+                  f"{type(_exc).__name__}: {_exc}", file=sys.stderr)
 
     # Resolve activation entry for dev_spec_uid + triggered UIDs
     activation_entry = read_vault_entry(activation_uid)
@@ -1430,7 +1588,7 @@ def build_run_context_uids(pipeline_run_entry: dict, activation_uid: str) -> dic
             expected_spec_type = "doc-spec"
         else:
             expected_spec_type = None
-        if explicit_spec_handle and re.fullmatch(r"[0-9a-f]{8}", triggered_spec_uid):
+        if explicit_spec_handle and re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", triggered_spec_uid):  # accepts-both
             explicit_spec = read_vault_entry(triggered_spec_uid)
             if (
                 explicit_spec
@@ -1452,11 +1610,11 @@ def build_run_context_uids(pipeline_run_entry: dict, activation_uid: str) -> dic
             or fm.get("triggered_by_activation")
             or ""
         )
-        if re.fullmatch(r"[0-9a-f]{8}", release_plan_uid):
+        if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", release_plan_uid):  # accepts-both
             ctx["release_plan"] = release_plan_uid
-        if re.fullmatch(r"[0-9a-f]{8}", release_run_uid):
+        if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", release_run_uid):  # accepts-both
             ctx["release_pipeline_run"] = release_run_uid
-        if re.fullmatch(r"[0-9a-f]{8}", release_activation_uid):
+        if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", release_activation_uid):  # accepts-both
             ctx["triggering_release_activation"] = release_activation_uid
 
         dev_spec_uid = afm.get("dev_spec_uid")
@@ -1481,7 +1639,7 @@ def build_run_context_uids(pipeline_run_entry: dict, activation_uid: str) -> dic
             # This activation IS the triggered doc/test-pipeline run — reverse-resolve
             # its own spec handle + the triggering dev-spec handle (see docstring).
             cycle_context = str(afm.get("cycle_context") or "")
-            m = re.search(r"triggered-by-dev-cycle:([0-9a-f]{8})", cycle_context)
+            m = re.search(r"triggered-by-dev-cycle:([0-9a-f]{8}(?:[0-9a-f]{4})?)", cycle_context)  # accepts-both
             if m:
                 dev_cycle_uid = m.group(1)
                 dev_cycle_entry = read_vault_entry(dev_cycle_uid)
@@ -1575,7 +1733,24 @@ def _pending_lock_run_created(run_folder: "Path | None", run_fm: dict) -> dict |
     else:
         # Historical dialect: no subject_kind, dev-spec by construction.
         expected["dev_spec_uid"] = str(run_fm.get("dev_spec_uid") or "")
-    if event.get("event") != "run_created" or data.get("bootstrap_pending") is not True:
+    if event.get("event") != "run_created":
+        return None
+    # THE TRIGGER-STEP SEED (E6): trigger-step auto-creates the doc/test run and
+    # seeds ONE run_created carrying {pipeline_uid, pipeline_run_uid,
+    # auto_triggered: true} — no bootstrap_pending, no activation binding — so
+    # the owner's bootstrap read it as "already has events" and refused, and
+    # step-start then refused for want of a contract. Two writers of one seed:
+    # the lock-time seed learned the pending dialect at v1.89, the trigger-time
+    # seed never did. Measured live on the v1.94 doc leg by orpheus-o38
+    # (2026-09-04, run f0151bfa63c7) and by every test-pipeline run before it.
+    # An auto-triggered seed whose pipeline and run identity agree with the
+    # immutable run entry is adoptable exactly like a lock seed. (argus-a169)
+    if data.get("auto_triggered") is True:
+        if (str(data.get("pipeline_uid") or "") == str(run_fm.get("pipeline") or "")
+                and str(data.get("pipeline_run_uid") or "") == str(run_fm.get("uid") or "")):
+            return event
+        return None
+    if data.get("bootstrap_pending") is not True:
         return None
     if any(str(data.get(key) or "") != value for key, value in expected.items()):
         return None
@@ -2424,11 +2599,31 @@ def _resolve_verdict_cwd(declared) -> str:
         return str(candidate)
     print(
         f"[WARN] step declares verdict_cwd={raw!r}, which is not a directory on this "
-        f"machine; running the verification command from the vault root instead. "
-        "The receipt records where it actually ran.",
+        f"machine. The verification command is NOT relocated to the vault root: it is "
+        f"launched against the declared path, fails to start, and the receipt records "
+        f"verdict 'error'. A step whose declared working directory does not exist here "
+        f"has not been verified here.",
         file=sys.stderr,
     )
-    return str(VAULT_ROOT)
+    # argus-a166, 2026-09-01 (Mike-directed: "fix the gates that stopped gating").
+    #
+    # This returned str(VAULT_ROOT), which relocated the command to a directory that
+    # DOES exist and let it succeed there — so `verdict_cwd: /path/from/another/machine`
+    # plus any command that passes anywhere produced exit 0 and a receipt reading PASS.
+    # test_wrong_cwd_repo_reports_fail_not_silent_pass (v1.84.1, the a69fcab3 shape) has
+    # been red on that since the fallback landed 2026-08-21.
+    #
+    # The named-handle substitution above is kept exactly as metis-g110 built it — that
+    # half is correct and is the bug she was actually curing (`vault-root` reaching
+    # subprocess as a literal). What is withdrawn is only the substitution for a path
+    # that genuinely does not exist.
+    #
+    # WARN-SAFE (deb77758) is not violated: it protects the RUN from crashing, and the
+    # run still does not crash — _run_verification_command never raises and resolves any
+    # launch failure to verdict 'error' with the exception in stdout_tail. Warn-safe
+    # never licensed reporting PASS for a verification that did not happen where it was
+    # declared to happen. The receipt still records; it records the truth.
+    return raw
 
 
 def _run_verification_command(command_str: str, cwd: str, timeout: int = 120) -> dict:
@@ -2581,7 +2776,8 @@ def _assert_release_legs_settled(activation_uid: str, pr: dict, step_uid: str,
 
 
 def action_step_complete(activation_uid: str, step_uid: str, artifact_links: list[str], actor: str,
-                          natural_verdict: str | None = None, dry_run: bool = False) -> str:
+                          natural_verdict: str | None = None, dry_run: bool = False,
+                          execution_mode: str = "machine", evidence_ref: str = "") -> str:
     activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
     if state["step_status"].get(step_uid) != "started":
         raise ContractError(f"step {step_uid!r} not in 'started' status (got {state['step_status'].get(step_uid)!r})")
@@ -2600,6 +2796,45 @@ def action_step_complete(activation_uid: str, step_uid: str, artifact_links: lis
     data: dict = {"artifact_links": artifact_links}
     decls = get_step_declarations(events)
     decl = decls.get(step_uid, {})
+
+    # Metis ruling guard (2026-08-29), placed BEFORE any journal write: evidence
+    # flags on a vc:TRUE instrument step mean the caller is in the wrong lane —
+    # those earn their AC7 receipt through verify-step. Refusing here leaves the
+    # journal untouched ("nothing was completed" is then literally true).
+    if (execution_mode in ("agent", "human") or str(evidence_ref or "").strip()) \
+            and decl.get("verification_class", True):
+        from lib import release_verify as _rv_vct
+        if _rv_vct.instrument_for_node(step_uid) is not None:
+            raise ContractError(
+                f"step {step_uid!r} is a vc:true instrument: its AC7 receipt is earned "
+                f"through verify-step (with the same --execution-mode/--evidence-ref "
+                f"flags), not step-complete. Nothing was completed.")
+
+    # Metis ruling (evt_823a851052454a86_00000020, built by talos-t53 2026-08-29),
+    # derivation half — placed BEFORE any journal write so every evidence refusal
+    # (unresolvable ref, self-signed, wrong run/package) leaves the journal
+    # untouched. vc:false instrument steps never pass through verify-step, so
+    # their AC7 release-verification-receipt is earned HERE from named evidence,
+    # through the same cross-checks verify-step applies. Non-instrument steps
+    # ignore the flags entirely (byte-for-byte unchanged); machine mode with a
+    # dangling ref also derives nothing — emit only happens on a derived verdict.
+    _ac7_ref = str(evidence_ref or "").strip()
+    _ac7_verdict = None
+    if (execution_mode in ("agent", "human") or _ac7_ref) \
+            and not decl.get("verification_class", True):
+        from lib import release_verify as _rv_sc
+        if _rv_sc.instrument_for_node(step_uid) is not None:
+            if execution_mode in ("agent", "human") and not _ac7_ref:
+                raise ContractError(
+                    f"--execution-mode {execution_mode} requires --evidence-ref: the "
+                    f"engine consumes evidence for non-machine instruments, it does "
+                    f"not produce it. A receipt claiming {execution_mode} execution "
+                    f"with nothing to point at is exactly the synthesized receipt "
+                    f"the harness gate refuses.")
+            if _ac7_ref:
+                _derived = _derive_verdict_from_evidence(
+                    pr, events, actor, execution_mode, _ac7_ref)
+                _ac7_verdict = _derived.get("verdict", "unknown")
 
     # v1.63 verification_command: for verification_class:true steps that declare a
     # verification_command, the engine RUNS the command and derives the verdict from
@@ -2775,6 +3010,47 @@ def action_step_complete(activation_uid: str, step_uid: str, artifact_links: lis
                 f"produce-release-folder completed but post-completion key mint failed: {exc}"
             ) from exc
 
+    # 77ec1d61 (v1.94 Stream 5), writer half of grade-through-receipt: when a
+    # vc:true command-verified completion fires, the verification_receipt is
+    # emitted IN THE SAME TRANSACTION — post-cutover, the receipt fold is the
+    # only grantor of 'verified', so the writer must hand it the evidence the
+    # old exit-code shortcut used to counterfeit. This is v1.93 manifestation
+    # (c) closed at the root: a command-passed instrument step now leaves BOTH
+    # the step-level receipt AND (for AC7 instrument nodes) the
+    # release-verification-receipt the freeze decider counts. Machine mode
+    # only — agent/human evidence routes are unchanged and mutually exclusive
+    # with the command branch (evidence flags on a vc:true instrument refuse
+    # earlier, at the wrong-lane guard).
+    if (decl.get("verification_class") and verification_command
+            and data.get("verification_command_exit_code") is not None):
+        _cmd_verdict = str(data.get("natural_verdict") or "fail")
+        _f = data.get("verification_receipt_forensics") or {}
+        ev_cmd_receipt = make_event(
+            "verification_receipt", actor, step=step_uid,
+            trace_id=activation_uid, parent_span_id=ev["span_id"],
+            data={
+                "verifier_role_resolved": "verification_command",
+                "verdict": _cmd_verdict,
+                "per_criterion": [{
+                    "criterion": f"verification_command: {verification_command}",
+                    "verdict": _cmd_verdict,
+                    "rationale": f"exit={data.get('verification_command_exit_code')}; "
+                                 f"stdout={data.get('verification_command_stdout_tail')}",
+                }],
+                "rubric_scores": {"exit_criteria_coverage": 1.0 if _cmd_verdict == "pass" else 0.0},
+                "overall_rationale": f"verification_command (in-transaction, step-complete): {_cmd_verdict}",
+                "forensics": {k: _f[k] for k in (
+                    "command", "cwd", "output_sha256", "started_at",
+                    "finished_at", "runtime_version") if k in _f},
+            })
+        append_event(run_folder, ev_cmd_receipt)
+        from lib import release_verify as _rv_cmd
+        if _rv_cmd.instrument_for_node(step_uid) is not None:
+            emit_release_verification_receipt(
+                run_folder, pr, step_uid, actor, _cmd_verdict,
+                execution_mode="machine", evidence_ref="")
+
+
     # E2 fix (v1.53): verification_class:false steps are terminal at completed.
     # Auto-emit verification_receipt verdict:pass — no separate verify-step required.
     # Option b per V52 lean: completed IS the verified state when no verification gate exists.
@@ -2799,6 +3075,14 @@ def action_step_complete(activation_uid: str, step_uid: str, artifact_links: lis
                                     "overall_rationale": auto_rationale,
                                 })
         append_event(run_folder, ev_receipt)
+        # Metis ruling, emission half: the derived verdict (computed before any
+        # writes) becomes the AC7 receipt. emit_release_verification_receipt is
+        # a no-op (returns False) for non-instrument steps, so ordinary steps
+        # never see a receipt either way.
+        if _ac7_verdict is not None:
+            emit_release_verification_receipt(
+                run_folder, pr, step_uid, actor, _ac7_verdict,
+                execution_mode=execution_mode, evidence_ref=_ac7_ref)
     write_run_state_json(run_folder, pr["frontmatter"], derive_state(read_events(run_folder)), activation_uid)
     # C.5 — Stream C auto-emission: tropo.pipeline.step_completed (v1.58)
     # Sandbox-aware + fail-loud since 7627b589 -- see _emit_pipeline_event.
@@ -2807,7 +3091,203 @@ def action_step_complete(activation_uid: str, step_uid: str, artifact_links: lis
     return f"completed:{step_uid}"
 
 
-def action_verify_step(activation_uid: str, step_uid: str, actor: str, dry_run: bool = False) -> str:
+def action_reverify_step(activation_uid: str, step_uid: str, actor: str,
+                         reason: str, dry_run: bool = False) -> str:
+    """Re-open a VERIFIED instrument step whose receipt names an INVALIDATED candidate.
+
+    v1.93 (argus-a161; metis-g114 ruled the shape, Mike verbatim "approved —
+    build the narrow re-verify path").
+
+    THE DEADLOCK THIS COMPLETES. AC7 binds a release-verification receipt to a
+    candidate DIGEST. A rebuild supersedes the candidate, which invalidates every
+    receipt on the run. But nothing could re-earn one: step-redeclare refuses a
+    verified step ("that would erase a green") and verify-step requires
+    'completed'. Both refusals are individually correct; composed, a rebuilt
+    candidate was unfreezable forever. Discovered at the first real fire, when
+    v1.93 rebuilt five times.
+
+    WHY THIS IS COMPLETING THE DESIGN, NOT BYPASSING IT. The freeze gate already
+    anticipates a SECOND receipt for the same instrument -- it accepts one that
+    self-certifies via supersedes_duplicate_receipt + duplicate_reason. The
+    vocabulary for re-verification shipped; only its legitimate writer was
+    missing. This is that writer.
+
+    THE NARROWNESS, which is the whole ruling:
+      * ONLY a step whose status is 'verified'.
+      * ONLY an instrument node (the four AC7 instruments; anything else refuses).
+      * ONLY when no receipt names the ACTIVE candidate: either the step's
+        receipt(s) name candidate(s) that are NOT the active one -- the bytes it
+        certified have been superseded -- or it carries NO receipt at all
+        (v1.93 endgame: work that genuinely passed but was never recorded --
+        emit_release_verification_receipt only fires through action_verify_step,
+        and instruments run through other paths never got one). A step verified
+        against the CURRENT candidate is refused untouched. NO GREEN IS EVER
+        ERASED: this exists solely to (re-)earn a green that either no longer
+        exists or was never recorded.
+      * It re-opens ONLY. It does not verify, does not judge, and does not write
+        a receipt. The operator then runs verify-step, which EXECUTES the
+        verification fresh and emits the receipt through the unchanged path.
+        Nothing is ever copied forward from the superseded run.
+    """
+    from lib import release_package as _pkg, release_verify as _rv
+
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
+    status = state["step_status"].get(step_uid)
+    if status not in ("verified", "skipped"):
+        raise ContractError(
+            f"step {step_uid!r} is {status!r}, not 'verified'/'skipped'. re-verify exists "
+            f"only to (re-)earn a receipt — for a verified step whose candidate was "
+            f"superseded or whose green was never recorded, or (argus-a162, 2026-08-29) "
+            f"for a skipped instrument step re-entering verification. A step in any "
+            f"other state has nothing to re-earn. Use step-start / step-complete / "
+            f"verify-step for a step that has not passed yet."
+        )
+
+    instrument = _rv.instrument_for_node(step_uid)
+    if instrument is None:
+        raise ContractError(
+            f"step {step_uid!r} is not one of the AC7 instrument nodes. Only instrument "
+            f"steps carry release-verification receipts, so only they can need one "
+            f"re-earned."
+        )
+
+    run_uid = str((pr.get("frontmatter") or {}).get("uid") or "")
+    active = _pkg.active_candidate(events, run_uid)
+    active_sha = str((active or {}).get("candidate_sha256") or "")
+    if not active_sha:
+        raise ContractError(
+            f"run {run_uid} has no active candidate, so there are no bytes to "
+            f"re-verify against. Build one first."
+        )
+
+    prior = [
+        (e.get("data") or {}) for e in events
+        if str(((e.get("data") or {}).get("receipt_kind")) or "") == _rv.RECEIPT_KIND
+        and str(((e.get("data") or {}).get("instrument")) or "") == instrument
+        and str(((e.get("data") or {}).get("release_run_uid")) or "") == run_uid
+    ]
+    # v1.93 endgame (argus-a162, 2026-08-29, built by talos-t53): a verified
+    # instrument step with ZERO receipts on this run may now be re-opened too.
+    # Only release-harness ever had a receipt emitted (emit_release_verification
+    # _receipt fires only through action_verify_step, and pre-passthrough runs
+    # -- validation-gate compare run directly, the cold walk -- bypassed it
+    # while their work genuinely passed). Zero prior receipts is not "nothing
+    # was invalidated"; it is "no green was ever RECORDED". The invariant that
+    # must not move is the one below: a receipt naming the ACTIVE candidate
+    # refuses untouched. No current green is ever erased either way.
+    if any(str(r.get("candidate_sha256") or "") == active_sha for r in prior):
+        raise ContractError(
+            f"step {step_uid!r} already holds a {instrument} receipt naming the ACTIVE "
+            f"candidate {active_sha[:12]}. Re-verify refuses: this green is current and "
+            f"re-opening it would erase a passing result about the bytes actually shipping."
+        )
+
+    superseded = sorted({str(r.get("candidate_sha256") or "")[:12] for r in prior})
+    ev = make_event("step_reverify_opened", actor, step=step_uid,
+                    trace_id=activation_uid,
+                    data={"step_uid": step_uid,
+                          "instrument": instrument,
+                          "previous_status": status,
+                          "superseded_candidates": superseded,
+                          "active_candidate_sha256": active_sha,
+                          "reason": reason,
+                          "reopened_by": actor})
+    if dry_run:
+        return f"[dry-run] would reopen:{step_uid} ({instrument}; previous {status}; receipts named {superseded}, active {active_sha[:12]})"
+    append_event(run_folder, ev)
+    write_run_state_json(run_folder, pr["frontmatter"], derive_state(read_events(run_folder)), activation_uid)
+    return (f"reverify_opened:{step_uid} instrument={instrument} "
+            f"superseded={','.join(superseded)} active={active_sha[:12]} "
+            f"-- now run step-start, step-complete, verify-step to re-earn the receipt")
+
+
+def _derive_verdict_from_evidence(pr: dict, events: list, actor: str,
+                                  execution_mode: str, evidence_ref: str) -> dict:
+    """b3f620fc (argus-a162 spec, talos-t53 build): the evidence-passthrough
+    verdict for verify-step. Mirrors the cross-checks tropo-check-harness-
+    receipt.py's resolve_evidence() performs — identity, run, package — with
+    the identity check genericized: the engine does not know per-instrument
+    agents, so it enforces the anti-self-certification contract instead (the
+    evidence must name a real executing agent OTHER than the signer).
+    Instrument-exact ownership stays the machine-path checker's own check.
+
+    Cross-check failures REFUSE (ContractError) exactly as the checker script
+    does; an evidence record whose own verdict is not a pass yields an honest
+    fail receipt, not a refusal — a present-but-failing instrument run is a
+    real result the journal should carry."""
+    ref = str(evidence_ref or "").strip()
+    entry = read_vault_entry(ref)
+    if entry is None:
+        raise ContractError(
+            f"--evidence-ref {ref!r} does not resolve to a governed vault "
+            f"entry. A ref that resolves to nothing proves nothing.")
+    fm = entry.get("frontmatter") or {}
+    owner = str(fm.get("owner") or "")
+    executed_by = str(fm.get("executed_by") or fm.get("agent") or "")
+    identity = (owner or executed_by).strip()
+    if not identity:
+        raise ContractError(
+            f"evidence {ref} names no owner/executed_by. Evidence produced by "
+            f"nobody certifies nothing.")
+    if identity == str(actor).strip():
+        raise ContractError(
+            f"evidence {ref} is owned by {identity!r} — the signer themselves. "
+            f"The pass-through exists so a different instrument's work signs "
+            f"the verdict; self-supplied evidence is the self-attestation "
+            f"v1.62 B4 closed.")
+    run_uid = str((pr.get("frontmatter") or {}).get("uid") or "")
+    from lib import release_package as _pkg_ev
+    active = _pkg_ev.active_candidate(events, run_uid)
+    active_sha = str((active or {}).get("candidate_sha256") or "")
+    if not active_sha:
+        raise ContractError(
+            "this run has no active candidate; an evidence receipt has to "
+            "name the bytes it tested, and there are none.")
+    # Both fields must be present AND equal — absence is not agreement (the
+    # same shape resolve_evidence() enforces; see its A148 fix-2 note).
+    for field, expected, label in (
+        ("release_pipeline_run_uid", run_uid, "release run"),
+        ("package_sha256", active_sha, "package"),
+    ):
+        recorded = str(fm.get(field) or "")
+        if not recorded:
+            raise ContractError(
+                f"evidence {ref} names no {label}. Evidence that does not say "
+                f"which {label} it covers cannot show the instrument ran "
+                f"against this one; absence is not agreement.")
+        if recorded != expected:
+            raise ContractError(
+                f"evidence {ref} records {label} {recorded[:12]} but this run "
+                f"has {expected[:12]}; the two do not describe the same run.")
+    ev_verdict = str(fm.get("verdict") or "").strip()
+    verdict = "pass" if ev_verdict in ("pass", "pass_with_findings") else "fail"
+    rationale = (f"evidence {ref}: executed_by={identity}, "
+                 f"verdict={ev_verdict or '(absent)'}; run+package cross-checks "
+                 f"match ({run_uid[:8]} / {active_sha[:12]})")
+    return {
+        "verifier_role_resolved": f"{execution_mode}-evidence",
+        "verdict": verdict,
+        "per_criterion": [{
+            "criterion": f"evidence_ref: {ref}",
+            "verdict": verdict,
+            "rationale": rationale,
+        }],
+        "rubric_scores": {"exit_criteria_coverage": 1.0 if verdict == "pass" else 0.0},
+        "overall_rationale": rationale,
+        "evidence": {
+            "ref": ref,
+            "executed_by": identity,
+            "verdict_recorded": ev_verdict,
+            "release_pipeline_run_uid": run_uid,
+            "package_sha256": active_sha,
+        },
+    }
+
+
+def action_verify_step(activation_uid: str, step_uid: str, actor: str,
+                       dry_run: bool = False, execution_mode: str = "machine",
+                       evidence_ref: str = "", supersedes_duplicate: bool = False,
+                       duplicate_reason: str = "") -> str:
     # B4 (v1.62): --verification-data-stdin self-attestation hatch removed. Criteria are
     # always engine-computed against substrate — never accepted as agent-authored prose.
     activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
@@ -2844,11 +3324,15 @@ def action_verify_step(activation_uid: str, step_uid: str, actor: str, dry_run: 
                     "overall_rationale": "FAIL — exit_criteria is empty; step was never specified. "
                                          "Populate exit_criteria DSL before verification (v1.62 B1).",
                 }
-            elif dry_run and decl.get("verification_command"):
+            elif dry_run and decl.get("verification_command") and not (
+                execution_mode in ("agent", "human") and str(evidence_ref or "").strip()
+            ):
                 # DSL-only evaluate_criterion() is pure substrate reads (safe to run for
                 # preview); a declared verification_command is an arbitrary external
                 # script whose exit code is the verdict — never executed under --dry-run
-                # (same rationale as action_step_complete).
+                # (same rationale as action_step_complete). b3f620fc exception: the
+                # evidence-passthrough path derives its verdict from pure reads too, so
+                # a dry run CAN state what it would derive — it falls through below.
                 data = {
                     "verifier_role_resolved": "verification_command",
                     "verdict": "unknown",
@@ -2862,7 +3346,16 @@ def action_verify_step(activation_uid: str, step_uid: str, actor: str, dry_run: 
                 # Fix (2): honor verification_command on vc:true steps in verify-step
                 # (Vela V56 00000662 2026-06-01 — same dispatch as action_step_complete)
                 verification_command = decl.get("verification_command")
-                if verification_command:
+                if verification_command and execution_mode in ("agent", "human") \
+                        and str(evidence_ref or "").strip():
+                    # b3f620fc (argus-a162 spec, talos-t53 build): the flags choose
+                    # the path — they are not receipt metadata. When an agent/human
+                    # instrument names evidence, the verdict is DERIVED from that
+                    # record (resolve_evidence-mirroring cross-checks) and the
+                    # verification_command is not executed.
+                    data = _derive_verdict_from_evidence(
+                        pr, events, actor, execution_mode, evidence_ref)
+                elif verification_command:
                     # v1.66 S1 (ed04d931): named-handle substitution + per-step verdict_cwd.
                     # S1 Governed Autonomy (ef65fccd) corollary 1: routes through the same
                     # shared execution helper as action_step_complete, so a re-verify here
@@ -2956,8 +3449,34 @@ def action_verify_step(activation_uid: str, step_uid: str, actor: str, dry_run: 
     append_event(run_folder, ev)
     # AC7: a Verify instrument also records the canonical release-verification
     # receipt naming the package it tested. No-op for every other step.
+    # v1.93 (argus-a161): agent/human instruments must NAME the evidence they
+    # consumed. The engine never synthesizes an agent receipt — an unresolvable
+    # or absent ref is refused, so "agent-executed" cannot be asserted by a flag
+    # alone. This is the guard that keeps the pass-through honest.
+    if execution_mode in ("agent", "human"):
+        _ref = str(evidence_ref or "").strip()
+        if not _ref:
+            raise ContractError(
+                f"--execution-mode {execution_mode} requires --evidence-ref: the engine "
+                f"consumes evidence for non-machine instruments, it does not produce it. "
+                f"A receipt claiming {execution_mode} execution with nothing to point at "
+                f"is exactly the synthesized receipt the harness gate refuses.")
+        if not (VAULT_ROOT / "vault" / "files" / f"{_ref}.md").is_file():
+            raise ContractError(
+                f"--evidence-ref {_ref!r} does not resolve to vault/files/{_ref}.md. "
+                f"The receipt is a claim; the evidence is the proof, and a ref that "
+                f"resolves to nothing proves nothing.")
+    if supersedes_duplicate and not str(duplicate_reason or "").strip():
+        raise ContractError(
+            "--supersedes-duplicate requires --duplicate-reason: two receipts for one "
+            "instrument is exactly the ambiguity the freeze gate refuses, and a "
+            "self-certification that does not say WHY certifies nothing.")
     emit_release_verification_receipt(run_folder, pr, step_uid, actor,
-                                      data.get("verdict", "unknown"))
+                                      data.get("verdict", "unknown"),
+                                      execution_mode=execution_mode,
+                                      evidence_ref=evidence_ref,
+                                      supersedes_duplicate=supersedes_duplicate,
+                                      duplicate_reason=duplicate_reason)
     write_run_state_json(run_folder, pr["frontmatter"], derive_state(read_events(run_folder)), activation_uid)
     return data.get("verdict", "unknown")
 
@@ -2965,7 +3484,9 @@ def action_verify_step(activation_uid: str, step_uid: str, actor: str, dry_run: 
 def emit_release_verification_receipt(run_folder, pr: dict, step_uid: str,
                                       actor: str, verdict: str,
                                       execution_mode: str = "machine",
-                                      evidence_ref: str = "") -> bool:
+                                      evidence_ref: str = "",
+                                      supersedes_duplicate: bool = False,
+                                      duplicate_reason: str = "") -> bool:
     """Write the one canonical AC7 receipt when a Verify instrument completes.
 
     A148 addendum 26 item 3: the receipt VOCABULARY existed and nothing in
@@ -3019,6 +3540,8 @@ def emit_release_verification_receipt(run_folder, pr: dict, step_uid: str,
         "verdict": "pass" if str(verdict) in ("pass", "passed") else "fail",
         "executor_or_attester": actor,
         "execution_mode": execution_mode,
+        **({"supersedes_duplicate_receipt": True,
+            "duplicate_reason": str(duplicate_reason)} if supersedes_duplicate else {}),
         "evidence_ref": evidence_ref or f"{step_uid}@{now}",
         "started_at": now,
         "completed_at": now,
@@ -3095,6 +3618,13 @@ def action_step_redeclare(activation_uid: str, step_uid: str, actor: str,
                           reason: str, failed_invocation: str,
                           dry_run: bool = False) -> str:
     """Return a STARTED step to DECLARED so its run can proceed.
+
+    3d8d4351 §5 DOCSTRING NARROWING: the redeclare wedge is counted by the
+    state fold, but NO scorecard reader consumes it — a release can wedge a
+    step and the scorecard reports nothing. That is the true remaining gap;
+    this function's docstring previously implied the mechanism was fully
+    observed. The friction counter below surfaces the count at emit time so
+    the gap is at least VISIBLE per-run.
 
     THE GAP THIS CLOSES (argus-a160, 2026-08-27, found by wedging a live
     release): a step whose executor fails AFTER step-start has no way back.
@@ -3188,12 +3718,18 @@ def action_step_redeclare(activation_uid: str, step_uid: str, actor: str,
             f"would emit step_redeclared for {step_uid!r} "
             f"(status {status!r} -> 'declared'; reason={reason!r})")
 
+    # 3d8d4351 §5: the friction counter. Counted at emit, from the same
+    # events list the fold reads — the Nth redeclare of THIS run, surfaced so
+    # the unscored gap is visible per-run instead of invisible everywhere.
+    _friction = sum(1 for e in events
+                    if e.get("event") == "step_redeclared") + 1
     parent = find_event_span(events, "step_started", step_uid)
     ev = make_event("step_redeclared", actor, step=step_uid,
                     trace_id=activation_uid, parent_span_id=parent,
                     data={
                         "step_id": step_uid,
                         "previous_status": status,
+                        "redeclare_friction_count": _friction,
                         "reason": reason,
                         "failed_invocation": failed_invocation,
                         "redeclared_by": actor,
@@ -3202,6 +3738,117 @@ def action_step_redeclare(activation_uid: str, step_uid: str, actor: str,
     write_run_state_json(run_folder, pr["frontmatter"],
                          derive_state(read_events(run_folder)), activation_uid)
     return f"redeclared:{step_uid}"
+
+
+PRODUCE_STEP_UID = "8654900a"  # produce-release-folder: the mint+build step
+
+
+def _last_candidate_invalidation(events: list[dict]) -> dict | None:
+    """The newest tropo.release.candidate_invalidated row, or None."""
+    last = None
+    for ev in events:
+        if ev.get("event") == "tropo.release.candidate_invalidated":
+            last = ev
+    return last
+
+
+def action_reopen_step(activation_uid: str, step_uid: str, actor: str,
+                       reason: str, dry_run: bool = False) -> str:
+    """Return the produce step (mint+build, 8654900a) to DECLARED after the run's
+    sealed candidate was INVALIDATED on the record -- the narrow verb.
+
+    THE GAP THIS CLOSES (metis-g123, v1.95 candidate #3, 2026-09-06): a run
+    whose candidate sealed at the candidate phase and was then blocked by a
+    walker (Mike ruling: cure and cut #3) could not rebuild through the ruled
+    path. The produce step reads 'verified'; step-redeclare refuses (not
+    'started'); reverify-step refuses (not an AC7 instrument node); the
+    standalone build is the rehearsal door and refuses at Step 0.4; the runner
+    skips terminal steps. v1.93 and v1.94 rebuilt through the standalone door,
+    so the runner path had never rebuilt after a seal -- declared-but-not-wired,
+    the family. Ruled by the driver: the narrow verb, not a superseding run.
+
+    GUARDRAILS, each a refusal by name:
+      * ONLY the produce step. Any other step refuses: this verb exists for one
+        step whose verdict is a candidate, and a candidate can be invalidated.
+      * ONLY from 'verified' or 'completed' -- there is a green to reopen. A
+        'started' step is step-redeclare's case; 'declared' is already runnable.
+      * ONLY when the run has NO active candidate: release_package.active_candidate
+        must be None, i.e. the sealed one was retired by
+        tropo-supersede-release-package.py --candidate-only --invalidate-candidate
+        <sha256> --reason "<the ruling>". A live candidate refuses, naming that
+        command. Invalidating is Mike's ruling on the record; this verb reads it.
+      * The invalidation row must be NEWER than the step's most recent
+        completion: an old invalidation cannot reopen a later green.
+    No green is erased: the completion and receipt rows stand; the reopen row
+    stands beside them carrying the previous status, the reason, the retired
+    candidate digest and the actor. The replay (derive_state) applies the same
+    candidate check, so a hand-authored step_reopened over a live candidate
+    leaves the step 'verified'.
+    """
+    activation, pr, run_folder, events, state = load_run(activation_uid, dry_run=dry_run)
+    if step_uid != PRODUCE_STEP_UID:
+        raise ContractError(
+            f"step {step_uid!r} is not the produce step ({PRODUCE_STEP_UID}); reopen-step "
+            f"exists for the mint+build step whose verdict is a candidate. Other steps "
+            f"have step-redeclare (wedged after start) or reverify-step (instrument nodes)")
+    status = state["step_status"].get(step_uid)
+    if status is None:
+        raise ContractError(f"step {step_uid!r} is not in this run; nothing to reopen")
+    if status not in ("verified", "completed"):
+        raise ContractError(
+            f"step {step_uid!r} is {status!r}, not 'verified'/'completed'. reopen-step "
+            f"exists for a green whose candidate was invalidated; 'started' is "
+            f"step-redeclare's case and 'declared' is already runnable")
+    from lib import release_package as _pkg
+    run_uid = str(pr["frontmatter"].get("uid") or "")
+    try:
+        live = _pkg.active_candidate(events, run_uid)
+    except _pkg.PackageRefusal as exc:
+        raise ContractError(f"candidate axis ambiguous; refusing to reopen: {exc}")
+    if live is not None:
+        raise ContractError(
+            f"run {run_uid} still has an active candidate "
+            f"{str(live.get('candidate_sha256') or '')[:12]}; reopen-step refuses while a "
+            f"candidate is live. Retire it on the record first: python3 "
+            f"vault/tools/tropo-supersede-release-package.py --run-dir <run> --candidate-only "
+            f"--invalidate-candidate <sha256> --reason \"<the ruling>\" --actor <who>")
+    invalidation = _last_candidate_invalidation(events)
+    if invalidation is None:
+        raise ContractError(
+            f"run {run_uid} has no tropo.release.candidate_invalidated row; a produce "
+            f"step is reopened only after its candidate was retired on the record")
+    last_done = max((i for i, ev in enumerate(events)
+                     if ev.get("step") == step_uid
+                     and ev.get("event") in ("step_completed", "verification_receipt")),
+                    default=-1)
+    if events.index(invalidation) < last_done:
+        raise ContractError(
+            f"the newest candidate invalidation predates step {step_uid!r}'s latest "
+            f"completion; an old invalidation cannot reopen a later green")
+    if not (reason or "").strip():
+        raise ContractError("--reason must say something; a reopen with no cause is not a record")
+    if not (actor or "").strip():
+        raise ContractError("--actor must name who is reopening")
+    retired = str((invalidation.get("data") or {}).get("candidate_sha256") or "")
+    if dry_run:
+        return _dry_run_report(
+            "reopen-step",
+            f"would emit step_reopened for {step_uid!r} (status {status!r} -> 'declared'; "
+            f"retired candidate {retired[:12]}; reason={reason!r})")
+    parent = find_event_span(events, "step_started", step_uid)
+    ev = make_event("step_reopened", actor, step=step_uid,
+                    trace_id=activation_uid, parent_span_id=parent,
+                    data={
+                        "step_id": step_uid,
+                        "previous_status": status,
+                        "reason": reason,
+                        "invalidated_candidate_sha256": retired,
+                        "reopened_by": actor,
+                    })
+    append_event(run_folder, ev)
+    write_run_state_json(run_folder, pr["frontmatter"],
+                         derive_state(read_events(run_folder)), activation_uid)
+    return f"reopened:{step_uid}"
 
 
 def action_skip_request(activation_uid: str, step_uid: str, actor: str, reason: str,
@@ -3226,7 +3873,7 @@ def action_authorize_skip(activation_uid: str, step_uid: str, authorized_by: str
     # non-UID labels remain accepted when non-empty (historical runs used labels).
     if not (authorized_by or "").strip():
         raise SkipAuthError("authorized_by is required")
-    if re.fullmatch(r"[0-9a-f]{8}", str(authorized_by).strip()):
+    if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", str(authorized_by).strip()):  # accepts-both
         authorizer = read_vault_entry(authorized_by)
         if authorizer is None:
             raise SkipAuthError(
@@ -3859,7 +4506,34 @@ def action_human_signoff(activation_uid: str, verdict: str, notes: str, actor: s
             f"vault entry; only registered principals may sign. (v1.66 S1 fix D; ed04d931)"
         )
     # C+A: reject if same canonical identity as executor (self-sign via any label)
-    if signer_uid == executor_uid:
+    #
+    # v1.93 NARROW EXEMPTION (argus-a161; metis-g114 raised it, Mike verbatim
+    # authorization "go now" 2026-08-29 at the terminal, mid-fire).
+    #
+    # THE CONTRADICTION THIS RESOLVES: the one-prompt design has MIKE commission
+    # and drive the release run, so activation 2e9f4dcd carries
+    # activated_by: mike. This gate then refused Mike's own signoff as a
+    # self-sign — and he is the only human in the company, so the gate became
+    # UNSATISFIABLE. An unsatisfiable gate is a false gate: it stops the work it
+    # was built to authorise and prevents nothing.
+    #
+    # WHAT THE GATE IS ACTUALLY FOR: stopping an AGENT from manufacturing its own
+    # independent verification. That is untouched below — an agent principal
+    # signing its own run still raises, exactly as before.
+    #
+    # THE DISCRIMINATOR ALREADY EXISTED. `principal_class` is populated on every
+    # principal record (human / agent-executive / agent-concierge) and
+    # `_get_principal_class` was written for precisely this — its own docstring
+    # says "distinguish human principals from agent principals for
+    # verifier-independence exemption logic". It was imported here and never
+    # used. Metis proposed keying on `subtype: person`; I checked and NO principal
+    # carries that field, so that cure would have refused Mike too. I then briefly
+    # added `subtype` myself before finding this helper, and reverted it — a
+    # second field asserting a fact that already has one is the sibling-drift
+    # defect, not a fix.
+    if signer_uid == executor_uid and _get_principal_class(signer_uid, VAULT_ROOT) == "human":
+        pass  # human commissioned and drives this run; their key IS the consent gate
+    elif signer_uid == executor_uid:
         raise ContractError(
             f"human-signoff refused: {actor!r} (resolved: {signer_uid}) is the pipeline "
             f"executor ({activated_by}, resolved: {executor_uid}); signoff must be independent. "
@@ -4124,7 +4798,13 @@ def _auto_bootstrap_triggered_pipeline(
                             trace_id=triggered_activation_uid, parent_span_id=None,
                             data={"pipeline_uid": triggered_pipeline_uid,
                                   "pipeline_run_uid": pr_uid,
-                                  "auto_triggered": True})
+                                  "auto_triggered": True,
+                                  # self-describing seed (argus-a169 2026-09-04): the owner's
+                                  # bootstrap adopts it; see _pending_lock_run_created
+                                  "bootstrap_pending": True,
+                                  "activation_uid": triggered_activation_uid,
+                                  "subject_kind": triggered_pipeline_class,
+                                  "subject_uid": triggered_spec_uid})
         append_event(run_folder_abs, run_ev)
         print(f"  [E6] auto-bootstrapped pipeline-run {pr_uid!r} for triggered {pipeline_name}",
               file=sys.stderr)
@@ -4218,9 +4898,9 @@ def action_trigger_step(
     4. Record the leg on the parent release run's event stream
     Returns: {"triggered_spec_uid": ..., "triggered_activation_uid": ...}
     """
-    if not re.fullmatch(r"[0-9a-f]{8}", triggered_spec_uid):
+    if not re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", triggered_spec_uid):  # accepts-both
         raise ValidationError(f"--triggered-spec-uid must be 8-hex; got {triggered_spec_uid!r}")
-    if not re.fullmatch(r"[0-9a-f]{8}", triggered_pipeline_uid):
+    if not re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", triggered_pipeline_uid):  # accepts-both
         raise ValidationError(f"--triggered-pipeline-uid must be 8-hex; got {triggered_pipeline_uid!r}")
     if pipeline_class not in ("doc-pipeline", "test-pipeline"):
         raise ValidationError(
@@ -4441,7 +5121,7 @@ def action_trigger_step(
         raise ContractError(
             f"pipeline-activate.py failed (exit {result.returncode}): {result.stderr.strip()}")
     triggered_activation_uid = result.stdout.strip()
-    if not re.fullmatch(r"[0-9a-f]{8}", triggered_activation_uid):
+    if not re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", triggered_activation_uid):  # accepts-both
         raise ContractError(
             f"pipeline-activate.py returned invalid activation UID: {triggered_activation_uid!r}")
 
@@ -4768,7 +5448,7 @@ def assert_post_test_evidence_descendant(
                     "monotonic writes_since_full_rebuild projection")
             continue
 
-        match = re.fullmatch(r"vault/files/([0-9a-f]{8})\.md", path)
+        match = re.fullmatch(r"vault/files/([0-9a-f]{8}(?:[0-9a-f]{4})?)\.md", path)  # accepts-both
         if match is None:
             raise ValidationError(
                 f"POST-TEST EVIDENCE REFUSED: {path} is not governed evidence metadata")
@@ -5839,7 +6519,13 @@ def action_amend_step_criteria(
     if step_uid not in decls:
         raise ValidationError(f"step {step_uid!r} not in activation contract; cannot amend")
     data: dict = {"step_id": step_uid, "exit_criteria": new_criteria}
-    if verification_command:
+    # 3d8d4351 AC6: the two truncation points cured. `verification_command`
+    # is None when the caller did not touch it (key absent = no change) and
+    # "" when the caller EXPLICITLY cleared it (key present and empty = the
+    # reader removes the declaration's command). The prior `if verification_
+    # command:` treated both the same — a requested clear silently kept the
+    # old command, the exact defect AC6 names.
+    if verification_command is not None:
         data["verification_command"] = verification_command
     if dry_run:
         return _dry_run_report(
@@ -5916,9 +6602,43 @@ def build_parser() -> argparse.ArgumentParser:
                     help="comma-separated paths or UIDs")
     sc.add_argument("--natural-verdict",
                     help="for verification-class steps: 'pass' or 'fail' from natural output")
+    # Metis ruling (evt_823a851052454a86_00000020, built by talos-t53 2026-08-29):
+    # vc:false instrument steps route around verify-step entirely — the AC7
+    # release-verification-receipt needs the same evidence-passthrough here.
+    # Absent these flags, step-complete behavior is byte-for-byte unchanged.
+    sc.add_argument("--execution-mode", choices=("machine", "human", "agent"),
+                    default="machine",
+                    help="who executed an instrument step's evidence (machine = "
+                         "default engine behavior, no evidence consumed)")
+    sc.add_argument("--evidence-ref", default="",
+                    help="governed vault entry UID backing an agent/human execution "
+                         "mode; the receipt consumes it, the engine never synthesizes it")
 
     vs = sub.add_parser("verify-step")
     vs.add_argument("step_uid")
+    # v1.93 (argus-a161; Mike-authorized). release_verify's own doctrine: the engine
+    # "runs machine instruments and CONSUMES EVIDENCE for human and agent ones". The
+    # emitter always took execution_mode + evidence_ref; nothing ever passed them, so
+    # agent instruments could never earn a receipt and the harness gate correctly
+    # refused the machine-mode one as synthesized. These two flags are that missing
+    # pass-through. Agent mode REQUIRES resolvable evidence — see action_verify_step.
+    vs.add_argument("--execution-mode", choices=("machine", "human", "agent"),
+                    default="machine",
+                    help="how this instrument was executed. 'agent'/'human' REQUIRE "
+                         "--evidence-ref naming a governed record of the real run.")
+    vs.add_argument("--evidence-ref", default="",
+                    help="8-hex uid of the governed evidence record; must resolve")
+    # v1.93 (argus-a161): the harness step's own verification_command IS
+    # tropo-check-harness-receipt.py, so the FIRST verify necessarily fails --
+    # the command runs, finds no receipt, and the receipt is written afterwards.
+    # The freeze gate already anticipates exactly two receipts and names the
+    # fields that make the second legal. Nothing could set them. These are that
+    # setter -- the circularity is structural, so the cure is declaring it.
+    vs.add_argument("--supersedes-duplicate", action="store_true",
+                    help="declare this receipt supersedes an earlier one for the "
+                         "same instrument; REQUIRES --duplicate-reason")
+    vs.add_argument("--duplicate-reason", default="",
+                    help="why two receipts legitimately exist, in one sentence")
     # B4 (v1.62): --verification-data-stdin removed — self-attestation hatch closed.
 
     sf = sub.add_parser("step-fail")
@@ -5930,6 +6650,17 @@ def build_parser() -> argparse.ArgumentParser:
                              "compensate", "abort"])
     sf.add_argument("--error-detail", required=True)
     sf.add_argument("--retry-count", type=int, default=0)
+
+    rv = sub.add_parser(
+        "reverify-step",
+        help="re-open a VERIFIED instrument step whose AC7 receipt names a "
+             "SUPERSEDED candidate, so its receipt can be re-earned against the "
+             "active one (refuses if the receipt already names the active candidate)")
+    rv.add_argument("step_uid")
+    rv.add_argument("--reason", required=True,
+                    help="why this receipt must be re-earned, in one sentence")
+    rv.add_argument("--actor", required=True,
+                    help="who is re-opening (agent-generation or principal)")
 
     rd = sub.add_parser(
         "step-redeclare",
@@ -5947,6 +6678,16 @@ def build_parser() -> argparse.ArgumentParser:
     rd.add_argument("--actor", required=True,
                     help="who is re-declaring (agent-generation or principal) -- "
                          "a wedge cost must be attributable to somebody")
+    ro = sub.add_parser(
+        "reopen-step",
+        help="return the produce step (8654900a) to DECLARED after its sealed "
+             "candidate was retired on the record (refuses while a candidate "
+             "is still active; no green erased)")
+    ro.add_argument("step_uid")
+    ro.add_argument("--reason", required=True,
+                    help="why the candidate was retired and the step reopens, in one sentence")
+    ro.add_argument("--actor", required=True,
+                    help="who is reopening (agent-generation or principal)")
 
     sr = sub.add_parser("skip-request")
     sr.add_argument("step_uid")
@@ -6044,20 +6785,37 @@ def main() -> int:
         elif action == "step-complete":
             links = [s.strip() for s in args.artifact_links.split(",") if s.strip()]
             result = action_step_complete(args.activation_uid, args.step_uid, links, actor,
-                                            args.natural_verdict, dry_run=args.dry_run)
+                                            args.natural_verdict, dry_run=args.dry_run,
+                                            execution_mode=args.execution_mode,
+                                            evidence_ref=args.evidence_ref)
             print(result if not args.json else json.dumps({"result": result}))
         elif action == "verify-step":
-            result = action_verify_step(args.activation_uid, args.step_uid, actor, dry_run=args.dry_run)
+            result = action_verify_step(
+                args.activation_uid, args.step_uid, actor,
+                dry_run=args.dry_run,
+                execution_mode=getattr(args, "execution_mode", "machine"),
+                evidence_ref=getattr(args, "evidence_ref", ""),
+                supersedes_duplicate=getattr(args, "supersedes_duplicate", False),
+                duplicate_reason=getattr(args, "duplicate_reason", ""))
             print(result if not args.json else json.dumps({"verdict": result}))
         elif action == "step-fail":
             result = action_step_fail(args.activation_uid, args.step_uid, actor,
                                        args.failure_phase, args.failure_class, args.disposition,
                                        args.error_detail, args.retry_count, dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
+        elif action == "reverify-step":
+            result = action_reverify_step(
+                args.activation_uid, args.step_uid, args.actor, args.reason,
+                dry_run=args.dry_run)
+            print(result if not args.json else json.dumps({"result": result}))
         elif action == "step-redeclare":
             result = action_step_redeclare(
                 args.activation_uid, args.step_uid, actor, args.reason,
                 args.failed_invocation, dry_run=args.dry_run)
+            print(result if not args.json else json.dumps({"result": result}))
+        elif action == "reopen-step":
+            result = action_reopen_step(
+                args.activation_uid, args.step_uid, actor, args.reason, dry_run=args.dry_run)
             print(result if not args.json else json.dumps({"result": result}))
         elif action == "skip-request":
             result = action_skip_request(args.activation_uid, args.step_uid, actor, args.reason,

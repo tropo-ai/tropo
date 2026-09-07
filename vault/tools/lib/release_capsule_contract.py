@@ -44,6 +44,24 @@ FAN_IN_FIELDS = (
 
 LOCKED_STATUSES = frozenset({"locked"})
 
+#: The release-plan capsule's `status:` enum, verbatim from its Check 2
+#: (`vault/capsules/tropo-release-plan.capsule.md`). ONE declared set read by
+#: every tool that asks "is this a plan state" — the preflight's
+#: `lock-plan-record` gate carried its own hand list `("locked", "active",
+#: "design")`, which lacked `specify`, the plan's correct post-walk state, and
+#: refused Mike's v1.95 ignition on it (Metis G122's finding; f015ef8ff398
+#: step 2; talos-t63 2026-09-06). A test reads the capsule line and goes red
+#: if this set and the capsule disagree.
+PLAN_STATUSES = frozenset({"design", "specify", "locked", "active", "build", "done", "cancelled"})
+
+#: The pre-lock states the release lock accepts. Read by tropo-lock-release-plan.py
+#: (the act and its --check) so the lock and the preflight cannot grow apart.
+#: Today's behaviour kept verbatim: `design` and `specify`. NOTE for the
+#: architect: the capsule's transitions name `specify -> locked` as the ONLY
+#: entry into locked and `design -> specify` as founder-gated, so `design` here
+#: lets a lock skip that gate; flagged, not changed (talos-t63).
+LOCKABLE_STATUSES = frozenset({"design", "specify"})
+
 
 def parse_version(value) -> Optional[tuple]:
     """`1.87.0` → `(1, 87, 0)`; anything unparseable → None.

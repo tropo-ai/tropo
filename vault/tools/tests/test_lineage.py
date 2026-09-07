@@ -205,5 +205,101 @@ class Lineage(unittest.TestCase):
                          "the next number follows the highest line present")
 
 
+def _load_lineage_module():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("tropo_lineage_direct", TOOL)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class BirthClearsThePredecessorsRetiredAt(Lineage):
+    """S3 (f0153e0eb53e, v1.95): retire writes retired_at onto the unified entry;
+    born wrote born_at and left retired_at standing, so every active entry after
+    a turnover read retired-before-born — one fact, two fields, one updated.
+    Mutation: remove the `"retired_at": None` from born_fields and the first
+    test goes red."""
+
+    def _entry_with_pointer(self, agent="metis", uid="abcdef12"):
+        (self.root / "agents" / agent).mkdir(parents=True, exist_ok=True)
+        (self.root / "vault" / "agents").mkdir(parents=True, exist_ok=True)
+        entry = self.root / "vault" / "agents" / f"{uid}.md"
+        entry.write_text(
+            "---\nuid: %s\ntype: agent\nstatus: retired\ngeneration: G1\n"
+            "retired_at: '2026-09-04T21:24:36Z'\n---\n# Metis\n\nvoice untouched\n" % uid,
+            encoding="utf-8")
+        (self.root / "agents" / agent / f"{agent}-activation.md").write_text(
+            f"---\nagent_uid: {uid}\n---\n", encoding="utf-8")
+        return entry
+
+    def test_born_clears_retired_at_and_stamps_born_at(self):
+        entry = self._entry_with_pointer()
+        out = self.born()
+        fm = entry.read_text(encoding="utf-8").split("---")[1]
+        self.assertNotIn("retired_at", fm)
+        self.assertIn("status: active", fm)
+        self.assertIn("born_at:", fm)
+        self.assertIn("generation: %s" % out["generation"], fm)
+        self.assertIn("voice untouched", entry.read_text(encoding="utf-8"))
+
+    def test_retire_then_born_leaves_no_retired_at(self):
+        entry = self._entry_with_pointer()
+        self.born()
+        c, _, err = self.run_tool("retire", "--agent", "metis")
+        self.assertEqual(c, 0, err)
+        self.assertIn("retired_at:", entry.read_text(encoding="utf-8").split("---")[1])
+        self.born()
+        fm = entry.read_text(encoding="utf-8").split("---")[1]
+        self.assertNotIn("retired_at", fm)
+        self.assertIn("status: active", fm)
+
+
+class ResolveEntryCaseSensitivity(unittest.TestCase):
+    """Argus's release-gate negative-control ask, narrowed: UID_HEX_PATTERN
+    (used inside resolve_entry's agent_uid extraction regex) accepts
+    uppercase hex, unlike the tight is_governed_uid_shape predicate. Before
+    the fix, an uppercase-cased agent_uid in the activation pointer would
+    resolve — on a case-insensitive filesystem (macOS APFS default) — to
+    whatever file happens to share that path case-insensitively, reading its
+    content under an unverified name rather than refusing outright."""
+
+    def setUp(self):
+        self.root = pathlib.Path(tempfile.mkdtemp(prefix="lineage-resolve-"))
+        self.lineage = _load_lineage_module()
+        (self.root / "agents" / "talos").mkdir(parents=True)
+        (self.root / "vault" / "agents").mkdir(parents=True)
+        (self.root / "vault" / "agents" / "abcdef12.md").write_text(
+            "---\nuid: abcdef12\ntype: agent\n---\n# Talos\n",
+            encoding="utf-8",
+        )
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _write_pointer(self, agent_uid: str) -> None:
+        (self.root / "agents" / "talos" / "talos-activation.md").write_text(
+            f"---\nagent_uid: {agent_uid}\n---\n",
+            encoding="utf-8",
+        )
+
+    def test_lowercase_agent_uid_resolves(self) -> None:
+        """Positive control: proves the refusal below is about case, not
+        that resolve_entry refuses every pointer."""
+        self._write_pointer("abcdef12")
+        entry = self.lineage.resolve_entry(self.root, "talos")
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.name, "abcdef12.md")
+
+    def test_uppercase_agent_uid_does_not_resolve(self) -> None:
+        self._write_pointer("ABCDEF12")
+        entry = self.lineage.resolve_entry(self.root, "talos")
+        self.assertIsNone(
+            entry,
+            "a case-mismatched agent_uid must refuse, not resolve to "
+            "whatever the filesystem happens to consider the same path",
+        )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

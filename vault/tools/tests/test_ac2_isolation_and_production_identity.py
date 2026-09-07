@@ -26,6 +26,14 @@ from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS))
+
+# 3d430852 suite migration 7 of 7 (T55): mint-output assertions follow the
+# AUTHORITY mint constant — Stage A mints 8-hex (the substrate_authored_by
+# extractor passes today unchanged); when Stage B flips MINT_HEX_LEN to 12 the
+# generated script's regex follows the flip instead of extracting a
+# plausible WRONG first-8 of a 12-hex uid. Never a second mint-shape
+# definition.
+from lib.governed_path import MINT_HEX_LEN as _MINT_LEN  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import temp_studio  # noqa: E402
@@ -61,7 +69,20 @@ class ProductionIsUntouched(unittest.TestCase):
                                           f"title: {title}", "status: active"])
         self.studio.write_entry("10c40001", [
             "type: dev-spec", "title: isolated fixture plant", "status: draft",
-            "state: active", "owner: talos", "schema_version: 2"])
+            "state: active", "owner: talos", "schema_version: 2",
+            # acceptance_criteria is REQUIRED at lock since S4 AC8 (29506520):
+            # without it every lock here dies on refuse_on_own_findings and the
+            # tests report the fixture, not the behaviour under test. Same seed
+            # repair the AC2 snapshot suite made when the refusal landed
+            # (argus-a156, retro 25c70440 §Actions 4); this suite's seed was
+            # never visited — 11 tests red on the fixture since 2026-08-24,
+            # measured pre-existing at the T55 308bb12e baseline.
+            "acceptance_criteria:",
+            "  - id: AC1",
+            "    behavior: the isolated gesture writes only into the temp studio",
+            "    verify:",
+            "      method: automated",
+            "      command: python3 -m unittest vault/tools/tests/test_ac2_isolation_and_production_identity.py"])
 
     def _lock_module(self):
         module = self.studio.load("tropo-lock-dev-spec.py", "isolated_lock_dev_spec")
@@ -112,6 +133,13 @@ class ProductionIsUntouched(unittest.TestCase):
             f"STUDIO = Path({str(self.studio.root)!r})\n"
             "assert Path(lt.VAULT_ROOT).resolve() == STUDIO, ('lib rooted at ' + str(lt.VAULT_ROOT))\n"
             "assert Path(lockdev.VAULT_ROOT).resolve() == STUDIO\n"
+            # Stage B: the lock's composite mints read the studio-identity
+            # manifest (refuse-if-absent) — every fixture studio needs its
+            # genesis before it can lock.
+            "import importlib.util as _ilu\n"
+            "_mspec = _ilu.spec_from_file_location('mint_seed', STUDIO / 'vault' / 'tools' / 'tropo-mint-id.py')\n"
+            "_mint = _ilu.module_from_spec(_mspec); _mspec.loader.exec_module(_mint)\n"
+            "_mint.mint_studio_identity(root=STUDIO, minted_by='fixture-genesis')\n"
             + body,
             encoding="utf-8")
         return subprocess.run([sys.executable, str(script)],
@@ -715,7 +743,7 @@ class ProductionIsUntouched(unittest.TestCase):
             "print('N_ACT', len(acts), 'N_ROOT', len(projects), 'N_RUN', len(runs))\n"
             "activation_uid = acts[0].stem\n"
             "print('HAS_CLASS', 'activation_class: pipeline' in acts[0].read_text())\n"
-            "m = re.search(r\"substrate_authored_by:\\s*['\\\"]?([0-9a-f]{8})\", runs[0].read_text())\n"
+            f"m = re.search(r\"substrate_authored_by:\\s*['\\\"]?([0-9a-f]{{{_MINT_LEN}}})\", runs[0].read_text())\n"
             "print('SUBSTRATE', m.group(1) if m else 'MISSING')\n"
             "print('SUBSTRATE_OK', (m.group(1) if m else '') == activation_uid)\n"
             "for uid in ('0c6518ef', 'fa3a49c8'):\n"

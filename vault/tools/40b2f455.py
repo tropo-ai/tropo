@@ -1599,10 +1599,19 @@ def _check_retirement_invariants(fm: dict, args) -> list[str]:
     else:
         try:
             reflection_text = rp_path.read_text()
-            if "## File Manifest" not in reflection_text:
+            # A10 (00d776ae W1): the playbook TEACHES the section as
+            # `§File Manifest`; this checker demanded the markdown-heading
+            # form only — a compliant reflection HALTED retirement (the
+            # hard R-3 stop) over a synonym the playbook itself uses. Both
+            # forms count; anything else is still the gap.
+            has_manifest_section = (
+                "## File Manifest" in reflection_text
+                or "§File Manifest" in reflection_text
+            )
+            if not has_manifest_section:
                 failures.append(
                     f"REFLECT practice-gap: reflection at {reflection_path!r} exists but is missing "
-                    f"`## File Manifest` section. Per agent-retire.playbook §Step 2.2 — "
+                    f"`## File Manifest` (or `§File Manifest`) section. Per agent-retire.playbook §Step 2.2 — "
                     f"the File Manifest section is required for executive-class reflections "
                     f"(non-git audit trail; provenance record). Remediation: add the section "
                     f"listing this session's created / modified / deleted files."

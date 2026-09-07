@@ -64,7 +64,7 @@ def envelope(event: str, data: dict, **overrides) -> dict:
     row = {
         "event": event,
         "ts": "2026-08-16T21:00:00Z",
-        "actor": "talos-t44",
+        "actor": "34cf0f1c",  # 3d8d4351: UID in actor (names -> label)
         "data": data,
         "schema_version": 2,
         "trace_id": ACTIVATION,

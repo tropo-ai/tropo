@@ -138,6 +138,20 @@ from dataclasses import fields as dataclass_fields
 from dataclasses import is_dataclass
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import git_env  # noqa: E402  (the git-env containment seam)
+
+# 3d430852 suite migration 4 of 7 (T55): mint-output assertions follow the
+# AUTHORITY mint constant — Stage A mints 8-hex (assertions pass today
+# unchanged); when Stage B flips MINT_HEX_LEN to 12 these follow the flip
+# instead of breaking. Never a second mint-shape definition. The static
+# fixture-parser regex above (hand-written 8-hex fixture text) is deliberately
+# NOT migrated — same class as the untouched refusal cases in migrations 1-3.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.governed_path import MINT_HEX_LEN as _MINT_LEN  # noqa: E402
+
+_MINT_SHAPE = r"^[0-9a-f]{%d}$" % _MINT_LEN
 from unittest import mock
 
 try:  # optional; the line parser below covers everything these fixtures emit
@@ -503,8 +517,8 @@ class FolderCase(unittest.TestCase):
     def assertMountUid(self, value) -> None:
         self.assertIsInstance(value, str)
         self.assertRegex(
-            value, r"^[0-9a-f]{8}$",
-            msg="the frozen surface says mount_uid is 8-hex, minted once",
+            value, _MINT_SHAPE,
+            msg=f"the frozen surface says mount_uid is {_MINT_LEN}-hex, minted once",
         )
 
     def sidecars_in(self, folder_path: Path) -> list:
@@ -705,8 +719,7 @@ class AttachRequiresNothingTests(FolderCase):
         """
         root = self.studio()
         cloud = self.cloud_folder(leaf="Repo")
-        subprocess.run(["git", "init", "-q"], cwd=str(cloud), check=True,
-                       capture_output=True)
+        git_env.git_run("init", "-q", cwd=cloud)
         (cloud / "uncommitted.md").write_text("dirty\n", encoding="utf-8")
         porcelain = subprocess.run(
             ["git", "status", "--porcelain"], cwd=str(cloud),
@@ -1956,17 +1969,9 @@ class MountedAvailabilityTests(FolderCase):
         return offline
 
     def seal_index(self, root: Path) -> None:
-        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
-        subprocess.run(
-            ["git", "config", "user.email", "fixture@test.local"],
-            cwd=root,
-            check=True,
-        )
-        subprocess.run(
-            ["git", "config", "user.name", "fixture"],
-            cwd=root,
-            check=True,
-        )
+        git_env.git_run("init", "-q", cwd=root)
+        git_env.git_run("config", "user.email", "fixture@test.local", cwd=root)
+        git_env.git_run("config", "user.name", "fixture", cwd=root)
         (root / ".gitignore").write_text(
             ".tropo-studio/\n"
             "vault/00-index.jsonl\n"
@@ -1976,16 +1981,8 @@ class MountedAvailabilityTests(FolderCase):
             "recycle/\n",
             encoding="utf-8",
         )
-        subprocess.run(
-            ["git", "add", ".gitignore", "STUDIO.md", "vault/files"],
-            cwd=root,
-            check=True,
-        )
-        subprocess.run(
-            ["git", "commit", "-q", "-m", "fixture sources"],
-            cwd=root,
-            check=True,
-        )
+        git_env.git_run("add", ".gitignore", "STUDIO.md", "vault/files", cwd=root)
+        git_env.git_run("commit", "-q", "-m", "fixture sources", cwd=root)
         self.assertEqual(
             rebuild_index.rebuild_index(root, True, reconcile=True),
             0,

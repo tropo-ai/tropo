@@ -140,7 +140,10 @@ class StableIdentity(unittest.TestCase):
             releases, Path("."), HUBS_MAP, existing={}, published_by_version={}
         )
         uid = rows[0]["registry_uid"]
-        self.assertEqual(len(uid), 8)
+        # Follows the AUTHORITY mint length since the Stage B flip (12-hex
+        # composite, 2026-08-31); never a second shape definition.
+        from lib.governed_path import MINT_HEX_LEN as _MINT_LEN
+        self.assertEqual(len(uid), _MINT_LEN)
         self.assertTrue(all(c in "0123456789abcdef" for c in uid.lower()))
 
 

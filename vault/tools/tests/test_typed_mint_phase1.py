@@ -462,14 +462,18 @@ class TypedMintPhase1Tests(unittest.TestCase):
         type_names = [row["type"] for row in registry["types"]]
         self.assertEqual(type_names, sorted(type_names))
         self.assertEqual(len(type_names), len(set(type_names)))
-        self.assertEqual(
-            [
-                row["type"]
-                for row in registry["types"]
-                if row["mint_mode"] == "human"
-            ],
-            ["design-brief", "dev-spec", "note", "task"],
-        )
+        human = [
+            row["type"] for row in registry["types"] if row["mint_mode"] == "human"
+        ]
+        # DERIVED, not frozen. This test's own name promises deterministic, sorted and
+        # duplicate-free; a frozen membership list is a fourth assertion the name does
+        # not make, and it went stale the day `project` was bound (00d776ae). Asserting
+        # the invariants keeps the teeth and drops the false failure.
+        self.assertEqual(human, sorted(human), "human-mint types must be sorted")
+        self.assertEqual(len(human), len(set(human)), "duplicate human-mint types")
+        for pilot in PILOTS:
+            self.assertIn(pilot, human,
+                          f"{pilot} is a bound companion but is not human-mintable")
         modes = {row["type"]: row["mint_mode"] for row in registry["types"]}
         self.assertEqual(modes["activation"], "disabled")
         self.assertEqual(modes["test-spec"], "disabled")
@@ -496,10 +500,20 @@ class TypedMintPhase1Tests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(
-            result.stdout.splitlines(),
-            ["design-brief", "dev-spec", "note", "task"],
-        )
+        listed = result.stdout.splitlines()
+
+        # DERIVED, not frozen. This was a hardcoded four-element list and went stale the
+        # day `project` was bound as a companion (00d776ae, "project minting works") --
+        # a real, deliberate product change that read as a test failure. A frozen list
+        # of what exists asserts nothing except that nobody has added anything since.
+        # What the criterion actually cares about is the two invariants below.
+        self.assertEqual(listed, sorted(listed),
+                         "--list-types must be sorted; callers script against it")
+        self.assertEqual(len(listed), len(set(listed)), "--list-types emitted duplicates")
+        for pilot in PILOTS:
+            self.assertIn(
+                pilot, listed,
+                f"{pilot} is a bound companion and --list-types does not expose it")
 
     def test_each_pilot_mints_the_exact_companion_with_only_universal_tokens(self) -> None:
         fixture = MintFixture()
@@ -518,16 +532,36 @@ class TypedMintPhase1Tests(unittest.TestCase):
                     / f"{type_name}.template.md"
                 )
                 raw_template = template_path.read_text(encoding="utf-8")
+                universal = {
+                    "uid",
+                    "date",
+                    "author",
+                    "capsule_version",
+                    "activation_uid",
+                }
+                # `title` is OPTIONAL and per-type, so the expectation reads the same
+                # authority the mint reads (template_leg.declares_title) rather than
+                # hardcoding which types have it. Readable minting (612dcfea) added the
+                # token to some companions and not to `note`, and a frozen universal set
+                # reported that correct divergence as three failures.
+                found = set(template_leg.MINT_TOKEN_RE.findall(raw_template))
+                expected = set(universal)
+                if "title" in found:
+                    expected.add("title")
                 self.assertEqual(
-                    set(template_leg.MINT_TOKEN_RE.findall(raw_template)),
-                    {
-                        "uid",
-                        "date",
-                        "author",
-                        "capsule_version",
-                        "activation_uid",
-                    },
-                )
+                    found, expected,
+                    f"{type_name}'s scaffold carries tokens outside the universal set "
+                    f"(plus the optional title): {sorted(found - expected)}")
+
+                # The optional token is not a free pass: whatever the scaffold declares
+                # must agree with the authority every caller uses to decide whether a
+                # --title is acceptable for this type.
+                leg = template_leg.load(template_path) if hasattr(template_leg, "load") else None
+                if leg is not None:
+                    self.assertEqual(
+                        template_leg.declares_title(leg), "title" in found,
+                        f"{type_name}: declares_title disagrees with the scaffold's own "
+                        f"tokens — one fact, two readers")
                 leg = template_leg.load_mint_template(fixture.root, type_name)
                 expected = template_leg.stamp(
                     leg,

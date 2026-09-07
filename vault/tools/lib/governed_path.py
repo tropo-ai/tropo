@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 from pathlib import Path
 
 #: Every governed home with an active writer. Existing files never move; these
@@ -74,6 +75,177 @@ _COLLAPSE = re.compile(r"-{2,}")
 #: federated `<studio>-<hex>` and admits no separator, dot, or traversal.
 _UID_OK = re.compile(r"^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$")
 _UID_MAX = 64
+
+
+# --------------------------------------------------------------------------- #
+# The shape authority (3d430852 Stage A, step 1 of 13).
+#
+# Two flat-hex shapes are first-class FOREVER: the legacy 8-hex this corpus was
+# born on (ADR-067: existing UIDs untouched, first-class, never migrated) and
+# the 12-hex COMPOSITE every new governed mint has taken since the Stage B
+# flip (2026-08-31: issued 4-hex prefix + 8 local, no separator). Generation
+# reads exactly ONE constant (MINT_HEX_LEN — 12); reading and validation
+# accept BOTH shapes so legacy records resolve forever. The TypeScript
+# adapter mirrors this block; neither is the other's
+# oracle — parity is proven against the shared vector file like the rest of
+# this module.
+# --------------------------------------------------------------------------- #
+
+#: The one generation length. Stage A left it at the legacy value so every
+#: observable output was unchanged; Stage B (flipped 2026-08-31 per W4's
+#: locked composite-mint contract, bb3911f5) sets it to 12 — every new
+#: governed mint is composite (4-hex issued prefix + 8-hex local, no
+#: separator). Nothing else in the tree may carry a length literal for
+#: generating new governed identities (AC2's checker enforces exactly that).
+MINT_HEX_LEN = 12
+
+#: Every shape a governed flat-hex UID may take, legacy first. Membership in
+#: this set is what "accepts-both" means at every reader/gate site.
+UID_SHAPES: frozenset[int] = frozenset({8, 12})
+
+_BARE_HEX_RE = re.compile(r"^[0-9a-f]+$")
+
+
+def uid_shape(uid: str) -> int | None:
+    """Which governed flat-hex shape a UID takes, or None.
+
+    Federated `studio-hex` identities resolve through the anchored-suffix rule
+    (the hex tail carries the shape), so they are handled by
+    `parse_anchored_uid`, not by this predicate.
+    """
+    if not isinstance(uid, str) or not _BARE_HEX_RE.match(uid):
+        return None
+    return len(uid) if len(uid) in UID_SHAPES else None
+
+
+#: The governed-uid HEX PATTERN, derived from UID_SHAPES rather than written.
+#: For the regex sites that must capture a uid inside a larger expression and
+#: therefore cannot call ``is_governed_uid_shape``. Interpolate this instead of
+#: typing a length -- a regex site is still a reader of the shape fact, and the
+#: whole point of the authority is that the fact has exactly one home.
+#:
+#: THIS IS FOR EXTRACTION, NOT ADMISSION: use it to find uid-shaped text
+#: inside a larger document (a frontmatter field, a log line, a directory
+#: name) where a false positive is safe because the caller validates the
+#: captured value downstream. Its case-insensitive ``[0-9a-fA-F]`` is
+#: correct for that job. Never use it to DECIDE whether a value already in
+#: hand is a governed uid -- that is admission, and admission belongs to
+#: ``is_governed_uid_shape`` below, whose exact (lowercase-only) match a
+#: case-mismatched uid must fail. Added 2026-09-01 by talos-t58, after two
+#: admission sites that had wrongly reused this pattern instead of the
+#: predicate each resolved an uppercase uid to a real file via a case-
+#: insensitive filesystem -- confirmed live, not theoretical (argus-a166's
+#: release-gate negative-control ask).
+#:
+#: Added 2026-09-01 by argus-a165, after tropo-lineage.py was found carrying
+#: ``[0-9a-fA-F]{8}`` in resolve_entry(): any agent minted after the Stage B flip
+#: has a composite agent_uid, so resolve_entry returned None and the lineage tool
+#: could not find that agent's own identity entry at all. Cal and Darin are
+#: minted exactly that way at genesis.
+UID_HEX_PATTERN = "|".join(
+    "[0-9a-fA-F]{%d}" % n for n in sorted(UID_SHAPES, reverse=True)
+)
+
+def is_governed_uid_shape(uid: str) -> bool:
+    """Accepts-both: the predicate every enumerated reader, gate, and writer
+    routes through from Stage A. Local hex-length literals die here.
+
+    THIS IS FOR ADMISSION, NOT EXTRACTION: call it to decide whether a value
+    already in hand IS a governed uid -- an identity check, a dict-key
+    lookup, a file resolution. Its exact (lowercase-only) match is the
+    point: a case-mismatched value must fail here, never be treated as the
+    same identity as its real lowercase-minted form. Use UID_HEX_PATTERN
+    above instead when the job is finding uid-shaped text inside a larger
+    document; its looser, case-insensitive match is correct there because a
+    false positive gets validated downstream, which admission cannot afford.
+    """
+    return uid_shape(uid) is not None
+
+
+def is_legacy_uid(uid: str) -> bool:
+    """The legacy 8-hex shape — first-class forever, never migrated."""
+    return uid_shape(uid) == 8
+
+
+def new_uid_is_valid_shape(uid: str) -> bool:
+    """What a FRESHLY MINTED uid must satisfy: the current generation shape.
+    Stage A this equals legacy (len == MINT_HEX_LEN == 8); Stage B it is 12.
+    Existing records never pass through this gate — only new mints do."""
+    return (isinstance(uid, str) and _BARE_HEX_RE.match(uid) is not None
+            and len(uid) == MINT_HEX_LEN)
+
+
+# --------------------------------------------------------------------------- #
+# The composite split (3d430852 Stage B; dormant until the flip).
+#
+# At the 12-hex flip every new governed mint becomes COMPOSITE: the
+# studio-identity manifest's 4-hex mint_prefix concatenated with 8 random
+# local hex, NO separator (shape-amended 2026-08-30, Mike-authorized; ADR-067
+# amended to match). The prefix is ISSUED once at genesis and READ from the
+# manifest at every mint — a studio must never self-assign a random prefix
+# (Metis-ruled; refuse-if-absent is the caller's contract, enforced in
+# tropo-mint-id.py where the manifest read lives). Existing 8-hex UIDs are
+# untouched and first-class forever.
+# --------------------------------------------------------------------------- #
+
+#: The issued half of a composite uid. 4 + 8 local = the 12-hex generation
+#: length; both numbers are the shape contract, not tunables.
+COMPOSITE_PREFIX_HEX_LEN = 4
+
+
+def is_composite_mint_prefix(prefix: str) -> bool:
+    """Exactly 4 lowercase hex — the only prefix shape a composite mint
+    accepts. Bound tight on purpose: 4-hex + 8-hex = 12 flat hex, and a
+    prefix of any other length would not compose into the generation shape."""
+    return (isinstance(prefix, str)
+            and _BARE_HEX_RE.match(prefix) is not None
+            and len(prefix) == COMPOSITE_PREFIX_HEX_LEN)
+
+
+def composite_uid(mint_prefix: str, token_hex=None) -> str:
+    """A composite generation uid: issued 4-hex prefix + 8 random local hex,
+    no separator.
+
+    DORMANT until the flip: refuses unless MINT_HEX_LEN is 12. Running this
+    half-configured (at Stage A's 8) would mint a uid of the wrong generation
+    shape — the refusal is loud on purpose, because a plausible-but-wrong uid
+    is the most expensive thing a minter can produce. Callers route through
+    tropo-mint-id.py, which reads the prefix from the studio-identity
+    manifest and refuses when the manifest is absent.
+    """
+    if MINT_HEX_LEN != COMPOSITE_PREFIX_HEX_LEN + 8:
+        raise RuntimeError(
+            f"composite_uid is dormant until the Stage B flip: MINT_HEX_LEN is "
+            f"{MINT_HEX_LEN}, composite generation requires 12 (4-hex issued "
+            "prefix + 8-hex local, no separator) — see 3d430852 Stage B")
+    if not is_composite_mint_prefix(mint_prefix):
+        raise ValueError(
+            f"mint_prefix {mint_prefix!r} is not the composite prefix shape "
+            f"(exactly {COMPOSITE_PREFIX_HEX_LEN} lowercase hex)")
+    local_hex_len = MINT_HEX_LEN - COMPOSITE_PREFIX_HEX_LEN
+    th = token_hex if token_hex is not None else secrets.token_hex
+    return mint_prefix + th(local_hex_len // 2)
+
+
+def parse_anchored_uid(filename: str) -> tuple[str | None, str] | None:
+    """Split a governed basename into (slug, uid); the uid is the anchored tail.
+
+    `example-task-1a2b3c4d5e6f.md` -> ("example-task", "1a2b3c4d5e6f");
+    `1a2b3c4d.md` -> (None, "1a2b3c4d"); anything whose anchored tail is not a
+    governed shape -> None (a filename is a claim, and this refuses claims the
+    authority does not recognize). THE NAME PROPOSES; THE FRONTMATTER DECIDES —
+    callers must still frontmatter-confirm before treating the uid as identity
+    (resolve_governed_path already does; rebuild's full-walk derivation will).
+    """
+    if not filename.endswith(".md"):
+        return None
+    stem = filename[:-3]
+    if _BARE_HEX_RE.match(stem) and len(stem) in UID_SHAPES:
+        return (None, stem)
+    head, sep, tail = stem.rpartition("-")
+    if sep and head and _BARE_HEX_RE.match(tail) and len(tail) in UID_SHAPES:
+        return (head, tail)
+    return None
 
 
 def _validate_uid(uid: str) -> None:
@@ -206,7 +378,13 @@ def _frontmatter_uid(path: Path) -> str | None:
     that may be mid-write. Refused rather than parsed.
     """
     try:
-        head = path.read_text(encoding="utf-8", errors="replace")[:8192]
+        # 64KB: real spec frontmatter (fixture-row test-specs among them)
+        # exceeds 8KB, and a resolver that cannot see a real record's uid
+        # reports blindness as an empty result (Metis's Gap-1 trace,
+        # 2026-08-31). The closed-fence requirement inside the window is
+        # unchanged: an unterminated block is still a fragment, not
+        # frontmatter.
+        head = path.read_text(encoding="utf-8", errors="replace")[:65536]
     except OSError:
         return None
     lines = head.splitlines()

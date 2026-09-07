@@ -353,6 +353,21 @@ class PreflightCliTests(unittest.TestCase):
         tools = tmp / "vault" / "tools"
         tools.mkdir(parents=True)
         (tools / "tropo-probe.py").write_text(tool_body, encoding="utf-8")
+        # v1.95 Spine B (f015997f8d8e): THE FLOOR TEST is a registered lock-static
+        # gate now (build-covenant-floor) and refuses when its instrument is
+        # absent from the tree, as the old Step 10.7 did. A scratch tree that
+        # wants a clean lock-static exit carries the instrument; this stub
+        # passes both modes because these tests are about exit codes, not the
+        # covenant (test_gate2_clean_update_sweep.py proves that one).
+        # build-no-absolute-paths scans the tree's own copy of the instrument;
+        # a real, unmodified copy of the shipped tool.
+        shutil.copy(TOOLS / "tropo-validate-no-absolute-paths.py",
+                    tools / "tropo-validate-no-absolute-paths.py")
+        tests = tools / "tests"
+        tests.mkdir()
+        (tests / "test_clean_update_floor.py").write_text(
+            "#!/usr/bin/env python3\nimport sys\nprint('floor-test stub: PASS')\nsys.exit(0)\n",
+            encoding="utf-8")
         return tmp
 
     HEADER = '#!/usr/bin/env python3\n"""---\nuid: deadbeef\ntype: tool\nstatus: active\nextraction_scope: ship\n---\n"""\n'
@@ -378,10 +393,13 @@ class PreflightCliTests(unittest.TestCase):
         registry = self.cli.build_registry()
         gate = registry.get("ship-python-floor")
         self.assertEqual(gate.first_evaluable_phase, "lock-static")
+        # v1.95 Spine B (f015997f8d8e, 2026-09-05): the build's guards register at
+        # candidate, so the two build-side boundaries together must reach every
+        # registered gate; lock-static alone no longer does, by design.
         self.assertEqual(
-            registry.unreached_gates(["lock-static"]),
+            registry.unreached_gates(["lock-static", "candidate"]),
             [],
-            "the only registered gate was not scheduled at the boundary it belongs to",
+            "a registered gate was not scheduled at the boundary it belongs to",
         )
 
     def test_evidence_is_written_to_the_release_run(self):

@@ -150,7 +150,24 @@ class AdaptersCallRealTools(unittest.TestCase):
         def recorder(*a, **k):
             seen["argv"] = list(_sys.argv)
             return 0
-        ctx = _ctx(STUDIO_ROOT, STUDIO_ROOT, activation_uid="713a1b4e")
+        # v1.95 Spine B AC3 (f015997f8d8e): the adapter refuses a build without
+        # a clean lock-static preflight for THIS tree, so this test gives it
+        # one — every lock-static gate PASS at HEAD, in a scratch run dir —
+        # because the claim under test is the argv, not the precondition
+        # (test_release_guard_registry.Runner owns that one, four arms).
+        run_dir = Path(tempfile.mkdtemp(prefix="runner-build-argv-"))
+        self.addCleanup(shutil.rmtree, run_dir, True)
+        _pf = importlib.util.spec_from_file_location(
+            "release_preflight_for_runner_test", TOOLS / "tropo-release-preflight.py")
+        preflight = importlib.util.module_from_spec(_pf)
+        _pf.loader.exec_module(preflight)
+        from lib import release_gates as _gates
+        head = runner._tree_head(STUDIO_ROOT)
+        with (run_dir / _gates.PREFLIGHT_EVIDENCE_FILENAME).open("w") as fh:
+            for gate in preflight.build_registry().gates_for_phase("lock-static"):
+                fh.write(json.dumps({"phase": "lock-static", "gate_id": gate.gate_id,
+                                     "verdict": "pass", "tree_commit": head}) + "\n")
+        ctx = _ctx(STUDIO_ROOT, run_dir, activation_uid="713a1b4e")
         ctx = ctx.__class__(**{**ctx.__dict__, "version": "9.9.9"}) \
             if hasattr(ctx, "__dict__") else ctx
         saved = _sys.argv
@@ -500,6 +517,14 @@ class ARaisingStepStopsTheWalk(unittest.TestCase):
 # The safety boundary: the outward act is never invoked, by uid OR by slot.
 # ===========================================================================
 
+def _write_bootstrap_state(run_dir, activation="aabbccdd"):
+    """3d8d4351 §2: a stamp only counts on a bootstrapped run — the outward-
+    boundary fixtures plant the state their stamps legitimately need."""
+    (run_dir / "run.state.json").write_text(
+        __import__("json").dumps({"activation_uid": activation,
+                                  "run_status": "active"}))
+
+
 class NeverFiresThePublishStep(unittest.TestCase):
     """Every test here must first satisfy the orchestrator PRECONDITION for
     3dd817cb (a valid identity plus an orchestrator_invoked row) — otherwise
@@ -521,7 +546,8 @@ class NeverFiresThePublishStep(unittest.TestCase):
                              "data": {"saga_id": "release:aaaaaaaa",
                                        "pipeline_run_uid": "aaaaaaaa"}},
                             {"event": "tropo.release.orchestrator_invoked",
-                             "ts": "2026-01-01T00:00:00Z", "actor": "mike"})
+                             "ts": "2026-01-01T00:00:00Z", "actor": "7b921d17"})
+            _write_bootstrap_state(Path(tmp))  # 3d8d4351: stamps count only bootstrapped
             prof = _profile(_slot("publish-the-artifact",
                                    _tool("3dd817cb", "would_fire.py:cmd_fire")))
             outcome = runner.walk(prof, base_dir=Path(tmp), execute=True, context=_ctx(tmp, tmp))
@@ -555,7 +581,8 @@ class NeverFiresThePublishStep(unittest.TestCase):
                              "data": {"saga_id": "release:aaaaaaaa",
                                        "pipeline_run_uid": "aaaaaaaa"}},
                             {"event": "tropo.release.orchestrator_invoked",
-                             "ts": "2026-01-01T00:00:00Z", "actor": "mike"})
+                             "ts": "2026-01-01T00:00:00Z", "actor": "7b921d17"})
+            _write_bootstrap_state(Path(tmp))  # 3d8d4351: stamps count only bootstrapped
             prof = _profile(_slot("publish-the-artifact",
                                    _tool("3dd817cb", "touch %s" % marker)))
             self.assertIsNone(runner._requires_orchestrator_invoked(_ctx(tmp, tmp)))
@@ -767,17 +794,19 @@ class OrchestratorGate(unittest.TestCase):
                           outcome.halted_at.command)
 
     def test_the_never_invoked_boundary_holds_even_on_the_abandoned_run(self):
-        """The abandoned run d9025a97's own journal carries a stale
-        orchestrator_invoked row from before it was abandoned, so the gate
-        opens on it (a documented, still-live gap — see the walkability
-        tests below for the defence that actually stops it). This test
-        confirms the SEPARATE, unconditional boundary — NEVER_INVOKED / the
-        publish slot check — still holds even when the gate opens: the
-        publish tool must still never be called."""
+        """3d8d4351 §2 flipped this test TRUTHFUL: the abandoned run
+        d9025a97's stale pre-bootstrap stamp NO LONGER opens the gate — the
+        reader discounts stamps on unbootstrapped runs (both ends of the
+        class cured: the writer refuses, the reader discounts). The SEPARATE,
+        unconditional boundary — NEVER_INVOKED / the publish slot check —
+        is still asserted below: the publish tool must never be called."""
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _copy_real_run(Path(tmp), "release-pipeline-d9025a97-2026-08-23")
-            self.assertIsNone(runner._requires_orchestrator_invoked(
-                _ctx(tmp, run_dir)), "expected this real gap to still be open")
+            refusal = runner._requires_orchestrator_invoked(_ctx(tmp, run_dir))
+            self.assertIsNotNone(refusal,
+                                 "the d9025a97 gap is CLOSED — a pre-bootstrap "
+                                 "stamp must be discounted")
+            self.assertIn("never bootstrapped", refusal)
             marker = Path(tmp) / "FIRED"
             _write_tool_module(Path(tmp), "would_fire3.py", (
                 "from pathlib import Path\n"

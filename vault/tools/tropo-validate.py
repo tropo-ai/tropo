@@ -151,6 +151,7 @@ import yaml  # v1.33.0 Stream H §3.1 PyYAML AST walk (R3 sa.skeptic-078 + sa.co
 
 # d996b941 L0c: shared identity resolver — must hard-fail on import (AC-L0c-fail)
 from lib._identity import _resolve_principal_uid, _get_principal_class  # noqa: E402
+from lib import governed_path  # noqa: E402  — the governed-uid shape authority
 
 # ADR-047 helper lives under vault/tools/lib/.  Load by path instead of
 # ``from lib`` because several regression harnesses pre-import the separate
@@ -279,8 +280,11 @@ def _load_public_snapshot_contract():
 
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
-UID_RE = re.compile(r'^[0-9a-f]{8}$')
-UID_REF_RE = re.compile(r'\b([0-9a-f]{8})\b')
+# 3d430852 Stage A step 5 (table 91a4b5af row 1): accepts-both. Legacy
+# 8-hex first-class forever; 12-hex post-flip. Sixteen use sites inherit.
+UID_RE = re.compile(r'^(?:[0-9a-f]{8}|[0-9a-f]{12})$')
+# 3d430852 step 5 (table row 2): UID_REF_RE deleted — it had zero use
+# sites anywhere in this file; a cured dead regex still asserts nothing.
 
 
 def _index_union(vault: Path) -> list[dict]:
@@ -626,15 +630,38 @@ def load_index(index_path: Path) -> tuple[dict[str, dict[str, Any]], int]:
 def check_uid_consistency(vault: Path) -> tuple[list[str], int]:
     """Verify uid frontmatter field matches filename for vault files."""
     findings: list[str] = []
+    _backlog: dict = {}
     files_dir = vault / 'vault' / 'files'
     if not files_dir.is_dir():
         return findings, 0
     checked = 0
     for f in files_dir.glob('*.md'):
-        uid_from_filename = f.stem
-        if not UID_RE.match(uid_from_filename):
-            findings.append(f'[FAIL] vault/files/{f.name} — filename is not a valid 8-hex UID')
+        # `f.stem` was compared straight against UID_RE, which failed EVERY
+        # slug-named record -- 20 of them by 2026-09-03, growing, and all 20
+        # measurably fine: declared uid == filename suffix 20/20, resolvable in
+        # vault/00-index.jsonl 20/20. This is the studio's ONE gating validator
+        # class, and its recorded harm is "a governed file whose declared uid
+        # contradicts its filename is unreachable by every index and every
+        # reference built over it". That harm did not obtain for a single
+        # flagged file, so per the debt baseline's own rule -- "if the growth
+        # does not match that harm, the gate is wrong" -- the grammar was the
+        # defect, not the records.
+        #
+        # Routed through lib.governed_path.parse_anchored_uid rather than a
+        # local shape literal: that module is the declared home for the
+        # governed-uid shape and test_uid_shape_has_one_home.py ratchets it. I
+        # hand-wrote this split first and it was a second home for a fact that
+        # already had one -- the exact family this check now stops flagging.
+        # Its own docstring states the division this check then completes:
+        # THE NAME PROPOSES; THE FRONTMATTER DECIDES.
+        parsed = governed_path.parse_anchored_uid(f.name)
+        if parsed is None:
+            findings.append(
+                f'[FAIL] vault/files/{f.name} — filename declares no governed UID '
+                f'(expected <uid>.md or <slug>-<uid>.md; shapes from '
+                f'lib.governed_path.UID_SHAPES)')
             continue
+        uid_from_filename = parsed[1]
         text = f.read_text(errors='replace')
         fm = split_frontmatter(text)
         if fm is None:
@@ -645,6 +672,58 @@ def check_uid_consistency(vault: Path) -> tuple[list[str], int]:
             findings.append(f'[FAIL] vault/files/{f.name} — uid frontmatter ({fm_uid}) does not match filename')
         checked += 1
     return findings, checked
+
+
+def check_origin_marked_content_class(vault: Path) -> tuple[list[str], int, int]:
+    """Warn when a record declares origin evidence but no content_class.
+
+    W5 lands warn-safe: these are visible classification gaps, not failures of
+    an irreversible operation. Full YAML parsing keeps nested origin fields
+    from masquerading as top-level marks.
+    """
+
+    findings: list[str] = []
+    checked = 0
+    missing = 0
+    files_dir = vault / "vault" / "files"
+    if not files_dir.is_dir():
+        return findings, checked, missing
+    for path in sorted(files_dir.glob("*.md")):
+        front = split_frontmatter(path.read_text(errors="replace"))
+        if front is None:
+            continue
+        try:
+            record = fast_yaml.safe_load(front)
+        except yaml.YAMLError:
+            continue
+        if not isinstance(record, dict):
+            continue
+        origin_marked = (
+            record.get("type") == "external-artifact"
+            or str(record.get("extraction_scope") or "").casefold() == "external"
+            or any(
+                record.get(field) not in (None, "")
+                for field in (
+                    "source_hash",
+                    "source_path",
+                    "mount_uid",
+                    "origin_studio",
+                    "source_studio_uid",
+                )
+            )
+        )
+        if not origin_marked:
+            continue
+        checked += 1
+        content_class = record.get("content_class")
+        if not isinstance(content_class, str) or not content_class.strip():
+            missing += 1
+            findings.append(
+                f"[WARN] vault/files/{path.name} — origin-marked record "
+                "lacks content_class (W5; run gardener-verdict "
+                "backfill-content-class)"
+            )
+    return findings, checked, missing
 
 
 def check_pruning_contract(vault: Path) -> tuple[list[str], int, int]:
@@ -1338,6 +1417,9 @@ def check_mint_id_chokepoint(vault: Path) -> tuple[list[str], int, int]:
 
     ALLOWLIST = frozenset({'tropo-mint-id.py', 'tropo-archive.py'})
     NOQA_MARKER = 'mint-id-chokepoint-deferred'
+    #: 3d430852 — the on-line claim that a raw mint is run-record identity
+    #: (the spec's declared deferral class), honored as an executable allowlist
+    RUN_RECORD_DEFERRAL_MARKER = 'RUN-RECORD DEFERRAL MARKER (3d430852)'
 
     tools_dir = vault / 'vault' / 'tools'
     findings: list[str] = []
@@ -1346,7 +1428,12 @@ def check_mint_id_chokepoint(vault: Path) -> tuple[list[str], int, int]:
     if not tools_dir.is_dir():
         return findings, scanned, violations
 
-    for f in sorted(tools_dir.glob('*.py')):
+    # 3d430852 (D2 cure, inherited from T53's step 5): the scan was
+    # non-recursive while its own docstring says "anywhere else in
+    # vault/tools/" — a raw mint in vault/tools/lib/ was invisible to it.
+    # Recursive, and uuid4-aware: a uuid4().hex[:8] is the same unchecked
+    # bypass wearing a different call.
+    for f in sorted(tools_dir.rglob('*.py')):
         scanned += 1
         if f.name in ALLOWLIST:
             continue
@@ -1363,17 +1450,30 @@ def check_mint_id_chokepoint(vault: Path) -> tuple[list[str], int, int]:
             if not isinstance(node, _ast.Call):
                 continue
             func = node.func
+            # 3d430852 D2: uuid4().hex[:8] is the same unchecked bypass —
+            # the Architecture Review's invisible-minter class.
+            is_uuid4_hexslice = (
+                isinstance(func, _ast.Attribute)
+                and func.attr == 'hex'
+                and isinstance(func.value, _ast.Call)
+            )
             is_token_hex = (
                 isinstance(func, _ast.Attribute) and func.attr == 'token_hex'
                 and isinstance(func.value, _ast.Name) and func.value.id == 'secrets'
             )
-            if not is_token_hex:
+            if not (is_token_hex or is_uuid4_hexslice):
                 continue
             if len(node.args) != 1 or not isinstance(node.args[0], _ast.Constant) or node.args[0].value != 4:
                 continue
             lineno = getattr(node, 'lineno', 0)
             line_text = lines[lineno - 1] if 0 < lineno <= len(lines) else ''
             if NOQA_MARKER in line_text:
+                continue
+            # 3d430852: the RUN-RECORD DEFERRAL MARKER is the executable
+            # allowlist — the spec's declared deferral class (run-directory /
+            # telemetry identity, not governed records), claimed on the exact
+            # line so the widened checker stays green without hand-lists.
+            if RUN_RECORD_DEFERRAL_MARKER in line_text:
                 continue
             violations += 1
             findings.append(
@@ -2307,7 +2407,7 @@ def check_canonical_reference_shape(vault: Path) -> tuple[list[str], int, int]:
         governed_version = fm.get('governed_by_version')
         governed_uid = fm.get('governed_by')
         if governed_version and governed_uid and isinstance(governed_uid, str):
-            if _re.fullmatch(r'[0-9a-f]{8}', governed_uid):
+            if _re.fullmatch(r'[0-9a-f]{8}(?:[0-9a-f]{4})?', governed_uid):  # accepts-both (D5)
                 target = read_vault_entry_from_path(files_dir / f'{governed_uid}.md')
                 if target:
                     canonical_version = target.get('version') or target.get('schema_version')
@@ -4117,6 +4217,27 @@ def check_step_completion_has_verification(vault: Path, thorough: bool = False) 
 
         total_checked += 1
 
+        # 38a0e0a5 (warn-safe): the fold bounds a ts-less step_completed by its
+        # run's era — post-cutover (or undatable) runs get no legacy leniency,
+        # so a ts-less row here means the WRITER forgot the stamp. The fold
+        # already refuses to grade it; this warning names the run so the
+        # writer gets cured. Pre-cutover runs keep their legacy rows silent.
+        era_stamps = [str(e.get('ts')) for e in events if e.get('ts')]
+        era_earliest = min(era_stamps) if era_stamps else None
+        if era_earliest is None or era_earliest >= RECEIPT_PARITY_CUTOVER_TS:
+            for ev in events:
+                if ev.get('event') == 'step_completed' and not ev.get('ts'):
+                    try:
+                        rel_jsonl = jsonl_path.relative_to(vault)
+                    except ValueError:
+                        rel_jsonl = jsonl_path
+                    findings.append(
+                        f'[WARN] {rel_jsonl} — ts-less step_completed row in a '
+                        f'post-cutover run (earliest era stamp {era_earliest!r}): '
+                        f'the writer forgot the ts stamp; the fold bounds this '
+                        f'row to no legacy leniency (38a0e0a5).'
+                    )
+
         # Build map: step_uid -> events targeting that step
         step_events: dict[str, list[dict]] = {}
         for ev in events:
@@ -4669,10 +4790,10 @@ def check_working_copy_lineage(vault: Path) -> tuple[list[str], int, int]:
     for path, fm in _walk_working_copies(vault):
         checked += 1
         # Extract derived_from UID from YAML list format
-        m = re.search(r'derived_from:\s*\n\s*-\s*"?([a-f0-9]{8})"?', fm)
+        m = re.search(r'derived_from:\s*\n\s*-\s*"?((?<![a-f0-9])[a-f0-9]{8}|(?<![a-f0-9])[a-f0-9]{12})(?![a-f0-9])"?', fm)  # TRUNCATE-CLASS CURE: anchored both shapes
         if not m:
             # Try inline list form
-            m = re.search(r'derived_from:\s*\[\s*"?([a-f0-9]{8})"?', fm)
+            m = re.search(r'derived_from:\s*\[\s*"?((?<![a-f0-9])[a-f0-9]{8}|(?<![a-f0-9])[a-f0-9]{12})(?![a-f0-9])"?', fm)  # TRUNCATE-CLASS CURE
         if not m:
             findings.append(
                 f'[FAIL] {path.relative_to(vault)} — derived_from: empty or unparseable; working-copy MUST chain to a projection'
@@ -4721,9 +4842,9 @@ def check_working_copy_sidecar_equivalence(vault: Path) -> tuple[list[str], int,
     for path, fm in _walk_working_copies(vault):
         checked += 1
         # Extract projection UID
-        m = re.search(r'derived_from:\s*\n\s*-\s*"?([a-f0-9]{8})"?', fm)
+        m = re.search(r'derived_from:\s*\n\s*-\s*"?((?<![a-f0-9])[a-f0-9]{8}|(?<![a-f0-9])[a-f0-9]{12})(?![a-f0-9])"?', fm)  # TRUNCATE-CLASS CURE: anchored both shapes
         if not m:
-            m = re.search(r'derived_from:\s*\[\s*"?([a-f0-9]{8})"?', fm)
+            m = re.search(r'derived_from:\s*\[\s*"?((?<![a-f0-9])[a-f0-9]{8}|(?<![a-f0-9])[a-f0-9]{12})(?![a-f0-9])"?', fm)  # TRUNCATE-CLASS CURE
         if not m:
             continue  # check_working_copy_lineage already flagged this
         projection_uid = m.group(1)
@@ -4757,7 +4878,6 @@ def check_working_copy_sidecar_equivalence(vault: Path) -> tuple[list[str], int,
     return findings, checked, defects
 
 
-_UID_RE_STRICT = re.compile(r'[0-9a-f]{8}')
 _LITERAL_ESCAPE_RE = re.compile(r'\\u([0-9a-fA-F]{4})')
 
 
@@ -4808,7 +4928,13 @@ def check_index_union_completeness(vault: Path) -> tuple[list[str], int, int]:
         if not uid:
             continue  # check_uid_presence owns the missing-uid finding
         uid = str(uid)
-        if str(path.stem) != uid or not _UID_RE_STRICT.fullmatch(uid):
+        # accepts-both (UID_SHAPES): legacy 8-hex uids stay first-class
+        # forever; every new governed mint is 12-hex composite since the
+        # Stage B flip (2026-08-31). The 8-only `_UID_RE_STRICT` this
+        # replaced flagged every composite-uid file on disk as an identity
+        # defect instead of checking it for indexing. Reuses the module-level
+        # `UID_RE` (line ~284), which already accepts both shapes.
+        if str(path.stem) != uid or not UID_RE.fullmatch(uid):
             # A malformed or filename-mismatched uid is an IDENTITY defect, owned by
             # the UID-consistency gate, not an indexable omission. Counting it here
             # would be wrong twice: it inflates the omission census with a file that
@@ -4818,7 +4944,7 @@ def check_index_union_completeness(vault: Path) -> tuple[list[str], int, int]:
             # reader to distrust the finding. Named, not counted, and not silent.
             findings.append(
                 f'[WARN] {path.relative_to(vault)} — declares uid={uid!r}, which is not '
-                f'a valid 8-hex UID matching its filename. Not counted as an index '
+                f'a valid governed UID matching its filename. Not counted as an index '
                 f'omission (it cannot be indexed until its identity is repaired); this '
                 f'is a UID-consistency defect and that gate owns the cure.'
             )
@@ -4946,9 +5072,9 @@ def check_working_copy_uniqueness(vault: Path) -> tuple[list[str], int, int]:
     for path, fm in _walk_working_copies(vault):
         if get_scalar(fm, 'state') != 'active':
             continue
-        m = re.search(r'derived_from:\s*\n\s*-\s*"?([a-f0-9]{8})"?', fm)
+        m = re.search(r'derived_from:\s*\n\s*-\s*"?((?<![a-f0-9])[a-f0-9]{8}|(?<![a-f0-9])[a-f0-9]{12})(?![a-f0-9])"?', fm)  # TRUNCATE-CLASS CURE: anchored both shapes
         if not m:
-            m = re.search(r'derived_from:\s*\[\s*"?([a-f0-9]{8})"?', fm)
+            m = re.search(r'derived_from:\s*\[\s*"?((?<![a-f0-9])[a-f0-9]{8}|(?<![a-f0-9])[a-f0-9]{12})(?![a-f0-9])"?', fm)  # TRUNCATE-CLASS CURE
         if not m:
             continue
         projection_uid = m.group(1)
@@ -5558,6 +5684,107 @@ def check_ship_artifact_target_field(vault: Path) -> tuple[list[str], int, int]:
     return findings, checked, defects
 
 
+def check_ship_verdict_coherence(vault: Path) -> tuple[list[str], int, int]:
+    """ship-artifact.capsule v1.5 Check 30 + core.capsule v2.2 Check 14.
+
+    Resolves through `lib/ship_verdict.py` -- THE SAME MODULE THE BUILD USES -- so the
+    validator and the build cannot disagree about what a path's verdict is. Two readers
+    of one fact with one of them updated is this release's dominant defect family; a
+    second independent implementation here would be a fresh instance of it.
+
+    WARN, per the capsule and warn-safe (deb77758): under the ratified silent-DENY
+    posture an unruled path does not ship, so the loud instrument is the build census,
+    which names every unruled path on every build. A second refusal here would prevent
+    a negative census the census already catches.
+    """
+    findings: list[str] = []
+    checked = 0
+    defects = 0
+
+    tools_dir = vault / 'vault' / 'tools'
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+    try:
+        from lib.ship_verdict import build_resolver, RULED_VERDICTS, SHADOW
+    except Exception as exc:  # noqa: BLE001
+        return ([f'  [WARN] ship_verdict module unavailable ({exc}) — check inert'], 0, 0)
+
+    index = vault / 'vault' / '00-index.jsonl'
+    rows = []
+    for name in ('00-index.jsonl', '00-archive-index.jsonl'):
+        f = vault / 'vault' / name
+        if f.exists():
+            for line in f.read_text(encoding='utf-8').splitlines():
+                if line.strip():
+                    try:
+                        rows.append(json.loads(line))
+                    except Exception:  # noqa: BLE001
+                        continue
+    artifacts = [r for r in rows if r.get('type') == 'ship-artifact']
+    by_uid = {r.get('uid'): r for r in rows}
+
+    for row in artifacts:
+        checked += 1
+        uid = row.get('uid')
+        verdict = (row.get('ship_verdict') or '').strip().upper()
+        if not verdict:
+            defects += 1
+            findings.append(
+                f'  [WARN] {uid} — ship-artifact carries no ship_verdict (REQUIRED at '
+                f'v1.5). It rules nothing, so its path falls through to record scope or '
+                f'to unruled-DENY.')
+            continue
+        if verdict not in RULED_VERDICTS:
+            defects += 1
+            findings.append(
+                f'  [WARN] {uid} — ship_verdict "{row.get("ship_verdict")}" is not one '
+                f'of {", ".join(RULED_VERDICTS)}')
+            continue
+        shadow_of = row.get('shadow_of')
+        if verdict == SHADOW and not shadow_of:
+            defects += 1
+            findings.append(
+                f'  [WARN] {uid} — ship_verdict: SHADOW with no shadow_of; a '
+                f'substitution with nothing to substitute')
+        if verdict != SHADOW and shadow_of:
+            defects += 1
+            findings.append(
+                f'  [WARN] {uid} — carries shadow_of but its verdict is {verdict}; '
+                f'shadow_of is legal only on SHADOW')
+
+    # core.capsule v2.2 Check 14 — designation coherence, both directions.
+    try:
+        resolver = build_resolver(str(vault), str(index) if index.exists() else None)
+        for source_path, twin in resolver.shadow_pairs():
+            checked += 1
+            if not twin:
+                defects += 1
+                findings.append(
+                    f'  [WARN] {source_path} is ruled SHADOW but names no twin')
+                continue
+            resolved = twin in by_uid
+            if not resolved:
+                hits = list((vault / 'vault' / 'files').glob(f'*{twin}*.md'))
+                resolved = bool(hits)
+            if not resolved:
+                defects += 1
+                findings.append(
+                    f'  [WARN] {source_path} designates twin {twin}, which resolves to '
+                    f'nothing — a designation pointing at no document')
+    except Exception as exc:  # noqa: BLE001
+        findings.append(f'  [WARN] shadow designation resolution failed: {exc}')
+
+    # An edition hash with no source to compare against can never change verdict.
+    for row in rows:
+        if row.get('edition_of_body_hash') and not row.get('shadow_of'):
+            defects += 1
+            findings.append(
+                f'  [WARN] {row.get("uid")} — edition_of_body_hash with no shadow_of; '
+                f'an edition hash with no source can never change verdict')
+
+    return findings, checked, defects
+
+
 def check_article_state_machine_invariants(vault: Path) -> tuple[list[str], int, int]:
     """v1.48.0 Stream A — ship-artifact.capsule v1.4 Check 25: article subtype editorial state machine.
 
@@ -5681,7 +5908,7 @@ def check_wrapper_article_editorial_lock(vault: Path) -> tuple[list[str], int, i
             continue
 
         # Detect article-source wrappers via vault/files/<uid>.md path pattern
-        m = re.search(r'vault/files/([0-9a-f]{8})\.md$', canonical_source)
+        m = re.search(r'vault/files/([0-9a-f]{8}(?:[0-9a-f]{4})?)\.md$', canonical_source)  # accepts-both (D5)
         if not m:
             continue
         article_uid = m.group(1)
@@ -6481,13 +6708,23 @@ def check_no_narrow_event_read_in_boot(vault: Path) -> tuple[list[str], int, int
     return findings, n_scanned, n_violations
 
 
-# v1.66 S2 (4acf3f2d Piece E): WORK_ITEM_TYPES — the flowing-lifecycle types per 1d14b1bf
-WORK_ITEM_TYPES = frozenset({
-    'task', 'note', 'decision', 'design-brief', 'design-spec', 'dev-spec',
-    'test-spec', 'arch-spec', 'doc-spec', 'project', 'pipeline', 'pipeline-run',
-    'release-plan', 'ship-artifact', 'build', 'project-plan', 'test-run',
-    'test-scenario', 'research', 'collection', 'vault-ops-spec', 'document', 'activation',
-})
+# v1.66 S2 (4acf3f2d Piece E): WORK_ITEM_TYPES — the flowing-lifecycle types per 1d14b1bf.
+# The literal moved to lib/work_item_types.py 2026-08-31 (argus-a165) so Check 23 in
+# .tropo/scripts/lib/event_validators.py can consult the same declaration instead of
+# scoping itself to every type in the index. Behaviour here is unchanged: same 23 members,
+# same name, same frozenset — one home, two readers.
+from lib.work_item_types import WORK_ITEM_TYPES  # noqa: E402
+
+
+# 38a0e0a5: the receipt-parity cutover constant lives in the runtime engine
+# (9e7003b1.py — digit-named, loaded by file location like the modules above).
+# One home, two readers: the fold bounds ts-less rows by run era, and Check 14
+# warns on the ts-less step_completed rows that bound now refuses to grade.
+_runtime_cutover_spec = _importlib_util.spec_from_file_location(
+    "pipeline_runtime_for_cutover", Path(__file__).resolve().parent / "9e7003b1.py")
+pipeline_runtime_for_cutover = _importlib_util.module_from_spec(_runtime_cutover_spec)
+_runtime_cutover_spec.loader.exec_module(pipeline_runtime_for_cutover)
+RECEIPT_PARITY_CUTOVER_TS = pipeline_runtime_for_cutover.RECEIPT_PARITY_CUTOVER_TS
 
 
 def check_agent_identity_unified(vault: Path) -> tuple[list[str], int, int]:
@@ -7975,9 +8212,21 @@ def check_curator_dispatch_fixture() -> tuple[list[str], int, int]:
         text = surface.read_text('utf-8')
         # F5 Condition A — generations since last fold (fixture surfaces carry both ints
         # explicitly; live agents derive per §2.5 from generation + last_curated provenance)
-        m_gen = _re.search(r'^generation:\s*(\d+)', text, _re.M)
-        m_lcg = _re.search(r'^last_curated_generation:\s*(\d+)', text, _re.M)
-        gens_since = (int(m_gen.group(1)) - int(m_lcg.group(1))) if (m_gen and m_lcg) else 0
+        # 21834ad2 cure (argus-a164, 2026-08-31): the old pattern was `(\d+)` — digits
+        # only — so it matched NO real agent label in this studio. Measured fleet-wide at
+        # filing: gens_since computed 0 for all eight agents, because every generation tag
+        # carries an alpha prefix (A164, G115, T54, V76, O36, C11, G1, T1). The gate that
+        # exists to catch a stale memory surface could not fire for anyone, which is why
+        # A162 and A163 both retired without folding and nothing said so.
+        _GEN = r'^%s:\s*([A-Za-z]*)(\d+)\s*$'
+        m_gen = _re.search(_GEN % 'generation', text, _re.M)
+        m_lcg = _re.search(_GEN % 'last_curated_generation', text, _re.M)
+        gens_since = 0
+        if m_gen and m_lcg and m_gen.group(1).upper() == m_lcg.group(1).upper():
+            # Prefixes must MATCH: comparing A164 against G115 is a category error, not a
+            # staleness measurement. A mismatch means the surface names another agent's
+            # lineage and the honest answer is 0, not a difference.
+            gens_since = int(m_gen.group(2)) - int(m_lcg.group(2))
         # F5 Condition B — entries past the LAST fold-boundary line in the episodic log
         unfolded = 0
         jsonl = memory_dir / 'agent-memories.jsonl'
@@ -7996,7 +8245,7 @@ def check_curator_dispatch_fixture() -> tuple[list[str], int, int]:
         # Citation-resolution sweep — every 8-hex UID cited in §Top-of-Mind resolves
         m_tom = _re.search(r'## §Top-of-Mind(.*?)(?=\n## |\Z)', text, _re.S)
         if m_tom:
-            cited = set(_re.findall(r'`([0-9a-f]{8})`', m_tom.group(1)))
+            cited = set(_re.findall(r'`([0-9a-f]{8}(?:[0-9a-f]{4})?)`', m_tom.group(1)))  # accepts-both (D5)
             if cited - resolvable_uids:
                 return 'citation_repair'
         return 'none'
@@ -8040,6 +8289,39 @@ def check_curator_dispatch_fixture() -> tuple[list[str], int, int]:
             else:
                 n_fail += 1
                 findings.append(f'  [FAIL] AC5 fixture: {label} — expected {expected}, got {got}')
+        # 6 — THE PRODUCTION SHAPE (21834ad2 cure, argus-a164 2026-08-31). Every fixture
+        # above writes INTEGER generations, which is why this check stayed green for months
+        # while the real gate could not fire for a single agent: no real label is bare
+        # digits. This case writes the shape agents actually carry. It is the known-positive
+        # the check was missing, and it fails against the pre-cure digit-only pattern.
+        d5 = tmp / 'alpha'; d5.mkdir()
+        (d5 / 'agent-memory.md').write_text(
+            "---\nagent: fixture\ngeneration: A164\nlast_curated_generation: A161\n"
+            "spec_version: \"3.0\"\n---\n\n## §Top-of-Mind\n\n- pin cites `aaaa1111`\n", 'utf-8')
+        _write_jsonl(d5, unfolded=0)
+        got = _evaluate(d5, resolvable)
+        if got == 'catch_up':
+            n_pass += 1
+        else:
+            n_fail += 1
+            findings.append(
+                f'  [FAIL] AC5 fixture: F5 PRODUCTION-SHAPE generation trip (A164 vs A161, '
+                f'3 generations) — expected catch_up, got {got}. The gate cannot read a real '
+                f'agent label.')
+        # 7 — prefix MISMATCH is a category error, not a staleness measurement
+        d6 = tmp / 'mismatch'; d6.mkdir()
+        (d6 / 'agent-memory.md').write_text(
+            "---\nagent: fixture\ngeneration: A164\nlast_curated_generation: G113\n"
+            "spec_version: \"3.0\"\n---\n\n## §Top-of-Mind\n\n- pin cites `aaaa1111`\n", 'utf-8')
+        _write_jsonl(d6, unfolded=0)
+        got = _evaluate(d6, resolvable)
+        if got == 'none':
+            n_pass += 1
+        else:
+            n_fail += 1
+            findings.append(
+                f'  [FAIL] AC5 fixture: mismatched prefixes (A164 vs G113) must not compute a '
+                f'generation distance — expected none, got {got}')
         # 5 — F5 generation trip on otherwise-healthy surface (Condition A): gens_since=4 -> catch_up
         _write_surface(d1, gen=110, lcg=106, cited='aaaa1111')
         got = _evaluate(d1, resolvable)
@@ -8510,6 +8792,50 @@ def check_release_event_writers(vault: Path) -> tuple[list[str], int, int]:
                 f"that will fail at runtime instead of here (v1.91 S2 AC2).")
     return findings, checked, defects
 
+def check_po_map_render_fresh(vault: Path) -> tuple[list[str], int, int]:
+    """Check 37 (B-7 / f01564310146 AC5) — Po's rendered Studio Map must
+    never silently outlive the canonical Map it was generated from.
+    Same shape as the boot-derivation drift gate above (fingerprint the
+    source, compare on read), because that is the shape this criterion's
+    own evidence names: 'a Map that has moved since the last render is
+    detectable AS STALE by something that runs anyway.'
+
+    Absent render is not a defect — a fresh box before first boot, or an
+    install that never fired the walk, has nothing to check yet."""
+    findings: list[str] = []
+    checked = 0
+    defects = 0
+    rendered = vault / 'boards' / 'po' / 'studio-map.html'
+    source = vault / 'docs' / 'tropo-studio-map.md'
+    if not rendered.is_file():
+        return findings, checked, defects
+    checked = 1
+    if not source.is_file():
+        findings.append(
+            f'[FAIL] {rendered} exists but its canonical source {source} is missing'
+        )
+        return findings, checked, 1
+    match = re.search(
+        r'<!--\s*tropo:source-body-sha256:([0-9a-f]{64})\s*-->',
+        rendered.read_text(encoding='utf-8'),
+    )
+    if not match:
+        findings.append(
+            f'[FAIL] {rendered} carries no source fingerprint '
+            '(missing tropo:source-body-sha256 comment)'
+        )
+        return findings, checked, 1
+    rendered_fp = match.group(1)
+    current_fp = body_sha256(source)
+    if rendered_fp != current_fp:
+        defects = 1
+        findings.append(
+            f'[FAIL] {rendered} is stale: rendered from {rendered_fp[:12]}…, '
+            f'{source} is now {current_fp[:12]}… — regenerate with '
+            'tropo-render-studio-map.py'
+        )
+    return findings, checked, defects
+
 def check_boot_derivation_fresh(vault: Path) -> tuple[list[str], int, int]:
     """v1.70 S3.5.2 — Drift-gate for compressed boot artifacts.
 
@@ -8840,13 +9166,31 @@ def check_identity_refs_resolve(vault: Path, release_mode: bool = False,
     files_dir = vault / 'vault' / 'files'
     if files_dir.is_dir():
         for f in files_dir.glob('*.md'):
-            all_uids.add(f.stem)
+            # Mike-ruled 2026-08-30 (Finding A): frontmatter uid IS identity;
+            # the stem is admission only, and only when shape-legal bare hex.
+            try:
+                _fm = split_frontmatter(f.read_text(errors='replace'))
+                _uid = get_scalar(_fm, 'uid') if _fm else None
+            except Exception:
+                _uid = None
+            if _uid:
+                all_uids.add(_uid)
+            elif UID_RE.match(f.stem):
+                all_uids.add(f.stem)
     
     # Add agent UIDs
     agents_dir = vault / 'vault' / 'agents'
     if agents_dir.is_dir():
         for f in agents_dir.glob('*.md'):
-            all_uids.add(f.stem)
+            try:
+                _fm = split_frontmatter(f.read_text(errors='replace'))
+                _uid = get_scalar(_fm, 'uid') if _fm else None
+            except Exception:
+                _uid = None
+            if _uid:
+                all_uids.add(_uid)
+            elif UID_RE.match(f.stem):
+                all_uids.add(f.stem)
 
     # Add kernel capsules (UIDs in frontmatter)
     capsules_dir = vault / 'vault' / 'capsules'
@@ -8854,11 +9198,19 @@ def check_identity_refs_resolve(vault: Path, release_mode: bool = False,
         for f in capsules_dir.glob('*.md'):
             # Some capsules are named by UID, some by name.
             # Check frontmatter.
-            all_uids.add(f.stem) # Stem might be UID
+            # Frontmatter uid IS identity (Mike-ruled, Finding A). D6 cure
+            # (3d430852): the comment described a shape-gated stem fallback
+            # that no code implemented, over a bare pass — the described
+            # behavior now EXISTS (stem admitted only when uid-shaped and the
+            # capsule carries no frontmatter uid), so comment and code match.
             try:
                 fm_text = split_frontmatter(f.read_text(errors='replace'))
                 uid = get_scalar(fm_text, 'uid')
-                if uid: all_uids.add(uid)
+                if uid:
+                    all_uids.add(uid)
+                else:
+                    if UID_STEM is not None and UID_STEM.match(f.stem):
+                        all_uids.add(f.stem)
             except Exception: continue
 
     # 2. Scan unified agent entries
@@ -8889,7 +9241,14 @@ def check_identity_refs_resolve(vault: Path, release_mode: bool = False,
                     for ref in refs:
                         if not isinstance(ref, str): continue
                         # If it looks like a UID but doesn't exist
-                        if len(ref) == 8 and all(c in '0123456789abcdef' for c in ref.lower()):
+                        # accepts-both (UID_SHAPES): legacy 8-hex uids stay
+                        # first-class forever; every new governed mint is
+                        # 12-hex composite since the Stage B flip
+                        # (2026-08-31). The literal `len(ref) == 8` this
+                        # replaced never flagged a dangling composite-uid
+                        # reference at all. Reuses the module-level `UID_RE`
+                        # (line ~284), which already accepts both shapes.
+                        if UID_RE.fullmatch(ref.lower()):
                             if ref not in all_uids:
                                 if customer_mode:
                                     if vendor_manifest is not None and ref in vendor_manifest:
@@ -9303,8 +9662,8 @@ def check_no_two_homes(vault: Path) -> tuple[list[str], int, int]:
     """
     import re as _re
 
-    UID_RE = _re.compile(r'^uid:\s*([0-9a-f]{8})\s*$', _re.MULTILINE)
-    UID_STEM = _re.compile(r'^[0-9a-f]{8}$')
+    UID_RE = _re.compile(r'^uid:\s*([0-9a-f]{8}(?:[0-9a-f]{4})?)\s*$', _re.MULTILINE)  # accepts-both (D4 cure)
+    UID_STEM = _re.compile(r'^(?:[0-9a-f]{8}|[0-9a-f]{12})$')  # accepts-both (step 5)
 
     BOOTSTRAP_FLOOR = frozenset({
         'boot-config.md', 'boot-digest.md', 'boot-fast-path.md', 'orientation.md',
@@ -10796,7 +11155,11 @@ def check_cross_vault_member_of(vault: Path) -> tuple[list[str], int, int]:
         except Exception:
             lattice = default_two_segment_lattice()
 
-    work_item_types = {'task', 'work-item', 'workitem'}
+    # 'project' joins at 00d776ae W1 (mint --type project). DUPLICATED BY NAME in
+    # lib/gardener.py (~:555): the two widen together or they drift - a project
+    # entry the gardener cannot see decays invisibly; a type only the gardener
+    # sees mints into a decay regime the validator denies.
+    work_item_types = {'task', 'work-item', 'workitem', 'project'}
     for uid, rec in by_uid.items():
         rtype = str(rec.get('type') or '')
         if rtype not in work_item_types:
@@ -10913,6 +11276,67 @@ DEV_SPEC_ACTIVATION_COUPLING_ALLOWLIST = frozenset()
 # escalation arm (AC-3). Sourced from dev-spec.capsule's observed enum
 # (built_pending_verify is in-flight, NOT terminal).
 _TERMINAL_BUILD_STATUS = frozenset({'mike-signed-accepted'})
+
+# f5790777 §The Seam Rule — grandfather seed for check_dev_spec_composed_path_ac.
+#
+# WHY THIS SHIPS NON-EMPTY (do not "clean this up" to frozenset()):
+# severity is derived from allowlist emptiness exactly as the precedent above
+# does it (tropo-validate.py:11026, ratchet_is_error = len(ALLOWLIST) == 0).
+# Measured 2026-08-29 by argus-a163 against the live vault: 59 dev-specs touch
+# a shared lifecycle surface, 0 of them declare composed_path, and 16 of those
+# are non-terminal (10 draft + 6 locked). An EMPTY seed would therefore ship
+# this check in ERROR mode on day one against the entire in-flight population
+# and break tropo-validate.py for the whole crew. f5790777 §Risks names this
+# "the ratchet trap (highest)"; its AC3 asserts non-emptiness for this reason.
+# The ERROR flip is a later, evidence-gated gesture once the in-flight
+# population is clean — emptying this constant is the single auditable
+# hand-edit that performs it, same as the precedent.
+#
+# Membership only changes a finding's WORDING (grandfathered cure-path note vs
+# "not on the named allowlist"), never whether a spec is reported or counted —
+# again mirroring the precedent. Severity is a function of emptiness alone.
+#
+# TALOS DISCLOSURE (build time, 2026-08-29): re-running the census under the
+# EXACT string equality this check implements (capsule §Substrate Reference
+# Syntax: "Prefix, containment, basename, case-fold, fuzzy, and 'looks
+# related' matches are forbidden") found 17 non-terminal violators, not 16.
+# Deltas, left uncured here because the seeded 16 are Mike-locked spec text:
+#   - c7c0b783 is seeded but does NOT match exactly — its targets carry
+#     parenthetical suffixes ("vault/tools/9e7003b1.py (parse_exit_criterion:615
+#     ...)"), so an exact-equality matcher never sees them. Its entry is inert.
+#   - 8c21f26a (locked) and ca349830 (draft) DO match exactly (both target
+#     vault/tools/tropo-validate.py) but are absent from the seeded 16. They
+#     are reported at WARN with the "not on the named allowlist" wording,
+#     which is the honest signal; they do not affect severity.
+DEV_SPEC_COMPOSED_PATH_ALLOWLIST = frozenset({
+    # CORRECTED 2026-08-29 by argus-a163 at independent verification of his own
+    # measurement. The locked spec f5790777 said 16; the exact-equality rule the
+    # spec itself mandates yields 17. The original 16 were measured with a looser
+    # matcher -- author error, caught by the builder and re-confirmed independently.
+    # Removed: c7c0b783 -- INERT, it can never match, because its committed_substrate
+    #   targets carry parentheticals ('vault/tools/9e7003b1.py (parse_exit_criterion:615)')
+    #   and one is pure fuzzy framing ('paired test-spec + doc-spec'). Those violate the
+    #   capsule's own Substrate Reference Syntax and Rule 2; filed separately, not cured here.
+    # Added: 8c21f26a, ca349830 -- both match exactly and were absent from the original seed.
+    # WHY THIS MATTERS FUNCTIONALLY, not cosmetically: severity is keyed on allowlist
+    # EMPTINESS. Curing only the original 16 would have emptied it while two specs still
+    # violated, flipping the whole check to ERROR and breaking the validator studio-wide --
+    # the exact day-one failure the seeding exists to prevent, arriving one cycle later.
+    '8c21f26a', 'ca349830',
+    '0bfa771d', '124c3d63', '30e22148', '372ffdda', '3d430852', '47c26a60',
+    '61f3153a', '80476734', 'b3f620fc',  'd1194f22', 'e06f5cd8',
+    'ea103495', 'ea5d8af6', 'eb28b840', 'f15a9b85',
+})
+
+# The capsule text is the ONE declared source of the shared-lifecycle-surface
+# set (f5790777 §Implementation Contract: "Do not maintain two lists"; the
+# builder's-call ruling from argus-a163 picked capsule-text-parsed-by-validator
+# over Python-constant-generates-capsule-text). These are the exact HTML
+# comment delimiters the enumeration lives between, one Studio-relative path
+# per line.
+_COMPOSED_PATH_SURFACES_BEGIN = '<!-- SHARED-LIFECYCLE-SURFACES:BEGIN -->'
+_COMPOSED_PATH_SURFACES_END = '<!-- SHARED-LIFECYCLE-SURFACES:END -->'
+_COMPOSED_PATH_CAPSULE_RELPATH = 'vault/capsules/tropo-dev-spec.capsule.md'
 
 
 def check_dev_spec_activation_coupling(vault: Path, customer_mode: bool = False) -> tuple[list[str], int, int]:
@@ -11061,6 +11485,337 @@ def check_dev_spec_activation_coupling(vault: Path, customer_mode: bool = False)
             + (f' with build_status:{build_status!r}' if build_status else '')
             + f' but has NO correlated type:activation (dev_spec_uid: {uid})'
             + escalation + cure_note
+        )
+
+    return findings, checked, violations
+
+
+# ---------------------------------------------------------------------------
+# The Seam Rule (f5790777, v1.94 Stream 5) — composed-path AC for dev-specs
+# that touch a shared lifecycle surface. Ships WARN against a seeded
+# allowlist; the ERROR ratchet is a later evidence-gated gesture.
+# ---------------------------------------------------------------------------
+
+# Non-terminal dev-spec statuses this check is scoped to. f5790777 §Scope
+# Boundaries: "Existing done and locked dev-specs are untouched (standing
+# grandfather pattern)" — `done` is terminal and is never flagged; `draft`
+# and `locked` are the in-flight population, and the seeded allowlist above
+# is what keeps the locked ones at WARN rather than ERROR.
+_NON_TERMINAL_DEV_SPEC_STATUS = frozenset({'draft', 'locked'})
+
+
+def _parse_shared_lifecycle_surfaces(vault: Path) -> tuple[frozenset, Optional[str]]:
+    """Read the shared-lifecycle-surface set from its ONE declared source:
+    the dev-spec capsule's own marker-delimited enumeration.
+
+    f5790777 §Implementation Contract: "The set lives in ONE declared
+    constant that both the capsule text and the validator read from ...
+    Do not maintain two lists — one fact in two places that disagree is
+    this studio's dominant defect shape." The builder's-call ruling
+    (f5790777 §Handoff, decided by argus-a163) is capsule-text-as-source:
+    the validator parses, and there is no second copy to drift from.
+
+    Returns (surfaces, error_reason). error_reason is None only when a
+    non-empty enumeration was actually read; it is a human-readable string
+    in EVERY failure mode, because the caller must refuse rather than
+    silently pass. Lines are stripped; blanks and `#` comment lines are
+    dropped.
+    """
+    capsule = vault / 'vault' / 'capsules' / 'tropo-dev-spec.capsule.md'
+    if not capsule.is_file():
+        return frozenset(), f'{_COMPOSED_PATH_CAPSULE_RELPATH} does not exist'
+    try:
+        text = capsule.read_text(errors='replace')
+    except OSError as exc:
+        return frozenset(), f'{_COMPOSED_PATH_CAPSULE_RELPATH} is unreadable ({exc})'
+
+    begin = text.find(_COMPOSED_PATH_SURFACES_BEGIN)
+    if begin == -1:
+        return frozenset(), (
+            f'the {_COMPOSED_PATH_SURFACES_BEGIN!r} marker is absent from '
+            f'{_COMPOSED_PATH_CAPSULE_RELPATH}'
+        )
+    end = text.find(_COMPOSED_PATH_SURFACES_END, begin)
+    if end == -1:
+        return frozenset(), (
+            f'the {_COMPOSED_PATH_SURFACES_END!r} marker is absent (or precedes BEGIN) in '
+            f'{_COMPOSED_PATH_CAPSULE_RELPATH}'
+        )
+
+    surfaces = set()
+    for raw in text[begin + len(_COMPOSED_PATH_SURFACES_BEGIN):end].splitlines():
+        line = raw.strip()
+        if not line or line.startswith('#'):
+            continue
+        surfaces.add(line)
+
+    if not surfaces:
+        return frozenset(), (
+            f'the enumeration between the markers in {_COMPOSED_PATH_CAPSULE_RELPATH} '
+            f'is empty (only blank/comment lines)'
+        )
+    return frozenset(surfaces), None
+
+
+def check_dev_spec_plan_membership_drift(vault: Path) -> tuple[list[str], int, int]:
+    """f01592dca86d AC5 — a locked dev-spec its release plan does not list.
+
+    The spec lock appends its uid to the live plan's `dev_spec_uids` (AC1);
+    this is the second reader, for a plan edited by hand afterwards or a spec
+    locked before the append existed. WARN-safe (deb77758): a missing member
+    is a fact the plan owner wants to see, not a reason to stop anything.
+
+    ONE reader of the binding, not two: the spec-to-plan resolution is the lock
+    tool's own `resolve_plan_for_spec` (spec `target_release` against plan
+    `release_version`, exactly one live plan), loaded here rather than
+    re-derived, so the check and the writer cannot disagree about which plan a
+    spec belongs to. If that loader cannot run, the skip EMITS as one WARN —
+    a check that silently reports green when it could not look is the
+    declared-but-not-wired class this file's digest names.
+
+    Returns (findings, checked, warn_count). Never counts toward fails.
+    """
+    findings: list[str] = []
+    files_dir = vault / 'vault' / 'files'
+    if not files_dir.is_dir():
+        return findings, 0, 0
+
+    try:
+        _spec = _importlib_util.spec_from_file_location(
+            'tropo_lock_dev_spec_for_drift', Path(__file__).resolve().with_name('tropo-lock-dev-spec.py'))
+        _lock = _importlib_util.module_from_spec(_spec)
+        _spec.loader.exec_module(_lock)
+        resolve_plan_for_spec = _lock.resolve_plan_for_spec
+        plans = _lock.scan_release_plans(files_dir)  # one pass, not one per spec
+    except Exception as exc:  # noqa: BLE001 — the skip must emit
+        findings.append(f'[WARN] plan-membership drift check could not load the spec lock '
+                        f'resolver ({type(exc).__name__}: {exc}); nothing was checked')
+        return findings, 0, 1
+
+    checked = 0
+    warns = 0
+    for f in sorted(files_dir.glob('*.md')):
+        try:
+            text = f.read_text(errors='replace')
+        except Exception:
+            continue
+        fm_text = split_frontmatter(text)
+        if fm_text is None:
+            continue
+        try:
+            fm = fast_yaml.safe_load(fm_text)
+        except yaml.YAMLError:
+            continue
+        if not isinstance(fm, dict) or fm.get('type') != 'dev-spec':
+            continue
+        if str(fm.get('status') or '').strip().lower() not in ('locked', 'done'):
+            continue
+        if not str(fm.get('target_release') or '').strip():
+            continue
+        uid = str(fm.get('uid') or f.stem)
+        checked += 1
+        plan_path, why = resolve_plan_for_spec(fm, files_dir, plans)
+        if plan_path is None:
+            if 'refusing to guess' in why:
+                findings.append(f'[WARN] vault/files/{f.name} — dev-spec {uid} target_release '
+                                f'{fm.get("target_release")!r}: {why}')
+                warns += 1
+            continue  # no live plan: a spec locked outside a cycle, silent
+        try:
+            plan_fm = fast_yaml.safe_load(split_frontmatter(
+                plan_path.read_text(errors='replace')) or '') or {}
+        except Exception:
+            plan_fm = {}
+        members = plan_fm.get('dev_spec_uids') or []
+        if not isinstance(members, list):
+            members = [members]
+        if uid not in {str(m).strip() for m in members}:
+            findings.append(
+                f'[WARN] vault/files/{f.name} — dev-spec {uid} ({fm.get("status")}) is bound to '
+                f'release-plan {plan_fm.get("uid", plan_path.stem)} by target_release '
+                f'{fm.get("target_release")!r} but that plan\'s dev_spec_uids does not list it; '
+                f'the spec lock appends members (f01592dca86d) — a hand edit dropped this one, '
+                f'or the spec locked before the append existed')
+            warns += 1
+    return findings, checked, warns
+
+
+def check_dev_spec_composed_path_ac(vault: Path, customer_mode: bool = False) -> tuple[list[str], int, int]:
+    """f5790777 / dev-spec.capsule Governance Rule 10 — the composed-path AC.
+
+    A dev-spec whose `committed_substrate` targets a shared lifecycle surface
+    MUST carry at least one acceptance criterion declaring `composed_path:
+    true` — an AC whose verify.command runs the whole affected chain
+    end-to-end on a throwaway instance, not merely the unit under change.
+    The composed-path AC proves the seams; the per-item ACs prove the items.
+
+    WHY THIS RULE EXISTS (f5790777 §Intent): v1.93 shipped at roughly ten
+    times its budget, and not one hour of the overrun went to a broken
+    component. Every costly failure lived at a SEAM between individually
+    correct parts that had never been composed. No per-item acceptance
+    criterion could have caught any of them, because each item *was*
+    correct.
+
+    Violation shape, both arms required:
+      (a) at least one committed_substrate[].target EXACTLY equals a
+          declared shared-lifecycle surface, AND
+      (b) no acceptance_criteria entry declares composed_path: true.
+
+    Matching is EXACT string equality, per dev-spec.capsule §Substrate
+    Reference Syntax: "Prefix, containment, basename, case-fold, fuzzy, and
+    'looks related' matches are forbidden." A target that decorates a real
+    path with a parenthetical (e.g. "vault/tools/9e7003b1.py (parse:615)")
+    therefore does not match, and that is correct behavior — it is a
+    malformed substrate-ref, and the ref-syntax checks own it, not this one.
+
+    Scope: `draft` and `locked` dev-specs only. `done` is terminal and
+    grandfathered by f5790777 §Scope Boundaries ("Existing done and locked
+    dev-specs are untouched"); the locked half of the in-flight population
+    is what the seeded allowlist covers.
+
+    Severity derives from allowlist emptiness exactly as the precedent
+    check_dev_spec_activation_coupling does (see this file's
+    `ratchet_is_error = (len(...) == 0)` line): the constant is the single
+    auditable hand-edit that flips the ratchet, and it ships SEEDED, so this
+    check is WARN on day one. See DEV_SPEC_COMPOSED_PATH_ALLOWLIST above for
+    the measured population and the ratchet-trap disclosure.
+
+    REFUSAL, not silent pass: if the capsule's marker-delimited enumeration
+    cannot be read — file missing, markers absent, enumeration empty — this
+    returns a single [ERROR] finding saying so. f5790777 §Risks: "A check
+    that never fires on the substrate that motivated it passes every naive
+    test and protects nothing." A check that cannot see its own subject and
+    reports green is precisely that blind mechanism, so it reports red.
+
+    Returns (findings, checked, violation_count).
+    """
+    findings: list[str] = []
+    checked = 0
+    violations = 0
+
+    surfaces, surface_error = _parse_shared_lifecycle_surfaces(vault)
+    if surface_error is not None:
+        # Refuse loudly. Customer mode mirrors the precedent's shipped-subset
+        # handling (INFO + zero tally) because a shipped box is a subset and
+        # cannot be held to source-studio governance; source mode — the only
+        # mode this rule governs — is a hard ERROR.
+        severity = 'INFO' if customer_mode else 'ERROR'
+        findings.append(
+            f'[{severity}] {_COMPOSED_PATH_CAPSULE_RELPATH} — composed-path AC gate '
+            f'CANNOT RUN: the shared-lifecycle-surface enumeration could not be read '
+            f'({surface_error}). This check REFUSES rather than reporting green, because '
+            f'a gate that silently passes when it cannot see its own subject is the blind '
+            f'mechanism f5790777 exists to prevent. Cure: restore the '
+            f'{_COMPOSED_PATH_SURFACES_BEGIN} / {_COMPOSED_PATH_SURFACES_END} block, one '
+            f'Studio-relative path per line, in {_COMPOSED_PATH_CAPSULE_RELPATH}.'
+        )
+        return findings, 0, (0 if customer_mode else 1)
+
+    files_dir = vault / 'vault' / 'files'
+    if not files_dir.is_dir():
+        return findings, checked, violations
+
+    offenders: list[tuple[str, str, str, list[str]]] = []
+    unassessable: list[tuple[str, str, str]] = []
+    for f in sorted(files_dir.glob('*.md')):
+        try:
+            text = f.read_text(errors='replace')
+        except Exception:
+            continue
+        fm_text = split_frontmatter(text)
+        if fm_text is None:
+            continue
+        try:
+            fm = fast_yaml.safe_load(fm_text)
+        except yaml.YAMLError:
+            continue
+        if not isinstance(fm, dict) or fm.get('type') != 'dev-spec':
+            continue
+
+        status = fm.get('status')
+        if status not in _NON_TERMINAL_DEV_SPEC_STATUS:
+            continue
+
+        substrate = fm.get('committed_substrate')
+        if not isinstance(substrate, list):
+            # argus-a163 2026-08-30: DO NOT SKIP SILENTLY. A dev-spec with no
+            # committed_substrate escapes Rule 10 by omitting the very field
+            # Rule 10 reads, and a silent skip is indistinguishable from a pass
+            # to anyone reading the tally. Found by an independent audit of
+            # 0be90697, which read PASS while being invisible to this gate.
+            #
+            # This is the SKIP class catalogued the same session in the UID
+            # inventory (91a4b5af): a check that stops running for a subject is
+            # worse than one that refuses, because the suite gets QUIETER rather
+            # than louder. The missing field is another check's defect to report
+            # (Rule 2 / check_dev_spec_required_fields); the SILENCE was mine.
+            unassessable.append((f.name, str(fm.get('uid') or f.stem), str(status)))
+            continue
+        matched = sorted({
+            entry['target']
+            for entry in substrate
+            if isinstance(entry, dict)
+            and isinstance(entry.get('target'), str)
+            and entry['target'] in surfaces  # EXACT equality; see docstring
+        })
+        if not matched:
+            continue
+
+        checked += 1
+
+        criteria = fm.get('acceptance_criteria')
+        # Legacy pre-v1.8 acceptance_criteria are a list of plain strings and
+        # cannot carry the marker; absence is the honest reading (the capsule
+        # says absent means absent), so those count as violations too.
+        declares = isinstance(criteria, list) and any(
+            isinstance(ac, dict) and ac.get('composed_path') is True
+            for ac in criteria
+        )
+        if declares:
+            continue
+
+        uid = str(fm.get('uid') or f.stem)
+        offenders.append((f.name, uid, str(status), matched))
+
+    violations = len(offenders)
+
+    # Ratchet: a STATIC function of the named allowlist constant, never of
+    # this run's finding count — a per-run "violations == 0" test is circular
+    # (a fresh violation always makes the count >= 1, so it could never
+    # self-select ERROR). Identical shape to the activation-coupling
+    # precedent above; emptying DEV_SPEC_COMPOSED_PATH_ALLOWLIST is the one
+    # hand-edit that flips every future violation to ERROR.
+    ratchet_is_error = (len(DEV_SPEC_COMPOSED_PATH_ALLOWLIST) == 0)
+    severity = 'ERROR' if ratchet_is_error else 'WARN'
+
+    if customer_mode:
+        severity = 'INFO'
+        violations = 0
+
+    for fname, uid, status in unassessable:
+        findings.append(
+            f'[{severity}] vault/files/{fname} — dev-spec {uid} is status:{status!r} with '
+            f'NO committed_substrate, so the composed-path gate CANNOT EVALUATE it. '
+            f'This is UNASSESSABLE, not a pass: Rule 10 is escaped by omitting the field '
+            f'it reads. Cure the required field first (Rule 2), then this gate applies.'
+        )
+
+    for fname, uid, status, matched in offenders:
+        surface_note = ', '.join(matched[:3]) + (f' (+{len(matched) - 3} more)' if len(matched) > 3 else '')
+        cure_note = (
+            ' — on the f5790777 seed allowlist (measured non-terminal population, '
+            '2026-08-29); cure by adding an AC with composed_path: true whose '
+            'verify.command runs the affected chain end-to-end on a throwaway'
+            if uid in DEV_SPEC_COMPOSED_PATH_ALLOWLIST else
+            ' — NOT on the f5790777 seed allowlist; add an AC with composed_path: true '
+            'whose verify.command runs the affected chain end-to-end on a throwaway '
+            '(see dev-spec.capsule Governance Rule 10)'
+        )
+        findings.append(
+            f'[{severity}] vault/files/{fname} — dev-spec {uid} is status:{status!r} and '
+            f'targets shared lifecycle surface(s) [{surface_note}] but NO acceptance '
+            f'criterion declares composed_path: true, so it commits only unit-level '
+            f'verification' + cure_note
         )
 
     return findings, checked, violations
@@ -11703,7 +12458,7 @@ def check_mint_provenance(vault: Path) -> tuple[list[str], int, int]:
     indexed_uids = _index_union_uids(vault)
 
     fm_re = _re.compile(r'^---\n(.*?)\n---', _re.DOTALL)
-    uid_re = _re.compile(r'^uid:\s*([0-9a-f]{8})\s*$', _re.MULTILINE)
+    uid_re = _re.compile(r'^uid:\s*[\'"]?([0-9a-f]{8}|[0-9a-f]{12})[\'"]?\s*$', _re.MULTILINE)  # accepts-both (step 5); QUOTED too (2026-09-03, metis-g118): the mint writes uid: 'xxxx' quoted, and a slug-named file has no uid in its stem to fall back on -- five real, indexed records read as 'None (task)' invisible: a 12-hex frontmatter uid must MATCH, not fall through to the stem
     type_re = _re.compile(r'^type:\s*"?([\w-]+)"?\s*$', _re.MULTILINE)
 
     findings: list[str] = []
@@ -11723,11 +12478,12 @@ def check_mint_provenance(vault: Path) -> tuple[list[str], int, int]:
             continue
         total_checked += 1
         uid_m = uid_re.search(m.group(1))
-        uid = uid_m.group(1) if uid_m else f.stem
+        uid = uid_m.group(1) if uid_m else (
+            f.stem if UID_RE.match(f.stem) else None)  # SILENT-FALLBACK CURE: a slug-named stem is not identity; None => flagged as unindexed BELOW rather than misidentified
         if uid not in indexed_uids:
             defect_count += 1
             findings.append(
-                f"[ERROR] {uid} ({type_m.group(1)}): mint-governed type has NO row in "
+                f"[ERROR] {uid if uid else f.name} ({type_m.group(1)}): mint-governed type has NO row in "
                 f"the current/archive index union -- invisible to every index-driven surface. "
                 f"Cure: python3 vault/tools/tropo-rebuild-index.py --only {uid} "
                 f"(hand-authored bypass of `mint file` -- the fail-loud floor per bba40cd7)."
@@ -11879,15 +12635,33 @@ def check_every_agent_can_still_boot(vault: Path) -> tuple[list[str], int, int]:
 ARGO_EXECUTIVE_SLUGS = {'metis', 'argus', 'talos', 'vela', 'orpheus', 'silas'}
 
 
-def _latest_retired_generation(lines: list) -> tuple:
-    """(gen, retired_at) of the most recent generation that closed, else (None, None)."""
-    live, latest = None, (None, None)
+def _retired_generations(lines: list) -> list:
+    """EVERY (gen, retired_at) that closed, oldest first.
+
+    21834ad2 cure 3b (argus-a164, 2026-08-31). This was `_latest_retired_generation`
+    and returned only the most recent close, which made the retirement-practice check
+    structurally unable to report a backlog: each new retirement ERASED the previous
+    one's finding, so an N-generation lapse could only ever surface as a one-generation
+    lapse, and the instrument under-reported exactly as the backlog grew.
+
+    Measured motivation: argus A162 and A163 both retired without folding memory. The
+    moment A163 closed, A162's identical lapse became unreportable, and the pair read as
+    a single miss. Returning the full list lets the caller warn per generation.
+    """
+    out, live = [], None
     for l in lines:
         if l.get('t') == 'born':
             live = l
         elif l.get('t') == 'retired' and live and l.get('gen') == live.get('gen'):
-            latest = (live.get('gen'), l.get('at', ''))
-    return latest
+            out.append((live.get('gen'), l.get('at', '')))
+    return out
+
+
+def _latest_retired_generation(lines: list) -> tuple:
+    """(gen, retired_at) of the most recent close, else (None, None). Kept for callers
+    that legitimately want only the newest; the practice check now walks all of them."""
+    gens = _retired_generations(lines)
+    return gens[-1] if gens else (None, None)
 
 
 def _gen_number(gen: str):
@@ -12113,7 +12887,7 @@ def check_no_procedure_summaries_in_identity(vault: Path) -> tuple[list[str], in
         slug_m = re.search(r'^agent:\s*["\']?([A-Za-z0-9_-]+)', text, re.MULTILINE)
         slug = slug_m.group(1) if slug_m else entry.stem
         seen = set()
-        for m in re.finditer(r'\b([0-9a-f]{8})\b', text):
+        for m in re.finditer(r'\b([0-9a-f]{8}(?:[0-9a-f]{4})?)\b', text):  # accepts-both (D5)
             uid = m.group(1)
             if uid not in canonical or uid in seen:
                 continue
@@ -12156,6 +12930,7 @@ def check_retirement_ceremony_completeness(vault: Path) -> tuple[list[str], int,
     retroactively fail it.
     """
     findings: list[str] = []
+    _backlog: dict = {}
     checked = 0
     lineage_root = vault / 'agents'
     if not lineage_root.is_dir():
@@ -12169,71 +12944,86 @@ def check_retirement_ceremony_completeness(vault: Path) -> tuple[list[str], int,
                      if l.strip()]
         except (OSError, ValueError):
             continue
-        gen, retired_at = _latest_retired_generation(lines)
-        if not gen:
+        all_retired = _retired_generations(lines)
+        if not all_retired:
             continue
-        closed_date = (retired_at or '')[:10]
-        try:
-            if datetime.strptime(closed_date, '%Y-%m-%d').date() < horizon:
-                continue
-        except ValueError:
-            continue  # no parseable close date: no recency claim, no warning
-        checked += 1
-        session_date = (retired_at or '')[:10]
-        missing = []
-        if not _has_fold(path.parent, gen, session_date):
-            missing.append('memory fold (no fold-boundary dated at or after the '
-                           'session in agent-memories.jsonl / agent-memory.md)')
-        if not _has_reflection(path.parent, gen):
-            missing.append('reflection (nothing at reflections/ matching this '
-                           'generation)')
-        # S4 AC3 (29506520), argus-a154 2026-08-23: the observer checked THREE of
-        # e2c7d185's EIGHT required steps and reported completeness on that basis.
-        # It passed A153's close, which had missed the Captain's Log AND the notice;
-        # it passed G110's, which missed three. Steps added below: 1 session
-        # memories, 3 the letter (non-empty — A152 found an EMPTY letter permanently
-        # consuming the create-only slot), 7 the §Status-Notes half of crew surfaces,
-        # 8 the retirement notice.
-        #
-        # NOT CHECKED, DECLARED RATHER THAN SILENT: step 6 event drain and the
-        # crew-brief half of step 7 leave no durable per-generation artifact, so
-        # neither is verifiable after the fact. They belong to S4's DRIVER (AC1/AC2),
-        # which observes them live. An observer that silently skipped them would
-        # report 8-of-8 while measuring 7.
-        letter = path.parent / 'transfers' / f'{gen}.md'
-        if not letter.is_file():
-            missing.append(f'the successor letter (nothing at transfers/{gen}.md)')
-        elif not letter.read_text(encoding='utf-8', errors='replace').strip():
-            missing.append(f'a NON-EMPTY successor letter (transfers/{gen}.md exists '
-                           f'but is empty, and the path is create-only — an empty '
-                           f'letter consumes the slot permanently)')
+        # 21834ad2 cure 3b: walk EVERY close in the horizon. Reading only the newest
+        # meant each retirement erased the prior one's finding, so a backlog was
+        # indistinguishable from a single lapse and the check under-reported exactly
+        # as the backlog grew.
+        for gen, retired_at in all_retired:
+            closed_date = (retired_at or '')[:10]
+            try:
+                if datetime.strptime(closed_date, '%Y-%m-%d').date() < horizon:
+                    continue
+            except ValueError:
+                continue  # no parseable close date: no recency claim, no warning
+            checked += 1
+            session_date = (retired_at or '')[:10]
+            missing = []
+            if not _has_fold(path.parent, gen, session_date):
+                missing.append('memory fold (no fold-boundary dated at or after the '
+                               'session in agent-memories.jsonl / agent-memory.md)')
+            if not _has_reflection(path.parent, gen):
+                missing.append('reflection (nothing at reflections/ matching this '
+                               'generation)')
+            # S4 AC3 (29506520), argus-a154 2026-08-23: the observer checked THREE of
+            # e2c7d185's EIGHT required steps and reported completeness on that basis.
+            # It passed A153's close, which had missed the Captain's Log AND the notice;
+            # it passed G110's, which missed three. Steps added below: 1 session
+            # memories, 3 the letter (non-empty — A152 found an EMPTY letter permanently
+            # consuming the create-only slot), 7 the §Status-Notes half of crew surfaces,
+            # 8 the retirement notice.
+            #
+            # NOT CHECKED, DECLARED RATHER THAN SILENT: step 6 event drain and the
+            # crew-brief half of step 7 leave no durable per-generation artifact, so
+            # neither is verifiable after the fact. They belong to S4's DRIVER (AC1/AC2),
+            # which observes them live. An observer that silently skipped them would
+            # report 8-of-8 while measuring 7.
+            letter = path.parent / 'transfers' / f'{gen}.md'
+            if not letter.is_file():
+                missing.append(f'the successor letter (nothing at transfers/{gen}.md)')
+            elif not letter.read_text(encoding='utf-8', errors='replace').strip():
+                missing.append(f'a NON-EMPTY successor letter (transfers/{gen}.md exists '
+                               f'but is empty, and the path is create-only — an empty '
+                               f'letter consumes the slot permanently)')
 
-        if not _has_session_memories(path.parent, gen):
-            missing.append('session memories (no agent-memories.jsonl record naming '
-                           'this generation)')
+            if not _has_session_memories(path.parent, gen):
+                missing.append('session memories (no agent-memories.jsonl record naming '
+                               'this generation)')
 
-        if slug in ARGO_EXECUTIVE_SLUGS:
-            log = vault / 'library' / 'captains-log.md'
-            has_log = log.is_file() and _names_generation(
-                log.read_text(encoding='utf-8', errors='replace'), gen)
-            if not has_log:
-                missing.append("Captain's Log line for this generation")
+            if slug in ARGO_EXECUTIVE_SLUGS:
+                log = vault / 'library' / 'captains-log.md'
+                has_log = log.is_file() and _names_generation(
+                    log.read_text(encoding='utf-8', errors='replace'), gen)
+                if not has_log:
+                    missing.append("Captain's Log line for this generation")
 
-            if not _status_notes_name_generation(vault, slug, gen):
-                missing.append('§Status-Notes naming this generation in the unified '
-                               'entry (step 7, crew surfaces)')
+                if not _status_notes_name_generation(vault, slug, gen):
+                    missing.append('§Status-Notes naming this generation in the unified '
+                                   'entry (step 7, crew surfaces)')
 
-            if not _has_retirement_notice(vault, slug, gen):
-                missing.append('a retirement notice on the crew bus naming this '
-                               'generation (step 8)')
-        for artifact in missing:
-            findings.append(
-                f'[WARN] retirement practice: {slug} {gen} closed '
-                f'{retired_at or "(date unknown)"} without: {artifact}. Required '
-                f'practice, recoverable after the fact — write the real artifact '
-                f'with its real timestamps; never backdate and never invent a '
-                f'record. This warning clears when the honest artifact lands.'
-            )
+                if not _has_retirement_notice(vault, slug, gen):
+                    missing.append('a retirement notice on the crew bus naming this '
+                                   'generation (step 8)')
+            for artifact in missing:
+                _backlog.setdefault((slug, artifact), []).append((gen, retired_at))
+
+    # 21834ad2 cure 3b, aggregated (argus-a164): walking every close in the horizon
+    # surfaced 64 findings across 49 generations where the latest-only read showed 3.
+    # That is the TRUE state, and 64 lines is also how a real signal becomes noise in a
+    # 2,000-warning stream. One line per agent per missing artifact, naming the depth and
+    # the range, keeps the backlog visible and countable without burying it.
+    for (a_slug, artifact), gens in sorted(_backlog.items()):
+        names = [g for g, _ in gens]
+        span = names[0] if len(names) == 1 else f'{names[0]}..{names[-1]}'
+        findings.append(
+            f'[WARN] retirement practice: {a_slug} is missing {artifact} for '
+            f'{len(names)} generation(s) in the last 30 days ({span}). Required '
+            f'practice, recoverable after the fact — write the real artifact with its '
+            f'real timestamps; never backdate and never invent a record. Depth is the '
+            f'point: a single missing fold is a slip, a run of them is a broken habit.'
+        )
     return findings, checked, 0
 
 
@@ -12257,7 +13047,7 @@ def check_lifecycle_card_drift(vault: Path) -> tuple[list[str], int, int]:
         pointer = lineage_root / slug / f'{slug}-activation.md'
         if not pointer.is_file():
             continue
-        m = re.search(r'^agent_uid:\s*([0-9a-fA-F]{8})\s*$',
+        m = re.search(r'^agent_uid:\s*([0-9a-fA-F]{8}(?:[0-9a-fA-F]{4})?)\s*$',  # accepts-both (D5)
                       pointer.read_text(encoding='utf-8', errors='replace'),
                       re.MULTILINE)
         if not m:
@@ -12379,7 +13169,7 @@ def check_pipeline_event_fixture_pollution(vault: Path) -> tuple[list[str], int,
     """
     import re as _re
 
-    uid_re = _re.compile(r'^[0-9a-f]{8}$')
+    uid_re = _re.compile(r'^(?:[0-9a-f]{8}|[0-9a-f]{12})$')  # accepts-both (step 5) -- INVERTED-POLARITY site: this is the fixture-pollution gate; both shapes are legal activations, junk still is not
     findings: list[str] = []
     total_checked = 0
     new_defects = 0
@@ -13163,7 +13953,29 @@ class _EnumerableTee:
         return self.pass_lines, self.fail_lines, self.warn_lines
 
 
+
+def _preflight_warn(caller_name: str) -> None:
+    """59c61b0e (folded into 00d776ae W1): preflight's first real caller.
+
+    Loads tropo-preflight.py beside this file and asks it to warn — one
+    line, naming the pip remedy, never a refusal (deb77758). Everything is
+    swallowed twice over: a missing preflight, a broken import, any failure
+    inside it — none may block this tool's own work.
+    """
+    try:
+        import importlib.util as _ilu
+        _path = Path(__file__).resolve().with_name("tropo-preflight.py")
+        _spec = _ilu.spec_from_file_location("_tropo_preflight_warn", _path)
+        if _spec is None or _spec.loader is None:
+            return
+        _mod = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        _mod.warn_from_caller(caller_name)
+    except Exception:
+        return
+
 def main() -> int:
+    _preflight_warn("tropo-validate")
     parser = argparse.ArgumentParser(
         description='Structural validator for a Tropo vault.',
     )
@@ -13172,6 +13984,12 @@ def main() -> int:
     parser.add_argument('--write-fingerprints', nargs='*', metavar='FILE',
                         help='v1.70 S3.5.2: Write dual fingerprints to target boot-derivation artifacts. '
                              'If no files provided, scans for existing boot_derivation:true entries.')
+    parser.add_argument('--gauntlet-verified', action='store_true',
+                        help="Stamp gauntlet_verified_at with today's date. Pass this ONLY when you "
+                             'have actually re-run the completeness gauntlet on the artifact. Without '
+                             'it, --write-fingerprints recomputes hashes and leaves the attestation '
+                             'alone. (argus-a167 2026-09-02: the stamp used to fire unconditionally, '
+                             'so a mechanical re-hash asserted a semantic review nobody ran.)')
     parser.add_argument('--release', action='store_true',
                         help='Release-mode validation (dev-spec f8b51f4d D1, v1.74): '
                              'downgrade outward-refs (UIDs not in the subset index) from [FAIL] to [INFO]. '
@@ -13249,6 +14067,45 @@ def main() -> int:
     vault = resolve_vault_root(args.vault_path)
     if vault is None:
         print('ERROR: Could not resolve vault root.', file=sys.stderr)
+        return 2
+
+    # --- Fresh-box precondition (argus-a163, 2026-08-30; be9abd46 finding S2) ---
+    # A freshly unzipped release box deliberately omits the derived index files
+    # (they are machine-local; the release ships source and the studio builds
+    # its own -- Mike-ruled, and the concierge's Boot Protocol 0b already says
+    # so in those words). Nearly every check below reads that index, so on a
+    # fresh box the validator produced either 52 failures and an UNCAUGHT
+    # IndexSurfaceRefusal traceback (plain) or 33 failures (--customer). Both
+    # measured in the shipped v1.93.0 box.
+    #
+    # None of that is a defect in the studio; it is a missing precondition. A
+    # newcomer's first command should not answer a setup question with a stack
+    # trace, and 33 red lines that all say the same thing teach them to distrust
+    # the validator before they have used it once.
+    #
+    # This refuses EARLY and CLEARLY with the one cure, in the same shape and
+    # nearly the same words the concierge uses -- one rule, two surfaces. It is
+    # a precondition, NOT a check being skipped: exit 2 (misuse), never 0, so no
+    # caller can mistake it for a pass.
+    index_path = vault / 'vault' / '00-index.jsonl'
+    rebuild_tool = vault / 'vault' / 'tools' / 'tropo-rebuild-index.py'
+    if not index_path.is_file() and rebuild_tool.is_file():
+        print('')
+        print('=' * 70)
+        print('This Studio has no index yet — nothing is wrong.')
+        print('=' * 70)
+        print('')
+        print('A release box ships the source files and builds its index on first use,')
+        print('so `vault/00-index.jsonl` is absent until you create it. Almost every')
+        print('check here reads that index, so validating first reports failures that')
+        print('are really just "not built yet."')
+        print('')
+        print('Run this once, from the Studio root:')
+        print('')
+        print('    python3 vault/tools/tropo-rebuild-index.py --apply --vault-path .')
+        print('')
+        print('It takes a few seconds. Then run this validator again.')
+        print('')
         return 2
 
     # --- v1.89 271d28d7: pairing-debt baseline capture (early return) ---
@@ -13393,9 +14250,25 @@ def main() -> int:
                 fm['self_fingerprint'] = {'body_sha256': body_sha256(f)}
                 print(f'    • Hashed self: {f.name}')
 
-                # 3. Add gauntlet_verified_at
-                from datetime import date
-                fm['gauntlet_verified_at'] = date.today().isoformat()
+                # 3. gauntlet_verified_at — ONLY on explicit attestation.
+                #
+                # argus-a167, 2026-09-02, Mike-directed. This stamp used to fire
+                # on every --write-fingerprints run. Recomputing hashes is a
+                # MECHANICAL act; the completeness gauntlet is a semantic review
+                # by separate readers. Conflating them meant the one field aimed
+                # at meaning-drift refreshed itself whenever the byte-level gate
+                # ran -- a gate that cannot change verdict, which is the defect
+                # family this studio spends most of its time closing.
+                #
+                # Found independently the same day by argus-a167 and talos-t60,
+                # who both hand-reverted a false date rather than let it stand.
+                # Its governing spec (5e12ab9c, done) designed the field on the
+                # premise that nobody re-fingerprints without re-gauntleting.
+                # That premise does not hold: three agents did exactly that.
+                # The premise is now enforced by the flag instead of assumed.
+                if getattr(args, 'gauntlet_verified', False):
+                    from datetime import date
+                    fm['gauntlet_verified_at'] = date.today().isoformat()
 
                 # 4. Write back
                 # Use yaml.dump to regenerate frontmatter text
@@ -13469,6 +14342,34 @@ def main() -> int:
                 total_warnings += 1  # ratchet preserves count for display; FAIL counted by [FAIL] prefix
         if len(findings) > 20:
             print(f'  ... and {len(findings) - 20} more')
+
+    # --- W5 content classification: warn-safe origin coverage ---
+    print('\n--- Origin-Marked Content Classification (W5; WARN-safe) ---')
+    try:
+        occ_findings, occ_checked, occ_missing = check_origin_marked_content_class(vault)
+        if occ_missing == 0:
+            print(
+                f'[PASS] {occ_checked} origin-marked record(s) checked — '
+                'all carry content_class'
+            )
+            total_passes += 1
+        else:
+            print(
+                f'[WARN] {occ_checked} origin-marked record(s) checked; '
+                f'{occ_missing} lack content_class'
+            )
+            for line in occ_findings[:20]:
+                print(f'  {line}')
+                total_warnings += 1
+            if len(occ_findings) > 20:
+                remaining = len(occ_findings) - 20
+                print(f'  ... and {remaining} more')
+                total_warnings += remaining
+    except Exception as e:
+        import traceback as _tb
+        print(f'[FAIL] origin-content-class check CRASHED: {e}')
+        _tb.print_exc()
+        total_fails += 1
 
     # --- UID Ref Type Check (d3a58cdf: UID-bearing fields must be string, not int; WARN→ERROR) ---
     print('\n--- UID-Reference Fields Are Strings (d3a58cdf; int refs in children/member_of/etc → WARN) ---')
@@ -13678,7 +14579,7 @@ def main() -> int:
                 if UID_RE.match(name):
                     all_uids.add(name)
                 # Also extract trailing 8-hex from named run folders if present
-                trail_match = re.search(r'([0-9a-f]{8})$', name)
+                trail_match = re.search(r'(?:^|[^0-9a-f])([0-9a-f]{8}|[0-9a-f]{12})$', name)  # TRUNCATE-FROM-TAIL CURE: the boundary refuses the last-8 of a 12-hex stem, so a never-minted uid cannot enter the authority set
                 if trail_match:
                     all_uids.add(trail_match.group(1))
 
@@ -14572,6 +15473,27 @@ def main() -> int:
         _tb.print_exc()
         total_fails += 1
 
+    # --- B-7 Check 37: Po Map Render Freshness (f01564310146 AC5; ERROR) ---
+    print('\n--- Po Map Render Freshness (Check 37; spec f01564310146 AC5; ERROR) ---')
+    try:
+        pmr_findings, pmr_checked, pmr_defects = check_po_map_render_fresh(vault)
+        if pmr_defects == 0:
+            if pmr_checked > 0:
+                print('[PASS] rendered Studio Map matches its canonical source')
+            else:
+                print('[PASS] no rendered map yet — nothing to check')
+            total_passes += 1
+        else:
+            print(f'[FAIL] {pmr_checked} artifact(s) checked; {pmr_defects} stale')
+            total_fails += 1
+        for line in pmr_findings:
+            print(f'  {line}')
+    except Exception as e:
+        import traceback as _tb
+        print(f'[FAIL] po-map-render-freshness check CRASHED: {e}')
+        _tb.print_exc()
+        total_fails += 1
+
     # --- v1.70 Check 33: Spec Coverage Pairing (AC <-> behavior) ---
     print('\n--- Spec Coverage Pairing (Check 33; dev-spec AC <-> test-spec behavior; ERROR) ---')
     try:
@@ -14760,6 +15682,21 @@ def main() -> int:
             total_fails += 1
         if len(sat_findings) > 10:
             print(f'  ... and {len(sat_findings) - 10} more')
+
+    # --- Ship Verdict Coherence (v1.94 Stream 5 / B-1; ship-artifact.capsule v1.5 Check 30 + core.capsule v2.2 Check 14) ---
+    print('\n--- Ship Verdict Coherence (B-1 91d951f4; ship-artifact v1.5 Check 30 + core v2.2 Check 14; WARN) ---')
+    svc_findings, svc_checked, svc_defects = check_ship_verdict_coherence(vault)
+    if not svc_findings:
+        print(f'[PASS] {svc_checked} ship-artifact(s) + shadow designation(s) verified — every path carries a ruled verdict')
+        total_passes += 1
+    else:
+        print(f'[WARN] {svc_checked} checked; {svc_defects} verdict/designation defect(s) (WARN — the build census is the loud instrument)')
+        for line in svc_findings[:10]:
+            print(line)
+            total_warnings += 1
+        if len(svc_findings) > 10:
+            print(f'  ... and {len(svc_findings) - 10} more')
+            total_warnings += (len(svc_findings) - 10)
 
     # --- Article State Machine Invariants (v1.48.0 Stream A; ship-artifact.capsule v1.4 Check 25 NEW) ---
     print('\n--- Article State Machine Invariants (v1.48.0 Stream A; ship-artifact.capsule v1.4 Check 25 NEW; WARN at v1.4 / ERROR ratchet at v1.5) ---')
@@ -15986,6 +16923,61 @@ def main() -> int:
     except Exception as e:
         import traceback as _tb
         print(f'[FAIL] dev-spec-activation-coupling check CRASHED: {e}')
+        _tb.print_exc()
+        total_fails += 1
+
+    # --- f01592dca86d AC5: Plan-membership drift — a locked dev-spec its release plan does not list (WARN) ---
+    print('\n--- Plan-Membership Drift (f01592dca86d AC5; WARN — the spec lock appends, this is the second reader) ---')
+    try:
+        pmd_findings, pmd_checked, pmd_warns = check_dev_spec_plan_membership_drift(vault)
+        if pmd_warns == 0:
+            print(f'[PASS] {pmd_checked} locked/done dev-spec(s) with a target_release checked — every one bound to a live plan is listed by it')
+            total_passes += 1
+        else:
+            print(f'[WARN] {pmd_checked} locked/done dev-spec(s) checked; {pmd_warns} plan-membership drift finding(s)')
+            for line in pmd_findings[:25]:
+                print(f'  {line}')
+            total_warnings += pmd_warns
+            if len(pmd_findings) > 25:
+                print(f'  ... and {len(pmd_findings) - 25} more')
+    except Exception as e:
+        import traceback as _tb
+        print(f'[FAIL] plan-membership drift check CRASHED: {e}')
+        _tb.print_exc()
+        total_fails += 1
+
+    # --- f5790777: The Seam Rule — composed-path AC for shared-lifecycle dev-specs (WARN; allowlist seeded non-empty) ---
+    print('\n--- Composed-Path AC for Shared-Lifecycle Surfaces (f5790777, dev-spec.capsule Rule 10; WARN — seed allowlist non-empty) ---')
+    try:
+        dscp_findings, dscp_checked, dscp_violations = check_dev_spec_composed_path_ac(
+            vault,
+            customer_mode=(
+                getattr(args, 'customer', False)
+                or getattr(args, 'release', False)
+            ),
+        )
+        if dscp_violations == 0:
+            print(f'[PASS] {dscp_checked} non-terminal dev-spec(s) touching a shared lifecycle surface checked — all declare a composed_path AC')
+            total_passes += 1
+        else:
+            severity_seen = 'ERROR' if any('[ERROR]' in l for l in dscp_findings) else 'WARN'
+            print(f'[{severity_seen}] {dscp_checked} non-terminal dev-spec(s) touching a shared lifecycle surface checked; {dscp_violations} without a composed_path AC')
+            for line in dscp_findings[:25]:
+                print(f'  {line}')
+                if line.startswith('[ERROR]'):
+                    total_fails += 1
+                else:
+                    total_warnings += 1
+            if len(dscp_findings) > 25:
+                extra = len(dscp_findings) - 25
+                print(f'  ... and {extra} more')
+                if severity_seen == 'ERROR':
+                    total_fails += extra
+                else:
+                    total_warnings += extra
+    except Exception as e:
+        import traceback as _tb
+        print(f'[FAIL] dev-spec-composed-path-ac check CRASHED: {e}')
         _tb.print_exc()
         total_fails += 1
 

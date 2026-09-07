@@ -322,7 +322,7 @@ def mint_key(activation_uid: str, gate: str = GATE_PRODUCE) -> dict:
     return key
 
 
-def _has_human_signoff(run_folder: Path) -> bool:
+def _has_human_signoff(run_folder: Path, activation_uid: str | None = None) -> bool:
     """Public-ship gate (5864c0b6, v1.80 post-S9): require an INDEPENDENT, REGISTERED signer.
 
     Round-3 adversarial re-verify (Argus, forge-proven) found this check accepted ANY
@@ -342,6 +342,16 @@ def _has_human_signoff(run_folder: Path) -> bool:
          the runtime's per-step `human:` criterion, this check is not scoped to one step (the
          release module has no single "subject" step), so "the run's executor" is the set of
          all step_completed actors across the whole run.
+
+    Owner exemption (Metis G114 ruling, evt_823a851052454a86_00000023, 2026-08-29, Mike-worded,
+    v1.93 endgame — option (b) with the human guard): found live when v1.93's own owner (Mike)
+    had a step_completed on this run and was then unable to sign his own release, because the
+    executor-exclusion set is unscoped across the run's whole history. The run's recorded OWNER
+    is exempt from that set IF AND ONLY IF the owner resolves to a HUMAN principal
+    (principal_class == "human") — the owner-does-hands-on-work-then-authorizes pattern is what
+    this studio wants; an agent who executed a step stays excluded forever, unconditionally,
+    which is what keeps the original self-certification hole closed. Option (a) — a time-window
+    exemption — was rejected: time does not restore independence, only identity class does.
     """
     events = _read_run_events(run_folder)
     executor_principal_uids = set()
@@ -353,6 +363,19 @@ def _has_human_signoff(run_folder: Path) -> bool:
             puid = _resolve_principal_uid(actor, VAULT_ROOT)
             if puid:
                 executor_principal_uids.add(puid)
+    if activation_uid:
+        activation_fm = _load_fm(VAULT_FILES / f"{activation_uid}.md") or {}
+        owner_label = activation_fm.get("owner")
+        if owner_label:
+            owner_uid = _resolve_principal_uid(owner_label, VAULT_ROOT)
+            if owner_uid:
+                # Principal identity always resolves against the real registry
+                # (VAULT_ROOT), never the test-injectable VAULT_FILES seam used for
+                # the activation-frontmatter read above — the two are the same path
+                # in real production, but only one of them should ever be substitutable.
+                owner_fm = _load_fm(VAULT_ROOT / "vault" / "files" / f"{owner_uid}.md") or {}
+                if owner_fm.get("principal_class") == "human":
+                    executor_principal_uids.discard(owner_uid)
     for e in events:
         if e.get("event") == "human_signoff" and _verdict(e) in ("accepted", "accepted_with_exceptions"):
             # (1) Trust ONLY ev.actor — never any self-reported field in data.
@@ -384,6 +407,10 @@ _ENGINE_EVENT_TYPES = frozenset({
     "skip_request", "skip_authorization",
     "verification_receipt", "verifier_findings",
     "step_criteria_amended", "status_changed",
+    # reopen-step (9e7003b1.py, v1.95 candidate #3): the produce step returns
+    # to 'declared' after its sealed candidate was retired on the record; the
+    # row lands after the earlier gate record by construction.
+    "step_reopened",
     # step_redeclare (9e7003b1.py) returns a wedged step to 'declared'. WITHOUT
     # this entry, any legitimate use after the produce gate mints the key makes
     # require_release_authorization refuse as "possible tampering" -- fail-closed
@@ -396,6 +423,17 @@ _ENGINE_EVENT_TYPES = frozenset({
     # the allowlist was the whole problem. Same class the v1.90 allowlist hit
     # three times, per test_allowlist_derived_v191.py's own docstring.
     "step_redeclared",
+    # step_reverify_opened (9e7003b1.py action_reverify_step) re-opens a VERIFIED
+    # or SKIPPED instrument step whose AC7 receipt was never earned (built the
+    # night before v1.93's own real fire attempt) -- exactly the step_redeclared
+    # class above: absent this entry, the first release run to ever use
+    # reverify-step reads its own legitimate reopen as tampering. Found live,
+    # 2026-08-29, argus-a162, on v1.93's real stage attempt -- the run had
+    # reverified a0f2bea8/bc6b17ec/c6b61fb9/4262d5fa/7de2c49f, all through the
+    # engine's own sanctioned command, none forged. Does not shift the
+    # fingerprint (same reasoning as step_redeclared: _WORK_EVENTS covers only
+    # step_completed/verification_receipt) -- the allowlist was the whole gap.
+    "step_reverify_opened",
     "test_executed", "test_aggregate",
     "workflow_complete", "activation_superseded",
 })
@@ -533,7 +571,7 @@ def require_release_authorization(activation_uid: str, gate: str = GATE_PRODUCE,
                         f"(event={_ev.get('event')!r}, step={_step(_ev)!r}) — "
                         f"possible tampering after the key was minted; refused"
                     )
-        if require_human_signoff and not _has_human_signoff(run_folder):
+        if require_human_signoff and not _has_human_signoff(run_folder, activation_uid):
             raise ReleaseAuthorizationError(
                 "public ship requires a human_signoff event in the run — none found "
                 "(the human key was not turned)")

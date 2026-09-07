@@ -386,7 +386,7 @@ def _read_gateway_spend(run_dir: Path) -> tuple[object, int]:
 def _ensure_run(root: Path, run_dir: Path) -> tuple[str, dict, bool, bool]:
     """Plan a fresh run entirely in memory or verify existing run state."""
     if not run_dir.exists():
-        run_uid = secrets.token_hex(4)
+        run_uid = secrets.token_hex(4)  # RUN-RECORD DEFERRAL MARKER (3d430852): run-record identity, the spec's declared deferral class
         _require_fresh_run_uid(run_uid)
         return run_uid, _run_events(run_uid)[1], True, True
     if run_dir.is_symlink() or not run_dir.is_dir():
@@ -396,7 +396,7 @@ def _ensure_run(root: Path, run_dir: Path) -> tuple[str, dict, bool, bool]:
         raise DistillerCanaryError("this canary run already has a scorecard")
     preparation_pending = PREPARATION_NAME not in entries
     if not entries:
-        run_uid = secrets.token_hex(4)
+        run_uid = secrets.token_hex(4)  # RUN-RECORD DEFERRAL MARKER (3d430852): run-record identity, the spec's declared deferral class
         _require_fresh_run_uid(run_uid)
         return run_uid, _run_events(run_uid)[1], True, True
     allowed = {

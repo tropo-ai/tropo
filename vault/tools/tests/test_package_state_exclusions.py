@@ -228,5 +228,102 @@ class TheBoxGetsAConcreteUpdateAddress(unittest.TestCase):
         ]
         self.assertEqual(offenders, [], "a fictional host is reachable as a value")
 
+class UpdateHistoryIsState(unittest.TestCase):
+    """The sibling-parity gap Argus A163 found (evt_b51c083be28ac6fe_00000285,
+    Mike-ruled fix-now 2026-08-29): updates-manifest.json was protected while
+    update-history.jsonl — the customer's record of what they have APPLIED —
+    was not, so every image-apply destroyed it. Original gap, not a regression.
+    """
+
+    def test_update_history_is_studio_state(self) -> None:
+        self.assertTrue(psx.is_studio_state("vault/updates/update-history.jsonl"))
+
+    def test_the_protection_is_enumerated_with_a_reason(self) -> None:
+        self.assertIn("vault/updates/update-history.jsonl", psx.F7_STATE_REASONS)
+        self.assertGreater(len(psx.F7_STATE_REASONS["vault/updates/update-history.jsonl"]), 40)
+
+
+class VendorQaResidueExclusions(unittest.TestCase):
+    """a6d2accf Stream 1 step 1: vendor QA residue enumerated and excluded at
+    the APPLY surface with honest labels. Prefix entries are NOT covered by
+    the explain-yourself loop (STATE_FILES only), so membership is asserted
+    here explicitly. T53's UpdateHistoryIsState stays green beside this."""
+
+    def test_test_report_is_studio_state(self) -> None:
+        self.assertTrue(psx.is_studio_state("test-report.md"))
+        self.assertIn("test-report.md", psx.F7_STATE_REASONS)
+        self.assertGreater(len(psx.F7_STATE_REASONS["test-report.md"]), 40)
+
+    def test_studio_identity_test_scratch_dir_is_state(self) -> None:
+        # The apply surface addresses FILES; child membership is the contract.
+        self.assertTrue(psx.is_studio_state(".tmp-studio-identity-tests/x.json"))
+        self.assertTrue(psx.is_studio_state(".tmp-studio-identity-tests/nested/y.md"))
+
+    def test_prophylactic_prefixes_are_state_and_labeled(self) -> None:
+        for prefix in ("playbook-runs/", "boards/suite-health/"):
+            self.assertTrue(psx.is_studio_state(prefix + "run.jsonl"), prefix)
+        module_text = Path(psx.__file__).read_text(encoding="utf-8")
+        prefix_block = module_text.split("STATE_DIR_PREFIXES", 1)[1].split("ARTIFACT_SEGMENTS", 1)[0]
+        self.assertIn("prophylactic", prefix_block,
+                      "prophylactic residue entries must be labeled as such")
+
+    def test_no_over_exclusion(self) -> None:
+        self.assertFalse(psx.is_studio_state("vault/files/some-entry.md"))
+        self.assertFalse(psx.is_studio_state("boards/other-surface.md"))
+
+
+class CustomerIdentitySetExclusions(unittest.TestCase):
+    """4e9ce4cc Stream 1 step 1 (the A1 cure): the customer's four root
+    identity files enter the exclusion set with A163-lineage reasons. The
+    membership is enumerated (these ARE in STATE_FILES, so the explain-
+    yourself loop covers them), but the root-exactness of the freeze and the
+    two-class contract are pinned HERE because nothing else asserts them.
+    Proven necessary by a real apply: a planted customer edit to STUDIO.md
+    was destroyed by a v1.86 box update (A163 fleet).
+    """
+
+    IDENTITY_SET = ("STUDIO.md", "operating-agreement.md", "CLAUDE.md", "AGENTS.md")
+
+    def test_each_identity_file_is_studio_state_with_a_reason(self) -> None:
+        for path in self.IDENTITY_SET:
+            with self.subTest(path=path):
+                self.assertTrue(psx.is_studio_state(path))
+                self.assertIn(path, psx.A163_IDENTITY_REASONS)
+                self.assertGreater(len(psx.A163_IDENTITY_REASONS[path]), 40)
+
+    def test_their_own_contracts_class_the_first_pair(self) -> None:
+        """STUDIO.md and operating-agreement.md are excluded per their OWN
+        documented text — quote it, so a template edit that moves the promise
+        shows up as a reason quoting a promise the file no longer makes."""
+        self.assertIn("never modifies this file", psx.A163_IDENTITY_REASONS["STUDIO.md"])
+        self.assertIn("content is yours", psx.A163_IDENTITY_REASONS["operating-agreement.md"])
+
+    def test_the_declared_freeze_classes_the_second_pair(self) -> None:
+        """CLAUDE.md and AGENTS.md carry the declared root-level freeze with
+        the template channel named — the vendor-evolution answer to 'then how
+        do these files ever improve?' must live in the reason itself."""
+        for path in ("CLAUDE.md", "AGENTS.md"):
+            with self.subTest(path=path):
+                reason = psx.A163_IDENTITY_REASONS[path]
+                self.assertIn("FREEZE", reason)
+                self.assertIn("vault/templates/root-docs/", reason)
+
+    def test_the_freeze_is_root_exact(self) -> None:
+        """The freeze covers the ROOT files only. Folder-tier AGENTS.md
+        mirrors and nested CLAUDE.md files are vendor OS content and keep
+        receiving updates — tropo-app/CLAUDE.md is a real in-tree case, not a
+        hypothetical. A freeze that swallowed these would silently strand
+        every folder's vendor protocol at its current version."""
+        self.assertFalse(psx.is_studio_state("tropo-app/CLAUDE.md"))
+        self.assertFalse(psx.is_studio_state("agents/argus/AGENTS.md"))
+        self.assertFalse(psx.is_studio_state("some/nested/dir/AGENTS.md"))
+        self.assertFalse(psx.is_studio_state("docs/CLAUDE.md"))
+
+    def test_the_reason_names_the_a163_lineage(self) -> None:
+        reason = psx.why_excluded("STUDIO.md")
+        self.assertIn("customer identity", reason)
+        self.assertIn("A163", reason)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

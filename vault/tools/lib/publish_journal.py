@@ -50,6 +50,8 @@ import re
 from pathlib import Path
 from typing import Optional
 
+from lib.governed_path import is_governed_uid_shape
+
 SCHEMA_ID = "tropo.publish-journal/v1"
 
 # Journal location: one append-only file per vault, OUTSIDE the derived index.
@@ -57,7 +59,19 @@ SCHEMA_ID = "tropo.publish-journal/v1"
 JOURNAL_DIR_REL = Path(".tropo") / "publish-journal"
 
 GENESIS_HASH = "0" * 64
-_UID_RE = re.compile(r"^[0-9a-f]{8}$")
+
+#: `vault_uid` here is a federation code (see lib/audience_context.py's
+#: VAULT_UID_RE), NOT a governed UID -- deliberately its own separate,
+#: unwidened shape. It must never be accidentally loosened to accept the
+#: 12-hex composite governed shape, so it keeps its own regex rather than
+#: routing through `is_governed_uid_shape` like `job_uid` below
+#: (accepts-both fix, 2026-09-01: the two uses were sharing one `_UID_RE`
+#: pattern, and widening it for job_uid would have widened this one too).
+# Accepts-both (S5 f0152efa4cd6 AC5, 2026-09-05, argus-a171): the vault uid a
+# journal is named by is a governed mint — 12-hex composite since 3d430852
+# Stage B, 8-hex on legacy vaults. The 8-only literal that stood here refused
+# every vault minted after the flip. One authority: lib/governed_path.
+from .governed_path import is_governed_uid_shape as _is_governed_uid_shape
 
 # ---------------------------------------------------------------------------
 # The closed job state machine (cc437616 §7 / dev-spec §Write Contract). Two
@@ -157,9 +171,9 @@ def path_set_hash(uid_or_path_set) -> str:
 # ---------------------------------------------------------------------------
 
 def journal_path(vault_root: Path, vault_uid: str) -> Path:
-    if not _UID_RE.match(str(vault_uid)):
+    if not _is_governed_uid_shape(str(vault_uid)):
         raise PublishJournalValidationError(
-            f"vault_uid must be 8-hex; got {vault_uid!r}"
+            f"vault_uid must be a governed uid (8-hex legacy or 12-hex composite); got {vault_uid!r}"
         )
     return vault_root / JOURNAL_DIR_REL / f"{vault_uid}.jsonl"
 
@@ -285,8 +299,13 @@ def append_transition(
                 f"non-blocked transition to {state!r} must not carry an error "
                 f"(errors only attach to blocked); got {error!r}"
             )
-    if not _UID_RE.match(str(job_uid)):
-        raise PublishJournalValidationError(f"job_uid must be 8-hex; got {job_uid!r}")
+    # accepts-both (UID_SHAPES): legacy 8-hex uids stay first-class forever;
+    # every new governed mint is 12-hex composite since the Stage B flip
+    # (2026-08-31). The literal 8-only regex this replaced (shared with
+    # vault_uid's unrelated federation-code check) refused a freshly-minted
+    # composite job_uid.
+    if not is_governed_uid_shape(str(job_uid)):
+        raise PublishJournalValidationError(f"job_uid must be a governed uid; got {job_uid!r}")
 
     key_path_hash = path_set_hash(path_set)
     path = journal_path(vault_root, vault_uid)

@@ -15,6 +15,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Mapping, Optional
 
+from lib.governed_path import is_governed_uid_shape
 from lib.group_registry import Result
 from lib import metered_model
 from lib.viewer_projection import Viewer, ViewerProjection
@@ -22,7 +23,8 @@ from lib.viewer_projection import Viewer, ViewerProjection
 
 DEFAULT_QUERY_SEED_LIMIT = 16
 PARSE_QUERY_MAX_TOKENS = 256
-_UID_RE = re.compile(r"^[0-9a-f]{8}$")
+# accepts-both (UID_SHAPES): a model-proposed structural UID naming post-flip
+# governed content used to raise ValueError because this only accepted 8-hex.
 _PARSE_SYSTEM = (
     "Return exactly one JSON object with one key, uids. uids must be a list "
     "of at most 16 lowercase 8-hex structural UIDs. Return no prose, scores, "
@@ -129,9 +131,9 @@ class ParseQueryModelAdapter:
         if (
             not isinstance(uids, list)
             or len(uids) > DEFAULT_QUERY_SEED_LIMIT
-            or any(not isinstance(uid, str) or not _UID_RE.fullmatch(uid) for uid in uids)
+            or any(not isinstance(uid, str) or not is_governed_uid_shape(uid) for uid in uids)
         ):
-            raise ValueError("parse-query uids must be bounded lowercase 8-hex strings")
+            raise ValueError("parse-query uids must be bounded lowercase 8-hex or 12-hex strings")
         return QueryProposal(tuple(sorted(set(uids))))
 
 

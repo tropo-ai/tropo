@@ -6,6 +6,11 @@ This procedure covers `tropo-publish-release.py`, the Tropo-OS publisher for Git
 
 ## The flow
 
+Before the build there is the release plan, and its member list fills itself: locking a dev-spec (`tropo-lock-dev-spec.py`) appends that spec's uid to the `dev_spec_uids` of the live release plan whose `release_version` matches the spec's `target_release`, so the plan owner no longer maintains the fan-in list by hand, and `tropo-validate.py` warns on any locked spec its plan does not list.
+
+Before handing the founder the lock line, run `python3 vault/tools/tropo-lock-release-plan.py --release-plan-uid <plan> --check`: it names every unmet precondition at once and writes nothing; the lock line is not handed over on a red check.
+
+
 ### 1. Build — private
 
 ```bash

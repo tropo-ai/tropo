@@ -362,7 +362,15 @@ SMOKE_AUTHOR = "tropo-smoke-probe"
 # mint path.
 SMOKE_MINT_TYPE = "note"
 
-_HEX8 = re.compile(r"^[0-9a-f]{8}$")
+# accepts-both (UID_SHAPES): was 8-hex-only, so every 12-hex (Stage B
+# composite) index row / agent transfer_uid / vault/files entry was invisible
+# to the liveness probes below — all ~6 call sites inherit the fix from here.
+# Cannot import lib.governed_path.UID_HEX_PATTERN here: AC3StdlibOnlyTests
+# forbids any non-stdlib import anywhere in this module by design (this tool
+# must still run when the studio's own lib/ layer is broken), so the pattern
+# is hand-mirrored from governed_path.UID_SHAPES = {8, 12} and must be kept in
+# sync with it if that authority ever changes shape.
+_HEX8 = re.compile(r"^(?:[0-9a-fA-F]{12}|[0-9a-fA-F]{8})$")
 _FM_SCALAR = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):[ \t]*(.*?)[ \t]*$")
 _GENERATION_TAIL = re.compile(r"^(.*?)(\d+)$")
 _NAV_START = "<!-- nav-block:start -->"
@@ -1091,11 +1099,12 @@ def _metadata_recovery_cure(studio: Path) -> str:
     options, which is why it is the one named here.
 
     The isolate EXCLUDES .tropo-studio/, and that exclusion is load-bearing
-    rather than tidy. dirty-counter.json under it is tracked, so a blanket
-    `stash push -u` sweeps it in — and the reconcile then rewrites the very
-    file it is holding, so the closing `stash pop` aborts with "local changes
-    would be overwritten by merge" and strands the operator's work in a stash
-    they now have to unpick by hand. Nothing under .tropo-studio/ is a
+    rather than tidy. dirty-counter.json under it WAS tracked until S2
+    (f0155dd8ab09, 2026-09-05) untracked it, and a blanket `stash push -u`
+    still sweeps the untracked file in — and the reconcile then rewrites the
+    very file it is holding, so the closing `stash pop` aborts with "local
+    changes would be overwritten by merge" and strands the operator's work in
+    a stash they now have to unpick by hand. Nothing under .tropo-studio/ is a
     derivation input, so holding it back costs the reconcile nothing and the
     three commands run clean end to end.
 

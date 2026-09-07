@@ -74,6 +74,52 @@ class TheJournalIsWrittenBeforeAnythingMoves(unittest.TestCase):
         self.assertIn("half closed", str(caught.exception))
 
 
+class UidShapeNegativeControls(unittest.TestCase):
+    """Argus's standing ask: the accepts-both widening (UID_SHAPES={8,12})
+    made `open_or_resume_journal`'s `is_governed_uid_shape` check accept a
+    12-hex composite `release_run_uid` it used to wrongly refuse. A widened
+    FINDER is unambiguously correct; a widened REFUSER also stops refusing
+    whatever the narrow pattern happened to exclude. These pin that a
+    genuinely-malformed run uid -- never just the old-vs-new shape question
+    -- is still refused, and that a valid 12-hex uid is not."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="ac8-uid-shape-")).resolve()
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_malformed_run_uids_are_refused(self):
+        malformed = (
+            "",
+            "abcdef1",       # 7 hex
+            "abcdef123",     # 9 hex
+            "abcdef123456a", # 13 hex
+            "abcdefzz",      # 8 chars, not hex
+            "ABCDEF12",      # valid length, uppercase -- the shared
+                             # predicate is lowercase-only (_BARE_HEX_RE)
+            "../../etc/passwd",
+        )
+        for bad in malformed:
+            with self.subTest(uid=bad):
+                with self.assertRaises(rc.ClosureRefusal) as caught:
+                    rc.open_or_resume_journal(self.root, bad, RECEIPT, TX)
+                self.assertIn("not a governed run uid", str(caught.exception))
+                self.assertFalse(
+                    rc.journal_path(self.root, bad).exists(),
+                    "a refused uid must never reach the write path",
+                )
+
+    def test_a_valid_12_hex_composite_run_uid_is_accepted(self):
+        """Positive control: proves accepts-both is real for this gate, not
+        that it refuses everything."""
+        composite = "a1b2c3d4e5f6"  # 12 lowercase hex chars
+        self.assertEqual(len(composite), 12)
+        journal = rc.open_or_resume_journal(self.root, composite, RECEIPT, TX)
+        self.assertEqual(journal.release_run_uid, composite)
+        self.assertTrue(rc.journal_path(self.root, composite).is_file())
+
+
 class AStepCannotBeRecordedWithoutReadingTheWorldBack(unittest.TestCase):
     """The machine for the mistake I kept making.
 

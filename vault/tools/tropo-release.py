@@ -61,7 +61,8 @@ if str(TOOLS) not in sys.path:
 from lib import release_completion as completion  # noqa: E402
 from lib import release_metrics as metrics  # noqa: E402
 from lib import release_saga as saga  # noqa: E402
-from lib.release_gates import PHASES  # noqa: E402
+from lib.governed_path import UID_HEX_PATTERN  # noqa: E402
+from lib.release_gates import PHASES, PREFLIGHT_EVIDENCE_FILENAME  # noqa: E402
 
 EXIT_OK = 0
 EXIT_REFUSED = 2
@@ -95,7 +96,11 @@ def resolve_run_dir(vault: Path, release_plan_uid: str) -> Path:
         # refusal: misuse — the named release-plan does not resolve
         raise SystemExit(f"[MISUSE] release-plan {release_plan_uid} does not resolve")
     text = plan_path.read_text(encoding="utf-8", errors="replace")
-    run_uid = _re.search(r"^release_pipeline_run_uid:\s*'?([0-9a-f]{8})'?", text, _re.M)
+    # accepts-both (UID_SHAPES): an unanchored 8-only capture truncated a
+    # composite 12-hex release_pipeline_run_uid and resolved the wrong file.
+    run_uid = _re.search(
+        r"^release_pipeline_run_uid:\s*'?(%s)'?" % UID_HEX_PATTERN, text, _re.M
+    )
     if not run_uid:
         # refusal: misuse — the release-plan names no pipeline run to resume from
         raise SystemExit(
@@ -166,8 +171,53 @@ def _identity(run_dir: Path) -> Dict[str, str]:
     )
 
 
-def _record_orchestrator_invoked(run_dir: Path, identity: Dict[str, str]) -> None:
-    """v1.91 S2 AC1/AC5 (3fb41c99): the moment Mike runs the bare orchestrator.
+def _run_is_bootstrapped(run_dir: Path) -> bool:
+    """3d8d4351 §2: the run carries an activation in run.state.json.
+
+    The SAME fact run_is_walkable reads (tropo-release-run.py), read here so
+    the stamp can never land on a run that never bootstrapped — the wedge
+    whose first movers were two pre-bootstrap leg_attested rows. One home
+    per fact: this reads the state file's activation_uid exactly as the
+    walker's own 4.2 note describes it.
+    """
+    state_path = run_dir / "run.state.json"
+    if not state_path.is_file():
+        return False
+    try:
+        body = json.loads(state_path.read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        return False
+    return bool(str(body.get("activation_uid") or ""))
+
+
+
+def _chokepoint_mint_uid() -> str:
+    """3d430852: route raw-mint uids through the collision-checked chokepoint.
+
+    This uid lands in a GOVERNED record (run journal / release event), so it
+    follows the ADR-050 ruling — not the run-record deferral class.
+    """
+    import importlib.util as _ilu
+    _spec = _ilu.spec_from_file_location(
+        "_mint_uid_chokepoint",
+        Path(__file__).resolve().parent / "tropo-mint-id.py")
+    _mod = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    return _mod.mint(1, kind="file", studio_root=Path(__file__).resolve().parents[2])[0]
+
+def _record_orchestrator_invoked(run_dir: Path, identity: Dict[str, str],
+                                 invoked_via: str = "bare") -> bool:
+    """v1.91 S2 AC1/AC5 (3fb41c99): the moment the orchestrator runs.
+
+    3d8d4351 §2 — TWO cures folded into the stamp:
+      * the SHARED BOOTSTRAP GUARD: this function itself refuses unless the
+        run is bootstrapped (activation present in run.state.json), so BOTH
+        callers (the bare path and the fire path) share the cure and the
+        bare-stamp-that-became-d9025a97's-fourth-row cannot recur.
+      * the MACHINE-AUTHORSHIP cure: the row's actor is the ENGINE (this
+        tool's own uid), never a human name — the v1 writer forged
+        "actor": "mike" and every consumer inherited the lie. The label
+        slot carries the readable name; invoked_via marks the path.
 
     Argus A154 could not locate this event's honest emit point before he
     retired and told his successor to stop and ask rather than invent one.
@@ -191,6 +241,16 @@ def _record_orchestrator_invoked(run_dir: Path, identity: Dict[str, str]) -> Non
     operator runs the bare orchestrator the run has already progressed well
     past that one-time seed state.
     """
+    if not _run_is_bootstrapped(run_dir):
+        # refusal: the stamp is evidence the orchestrator ran A BOOTSTRAPPED
+        # RUN; stamping an unbootstrapped one fabricates that evidence (the
+        # d9025a97 class). Never an exception — a one-line refusal the caller
+        # surfaces; the lineage of the run is untouched.
+        print("[REFUSED] orchestrator stamp: this run has no activation in "
+              "run.state.json — it never bootstrapped, so there is nothing "
+              "to stamp. Lock + bootstrap first.", file=sys.stderr)
+        return False
+
     import hashlib
     import secrets
     import uuid as _uuid
@@ -203,14 +263,20 @@ def _record_orchestrator_invoked(run_dir: Path, identity: Dict[str, str]) -> Non
     event = {
         "event": "tropo.release.orchestrator_invoked",
         "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "actor": "mike",
-        "actor_label_resolved": None,
+        # 3d8d4351 §2/§4: MACHINE-AUTHORED. The actor is this tool's own
+        # uid (the engine), the label names it for humans, and invoked_via
+        # marks the path — so the v2 tally can never count this row as a
+        # principal gesture, and no journal again carries a forged human
+        # name on a machine row (the authorization layer refuses names too).
+        "actor": "4e8d1c60",
+        "actor_label_resolved": "tropo-release engine stamp",
         "step": None,
         "stage": None,
         "data": {
             "saga_id": identity["saga_id"],
             "pipeline_run_uid": identity["pipeline_run_uid"],
-            "invocation_uid": secrets.token_hex(4),
+            "invocation_uid": _chokepoint_mint_uid(),
+            "invoked_via": invoked_via,
         },
         "schema_version": 2,
         "trace_id": identity["pipeline_run_uid"],
@@ -219,6 +285,7 @@ def _record_orchestrator_invoked(run_dir: Path, identity: Dict[str, str]) -> Non
     }
     with (run_dir / "run.jsonl").open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+    return True
 
 
 def _missing_fire_requirements(environ) -> List[str]:
@@ -263,8 +330,24 @@ def _completion_observers(run_dir: Path):
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    bus = _rows(run_dir / "bus-events.jsonl")
-    return module.build_observers(run_dir, bus)
+    # THE BUS COMES FROM THE VERIFIER'S OWN LOADER, never a path typed here.
+    # This read `run_dir / "bus-events.jsonl"` until 2026-09-01 -- a literal that
+    # occurred exactly ONCE in the entire tree, at this line, written by nothing.
+    # So every release observed an empty bus, bus_published_event is a REQUIRED
+    # bound fact, and `status` could return only REFUSED, for every release,
+    # with no flag to override it. The verifier cured this same conflation in
+    # its own main() on 2026-08-25; the facade never routed through main().
+    studio_root = TOOLS.parent.parent
+    bus = module.load_bus_rows(studio_root)
+    # AND THE VERSION, WHICH SCOPES THE BUS CHECK. Curing the phantom path alone
+    # turned "found 0" into "found 7" -- the observer expects exactly ONE
+    # tropo.release.published and, unscoped, it counts every release ever
+    # published. Two defects stacked: an invisible bus, and an unscoped reader of
+    # it. Fixing only the first still refuses, for a different reason, and would
+    # have read as a working fix. The verifier already derives this the one true
+    # way; the facade calls the same function rather than a second derivation.
+    version = module._release_version_for(run_dir, studio_root)
+    return module.build_observers(run_dir, bus, version, studio_root)
 
 
 def cmd_rehearse(args) -> int:
@@ -803,6 +886,229 @@ def _write_real_fire_scorecard(
               % exc, file=sys.stderr)
 
 
+def _fire_sequence_gate(run_dir: Path, vault: Path,
+                        identity: Dict[str, str]) -> Optional[Tuple[int, str]]:
+    """3d8d4351 §3: the macro-sequence walked as machine-checked preconditions.
+
+    Each stage's evidence is answered by the DECLARED READER named in
+    release_bindings.MACRO_SEQUENCE — never a re-parse of another subsystem's
+    file. One sentence per refusal, naming the stage and the command that
+    produces the evidence; no refusal ever instructs re-running an outward
+    act. Exactly one production consumer: this fire path.
+    """
+    from lib import release_bindings
+
+    def _stage_commands(stage: str) -> str:
+        return {
+            "LOCK": "tropo-lock-dev-spec.py / tropo-lock-release-plan.py — the lock IS gesture one",
+            "BOOTSTRAP": "the pipeline activation (tropo-release-run.py bootstrap)",
+            "STEPS": "tropo-release-run.py — walk the declared steps",
+            "BUILD": "tropo-build-release.py — produce and freeze the package",
+            "STAGE": "tropo-publish-release.py stage",
+            "PREFLIGHT": "tropo-release-preflight.py — run every fire precondition",
+            "ORCHESTRATOR": "tropo-release.py --release-plan-uid <uid> (the bare orchestrator)",
+        }.get(stage, "see the release engine docs")
+
+    for stage_spec in release_bindings.MACRO_SEQUENCE:
+        stage = stage_spec["stage"]
+        if stage == "LOCK":
+            stamps = _journal_timestamps(run_dir, identity, vault)
+            if not stamps.get("scope_locked_at"):
+                return (EXIT_REFUSED,
+                        "sequence gate: LOCK has no evidence (no scope_locked "
+                        "timestamp in this run's journal+bus) — %s"
+                        % _stage_commands("LOCK"))
+        elif stage == "BOOTSTRAP":
+            if not _run_is_bootstrapped(run_dir):
+                return (EXIT_REFUSED,
+                        "sequence gate: BOOTSTRAP has no evidence (no "
+                        "activation in run.state.json) — %s"
+                        % _stage_commands("BOOTSTRAP"))
+        elif stage == "STEPS":
+            state = json.loads(
+                (run_dir / "run.state.json").read_text(encoding="utf-8") or "{}"
+            ) if (run_dir / "run.state.json").is_file() else {}
+            statuses = state.get("step_status") or {}
+            if not statuses:
+                return (EXIT_REFUSED,
+                        "sequence gate: STEPS has no evidence (run.state.json "
+                        "records no step statuses) — %s" % _stage_commands("STEPS"))
+            failed = [k for k, v in statuses.items() if str(v) == "failed"]
+            if failed:
+                return (EXIT_REFUSED,
+                        "sequence gate: STEPS carry failures (%s) — resolve "
+                        "them before the fire; %s"
+                        % (", ".join(sorted(failed)[:4]), _stage_commands("STEPS")))
+        elif stage == "BUILD":
+            from lib import release_package
+            try:
+                # _rows is THIS module's raw-journal reader (the one the
+                # stamp documents); _journal returns a SagaJournal object,
+                # which the reader would iterate as empty — the silent-empty
+                # failure shape release_package.event_type's own docstring
+                # warns about.
+                rows = _rows(run_dir / "run.jsonl")
+            except (Exception, SystemExit):
+                rows = []
+            payload = None
+            try:
+                payload = release_package.active_frozen_payload(
+                    rows, identity.get("pipeline_run_uid", ""))
+            except Exception:
+                payload = None
+            if not payload:
+                return (EXIT_REFUSED,
+                        "sequence gate: BUILD has no evidence (no active "
+                        "frozen package for this run) — %s"
+                        % _stage_commands("BUILD"))
+        elif stage == "STAGE":
+            wired = _load_wired_publisher()
+            state = wired._run_publish_state("--expect", identity.get(
+                "pipeline_run_uid", "")) if wired else {}
+            if not state or state.get("status") not in ("staged", "verified", "live"):
+                return (EXIT_REFUSED,
+                        "sequence gate: STAGE has no evidence (publish state "
+                        "is %r) — %s"
+                        % (state.get("status") if state else None,
+                           _stage_commands("STAGE")))
+        elif stage == "PREFLIGHT":
+            # The roster's own runner is the declared reader; its absence or a
+            # missing preflight journal is the refusal.
+            # The filename is IMPORTED from the writer's own module, never
+            # re-typed here. This line read "preflight-journal.jsonl" until
+            # 2026-08-31 — a name nothing ever wrote — so the gate refused
+            # every run that had actually passed preflight.
+            pf_path = run_dir / PREFLIGHT_EVIDENCE_FILENAME
+            if not pf_path.is_file():
+                return (EXIT_REFUSED,
+                        "sequence gate: PREFLIGHT has no evidence (no "
+                        "preflight journal in the run folder) — %s"
+                        % _stage_commands("PREFLIGHT"))
+        elif stage == "ORCHESTRATOR":
+            stamps = _journal_timestamps(run_dir, identity, vault)
+            if not stamps.get("orchestrator_started_at"):
+                return (EXIT_REFUSED,
+                        "sequence gate: ORCHESTRATOR has no evidence (no "
+                        "orchestrator_invoked timestamp) — %s"
+                        % _stage_commands("ORCHESTRATOR"))
+        # FIRE itself is authorized here + completed by the publisher; it has
+        # no occurrence-evidence precondition of its own in this walk.
+    return None
+
+
+def _load_wired_publisher():
+    """Best-effort load of the publisher module (the STAGE reader's home)."""
+    import importlib.util as _ilu
+    path = Path(__file__).resolve().parent / "tropo-publish-release.py"
+    spec = _ilu.spec_from_file_location("tropo_publish_release_walk", path)
+    if spec is None or spec.loader is None:
+        return None
+    module = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _pointer_row_for_owner(identity: Dict[str, str], message: str) -> None:
+    """§1: ONE pointer row on the bus for the release owner (7c017d1f).
+
+    A notification, never a counted ledger store. Swallowed whole: a bus the
+    engine cannot reach must not turn a refusal into a crash.
+    """
+    import subprocess as _sp
+    tool = Path(__file__).resolve().parent / "tropo-emit-event.py"
+    if not tool.is_file():
+        return
+    try:
+        _sp.run(
+            [sys.executable, str(tool), "--type", "tropo.message.sent",
+             "--as", "talos", "--source", "/tools/tropo-release",
+             "--source-uid", "4e8d1c60", "--lifecycle", "ephemeral",
+             "--subject", "7c017d1f",
+             "--data", json.dumps({"body": "[fire gate] %s" % message})],
+            capture_output=True, timeout=15)
+    except Exception:
+        return
+
+
+def _rehearsal_gate(run_dir: Path, fired_version: str) -> Optional[Tuple[int, str]]:
+    """3d8d4351 §7: a real fire requires a PASSING rehearsal of THIS candidate.
+
+    The gate READS the card; it never re-runs the rehearsal. The engine
+    invokes rehearse with the real candidate version elsewhere (never
+    rehearse's --version default): this function only refuses, naming the
+    command that produces what is missing.
+    """
+    card_path = metrics.scorecard_path(run_dir, metrics.REHEARSAL)
+    if not card_path.is_file():
+        return (EXIT_REFUSED,
+                "no rehearsal card at %s — run `tropo-release.py rehearse "
+                "--run-dir %s --version %s` first; the fire gate reads the "
+                "card, it never runs the rehearsal for you"
+                % (card_path, run_dir, fired_version or "<candidate>"))
+    try:
+        card = json.loads(card_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return (EXIT_REFUSED,
+                "rehearsal card unreadable (%s) — re-run the rehearsal: "
+                "tropo-release.py rehearse --run-dir %s"
+                % (exc, run_dir))
+    if card.get("mode") != metrics.REHEARSAL or card.get("verdict") != "pass":
+        return (EXIT_REFUSED,
+                "rehearsal verdict is %r, not pass — a failing rehearsal "
+                "gates the fire by design; fix what it found, then re-run it"
+                % (card.get("verdict"),))
+    if fired_version and str(card.get("release_version") or "") != fired_version:
+        return (EXIT_REFUSED,
+                "rehearsal card names version %r; this candidate is %r — the "
+                "rehearsal must be OF this release. Re-run: tropo-release.py "
+                "rehearse --run-dir %s --version %s"
+                % (card.get("release_version"), fired_version, run_dir, fired_version))
+    performed = card.get("checkpoints_performed")
+    declared = len(saga.CHECKPOINTS)
+    if performed is None or int(performed) != declared:
+        return (EXIT_REFUSED,
+                "rehearsal performed %r of %d declared checkpoints — the "
+                "rehearsal must exercise the full checkpoint set before the "
+                "fire walks it for real" % (performed, declared))
+    return None
+
+
+def _write_scorecard_so_far(run_dir: Path, identity: Dict[str, str],
+                            vault: Path) -> Optional[Path]:
+    """3d8d4351 §1: the scorecard-so-far artifact, in the run folder, BEFORE
+    the handoff — so the publisher's one go/no-go renders a MEASURED state
+    and never a blank ask. Honest about absences: what the journal cannot
+    yet know is recorded as absent, not guessed. Returns the artifact path
+    (or None when even the identity is unreadable — the caller proceeds;
+    the publisher renders its honest absent-line).
+    """
+    try:
+        rows = _journal(run_dir)
+    except (Exception, SystemExit):
+        # SystemExit included deliberately: _journal's MISUSE refusal for an
+        # identity-less journal is an ABSENCE here, not an error to propagate —
+        # the artifact records what is knowable and the publisher renders its
+        # honest absent-line either way.
+        rows = []
+    card = {
+        "schema_version": 2,
+        "kind": "scorecard-so-far",
+        "saga_id": identity.get("saga_id"),
+        "pipeline_run_uid": identity.get("pipeline_run_uid"),
+        "journal_rows_seen": len(rows),
+        "written_at": __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "note": "pre-handoff state; the REAL_FIRE card is produced at the "
+                "moment its inputs become true (the injected producer)",
+    }
+    path = run_dir / "scorecard-so-far.json"
+    try:
+        path.write_text(json.dumps(card, indent=1) + "\n", encoding="utf-8")
+        return path
+    except OSError:
+        return None
+
+
 def cmd_fire(args) -> int:
     """Perform the outward release, or refuse for a named reason.
 
@@ -831,6 +1137,28 @@ def cmd_fire(args) -> int:
         print("[REFUSED:%s] %s" % (code, message), file=sys.stderr)
         _record_fire_refusal(identity, code, Path(args.vault))
         return EXIT_REFUSED
+
+    # 3d8d4351 §3 — the macro-sequence walked as machine-checked preconditions.
+    sequence_refusal = _fire_sequence_gate(run_dir, Path(args.vault), identity)
+    if sequence_refusal is not None:
+        code, message = sequence_refusal
+        print("[REFUSED:%s] %s" % (code, message), file=sys.stderr)
+        _record_fire_refusal(identity, code, Path(args.vault))
+        _pointer_row_for_owner(identity, message)
+        return EXIT_REFUSED
+
+    # 3d8d4351 §7 — the rehearsal gate reads the card and never re-runs it.
+    _candidate_version = getattr(args, "version", None)
+    rehearsal_refusal = _rehearsal_gate(run_dir, _candidate_version or "")
+    if rehearsal_refusal is not None:
+        code, message = rehearsal_refusal
+        print("[REFUSED:%s] %s" % (code, message), file=sys.stderr)
+        _record_fire_refusal(identity, code, Path(args.vault))
+        return EXIT_REFUSED
+
+    # 3d8d4351 §1 — the scorecard-so-far lands in the run folder BEFORE the
+    # handoff; the publisher's go/no-go renders it (absent-line if missing).
+    _write_scorecard_so_far(run_dir, identity, Path(args.vault))
 
     # Both facade gates cleared: the credentialed outward edges are present and
     # the operator supplied --authorize (gesture three, the one input the

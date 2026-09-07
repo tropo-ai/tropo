@@ -59,13 +59,16 @@ Checkpoint 5e6652ac. Metis G98, 2026-08-01; reading landed 2026-08-01.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html
 import json
 import os
 import re
 import secrets
+import sqlite3
 import sys
 import textwrap
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Optional
@@ -76,9 +79,9 @@ sys.path.insert(0, str(ROOT / "vault" / "tools" / "lib"))
 
 from lib import daily_spend  # noqa: E402
 from lib import distiller  # noqa: E402
+from lib import distiller_query  # noqa: E402
+from lib import governed_path  # noqa: E402
 from lib import index_surfaces  # noqa: E402
-from lib import llm  # noqa: E402
-from lib import loop_metering  # noqa: E402
 from lib import metered_model  # noqa: E402
 from lib import orient_stage_c as stage_c  # noqa: E402
 from lib import viewer_projection as vp  # noqa: E402
@@ -115,6 +118,75 @@ def _principals() -> dict[str, str]:
                 out[name] = key
                 break
     return out
+
+
+def _principal_names() -> dict[str, str]:
+    """Resolve UID-keyed display names through the Studio identity records."""
+
+    names: dict[str, str] = {}
+    agents_dir = ROOT / "vault" / "agents"
+    if agents_dir.is_dir():
+        for path in sorted(agents_dir.glob("*.md")):
+            fields: dict[str, str] = {}
+            for line in path.read_text(errors="ignore").splitlines()[:50]:
+                if ":" not in line or line[:1].isspace():
+                    continue
+                key, value = line.split(":", 1)
+                fields[key] = value.strip().strip("'\"")
+            uid = fields.get("party_uid")
+            if uid and governed_path.is_governed_uid_shape(uid):
+                title = fields.get("title", "").split("—", 1)[0].strip()
+                slug = fields.get("agent", "").strip()
+                names[uid] = title or slug.title() or uid
+
+    principal_dir = ROOT / "vault" / "files"
+    if principal_dir.is_dir():
+        for path in sorted(principal_dir.glob("*.md")):
+            head = path.read_text(errors="ignore")[:8192]
+            if not re.search(r"^type:\s*['\"]?principal['\"]?\s*$", head, re.MULTILINE):
+                continue
+            uid_match = re.search(
+                r"^uid:\s*['\"]?([0-9a-f]+)['\"]?\s*$", head, re.MULTILINE
+            )
+            if uid_match is None or not governed_path.is_governed_uid_shape(
+                uid_match.group(1)
+            ):
+                continue
+            title_match = re.search(
+                r"^title:\s*['\"]?(.+?)['\"]?\s*$", head, re.MULTILINE
+            )
+            name_match = re.search(
+                r"^name:\s*['\"]?(.+?)['\"]?\s*$", head, re.MULTILINE
+            )
+            label = (
+                title_match.group(1).split("—", 1)[0].strip()
+                if title_match
+                else name_match.group(1).strip() if name_match else uid_match.group(1)
+            )
+            names[uid_match.group(1)] = label
+    return names
+
+
+def _authority_principal_uids() -> tuple[str, ...]:
+    """Read active principal identities from the installed authority generation."""
+
+    pin = ROOT / ".tropo-studio" / "authorities" / "group-authority" / "installed.json"
+    try:
+        installed = json.loads(pin.read_text())
+        directory = ROOT / str(installed["generation_dir"]) / "principals.jsonl"
+        rows = [json.loads(line) for line in directory.read_text().splitlines() if line]
+    except (OSError, KeyError, TypeError, ValueError):
+        return tuple(sorted(set(_principals().values())))
+    return tuple(
+        sorted(
+            {
+                str(row["principal_uid"])
+                for row in rows
+                if row.get("status") == "active"
+                and governed_path.is_governed_uid_shape(str(row.get("principal_uid") or ""))
+            }
+        )
+    )
 
 
 def _records() -> dict[str, dict]:
@@ -163,6 +235,126 @@ def _all_records() -> dict[str, dict]:
     return out
 
 
+class AnchorResolutionError(ValueError):
+    """A free-text question could not be anchored honestly."""
+
+
+def resolve_question_anchor(
+    question: str,
+    *,
+    index_path: Optional[Path] = None,
+    studio_root: Optional[Path] = None,
+    files_root: Optional[Path] = None,
+    records: Optional[Mapping[str, Mapping[str, Any]]] = None,
+) -> dict[str, Any]:
+    """Resolve prose through FTS, then current mounted extracted bodies.
+
+    The cache fallback exists for the interval between extraction and an index
+    rebuild.  It is deliberately bounded to indexed external-artifact records
+    and reads each body through Stage C's current-cache validator, so a stale,
+    missing or dataless source can never become an answer.
+    """
+
+    if not isinstance(question, str) or not question.strip():
+        raise AnchorResolutionError("question must be non-empty text")
+    terms = tuple(
+        term
+        for term in distiller_query.normalize_query_terms(question)
+        if term not in _TERM_STOPWORDS
+    )
+    if not terms:
+        raise AnchorResolutionError("question has no searchable terms")
+    target = Path(index_path or INDEX_SQLITE)
+    try:
+        with sqlite3.connect(f"file:{target}?mode=ro", uri=True) as conn:
+            frequencies = []
+            for term in terms:
+                expression = f'"{term.replace(chr(34), chr(34) * 2)}"'
+                count = conn.execute(
+                    "SELECT count(*) FROM entries_fts "
+                    "WHERE entries_fts MATCH ?",
+                    (expression,),
+                ).fetchone()[0]
+                if count:
+                    frequencies.append((int(count), term, expression))
+            if frequencies:
+                _count, anchor_term, expression = min(frequencies)
+                rows = conn.execute(
+                    "SELECT uid, bm25(entries_fts) AS score "
+                    "FROM entries_fts WHERE entries_fts MATCH ? "
+                    "ORDER BY score, uid LIMIT 20",
+                    (expression,),
+                ).fetchall()
+            else:
+                rows = []
+    except sqlite3.Error as exc:
+        raise AnchorResolutionError(
+            f"studio search index unavailable at {target}: {exc}"
+        ) from exc
+    for uid, score in rows:
+        if isinstance(uid, str) and governed_path.is_governed_uid_shape(uid):
+            return {
+                "uid": uid,
+                "terms": terms,
+                "anchor_term": anchor_term,
+                "score": float(score),
+                "method": "entries_fts",
+            }
+
+    root = Path(studio_root or ROOT)
+    indexed_records = dict(records) if records is not None else _records()
+    reader = stage_c.studio_body_reader(
+        root,
+        Path(files_root or (root / "vault" / "files")),
+        indexed_records,
+    )
+    hits: list[tuple[int, int, str, str]] = []
+    unavailable: list[stage_c.BodySourceError] = []
+    for uid, record in sorted(indexed_records.items()):
+        if (
+            not governed_path.is_governed_uid_shape(str(uid))
+            or record.get("type") != "external-artifact"
+        ):
+            continue
+        try:
+            text = reader.source(str(uid)).body.decode("utf-8", errors="ignore")
+        except stage_c.BodySourceError as error:
+            unavailable.append(error)
+            continue
+        normalized = tuple(distiller_query.normalize_query_terms(text))
+        counts = Counter(normalized)
+        matched = tuple(term for term in terms if counts.get(term, 0))
+        if matched:
+            hits.append(
+                (
+                    len(matched),
+                    sum(counts[term] for term in matched),
+                    str(uid),
+                    min(matched, key=lambda term: (counts[term], term)),
+                )
+            )
+    if hits:
+        matched_count, occurrences, uid, anchor_term = min(
+            hits, key=lambda hit: (-hit[0], -hit[1], hit[2])
+        )
+        return {
+            "uid": uid,
+            "terms": terms,
+            "anchor_term": anchor_term,
+            "score": float(-(matched_count * 1_000_000 + occurrences)),
+            "method": "extracted-cache-current",
+        }
+    if unavailable:
+        codes = ", ".join(sorted({error.code for error in unavailable}))
+        raise AnchorResolutionError(
+            "no indexed or current extracted body answers the question terms; "
+            f"{len(unavailable)} mounted cache record(s) unavailable ({codes})"
+        )
+    raise AnchorResolutionError(
+        "no indexed or current extracted body answers the question terms"
+    )
+
+
 def _describe(member) -> str:
     """Why this item is in the circle, in words rather than field names.
 
@@ -207,33 +399,19 @@ K_READ = stage_c.K_SURVIVORS
 #: FIELDS, not prose: the renderers consume the list and print one line per
 #: entry, so a dropped document cannot be lost in a sentence a reader skims.
 #:
-#: Four reasons and no fifth. There is deliberately no "ineligible" here —
-#: every entry says which of four separate problems cost the reader this
-#: document, because they have four different fixes and one bucket would hide
-#: which one is actually biting.
+#: Three reasons and no fourth. Outside-origin is no longer a reason to drop a
+#: document; W5 labels it and lets the existing provider gates decide.
 DROP_UNGOVERNED = "no-governed-body"
-DROP_IMPORTED = "imported"
 DROP_BATCH = "outside-the-batch"
 DROP_SPEND = "over-the-call-ceiling"
 
 _DROP_SENTENCE = {
     DROP_UNGOVERNED: (
-        "the reader only opens governed bodies under vault/files, and this is "
-        "not one"
-    ),
-    DROP_IMPORTED: (
-        "it came into the studio from outside, so its words are not ours to send"
+        "the reader found neither a governed body nor a mounted extracted body"
     ),
     DROP_BATCH: f"the reader takes {K_READ} at a time and this one fell outside",
     DROP_SPEND: "adding it would push the one batched call past its spend ceiling",
 }
-
-#: Room left in the C2 estimate for the brief, which does not exist yet when
-#: the batch is priced, and for the guard's one repair call, which carries the
-#: rejected spans on top of the same bodies. Both are bounded — the brief by
-#: Stage C's own response ceiling, a repair by the guard's span bound times a
-#: batch — so this is an allowance, not a guess.
-_C2_ALLOWANCE_BYTES = stage_c.RESPONSE_MAX_BYTES + 8 * 1024
 
 #: The three marks of an outside origin, read off a governed file's own
 #: frontmatter. ``source_hash`` is the import walker's provenance stamp: it
@@ -332,13 +510,10 @@ def _imported(uid: str, rec: dict) -> bool:
 def egress_class(uid: str, records: dict) -> str:
     """The policy segment class Stage C's egress gate reads for ``uid``.
 
-    Returns the OS class for anything that may cross to a provider and the
-    private class for anything that may not. Handed to Stage C as its
-    ``segment_class_of``, so AC5's gate refuses by name on anything this call
-    marks private — which is why the read set is filtered by the SAME function
-    before Stage C sees it. Belt and braces on purpose: the filter decides what
-    is offered, the gate decides what is allowed, and if they ever disagree the
-    gate wins and says so rather than letting a byte through.
+    Handed to Stage C as its independent ``segment_class_of``. Outside origin
+    is a disclosure label, not an automatic egress refusal: audience and
+    extraction scope answer different questions. Consent, geo and spend remain
+    enforced by the metered edge.
 
     The governed body is what is classified, so a document with no governed
     body is private by default. That is not an egress judgement about it; there
@@ -346,9 +521,9 @@ def egress_class(uid: str, records: dict) -> str:
     before this is ever consulted.
     """
 
-    if not (FILES / f"{uid}.md").is_file():
-        return "private"
-    if _imported(uid, records.get(uid) or {}):
+    rec = records.get(uid) or {}
+    source_path = _text(rec.get("source_path")).strip()
+    if not (FILES / f"{uid}.md").is_file() and not source_path:
         return "private"
     return vp.OS_SEGMENT
 
@@ -356,11 +531,9 @@ def egress_class(uid: str, records: dict) -> str:
 def _read_set(items: list, records: dict) -> tuple[list, list]:
     """Split the ranked survivors into what can be read and what cannot.
 
-    Returns ``(uids, dropped)``. Two gates here and two more downstream, each
-    with its own reason, and the reasons stay separate because they are
-    separate problems with separate fixes: no governed body on disk is a
-    substrate-shape problem, an imported artifact is an egress decision, the
-    batch bound is Stage C's K, and the spend trim is the call ceiling.
+    Returns ``(uids, dropped)``. Outside-origin records survive this split and
+    are labelled by ``_named``. Missing body, batch bound and spend trim remain
+    separate because they have separate fixes.
 
     Note what is NOT a gate. Whether the current index projection carries the
     entry decides nothing — over half the ranked survivors in this vault are
@@ -370,10 +543,11 @@ def _read_set(items: list, records: dict) -> tuple[list, list]:
     keep, dropped = [], []
     for item in items:
         uid = item["uid"]
-        if not (FILES / f"{uid}.md").is_file():
+        rec = records.get(uid) or {}
+        if not (FILES / f"{uid}.md").is_file() and not _text(
+            rec.get("source_path")
+        ).strip():
             dropped.append({**_named(item, records), "reason": DROP_UNGOVERNED})
-        elif egress_class(uid, records) != vp.OS_SEGMENT:
-            dropped.append({**_named(item, records), "reason": DROP_IMPORTED})
         else:
             keep.append(item)
     for item in keep[K_READ:]:
@@ -391,6 +565,16 @@ def _text(value) -> str:
     """
 
     return value if isinstance(value, str) else ""
+
+
+def _mounted_real_path(rec: Mapping[str, Any]) -> str:
+    value = _text(rec.get("source_path")).strip()
+    if not value:
+        return ""
+    source = Path(value).expanduser()
+    if not source.is_absolute():
+        source = ROOT / source
+    return str(source) if source.exists() else ""
 
 
 def _named(item: dict, records: dict) -> dict:
@@ -432,44 +616,96 @@ def _named(item: dict, records: dict) -> dict:
     if not title:
         title = ("an entry the index carries under no name" if rec
                  else "an entry no index carries")
-    where = _text(rec.get("path")).strip()
+    real_source = _mounted_real_path(rec)
+    where = real_source or _text(rec.get("path")).strip()
     if not where and (FILES / f"{uid}.md").is_file():
         where = f"vault/files/{uid}.md"
+    content_class = _text(rec.get("content_class")).strip() or "unclassified"
     return {
         "uid": uid,
         "title": title,
         "where": where,
         "archived": bool(rec) and index_surfaces.is_archive_record(rec),
+        "content_class": content_class,
+        "outside_origin": _imported(uid, rec),
     }
 
 
-def _admits(task: str, payload: dict, *, system: str, max_tokens: int,
-            allowance: int = 0) -> bool:
-    """Would the metered edge admit this request?
+@dataclass(frozen=True)
+class AdmissionQuote:
+    """The one arithmetic result used by preview and local admission."""
+
+    task: str
+    model: str
+    request_bytes: int
+    request_sha256: str
+    max_tokens: int
+    token_estimate: int
+    worst_case_nano_usd: int
+    ceiling_nano_usd: int
+    admitted: bool
+
+
+def _admission_quote(
+    task: str,
+    payload: dict,
+    *,
+    system: str,
+    max_tokens: int,
+) -> AdmissionQuote:
+    """Price one request through the shipped metered-edge arithmetic.
 
     Prices the request through the SHIPPED admission arithmetic — the same
     serializer and the same worst-case pricer :mod:`lib.metered_model` uses —
     against the same route ceiling. Nothing about the ceiling is restated here;
-    a second copy of it is a second ceiling. If this reconstruction ever drifts
-    from the payload Stage C actually sends, the only consequence is that the
-    edge refuses the call by name, which is the safe direction to be wrong in.
+    a second copy of it is a second ceiling. The returned object is rendered by
+    the preview and read by the local gate, so those surfaces cannot agree by
+    coincidence while using different numbers.
     """
 
     model, ceiling = MODEL_ROUTES[task]
-    request = llm.serialize_locked_request(
+    edge_quote = metered_model.quote_request_admission(
         task,
-        [{"role": "user",
-          "content": json.dumps(payload, sort_keys=True, ensure_ascii=False)}],
+        [
+            {
+                "role": "user",
+                "content": json.dumps(payload, sort_keys=True, ensure_ascii=False),
+            }
+        ],
         max_tokens=max_tokens,
         system=system,
+        model=model,
+        ceiling_nano_usd=ceiling,
     )
-    worst = loop_metering.worst_case_request_cost_nano_usd(
-        model,
-        request_bytes=len(request) + allowance,
+    return AdmissionQuote(
+        task=task,
+        model=model,
+        request_bytes=edge_quote.request_bytes,
+        request_sha256=edge_quote.request_sha256,
         max_tokens=max_tokens,
-        cache_mode="none",
+        # Admission deliberately assumes one input token per request byte.
+        token_estimate=edge_quote.request_bytes + max_tokens,
+        worst_case_nano_usd=edge_quote.worst_case_nano_usd,
+        ceiling_nano_usd=ceiling,
+        admitted=edge_quote.admitted,
     )
-    return worst <= ceiling
+
+
+def _admits(
+    task: str,
+    payload: dict,
+    *,
+    system: str,
+    max_tokens: int,
+) -> bool:
+    """Compatibility bool, projected from the shared admission quote."""
+
+    return _admission_quote(
+        task,
+        payload,
+        system=system,
+        max_tokens=max_tokens,
+    ).admitted
 
 
 def _fit(uid: str, title: str, body: str, links: tuple) -> Optional[_TaskSource]:
@@ -524,23 +760,239 @@ def _affordable(task_uid: str, uids: list, bodies: dict) -> tuple[list, list]:
 
     kept, cut = list(uids), []
     while kept:
-        payload = {
-            "brief": "",
-            "task_uid": task_uid,
-            "survivors": [
-                {"uid": uid,
-                 "body": bodies[uid][:stage_c.PER_BODY_INPUT_BYTE_CAP]
-                 .decode("utf-8", errors="ignore")}
-                for uid in kept
-            ],
-        }
+        payload = _c2_preview_payload(task_uid, kept, bodies)
         if _admits(stage_c.C2_TASK_CLASS, payload,
                    system=stage_c.C2_SYSTEM_PROMPT,
-                   max_tokens=stage_c.C2_MAX_OUTPUT_TOKENS,
-                   allowance=_C2_ALLOWANCE_BYTES):
+                   max_tokens=stage_c.C2_MAX_OUTPUT_TOKENS):
             break
         cut.append(kept.pop())
     return kept, cut
+
+
+#: The worst-case stand-in for a C1 brief the preview cannot have yet (Lock 3:
+#: C1 runs before any survivor body is read, and pricing happens before C1
+#: runs at all). Sized to RESPONSE_MAX_BYTES — the one place a real brief's
+#: length is already bounded exactly, before it can reach C2 — rather than a
+#: second, looser bound on the same fact (W5 AC5, Argus A166 ruling
+#: evt_b51c083be28ac6fe_00000350).
+_C2_PREVIEW_BRIEF_PLACEHOLDER = "x" * stage_c.RESPONSE_MAX_BYTES
+
+
+def _c2_preview_payload(task_uid: str, uids: list, bodies: dict) -> dict:
+    return {
+        "brief": _C2_PREVIEW_BRIEF_PLACEHOLDER,
+        "task_uid": task_uid,
+        "survivors": [
+            {"uid": uid, "body": stage_c.capped_body(bodies[uid])}
+            for uid in uids
+        ],
+    }
+
+
+def _quote_identity(
+    task_uid: str,
+    question: Optional[str],
+    uids: list[str],
+    bodies: Mapping[str, bytes],
+    quotes: tuple[AdmissionQuote, ...],
+) -> str:
+    """Bind approval to this exact anchor, body set and serialized quote."""
+
+    claim = {
+        "version": 1,
+        "task_uid": task_uid,
+        "question": question,
+        "documents": [
+            {"uid": uid, "body_sha256": hashlib.sha256(bodies[uid]).hexdigest()}
+            for uid in uids
+        ],
+        "requests": [
+            {
+                "task": quote.task,
+                "request_sha256": quote.request_sha256,
+                "worst_case_nano_usd": quote.worst_case_nano_usd,
+            }
+            for quote in quotes
+        ],
+    }
+    return hashlib.sha256(
+        json.dumps(claim, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+@dataclass(frozen=True)
+class ReadPreparation:
+    """Provider-free read plan shared by preview and execution."""
+
+    records: dict
+    uids: tuple[str, ...]
+    dropped: tuple[dict, ...]
+    reader: stage_c.StudioBodyReader
+    bodies: dict[str, bytes]
+    source: Optional[_TaskSource]
+    quotes: tuple[AdmissionQuote, ...]
+    preview: dict
+    refusal: Optional[str] = None
+    detail: Optional[str] = None
+
+
+def prepare_read(
+    task_uid: str,
+    task_title: str,
+    items: list,
+    *,
+    question: Optional[str] = None,
+) -> ReadPreparation:
+    """Build and price the exact local body set before any provider call."""
+
+    records = _all_records()
+    task_title = question or (records.get(task_uid) or {}).get("title") or task_title
+    uids, dropped = _read_set(items, records)
+    reader = stage_c.studio_body_reader(ROOT, FILES, records)
+    if not uids:
+        preview = {
+            "status": "nothing-readable",
+            "count": 0,
+            "documents": [],
+            "token_estimate": 0,
+            "dollar_estimate": 0.0,
+            "worst_case_nano_usd": 0,
+            "admitted": False,
+            "approval_required": False,
+            "quotes": [],
+        }
+        return ReadPreparation(
+            records, (), tuple(dropped), reader, {}, None, (), preview
+        )
+
+    try:
+        if question is not None:
+            task_body = question
+            links: tuple[str, ...] = ()
+        else:
+            task_body = reader(task_uid).decode("utf-8", errors="replace")
+            links = tuple(
+                str(link)
+                for link in ((records.get(task_uid) or {}).get("member_of") or ())
+            )
+        source = _fit(task_uid, task_title, task_body, links)
+        if source is None:
+            raise ValueError(
+                "the task/question identity alone overruns the brief route ceiling"
+            )
+        bodies = {uid: reader(uid) for uid in uids}
+    except (OSError, ValueError, stage_c.BodySourceError) as error:
+        preview = {
+            "status": "unavailable",
+            "count": 0,
+            "documents": [],
+            "token_estimate": 0,
+            "dollar_estimate": 0.0,
+            "worst_case_nano_usd": 0,
+            "admitted": False,
+            "approval_required": False,
+            "quotes": [],
+            "refusal": getattr(error, "code", "BODY_UNREADABLE"),
+            "detail": str(error),
+        }
+        return ReadPreparation(
+            records,
+            (),
+            tuple(dropped),
+            reader,
+            {},
+            None,
+            (),
+            preview,
+            preview["refusal"],
+            preview["detail"],
+        )
+
+    affordable, priced_out = _affordable(task_uid, uids, bodies)
+    by_uid = {item["uid"]: item for item in items}
+    dropped.extend(
+        {**_named(by_uid[uid], records), "reason": DROP_SPEND}
+        for uid in priced_out
+    )
+    bodies = {uid: bodies[uid] for uid in affordable}
+    c1_payload = {
+        "task_uid": task_uid,
+        "title": source.title,
+        "body": source.body,
+        "links": list(source.links),
+    }
+    quotes: tuple[AdmissionQuote, ...] = ()
+    if affordable:
+        quotes = (
+            _admission_quote(
+                stage_c.C1_TASK_CLASS,
+                c1_payload,
+                system=stage_c.C1_SYSTEM_PROMPT,
+                max_tokens=stage_c.C1_MAX_OUTPUT_TOKENS,
+            ),
+            _admission_quote(
+                stage_c.C2_TASK_CLASS,
+                _c2_preview_payload(task_uid, affordable, bodies),
+                system=stage_c.C2_SYSTEM_PROMPT,
+                max_tokens=stage_c.C2_MAX_OUTPUT_TOKENS,
+            ),
+        )
+    named = []
+    for uid in affordable:
+        entry = _named(by_uid[uid], records)
+        entry["where"] = reader.citation_path(uid)
+        named.append(entry)
+    worst = sum(quote.worst_case_nano_usd for quote in quotes)
+    preview = {
+        "status": "ready" if affordable else "nothing-readable",
+        "count": len(affordable),
+        "documents": named,
+        "token_estimate": sum(quote.token_estimate for quote in quotes),
+        "dollar_estimate": worst / 1_000_000_000,
+        "worst_case_nano_usd": worst,
+        "admitted": bool(quotes) and all(quote.admitted for quote in quotes),
+        "approval_required": bool(affordable),
+        "quotes": [
+            {
+                "task": quote.task,
+                "model": quote.model,
+                "request_bytes": quote.request_bytes,
+                "request_sha256": quote.request_sha256,
+                "max_tokens": quote.max_tokens,
+                "token_estimate": quote.token_estimate,
+                "worst_case_nano_usd": quote.worst_case_nano_usd,
+                "ceiling_nano_usd": quote.ceiling_nano_usd,
+                "admitted": quote.admitted,
+            }
+            for quote in quotes
+        ],
+        "quote_token": _quote_identity(
+            task_uid, question, affordable, bodies, quotes
+        ),
+        # W5 AC5, third finding (Argus A166 ruling
+        # evt_b51c083be28ac6fe_00000350): the declared call shape is C1 + C2
+        # plus at most one guard-repair call (MODEL_CALL_CEILING = 3); this
+        # figure prices only the first two. Disclosed rather than silently
+        # under-shown.
+        "priced_calls": 2,
+        "declared_call_shape_calls": stage_c.MODEL_CALL_CEILING,
+        "pricing_disclosure": (
+            "This figure covers C1 + first-pass C2 only (2 of up to "
+            f"{stage_c.MODEL_CALL_CEILING} possible calls); Stage C may make "
+            "one additional C2-shaped guard-repair call if the first pass "
+            "needs correction, and that call is not priced here."
+        ),
+    }
+    return ReadPreparation(
+        records=records,
+        uids=tuple(affordable),
+        dropped=tuple(dropped),
+        reader=reader,
+        bodies=bodies,
+        source=source,
+        quotes=quotes,
+        preview=preview,
+    )
 
 
 def _spend(edge: MeteredEdge, policy, run_uid: str) -> dict:
@@ -586,7 +1038,9 @@ def _spend(edge: MeteredEdge, policy, run_uid: str) -> dict:
 
 def read_block(task_uid: str, task_title: str, items: list,
                viewer, deterministic, index_as_of: str,
-               edge: MeteredEdge) -> dict:
+               edge: MeteredEdge, *,
+               question: Optional[str] = None,
+               preparation: Optional[ReadPreparation] = None) -> dict:
     """Run Stage C over the readable survivors and return the block.
 
     Composes ``orient_deterministic``'s own output with
@@ -610,13 +1064,12 @@ def read_block(task_uid: str, task_title: str, items: list,
     all enforced inside ``run_stage_c``, which is where they belong.
     """
 
-    records = _all_records()
-    # The heading above this block reads the current index and says "(unknown)"
-    # for an archived task. The brief is written FROM the task's title, so a
-    # placeholder there is not a cosmetic problem: it is the yardstick C1
-    # judges every candidate span against.
-    task_title = (records.get(task_uid) or {}).get("title") or task_title
-    uids, dropped = _read_set(items, records)
+    prepared = preparation or prepare_read(
+        task_uid, task_title, items, question=question
+    )
+    records = prepared.records
+    uids = list(prepared.uids)
+    dropped = list(prepared.dropped)
     block = {
         "status": "nothing-eligible",
         "considered": len(items),
@@ -630,60 +1083,30 @@ def read_block(task_uid: str, task_title: str, items: list,
         "detail": None,
         "task_body_bytes": 0,
         "task_body_bytes_total": 0,
+        "preview": prepared.preview,
+        "egress_report": [],
     }
+    if prepared.refusal:
+        block["status"] = "refused"
+        block["refusal"] = prepared.refusal
+        block["detail"] = prepared.detail
+        return block
     if not uids:
         return block
-
-    # The task's own words cross the edge too. If the task itself came from
-    # outside the studio, no amount of eligible survivors makes the brief
-    # sendable — Stage C is handed no classifier for the task stub, so this is
-    # the only place the question gets asked.
-    if egress_class(task_uid, records) != vp.OS_SEGMENT:
-        block["refusal"] = "TASK_NOT_OURS_TO_SEND"
-        block["detail"] = (
-            "the task itself came into the studio from outside, and the brief "
-            "is written from the task's own words"
-        )
-        block["status"] = "refused"
-        return block
-
-    task_body = ""
-    task_path = FILES / f"{task_uid}.md"
-    if task_path.is_file():
-        task_body = distiller.span_guard.match_domain_bytes(task_path).decode(
-            "utf-8", errors="replace")
-    links = tuple(
-        str(link) for link in ((records.get(task_uid) or {}).get("member_of") or ())
-    )
-    source = _fit(task_uid, task_title, task_body, links)
+    source = prepared.source
     if source is None:
         block["refusal"] = "BRIEF_WILL_NOT_FIT"
-        block["detail"] = (
-            "the task's title and links alone overrun the brief route's "
-            "per-call ceiling, so there is nothing to write a brief from"
-        )
+        block["detail"] = "the provider-free preparation produced no task brief source"
         block["status"] = "refused"
         return block
     block["task_body_bytes"] = source.body_bytes
     block["task_body_bytes_total"] = source.body_bytes_total
-
-    reader = distiller.governed_body_reader(FILES)
-    try:
-        bodies = {uid: reader(uid) for uid in uids}
-    except (OSError, ValueError) as error:
-        block["refusal"] = "BODY_UNREADABLE"
-        block["detail"] = str(error)
-        block["status"] = "refused"
-        return block
-    uids, priced_out = _affordable(task_uid, uids, bodies)
     by_uid = {item["uid"]: item for item in items}
-    dropped.extend(
-        {**_named(by_uid[uid], records), "reason": DROP_SPEND}
-        for uid in priced_out
-    )
     block["dropped_count"] = len(dropped)
-    if not uids:
-        block["status"] = "nothing-eligible"
+    if not all(quote.admitted for quote in prepared.quotes):
+        block["status"] = "refused"
+        block["refusal"] = "STAGE_C_SPEND_CEILING"
+        block["detail"] = "the shared preview/admission quote exceeds a route ceiling"
         return block
 
     resolve = edge.policy_resolver or metered_model.resolve_policy
@@ -695,7 +1118,7 @@ def read_block(task_uid: str, task_title: str, items: list,
         block["status"] = "refused"
         return block
 
-    run_uid = edge.run_uid or os.environ.get("TROPO_RUN_UID") or secrets.token_hex(4)
+    run_uid = edge.run_uid or os.environ.get("TROPO_RUN_UID") or secrets.token_hex(4)  # RUN-RECORD DEFERRAL MARKER (3d430852): run-directory identity, the spec's declared deferral class — not a governed-record mint
     binding = metered_model.RunBinding(
         run_uid=run_uid,
         gateway_url=metered_model.GATEWAY_URL,
@@ -719,7 +1142,18 @@ def read_block(task_uid: str, task_title: str, items: list,
         # instead would replace a named refusal with a traceback.
         pass
 
-    block["read"] = [_named(by_uid[uid], records) for uid in uids]
+    block["read"] = list(prepared.preview["documents"])
+    # W5 AC5 — the exact figure the human already approved binds the real C2
+    # call's admission (Argus A166 ruling evt_b51c083be28ac6fe_00000350): one
+    # value, computed once at preview time, passed rather than re-realized.
+    c2_approved_ceiling_nano_usd = next(
+        (
+            quote.worst_case_nano_usd
+            for quote in prepared.quotes
+            if quote.task == stage_c.C2_TASK_CLASS
+        ),
+        None,
+    )
     try:
         stage = stage_c.run_stage_c(
             task_uid=task_uid,
@@ -736,7 +1170,9 @@ def read_block(task_uid: str, task_title: str, items: list,
             circle=tuple(
                 member.uid for member in deterministic.circle.members
             ),
-            body_reader=reader,
+            # The exact bytes priced and previewed above. Stage C reads this
+            # mapping once and shares that read with its model and span guard.
+            body_reader=lambda uid: prepared.bodies[uid],
             segment_class_of=lambda uid: egress_class(uid, records),
             run_binding=binding,
             provider_call=edge.provider_call,
@@ -744,6 +1180,7 @@ def read_block(task_uid: str, task_title: str, items: list,
             clock=edge.clock,
             reservation_id_factory=edge.reservation_id_factory,
             environment=edge.environment,
+            c2_approved_ceiling_nano_usd=c2_approved_ceiling_nano_usd,
         )
     except stage_c.StageCRefusal as refusal:
         block["status"] = "refused"
@@ -764,9 +1201,14 @@ def read_block(task_uid: str, task_title: str, items: list,
 
     block["status"] = "read"
     block["brief"] = stage.c1_brief
+    block["egress_report"] = [
+        {"uid": row.uid, "segment_class": row.segment_class}
+        for row in stage.egress_report
+    ]
     block["spans"] = [
         {
             **_named(by_uid[span.uid], records),
+            "where": prepared.reader.citation_path(span.uid),
             # The source's own bytes. The guard threw the model's copy away.
             "text": span.span_text,
             "char_start": span.locator.char_start,
@@ -974,10 +1416,76 @@ def _keyword_hits(task_uid: str, extra_terms: tuple,
             "total": len(hits)}
 
 
+def visibility_report(
+    *,
+    records: Optional[Mapping[str, dict]] = None,
+    projection: Optional[vp.ViewerProjection] = None,
+    principal_uids: Optional[tuple[str, ...]] = None,
+    principal_names: Optional[Mapping[str, str]] = None,
+) -> dict:
+    """Derive per-principal content-class counts from live group resolution."""
+
+    live_records = dict(records or _all_records())
+    live_projection = projection or vp.ViewerProjection.from_repo_root(ROOT)
+    uids = principal_uids or _authority_principal_uids()
+    names = dict(principal_names or _principal_names())
+    principals: dict[str, dict] = {}
+    visible_signatures: list[tuple[str, ...]] = []
+    for principal_uid in uids:
+        result = live_projection.filter_visible_uids(
+            live_records.keys(), vp.Viewer(principal_uid=principal_uid)
+        )
+        if not result.ok:
+            principals[principal_uid] = {
+                "name": names.get(principal_uid, principal_uid),
+                "error": str(result.error),
+                "visible_records": None,
+                "content_classes": {},
+                "missing_content_class": None,
+            }
+            continue
+        visible = tuple(result.value)
+        visible_signatures.append(visible)
+        classes = Counter(
+            _text(live_records[uid].get("content_class")).strip()
+            for uid in visible
+            if uid in live_records
+            and _text(live_records[uid].get("content_class")).strip()
+        )
+        missing = sum(
+            1
+            for uid in visible
+            if uid in live_records
+            and not _text(live_records[uid].get("content_class")).strip()
+        )
+        principals[principal_uid] = {
+            "name": names.get(principal_uid, principal_uid),
+            "error": None,
+            "visible_records": len(visible),
+            "content_classes": dict(sorted(classes.items())),
+            "missing_content_class": missing,
+        }
+    scope_mode = (
+        "undifferentiated"
+        if visible_signatures
+        and len(set(visible_signatures)) == 1
+        and len(visible_signatures) > 1
+        else "per-principal"
+    )
+    return {
+        "derived_live": True,
+        "scope_mode": scope_mode,
+        # UID keys are the identity. Names are display-only fields beside them.
+        "principals": principals,
+    }
+
+
 def orient(task_uid: str, k: int, principal: str,
            edge: Optional[MeteredEdge] = None,
            draw_budget: Optional[int] = None,
-           extra_terms: tuple = ()) -> dict:
+           extra_terms: tuple = (),
+           question: Optional[str] = None,
+           read_preparation: Optional[ReadPreparation] = None) -> dict:
     projection = vp.ViewerProjection.from_repo_root(ROOT)
     circle_index = SqliteStructuralIndex(INDEX_SQLITE, index_as_of=INDEX_AS_OF)
     rank_index = SqliteRankIndex(INDEX_SQLITE)
@@ -996,7 +1504,7 @@ def orient(task_uid: str, k: int, principal: str,
     if not result.ok:
         return {"ok": False, "error": str(result.error)}
 
-    records = _records()
+    records = _all_records()
     clock = _index_clock(records)
     ranked_items = []
     for item in getattr(result.value, "items", ()):
@@ -1020,6 +1528,9 @@ def orient(task_uid: str, k: int, principal: str,
             "stale": bool((rec.get("decay") or {}).get("stale")),
             "catalog_age_days": _catalog_age_days(rec, clock),
             "indexed": bool(rec),
+            "where": _named({"uid": uid}, records)["where"],
+            "content_class": _text(rec.get("content_class")).strip()
+            or "unclassified",
         })
     # Governed-ranker order, exactly (4883fa94 lock-break, AC1): orchestration
     # must not become a second ranker, so there is NO post-sort here — not by
@@ -1028,6 +1539,27 @@ def orient(task_uid: str, k: int, principal: str,
     # node's governed rank disclosed (AC7), which is where a far-ranked live
     # node stays visible.
     items = ranked_items[:k]
+    if question is not None and not any(item["uid"] == task_uid for item in items):
+        rec = records.get(task_uid) or {}
+        named_anchor = _named({"uid": task_uid}, records)
+        items = [
+            {
+                "uid": task_uid,
+                "title": named_anchor["title"],
+                "type": rec.get("type") or "unindexed",
+                "status": rec.get("status") or "",
+                "modified": _when(rec),
+                "why": "matched the question in the deterministic full-text index",
+                "score": 0.0,
+                "distance": 0,
+                "stale": bool((rec.get("decay") or {}).get("stale")),
+                "catalog_age_days": _catalog_age_days(rec, clock),
+                "indexed": bool(rec),
+                "where": named_anchor["where"],
+                "content_class": named_anchor["content_class"],
+            },
+            *items,
+        ][:k]
     governed_ranks = {it["uid"]: n for n, it in enumerate(ranked_items, 1)}
     observations = [
         {
@@ -1041,7 +1573,13 @@ def orient(task_uid: str, k: int, principal: str,
         for observation in getattr(result.value, "reference_observations", ())
     ]
     answer = {"ok": True, "task": task_uid,
-              "task_title": (records.get(task_uid) or {}).get("title") or "(unknown)",
+              "task_title": question or (records.get(task_uid) or {}).get("title") or "(unknown)",
+              "question": question,
+              "anchor": {
+                  "uid": task_uid,
+                  "title": (records.get(task_uid) or {}).get("title") or "(unknown)",
+                  "method": "entries_fts" if question is not None else "explicit-uid",
+              },
               "items": items,
               "ranked_total": len(ranked_items),
               "k": k,
@@ -1049,7 +1587,10 @@ def orient(task_uid: str, k: int, principal: str,
               "one_hop": _one_hop_roster(task_uid, governed_ranks),
               "keyword_recall": _keyword_hits(task_uid, extra_terms,
                                               governed_ranks),
-              "reference_observations": observations}
+              "reference_observations": observations,
+              "visibility": visibility_report(
+                  records=records, projection=projection
+              )}
     # The paid branch, and the only one. Without ``edge`` the answer above is
     # the same deterministic citation + observation answer and no metered edge
     # is constructed, let alone reached — "did this cost money?" is answerable
@@ -1059,6 +1600,7 @@ def orient(task_uid: str, k: int, principal: str,
         answer["read"] = read_block(
             task_uid, answer["task_title"], items,
             viewer, result.value, INDEX_AS_OF, edge,
+            question=question, preparation=read_preparation,
         )
     return answer
 
@@ -1185,7 +1727,9 @@ def _roster_lines(read: dict) -> list:
     head = _roster_head(read)
     lines = [f"  {head[0].upper()}{head[1:]}"]
     for entry in read["read"]:
-        lines.append(f"    · {entry['title']}")
+        lines.append(
+            f"    · {entry['title']} [{entry.get('content_class', 'unclassified')}]"
+        )
         lines.append(f"      {_cite(entry)}")
     return lines
 
@@ -1217,7 +1761,8 @@ def _read_lines(read: dict) -> list:
                               initial_indent="    ", subsequent_indent="    ")
             )
             lines.append(
-                f"        — {span['title']}"
+                f"        — {span['title']} "
+                f"[{span.get('content_class', 'unclassified')}]"
             )
             lines.append(
                 f"          {span['where']}, characters "
@@ -1661,10 +2206,44 @@ def render_board(answer: dict) -> str:
 </body></html>"""
 
 
+def _preview_lines(preview: Mapping[str, Any]) -> list[str]:
+    """Human-readable provider disclosure, rendered before any provider call."""
+
+    lines = [
+        "  PROVIDER READ PREVIEW",
+        f"  {preview.get('count', 0)} document(s) · "
+        f"{preview.get('token_estimate', 0):,} estimated tokens · "
+        f"{_usd(int(preview.get('worst_case_nano_usd', 0)))} worst-case",
+    ]
+    for document in preview.get("documents", ()):
+        lines.append(
+            f"    · {document['title']} [{document.get('content_class', 'unclassified')}]"
+        )
+        lines.append(f"      {document['where']}")
+    if not preview.get("admitted"):
+        lines.append("  The shared admission result refuses this request.")
+    return lines
+
+
+def _approval_from_tty(preview: Mapping[str, Any]) -> bool:
+    if not sys.stdin.isatty():
+        return False
+    try:
+        answer = input("  Proceed with this provider read? Type YES [default NO]: ")
+    except (EOFError, KeyboardInterrupt):
+        return False
+    return answer.strip() == "YES"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Ask the studio where a piece of work stands.")
-    parser.add_argument("--task", required=True, help="uid of the work to orient on")
+    anchor = parser.add_mutually_exclusive_group(required=True)
+    anchor.add_argument("--task", help="uid of the work to orient on")
+    anchor.add_argument(
+        "--question",
+        help="plain-language question; resolves to an anchor through deterministic FTS",
+    )
     parser.add_argument("--k", type=int, default=8, help="how many documents (default 8)")
     parser.add_argument("--as", dest="as_agent", default="mike",
                         help="who is asking — an agent name, or 'mike' (default)")
@@ -1673,9 +2252,14 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     parser.add_argument(
         "--read", action="store_true",
-        help="SPENDS MONEY — a few cents. Opens the documents with a model and "
-             "puts what they say at the top. Off by default; there is no other "
-             "way to turn it on.")
+        help="PREVIEWS a provider read and asks before any call. Off by default.")
+    parser.add_argument(
+        "--yes", action="store_true",
+        help="explicitly approve the --read preview (required for non-interactive calls)")
+    parser.add_argument(
+        "--quote-token",
+        help="bind non-interactive approval to the previously displayed preview",
+    )
     parser.add_argument(
         "--draw-budget", type=int, default=None,
         help="how many candidates the circle may admit before ranking "
@@ -1695,39 +2279,109 @@ def main() -> int:
         help="--for-librarian only: total body characters included before the "
              "cap names what it excluded (default 400000).")
     args = parser.parse_args()
+    if args.yes and not args.read:
+        parser.error("--yes is valid only with --read")
+    if args.quote_token and not args.yes:
+        parser.error("--quote-token is valid only with --yes")
+    if args.for_librarian and args.read:
+        parser.error("--for-librarian is the free path and cannot be combined with --read")
 
     people = _principals()
     people.setdefault("mike", "7b921d17")
     principal = people.get(args.as_agent, args.as_agent)
     extra_terms = tuple(t for t in (s.strip() for s in args.terms.split(",")) if t)
-
-    # AC5 (4883fa94): the read tier is gateway-brokered. Preflight the local
-    # metering gateway BEFORE constructing the edge, so a missing gateway is
-    # named as itself — not surfaced later as PROVIDER_FAILED mid-run with a
-    # budget hold already taken.
-    read_preflight_refusal = None
-    if args.read:
-        import socket
+    question = args.question.strip() if args.question else None
+    if question is not None:
         try:
-            socket.create_connection(("127.0.0.1", 8080), timeout=1.0).close()
-        except OSError:
-            read_preflight_refusal = (
-                "the local metering gateway is not accepting on 127.0.0.1:8080."
-                " The read tier is gateway-brokered by design; start the"
-                " gateway and re-run --read. No model was called, nothing was"
-                " reserved, nothing was spent."
-            )
-            args.read = False
+            resolved = resolve_question_anchor(question)
+        except AnchorResolutionError as error:
+            answer = {"ok": False, "error": str(error), "question": question}
+            print(json.dumps(answer, indent=1) if args.json else render_text(answer))
+            return 1
+        task_uid = resolved["uid"]
+        extra_terms = tuple(sorted(set((*extra_terms, *resolved["terms"]))))
+    else:
+        task_uid = str(args.task)
+        if not governed_path.is_governed_uid_shape(task_uid):
+            parser.error("--task must be a governed UID")
 
-    # The whole spend gate, in one expression: no flag, no edge, no money. The
-    # deterministic answer below is reached identically either way. (TROPO_RUN_UID
-    # attribution resolves where run_uid is consumed, so the gate stays bare.)
-    answer = orient(args.task, args.k, principal,
-                    MeteredEdge() if args.read else None,
+    # AC1: always run the free path first. No read flag means no preparation,
+    # no pricing, no edge construction and no spend mutation.
+    answer = orient(
+        task_uid,
+        args.k,
+        principal,
+        draw_budget=args.draw_budget,
+        extra_terms=extra_terms,
+        question=question,
+    )
+    if args.read and answer.get("ok"):
+        prepared = prepare_read(
+            task_uid,
+            answer["task_title"],
+            answer["items"],
+            question=question,
+        )
+        preview = prepared.preview
+        answer["read_preview"] = preview
+        answer["approval_required"] = bool(preview.get("approval_required"))
+
+        # Positive ordering evidence: the preview is emitted before approval
+        # and before the gateway/provider edge can even be constructed.
+        preview_text = "\n".join(_preview_lines(preview))
+        if args.json:
+            if args.yes:
+                print(preview_text, file=sys.stderr)
+        else:
+            print(preview_text)
+
+        quote_matches = True
+        if args.yes:
+            expected_token = preview.get("quote_token")
+            quote_matches = (
+                isinstance(args.quote_token, str)
+                and isinstance(expected_token, str)
+                and secrets.compare_digest(args.quote_token, expected_token)
+            )
+            if not quote_matches:
+                answer["read_preflight_refusal"] = (
+                    "the provider preview is missing, stale, or tampered; "
+                    "request a fresh preview and approve its quote token. "
+                    "No model was called, nothing was reserved, nothing was spent."
+                )
+        approved = (args.yes and quote_matches) or (
+            bool(preview.get("admitted"))
+            and bool(preview.get("approval_required"))
+            and not args.json
+            and _approval_from_tty(preview)
+        )
+        if approved and preview.get("admitted"):
+            # The read tier is gateway-brokered. This check is deliberately
+            # after preview + approval and before edge construction.
+            import socket
+
+            try:
+                socket.create_connection(("127.0.0.1", 8080), timeout=1.0).close()
+            except OSError:
+                answer["read_preflight_refusal"] = (
+                    "the local metering gateway is not accepting on "
+                    "127.0.0.1:8080. Start it and approve the same preview "
+                    "again. No model was called, nothing was reserved, nothing "
+                    "was spent."
+                )
+            else:
+                answer = orient(
+                    task_uid,
+                    args.k,
+                    principal,
+                    MeteredEdge(),
                     draw_budget=args.draw_budget,
-                    extra_terms=extra_terms)
-    if read_preflight_refusal and answer.get("ok"):
-        answer["read_preflight_refusal"] = read_preflight_refusal
+                    extra_terms=extra_terms,
+                    question=question,
+                    read_preparation=prepared,
+                )
+                answer["read_preview"] = preview
+                answer["approval_required"] = False
     if args.json:
         print(json.dumps(answer, indent=1))
         return 0 if answer["ok"] else 1
@@ -1738,7 +2392,7 @@ def main() -> int:
         feed_path.write_text(render_librarian_feed(answer, args.body_budget))
         print(f"  librarian feed: {feed_path}\n")
     if args.board and answer["ok"]:
-        out = ROOT / "boards" / "metis" / f"orient-{args.task}.html"
+        out = ROOT / "boards" / "metis" / f"orient-{task_uid}.html"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(render_board(answer))
         print(f"  board: {out.relative_to(ROOT)}\n")

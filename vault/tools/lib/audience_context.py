@@ -80,7 +80,11 @@ PRIVATE_ALIAS = "private"
 # Group UIDs are 8 lowercase hex (v1 identity, kept for governed groups).  Vault
 # UIDs are the ADR-050 vault-code grammar ``^[a-z0-9]{4,6}$`` (locked
 # architecture choice 1); the two grammars are length-disjoint.
-GROUP_UID_RE = re.compile(r"^[0-9a-f]{8}$")
+# accepts-both (UID_SHAPES): legacy 8-hex group uids stay first-class forever;
+# every new mint since the Stage B composite flip is 12-hex. Mirrors the
+# sibling fix in group_authority.py's UID_RE, which "refused the first
+# composite group uid the join ever minted."
+GROUP_UID_RE = re.compile(r"^[0-9a-f]{8}(?:[0-9a-f]{4})?$")
 VAULT_UID_RE = re.compile(r"^[a-z0-9]{4,6}$")
 HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 

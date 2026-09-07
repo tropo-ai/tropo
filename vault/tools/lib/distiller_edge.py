@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
@@ -11,6 +10,7 @@ from lib import metered_model
 from lib.distiller_model_policy import resolve_policy
 from lib.distiller_content import ContentError, ContentLoader, ContentSpan, SpanAnchor
 from lib.distiller_query import PrevalidatedQuerySeeds
+from lib.governed_path import is_governed_uid_shape
 from lib.group_registry import Result
 from lib.viewer_projection import Viewer
 
@@ -21,7 +21,10 @@ if TYPE_CHECKING:
 FRESHNESS_UNKNOWN = "UNKNOWN"
 CAPTURE_STATUS_PENDING = "pending"
 DISTILL_MAX_TOKENS = 1024
-_UID_RE = re.compile(r"^[0-9a-f]{8}$")
+# accepts-both (UID_SHAPES): span.source_uid validation used to be a local
+# 8-only regex here, gating post-flip 12-hex governed content out of the
+# distillation candidate set. Routed through the shared shape authority
+# (is_governed_uid_shape) instead.
 _DISTILL_SYSTEM = (
     "Return exactly one JSON object with key selections. Each selection must "
     "contain exactly source_uid, span_anchor, reorder_note. Select only supplied "
@@ -116,8 +119,8 @@ class DistillModelAdapter:
             raise ValueError("distill adapter arguments are malformed")
         identities = {}
         for span in candidates:
-            if not _UID_RE.fullmatch(span.source_uid):
-                raise ValueError("candidate source_uid must be lowercase 8-hex")
+            if not is_governed_uid_shape(span.source_uid):
+                raise ValueError("candidate source_uid must be lowercase 8-hex or 12-hex")
             key = (span.source_uid, span.span_anchor.canonical())
             if key in identities:
                 raise ValueError("candidate identities must be unique")

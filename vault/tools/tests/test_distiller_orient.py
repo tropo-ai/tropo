@@ -6,6 +6,7 @@ import ast
 import hashlib
 import inspect
 import json
+import os
 import socket
 import subprocess
 import tempfile
@@ -440,6 +441,24 @@ class CutBoundarySourceAudit(unittest.TestCase):
 
 
 # BEGIN 77184178 BOOT-ORIENTATION TESTS
+#: The GIT_* variables that REDIRECT git at another repository. These caused the
+#: 2026-09-02 incident (GIT_DIR beat cwd and re-initialised argo-os as bare) and
+#: are refused by `_scrubbed_env` whether inherited OR passed explicitly. Every
+#: other GIT_* variable — dates, identity — is inherited-scrubbed but may be set
+#: deliberately by a caller.
+_GIT_REDIRECT_VARS = frozenset({
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_NAMESPACE",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+})
+
+
 class _GitFixture:
     """Small real repository with exact, replayable commit topology."""
 
@@ -458,13 +477,69 @@ class _GitFixture:
     def cleanup(self) -> None:
         self._tmp.cleanup()
 
+    @staticmethod
+    def _scrubbed_env(env=None):
+        """Every GIT_* variable removed. This is not hygiene, it is containment.
+
+        THE INCIDENT, 2026-09-02 ~22:20 local: this fixture ran `git init` with
+        `cwd=self.root` and `env=None`, so it inherited the caller's environment. A
+        sub-agent shell had GIT_DIR set. **cwd does not win over GIT_DIR** — git
+        re-initialised the REAL argo-os repository as BARE, and the three `config`
+        calls below landed in argo-os/.git/config: core.bare=true,
+        core.hooksPath=<a temp dir that was about to be deleted>, user.name=Distiction
+        Fixture. Every git operation on the machine died for forty minutes and the
+        checkout was restored by hand.
+
+        The blast radius is not local: **this file SHIPS in the customer box**, so a
+        recipient running their own suite with GIT_DIR set gets their repository
+        re-initialised as bare by a test. That is the whole reason this is a
+        containment fix and not a tidy-up.
+
+        Same cure lib/event_identity.py already uses (:140-143), reached for here
+        rather than invented. GIT_OPTIONAL_LOCKS=0 comes with it: a fixture must never
+        contend for the caller's index lock.
+
+        A caller-supplied `env` is an OVERLAY of explicit keys, never a replacement
+        for the inherited environment — otherwise the leak simply returns through
+        the parameter, which is the shape of every guard that covers one door.
+
+        WHY AN OVERLAY AND NOT A SECOND SCRUB (talos-t61, 2026-09-03). The first
+        version scrubbed the caller's env as well, which was the right instinct
+        aimed at the wrong thing: the incident was INHERITED environment, and an
+        explicitly-passed `GIT_AUTHOR_DATE` is not a leak. Scrubbing both made
+        `commit(date=...)` silently do nothing — it builds a `dict(os.environ)`
+        with the two date variables set, and every one was stripped, so every
+        fixture commit landed at "now". Two commits requested two days apart
+        landed on the same day and
+        `test_governing_plant_discriminates_stale_day_record_across_actual_days`
+        went red on `watermark_day < as_of_day`. A parameter accepted and
+        discarded is declared-but-not-wired, authored INTO the containment fix.
+
+        The repository-REDIRECTING variables are refused even when passed
+        explicitly, which is strictly stronger than the original scrub: those are
+        the ones that re-initialised the real repository, and no fixture has a
+        legitimate reason to set them. Identity and date variables pass through.
+        """
+        source = os.environ
+        scrubbed = {k: v for k, v in source.items() if not k.startswith("GIT_")}
+        scrubbed["GIT_OPTIONAL_LOCKS"] = "0"
+        for key, value in (env or {}).items():
+            if key in _GIT_REDIRECT_VARS:
+                continue  # never, not even explicitly — this is the incident
+            if key.startswith("GIT_") or key not in source:
+                scrubbed[key] = value
+        return scrubbed
+
     def run(
         self, *args: str, check: bool = True, env=None
     ) -> subprocess.CompletedProcess:
         result = subprocess.run(
-            ["git", *args],
+            # -C is belt to the scrubbed env's braces: it pins the repository
+            # explicitly rather than relying on cwd, which is precisely what GIT_DIR
+            # overrode.
+            ["git", "-C", str(self.root), *args],
             cwd=self.root,
-            env=env,
+            env=self._scrubbed_env(env),
             capture_output=True,
             text=True,
             timeout=20,
@@ -483,11 +558,10 @@ class _GitFixture:
     def commit(self, message: str, *, date: Optional[str] = None) -> str:
         environment = None
         if date is not None:
-            import os
-
-            environment = dict(os.environ)
-            environment["GIT_AUTHOR_DATE"] = date
-            environment["GIT_COMMITTER_DATE"] = date
+            # ONLY the two variables this method means to set. Handing over a
+            # copy of the whole environment is how the caller's GIT_DIR would
+            # travel back in through the parameter.
+            environment = {"GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date}
         self.run("add", "-A")
         self.run("commit", "-m", message, env=environment)
         return self.run("rev-parse", "HEAD").stdout.strip()
@@ -4718,8 +4792,21 @@ class OrientBootRegressionFloor(unittest.TestCase):
     # they were written on") and this floor's constant was never re-pinned —
     # it did not even match the blob at its own old commit. Pinned now to the
     # commit that last touched the file; content verified byte-identical to HEAD.
-    IMPORTED_FIXTURE_COMMIT = "888a858fd"
-    IMPORTED_FIXTURE_BLOB = "2377b3eacc4cf198904d7dcfb54dfb03bfc37f82"
+    # RE-PINNED 2026-09-03 (talos-t61) to the ADR-050 fixture cure, with the
+    # reason, as ab7444e45 re-pinned it before me. TWO legitimate changes to
+    # test_distiller.py had landed since 888a858fd and neither re-pinned:
+    #   1. sa.suite-health, earlier today, added the `vault_uid:, not uid:`
+    #      comment to _RootFactory (its own attribution is in that comment).
+    #   2. this cycle's ADR-050 a-prime cure, splitting TEAM_GROUP (governed
+    #      group record) from TEAM (the ADR-050 vault code) and adding the
+    #      MountAudienceBinding context — argus-a168's ruling
+    #      evt_b51c083be28ac6fe_00000419.
+    # The floor was doing its job: it fired on a real, unre-pinned edit. It is
+    # re-pinned rather than relaxed, and
+    # test_imported_fixture_mutation_probe_fails_the_regression_floor still
+    # proves it bites.
+    IMPORTED_FIXTURE_COMMIT = "4b23a9ac3"
+    IMPORTED_FIXTURE_BLOB = "97a8532937a61fe86db889e9791361250fdeb7bf"
 
     def _pinned_blob(
         self, relative: str, expected_blob: str, *, commit: str | None = None
@@ -4783,6 +4870,17 @@ class OrientBootRegressionFloor(unittest.TestCase):
         for added_import in (
             "import inspect\n",
             "import json\n",
+            # Added by 5e1458133 (talos-t60, 2026-09-03) alongside `import json`
+            # for the GIT_* environment scrub -- the CONTAINMENT fix for a
+            # shipped fixture that could re-initialise the caller's repository
+            # as bare. `import json` was already carved out by an earlier cycle;
+            # this one was not, so the floor has been red on a ONE-LINE
+            # difference ever since, and the reconstruction diff is literally
+            # this single line. The safety fix was right; the floor was right to
+            # fire; only the carve-out list was never updated. Declared here
+            # rather than re-pinning the blob, which would have swallowed every
+            # other pre-cycle byte along with it.
+            "import os\n",
             "import subprocess\n",
             "import tempfile\n",
         ):

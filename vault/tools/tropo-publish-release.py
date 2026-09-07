@@ -215,7 +215,8 @@ PRESERVE_LIST = frozenset({
     ".gitignore",
 })
 
-UID_RE = re.compile(r"^[0-9a-f]{8}$")
+# UID_RE (^[0-9a-f]{8}$) stood here with no caller; removed 2026-09-05
+# (argus-a171, S5 f0152efa4cd6 AC5). The uid shape has one home: lib/governed_path.
 
 
 class PublishError(Exception):
@@ -1279,6 +1280,55 @@ def _run_journal_folder(ac7_context: dict | None) -> Path | None:
     return Path(tropo_roots.STUDIO_ROOT) / run_folder
 
 
+def _render_scorecard_so_far(run_folder: "Path | None") -> None:
+    """§1's render half: print the pre-handoff state beside the ask."""
+    if run_folder is None:
+        print("  · scorecard-so-far: no run folder resolved for this release "
+              "(nothing rendered)", flush=True)
+        return
+    path = run_folder / "scorecard-so-far.json"
+    if not path.is_file():
+        print(f"  · scorecard-so-far: ABSENT at {path} — the orchestrator "
+              f"writes it before handoff; proceeding without it", flush=True)
+        return
+    try:
+        card = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"  · scorecard-so-far: unreadable ({exc}) — proceeding", flush=True)
+        return
+    print("  · scorecard-so-far: %s journal rows seen at %s (saga %s)"
+          % (card.get("journal_rows_seen"), card.get("written_at"),
+             card.get("saga_id")), flush=True)
+
+
+def _record_verify_only_invoked(version: str, reason: str,
+                                run_folder: "Path | None") -> None:
+    """3d8d4351 §6: the verify-only path journals its invocation.
+
+    No run-resolving publish path escapes measurement. Machine-authored
+    (engine uid + invoked_via marker) per the §2/§4 authorship rule; the
+    counted reader is the v2 tally. Best-effort: a journaling failure must
+    never block a verification.
+    """
+    try:
+        runtime = _load_pipeline_runtime()
+        if run_folder is not None:
+            runtime.append_event(run_folder, runtime.make_event(
+                event="tropo.release.verify_only_invoked",
+                actor="4e8d1c60",
+                data={
+                    "saga_id": _saga().saga_id_for(run_folder.name),
+                    "pipeline_run_uid": run_folder.name,
+                    "invocation_uid": __import__("secrets").token_hex(4),
+                    "version": version,
+                    "reason": reason,
+                    "invoked_via": "verify-only",
+                }))
+    except Exception as exc:
+        print(f"WARN: verify_only_invoked journaling failed (non-blocking): {exc}",
+              file=sys.stderr)
+
+
 def _record_fire_authorized(ac7_context: dict) -> None:
     """v1.91 S2 AC1/AC5 (3fb41c99): the moment the TTY confirm returns yes.
 
@@ -1320,7 +1370,7 @@ def _record_fire_authorized(ac7_context: dict) -> None:
                 "saga_id": _saga().saga_id_for(run_uid),
                 "pipeline_run_uid": run_uid,
                 "package_sha256": package_sha256,
-                "approval_uid": secrets.token_hex(4),
+                "approval_uid": _chokepoint_mint_uid(),
             },
             trace_id=run_uid,
         ))
@@ -2725,6 +2775,11 @@ def cmd_fire(args) -> int:
         return 3
 
     print(f"=== FIRE v{version} (the one public act) ===\n")
+    # 3d8d4351 §1: the ONE go/no-go renders the measured state — the
+    # scorecard-so-far the orchestrator wrote into the run folder before the
+    # handoff. Honest absent-line when it is missing: the publisher still
+    # never computes measurement (layering note below holds); it renders.
+    _render_scorecard_so_far(_run_journal_folder(_ac7))
     if not _confirm_tty(f"Fire v{version} to GitHub + Supabase? This is the one public act."):
         print("  ✗ Refused (default NO / not confirmed).", file=sys.stderr)
         return 6
@@ -2862,7 +2917,10 @@ def cmd_fire(args) -> int:
         # the index, so a later flip yields a manifest naming the prior version.
         _flip_release_entry_to_shipped(version)
         _upload_update_manifest()
-        _verify_published_update_manifest(version)
+        # 4e9ce4cc step 2.5: BOTH legs (completeness + HEAD-every-url). The
+        # bare completeness call here was the gate's only home — and the one
+        # v1.93's attested path never touched.
+        verify_channel(version)
     except PublishError as e:
         print(f"  ✗ {e}", file=sys.stderr)
         print("  Push + release object are live; upload can be retried without re-firing.", file=sys.stderr)
@@ -3077,6 +3135,26 @@ def cmd_fire(args) -> int:
 
 # ── DEFER ──────────────────────────────────────────────────────────────────────
 
+def _verify_live_module():
+    """Load the sibling that OWNS .tropo/publish-pending.json (fbe50871: one
+    writer module, never forked). Resolves through the tropo_roots seam, never
+    a walk up from __file__ — the seam contract test_tropo_roots enforces it
+    (`consumer directly walks upward from __file__`, which fails on any
+    .parent/.parents reached from __file__; .with_name is not that shape,
+    which is why the five other __file__ loads in this file are legal).
+    Same class and same suite as _saga() above, which the 2026-08-21
+    suite-health baseline found red on exactly its line; this was the second
+    site, found by sa.suite-health record 014 and routed by metis-g117
+    2026-09-03. Hoisted 2026-09-05 (argus-a171) when cmd_defer became the
+    second caller."""
+    import importlib.util as _ilu
+    _vl_path = tropo_roots.VAULT_DIR / "tools" / "tropo-verify-release-live.py"
+    _vl_spec = _ilu.spec_from_file_location("_tropo_verify_release_live", _vl_path)
+    _vl = _ilu.module_from_spec(_vl_spec)
+    _vl_spec.loader.exec_module(_vl)
+    return _vl
+
+
 def cmd_defer(args) -> int:
     version = args.version or _latest_staged_version()
     if not version:
@@ -3091,14 +3169,68 @@ def cmd_defer(args) -> int:
         return 6
     deferred_by = os.environ.get("USER", "mike-maziarz")
     deferred_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    defer_record = {"deferred_by": deferred_by, "deferred_at": deferred_at,
+                    "reason": args.reason}
     _stamp_release_entry(version, publish_state="deferred-by-mike",
-                          defer_record={"deferred_by": deferred_by, "deferred_at": deferred_at,
-                                        "reason": args.reason})
+                          defer_record=defer_record)
+    # The second home of the same fact. Until 2026-09-05 this command stamped
+    # the release entry and never touched .tropo/publish-pending.json, so the
+    # boot line kept firing on a release the founder had deferred (v1.94, and
+    # §30 of the Architecture Review had the same marker defect on v1.92).
+    # Same writer module as the live flip; non-blocking, like that site.
+    try:
+        print("  · " + _verify_live_module().defer_publish_pending(
+            tropo_roots.STUDIO_ROOT, version, defer_record=defer_record), flush=True)
+    except Exception as _exc:
+        print(f"WARN: publish-pending defer flip failed (non-blocking): {_exc}",
+              file=sys.stderr)
     print(f"  ✓ v{version} recorded DEFERRED-BY-MIKE — boot-line silent; remains fireable later.")
     return 0
 
 
 # ── VERIFY-ONLY ──────────────────────────────────────────────────────────────────
+
+def verify_channel(expected_version: str) -> dict:
+    """4e9ce4cc AC1 / step 2.5 — the channel verifies itself, on EVERY publish
+    path. TWO legs:
+
+      leg 1 COMPLETENESS — the live manifest's `current` IS the expected
+      version AND its row is present (_verify_published_update_manifest);
+      leg 2 RESOLUTION   — every url-BEARING row of that manifest HEADs
+      green (resolve_manifest_urls, its first production caller — written
+      for 1.87/1.88, tested, and never wired until now).
+
+    Standalone on purpose: v1.93 shipped through cmd_verify_only while every
+    manifest gate lived only inside cmd_fire, so the live manifest is stale
+    right now (current 1.92.0, no 1.93 row) — a gate wired into one path is
+    skipped by exactly the other path a deadlocked fire falls back to. Both
+    wire points call THIS; neither owns a private copy of either leg.
+    Url-less rows (the dead-catalog class) are skipped by leg 2 by design —
+    a dead row can never red the gate forever.
+    """
+    manifest = _verify_published_update_manifest(expected_version)  # leg 1
+    resolve_manifest_urls(manifest)  # leg 2
+    url_bearing = sum(1 for u in (manifest or {}).get("updates", []) if u.get("url"))
+    print(f"  ✓ verify-channel: completeness + {url_bearing} url-bearing row(s) HEAD-green "
+          f"for v{expected_version}")
+    return manifest
+
+
+def cmd_verify_channel(args) -> int:
+    """The standalone runner: the birth-certificate path AC1 names. A red
+    here is a FINDING about the channel, not a tool failure — exit 14 carries
+    it distinctly so operational runs can tell 'channel unhealthy' from
+    'invocation wrong'."""
+    version = args.version
+    print(f"=== VERIFY-CHANNEL v{version} ===\n")
+    try:
+        verify_channel(version)
+    except PublishError as e:
+        print(f"  ✗ CHANNEL RED (v{version}): {e}", file=sys.stderr)
+        return 14
+    print(f"  ✓ CHANNEL GREEN — v{version} named current, every url-bearing row resolves.")
+    return 0
+
 
 def cmd_verify_only(args) -> int:
     """The SOP's documented manual path for attested-class releases: no
@@ -3106,12 +3238,38 @@ def cmd_verify_only(args) -> int:
     against a version already live by some other means. Never touches the
     outward gate (attested_build_authorization never satisfies it, by design)."""
     version = args.version
+    # 3d8d4351 §6: journal the invocation — no run-resolving publish path
+    # escapes measurement. The run folder resolves from the release entry's
+    # run linkage; a release resolving NO run gets the named refusal below
+    # (never a silent 0), and the journal row lands only when a run exists.
+    _vo_run_folder = None
+    try:
+        _vo_identity = release_package.resolve_release_run(
+            _load_pipeline_runtime(), version=version)
+        _vo_entry = _load_pipeline_runtime().read_vault_entry(_vo_identity.run_uid) or {}
+        _vo_rf = str((_vo_entry.get("frontmatter") or {}).get("run_folder") or "")
+        if _vo_rf:
+            _vo_run_folder = Path(tropo_roots.STUDIO_ROOT) / _vo_rf
+    except Exception:
+        _vo_run_folder = None
     try:
         remote = _require_pinned_remote(args.remote or DEFAULT_REMOTE)
     except PublishError as e:
         print(f"  ✗ {e}", file=sys.stderr)
         return 13
     print(f"=== VERIFY-ONLY v{version} ===\n")
+    if _vo_run_folder is None:
+        # §6: one NAMED refusal for the unmeasurable case — an unmeasurable
+        # release needs its run identified; never a silent exit 0.
+        print("  ✗ REFUSED: v%s resolves no run folder — an unmeasurable "
+              "release cannot be verified-and-measured. Identify its run "
+              "(--run-dir or the release entry's run_folder) and re-run."
+              % version, file=sys.stderr)
+        return 14
+    _record_verify_only_invoked(version, "attested-class SOP path",
+                                _vo_run_folder)
+    print("  · verify_only_invoked journaled (run %s)"
+          % _vo_run_folder.name, flush=True)
     state = _run_publish_state("--expect", version, remote=remote)
     if (
         state.get("status") != "verified"
@@ -3132,6 +3290,73 @@ def cmd_verify_only(args) -> int:
         print(f"  ✗ release object not verified for v{version}: {e}", file=sys.stderr)
         return 13
     print(f"  ✓ VERIFIED — v{version} tag + release object present on the remote.")
+    # 4e9ce4cc step 2.5 — THE load-bearing wire. v1.93 shipped through this
+    # exact path while every manifest gate lived only inside cmd_fire: the
+    # live manifest went stale (current 1.92.0, no 1.93 row) with nothing
+    # noticing. A gate wired into one publish path is skipped by precisely
+    # the other path a deadlocked fire falls back to. RED here is honest —
+    # it names the channel debt this command let ship last time.
+    try:
+        verify_channel(version)
+    except PublishError as e:
+        print(f"  ✗ CHANNEL RED (v{version}): {e}", file=sys.stderr)
+        print("  The tag + release object are live; the update CHANNEL is not "
+              "healthy. Upload/regenerate the manifest, then re-run.",
+              file=sys.stderr)
+        return 14
+
+    # 3d8d4351 §6 (second half): post-publish measurement + BOTH home flips.
+    # The verify-only path is the ONE place the publisher builds a card —
+    # from what the journal can know, absences recorded — because §6 exempts
+    # it from the fire-path layering rule (there is no producer injection on
+    # a path that never fired).
+    try:
+        from lib import release_metrics as _metrics
+        _journal_rows = []
+        _jp = _vo_run_folder / "run.jsonl"
+        if _jp.is_file():
+            for _line in _jp.read_text(errors="replace").splitlines():
+                _line = _line.strip()
+                if not _line:
+                    continue
+                try:
+                    _r = json.loads(_line)
+                    if isinstance(_r, dict):
+                        _journal_rows.append(_r)
+                except ValueError:
+                    continue
+        _card = _metrics.build_scorecard_v2(
+            mode=_metrics.REAL_FIRE, saga_id=_vo_run_folder.name,
+            pipeline_run_uid=_vo_run_folder.name, release_version=version,
+            journal_rows=_journal_rows,
+            principal_registry_path=(tropo_roots.STUDIO_ROOT / ".tropo-studio"
+                                     / "registries" / "agent-registry.yaml"),
+            timestamps={"scope_locked_at": None, "orchestrator_started_at": None,
+                        "primary_live_at": _utc_timestamp(), "all_targets_live_at": None},
+            active_machine_seconds=None, observed_refusals=[], baseline={})
+        _card_path = _metrics.scorecard_path(_vo_run_folder, _metrics.REAL_FIRE)
+        _card_path.parent.mkdir(parents=True, exist_ok=True)
+        _card_path.write_text(json.dumps(_card, indent=1) + "\n", encoding="utf-8")
+        print(f"  · measured: REAL_FIRE card v2 at {_card_path.name} "
+              f"(verdict {_card['verdict']}; absences recorded)", flush=True)
+    except Exception as _exc:
+        print(f"WARN: verify-only measurement failed (non-blocking): {_exc}",
+              file=sys.stderr)
+
+    _stamp_release_entry(version, publish_state="live",
+                         verified_via="verify-only",
+                         completion_verdict="verified-live")
+    # The second home, through its ONE named writer (fbe50871 — coordinated,
+    # never forked): the verify-only case reaches the same flip path the
+    # verify-live walk uses, with the run folder it resolved.
+    try:
+        _vl = _verify_live_module()
+        print("  · " + _vl.clear_publish_pending(tropo_roots.STUDIO_ROOT,
+                                                 _vo_run_folder,
+                                                 verified_version=version), flush=True)
+    except Exception as _exc:
+        print(f"WARN: publish-pending flip failed (non-blocking): {_exc}",
+              file=sys.stderr)
     return 0
 
 
@@ -3315,6 +3540,14 @@ def main() -> int:
     v.add_argument("--version", required=True)
     v.add_argument("--remote", default=None)
     v.set_defaults(func=cmd_verify_only)
+
+    vc = sub.add_parser(
+        "verify-channel",
+        help="4e9ce4cc AC1: the channel's own two-leg check (completeness + "
+             "HEAD-every-url-bearing-row), standalone against the live manifest")
+    vc.add_argument("--version", required=True,
+                    help="the version the live manifest must name as current")
+    vc.set_defaults(func=cmd_verify_channel)
 
     # Flag-style aliases (--fire / --defer / --verify-only) so the CLI reads the way the
     # spec body writes it, without requiring the subcommand form.

@@ -79,6 +79,7 @@ from lib.ship_extract import (
     validate_manifest_basic,
 )
 from publish_types import StageResult, PublishResult, PublishTargetError
+from lib.governed_path import is_governed_uid_shape
 INDEX_PATH = os.path.join(VAULT_ROOT, 'vault', '00-index.jsonl')
 
 
@@ -117,8 +118,10 @@ def load_pipeline_def(arg: str) -> dict:
     Load a publish.pipeline.md definition from a vault UID or direct file path.
     Returns parsed frontmatter dict, validated for required fields.
     """
-    # Determine file path
-    if re.fullmatch(r'[0-9a-f]{8}', arg):
+    # Determine file path (accepts-both, UID_SHAPES: a 12-hex pipeline uid
+    # was falling through to the direct-path branch and misreporting "file
+    # not found")
+    if is_governed_uid_shape(arg):
         # UID lookup
         file_path = _find_in_index(arg)
         if not file_path:

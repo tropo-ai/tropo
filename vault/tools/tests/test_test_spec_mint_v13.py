@@ -41,6 +41,13 @@ check_one = _load("test_spec_v13_check_one", TOOLS / "tropo-check-one.py")
 from lib import index_surfaces, template_leg  # noqa: E402
 from lib import test_spec_validators  # noqa: E402
 
+# 3d430852 suite migration: mint-output assertions follow the AUTHORITY mint
+# constant — Stage A mints 8-hex (assertions pass today unchanged); when
+# Stage B flips MINT_HEX_LEN to 12 these assertions follow the flip instead
+# of breaking. Never a second mint-shape definition.
+from lib.governed_path import MINT_HEX_LEN as _MINT_LEN
+_MINT_SHAPE = r'^[0-9a-f]{%d}$' % _MINT_LEN
+
 
 DEV_UID = "dddd0001"
 ACTIVATION_UID = "aaaa0001"
@@ -78,6 +85,22 @@ class ScratchMintRoot:
         # one-line defect as test_typed_mint_phase1.py (metis-g103 2026-08-06).
         self.root = Path(self._temp.name).resolve()
         (self.root / ".tropo").mkdir()
+        # A scratch studio needs a genesis manifest since the Stage-B flip:
+        # the mint chokepoint's genesis-identity precheck fires before any
+        # freshener/transaction assertion under test. Same shape as
+        # test_index_lifecycle._seed_genesis_artifacts. (suite-health 2026-09-03)
+        (self.root / ".tropo" / "studio-identity.md").write_text(
+            "---\n"
+            "studio_id: aaaa0000\n"
+            "mint_prefix: aaaa\n"
+            "created: '2026-07-26'\n"
+            "minted_by: fixture\n"
+            "hq_registered: false\n"
+            "schema_version: 1\n"
+            "entity_name: fixture-studio\n"
+            "---\n",
+            encoding="utf-8",
+        )
         (self.root / "vault" / "files").mkdir(parents=True)
         self.workspace = (
             self.root
@@ -298,7 +321,7 @@ class TestSpecV13MintTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         uid = result.stdout.strip()
-        self.assertRegex(uid, r"^[0-9a-f]{8}$")
+        self.assertRegex(uid, _MINT_SHAPE)
         path = scratch.root / "vault" / "files" / f"{uid}.md"
         self.assertTrue(path.is_file())
 

@@ -259,10 +259,39 @@ def decide(run_dir: Path, candidate: Path) -> Tuple[Dict[str, Any], Optional[str
     except release_package.PackageRefusal as exc:
         return payload, str(exc)
     if active_frozen:
-        return payload, (
-            "this run already has an active package_frozen; a second freeze is a "
-            "supersession and needs package_superseded, not another freeze"
+        # The verdict is idempotent on its own act (talos-t63, 2026-09-06;
+        # driver-ruled post-lock inclusion on v1.95). This command is BOTH the
+        # step's act (--emit) and its declared verification_command, and the
+        # runner re-runs the verification after the act: so "already frozen"
+        # as a flat refusal meant the step could never pass its own check once
+        # it had done its job, and v1.90, v1.93 and v1.94 each amended the
+        # criteria to a hand-written script to get past it. Criterion 4 reads
+        # "exactly one active package_frozen exists for this run AFTER the
+        # step": a freeze that binds THESE bytes is that criterion satisfied.
+        # A freeze on DIFFERENT bytes is still the dangerous case and refuses
+        # — the same rule release_package.reconcile_existing_freeze applies to
+        # the build tool.
+        frozen_sha = str(active_frozen.get("package_sha256") or "").strip()
+        if not frozen_sha:
+            return payload, (
+                "this run already has an active package_frozen that records no "
+                "digest; refusing to guess whether it binds these bytes"
+            )
+        if frozen_sha != rehashed:
+            return payload, (
+                "this run already has an active package_frozen at %s and the "
+                "candidate on disk is %s; a second freeze is a supersession and "
+                "needs package_superseded, not another freeze"
+                % (frozen_sha[:12], rehashed[:12])
+            )
+        payload["verdict"] = "pass"
+        payload["frozen_event_uid"] = "existing"
+        payload["rationale"] = (
+            "candidate re-hashes to the recorded bytes, all four instrument "
+            "receipts bind them, and the run's one active package_frozen binds "
+            "these same bytes (criterion 4 holds as the post-state)"
         )
+        return payload, None
 
     payload["verdict"] = "pass"
     payload["rationale"] = (
@@ -305,7 +334,10 @@ def main(argv=None) -> int:
     # spec all existed; the writer did not.
     # Emits ONLY on a pass. A refusal can never write a freeze.
     # metis-g110, 2026-08-22.
-    if args.emit and refusal is None:
+    if args.emit and refusal is None and payload.get("frozen_event_uid") == "existing":
+        print("[NOTE] --emit: the run's active package_frozen already binds these bytes; "
+              "nothing written (a second identical freeze would be a duplicate)", file=sys.stderr)
+    elif args.emit and refusal is None:
         import uuid as _uuid
         from datetime import datetime as _dt, timezone as _tz
         journal = run_dir / "run.jsonl"

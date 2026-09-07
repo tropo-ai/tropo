@@ -1,0 +1,32 @@
+{
+  "schema_version": 2,
+  "pipeline_run_uid": "f015af4a6a0a",
+  "run_nonce": "6b3828b501e171d4360501f93d6258d0",
+  "activation_uid": "f015637f34b1",
+  "substrate_authored_by": "f015637f34b1",
+  "pipeline_uid": "634913c2",
+  "pipeline_version": "1.0.1",
+  "current_step": "a0f2bea8",
+  "step_status": {
+    "f9365ede": "verified",
+    "8654900a": "verified",
+    "0cf86ea5": "verified",
+    "4f64ec3c": "verified",
+    "37996741": "verified",
+    "2e9b1db7": "verified",
+    "4262d5fa": "verified",
+    "a0f2bea8": "started",
+    "bc6b17ec": "declared",
+    "c6b61fb9": "declared",
+    "7de2c49f": "declared",
+    "3dd817cb": "declared"
+  },
+  "skip_authorizations": {},
+  "pause_resumed_pending": [],
+  "eligible_steps": [],
+  "last_event_ts": "2026-09-06T13:10:34Z",
+  "last_segment_path": "vault/pipeline-runs/release-pipeline-f015af4a6a0a-2026-09-05/run.jsonl",
+  "run_status": "active",
+  "supersession_reason": null,
+  "supersedes_activation": null
+}

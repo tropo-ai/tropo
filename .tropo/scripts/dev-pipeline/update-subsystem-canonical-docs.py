@@ -142,6 +142,30 @@ def derive_subsystems_with_audit(
     return sorted(subsystems), non_hub_caps
 
 
+def adopt_declared_hubs(
+    subsystems: list[str],
+    hub_summaries: dict[str, str],
+    hub_uids: frozenset[str] = HUB_UIDS,
+) -> tuple[list[str], list[str]]:
+    """Union the derived hubs with the hubs the plan DECLARES in hub_summaries.
+
+    Ruled by argus-a169 on 2026-09-04 from the v1.94 run (metis-g119's measurement):
+    the plan's capabilities_touched were the fourteen dev-spec uids, every one
+    member_of the dev-pipeline root and none a hub member, so derivation returned
+    [] and the release entry carried `subsystems_touched: []` beside a
+    `hub_summaries:` that named 8dd772a0 — one fact, two readers, one of them
+    empty. A plan that writes a hub summary has declared that hub touched; the
+    declaration is a source, not decoration. Only keys that are real hub uids are
+    adopted; anything else stays a validation matter for Check 20.
+
+    Returns (sorted_union, adopted) where `adopted` lists the hubs that came
+    from the declaration alone, so the audit can say so.
+    """
+    declared = sorted(h for h in hub_summaries if h in hub_uids)
+    adopted = [h for h in declared if h not in subsystems]
+    return sorted(set(subsystems) | set(declared)), adopted
+
+
 def derive_subsystems_touched(
     capabilities: list[str],
     member_of_map: dict[str, list[str]],
@@ -615,6 +639,14 @@ def run(args: argparse.Namespace) -> int:
     subsystems, non_hub_caps = derive_subsystems_with_audit(
         [str(c) for c in capabilities], member_of_map, HUB_UIDS
     )
+    subsystems, declared_hubs_adopted = adopt_declared_hubs(subsystems, hub_summaries, HUB_UIDS)
+    if declared_hubs_adopted:
+        print(
+            f"NOTE: {len(declared_hubs_adopted)} subsystem hub(s) adopted from the plan's "
+            f"hub_summaries declaration, not derived from capabilities_touched: "
+            f"{declared_hubs_adopted} (argus-a169 ruling 2026-09-04: a declared hub summary is a source).",
+            file=sys.stderr,
+        )
 
     # Surface silent-filter audit (Stream B2 round 2 fold). Capabilities whose
     # member_of has zero subsystem hubs are dropped from subsystems_touched
@@ -667,6 +699,7 @@ def run(args: argparse.Namespace) -> int:
             "capabilities_touched": capabilities,
             "subsystems_touched_derived": subsystems,
             "silently_filtered_non_hub_caps": non_hub_caps,
+            "declared_hubs_adopted": declared_hubs_adopted,
             "registry_uids_would_allocate": registry_uids,
             "hub_summaries_validated": True,
             "writes_skipped": True,
@@ -789,6 +822,7 @@ def run(args: argparse.Namespace) -> int:
             "registry_rows_skipped_dedup": registry_rows_skipped_dedup,
             "registry_uids_allocated": registry_uids,
             "silently_filtered_non_hub_caps": non_hub_caps,
+            "declared_hubs_adopted": declared_hubs_adopted,
         },
     }
     print(json.dumps(manifest, indent=2))

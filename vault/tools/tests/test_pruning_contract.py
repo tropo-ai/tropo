@@ -21,6 +21,10 @@ ROOT = Path(__file__).resolve().parents[3]
 TOOLS = ROOT / "vault" / "tools"
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
+if str(ROOT) not in sys.path:
+    # `from vault.tools.tests...` below is an absolute import; it needs the
+    # studio root on sys.path, not only vault/tools. (suite-health 2026-09-03)
+    sys.path.insert(0, str(ROOT))
 
 
 def _load(name: str, path: Path):

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<!-- ============================================================================
+     TROPO BOARD FORMAT · design-status-board
+     ----------------------------------------------------------------------------
+     SHAPE (pairs with boards/_shared/board.css for the style). FILL-IN TEMPLATE.
+
+     WHEN TO USE: the status of ONE design / feature / multi-artifact initiative —
+     "where does the L2 cockpit stand", "status of the studio consolidation", a
+     design's tier placement + lifecycle stage + its artifacts + the decisions
+     binding it + what it's waiting on. The agent reads the design's brief(s) +
+     the live vault status of its artifacts and frames it.
+     NOT for: a multi-cycle roadmap (use roadmap-board) · what ships this one cycle
+     (use release-board) · a per-decision walk (Walk Format Doctrine, prose).
+
+     HOW TO FILL (you are the engine — supply judgment + real, current state):
+       1. Copy to boards/<you>/<slug>-<date>.html  (stylesheet link below is correct)
+       2. Replace every {{FILL: ...}} from the design's brief + live vault.
+       3. STATUS IS THE ARBITER: each artifact's badge = its AUTHORITATIVE status/state
+          field; the "Awaiting" section reads the OWNERSHIP fields (requested_of /
+          approver / verifier) + non-terminal status, NOT a "pending" tag (tags rot).
+       4. The stage track marks ONE current stage with .here (and/or a badge).
+       5. Hand-link files as [readable name](path); no bare UIDs; no em-dashes.
+     ============================================================================ -->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{FILL: design name + "— Status"}}</title>
+<link rel="stylesheet" href="../_shared/board.css">
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ── HEADER ─────────────────────────────────────────────────────────────-->
+  <header>
+    <div class="eyebrow">{{FILL: context, e.g. "Tropo-OS · Design Status"}}</div>
+    <h1>{{FILL: the design's name + where it stands in one phrase}}</h1>
+    <div class="thesis">{{FILL: one italic sentence — what this design is for}}</div>
+    <div class="statebar">
+      <span class="pill good">Stage: <b>{{FILL: current lifecycle stage}}</b></span>
+      <span class="pill live">Open: <b>{{FILL: the one thing still in motion}}</b></span>
+      <span class="pill">Owner: <b>{{FILL}}</b></span>
+    </div>
+  </header>
+
+  <!-- ── 1 · WHERE THIS SITS (tier model — optional; delete if not tiered) ────
+       Mark the tier this design lives in with .here. -->
+  <h2>1 · Where This Sits</h2>
+  <div class="tiers">
+    <div class="tier"><div class="lbl">{{FILL: tier 1 label, e.g. L1 — the floor}}</div><b>{{FILL}}</b></div>
+    <div class="arrow">›</div>
+    <div class="tier here"><div class="lbl">{{FILL: this tier, e.g. L2 — the cockpit}}</div><b>{{FILL: what this design adds}}</b></div>
+    <div class="arrow">›</div>
+    <div class="tier"><div class="lbl">{{FILL: tier 3 label, e.g. hosted}}</div><b>{{FILL}}</b></div>
+  </div>
+
+  <!-- ── 2 · STAGE TRACK (lifecycle; mark the current stage) ──────────────────
+       Use the design lifecycle that fits: e.g. Design · Specify · Build · Verify
+       · Ship · Adopt. Mark the current one with class "stage here" + a badge. -->
+  <h2>2 · Lifecycle Stage</h2>
+  <div class="stages">
+    <div class="stage"><b>Design</b>{{FILL: one line or a badge}}</div>
+    <div class="stage"><b>Specify</b>{{FILL}}</div>
+    <div class="stage here"><b>Build</b> <span class="badge b-flight">here</span></div>
+    <div class="stage"><b>Verify</b>{{FILL}}</div>
+    <div class="stage"><b>Ship</b>{{FILL}}</div>
+    <div class="stage"><b>Adopt</b>{{FILL}}</div>
+  </div>
+
+  <!-- ── 3 · ARTIFACTS (the substrate this design is made of; status-is-arbiter)-->
+  <h2>3 · Artifacts</h2>
+  <table>
+    <tr><th>Artifact</th><th>Type</th><th>Status</th><th>Lands</th><th>UID</th></tr>
+    <tr><td class="item">{{FILL: readable name}}</td><td>{{FILL: design-brief / capsule / spec}}</td><td><span class="badge b-done">{{FILL: real status}}</span></td><td class="lands">{{FILL: where/when}}</td><td class="uid">{{FILL: uid}}</td></tr>
+    <tr><td class="item">{{FILL}}</td><td>{{FILL}}</td><td><span class="badge b-flight">{{FILL}}</span></td><td class="lands">{{FILL}}</td><td class="uid">{{FILL}}</td></tr>
+  </table>
+
+  <!-- ── 4 · THE FRAME (the decisions/principles binding this design) ─────────-->
+  <h2>4 · The Frame — what's locked</h2>
+  <div class="card">
+    <ul class="ledger">
+      <li><b>{{FILL: binding decision}}</b> — {{FILL: one line}}</li>
+      <li><b>{{FILL: binding decision}}</b> — {{FILL: one line}}</li>
+    </ul>
+  </div>
+
+  <!-- ── 5 · AWAITING (what's blocked + on whom; read OWNERSHIP fields) ───────
+       status-is-arbiter: an item appears here only if its status is non-terminal
+       AND an ownership field (requested_of / approver / verifier) names the blocker.
+       Never surface a status:locked/done item as "awaiting" off a stale tag. -->
+  <h2>5 · Awaiting</h2>
+  <div class="card">
+    <ul class="ledger">
+      <li><b>{{FILL: who}}</b> — {{FILL: what's owed, plain English}}</li>
+      <li><b>Fenced on Mike:</b> {{FILL: what only the principal can decide}}</li>
+    </ul>
+  </div>
+
+  <footer>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--tropo-done)"></i>done</span>
+      <span><i class="sw" style="background:var(--tropo-flight)"></i>in flight</span>
+      <span><i class="sw" style="background:var(--tropo-next)"></i>next</span>
+      <span><i class="sw" style="background:var(--tropo-fenced)"></i>fenced</span>
+    </div>
+    <div class="note">{{FILL: author + date}} · design-status-board format · L1-native render, pulls boards/_shared/board.css. A snapshot; regenerate when work moves.</div>
+  </footer>
+
+</div>
+</body>
+</html>

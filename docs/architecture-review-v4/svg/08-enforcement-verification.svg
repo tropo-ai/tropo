@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 910" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .panel-title { font-size: 15px; font-weight: bold; fill: #1a2332; }
+      .node { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .node-sub { font-size: 11px; fill: #5a6a7a; }
+      .label { font-size: 12px; fill: #44525f; }
+      .caption { font-size: 12px; fill: #5a6a7a; font-style: italic; }
+      .locus { font-size: 14px; font-weight: bold; fill: #ffffff; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="910" fill="#fafbfc"/>
+  <text x="40" y="48" class="title">Enforcement + Verification — Defense in Depth on a Language Base</text>
+  <text x="40" y="72" class="subtitle">Four enforcement loci, a matured WARN→ERROR ratchet, and a verification model where "done" means independently proven. Verified at v1.84.1 (ADR-044).</text>
+
+  <!-- Four loci -->
+  <rect x="40" y="100" width="1200" height="218" rx="10" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="60" y="130" class="panel-title">The four enforcement loci (each catches what the others miss)</text>
+
+  <rect x="60" y="148" width="280" height="152" rx="8" fill="#2c4a6e"/>
+  <text x="76" y="176" class="locus">1 · WRITE-TIME — TOOLS</text>
+  <text x="76" y="198" class="node-sub" fill="#cfe0ee">Structured mutations route through tools</text>
+  <text x="76" y="214" class="node-sub" fill="#cfe0ee">that enforce + normalize on write: emit-</text>
+  <text x="76" y="230" class="node-sub" fill="#cfe0ee">event guards, activation hard gates, and</text>
+  <text x="76" y="246" class="node-sub" fill="#cfe0ee">the mint chokepoint — ADR-050 routes ALL</text>
+  <text x="76" y="262" class="node-sub" fill="#cfe0ee">identifier generation through one</text>
+  <text x="76" y="278" class="node-sub" fill="#cfe0ee">collision-checked minter (typed kinds).</text>
+  <text x="76" y="294" class="node-sub" fill="#cfe0ee">The paved road — never a mandatory gate.</text>
+
+  <rect x="356" y="148" width="280" height="152" rx="8" fill="#3a6b8a"/>
+  <text x="372" y="176" class="locus">2 · VALIDATE-TIME — GATE</text>
+  <text x="372" y="198" class="node-sub" fill="#d6e6ef">94 check functions (~90 executed per run)</text>
+  <text x="372" y="214" class="node-sub" fill="#d6e6ef">at every rebuild + as build pre-flight</text>
+  <text x="372" y="230" class="node-sub" fill="#d6e6ef">(v1: ~58). Schemas read from capsules,</text>
+  <text x="372" y="246" class="node-sub" fill="#d6e6ef">never hardcoded. New checks land WARN,</text>
+  <text x="372" y="262" class="node-sub" fill="#d6e6ef">ratchet to ERROR with named grandfathers:</text>
+  <text x="372" y="278" class="node-sub" fill="#d6e6ef">history exempt by name, go-forward fails.</text>
+  <text x="372" y="294" class="node-sub" fill="#d6e6ef">A red gate blocks the ship.</text>
+
+  <rect x="652" y="148" width="280" height="152" rx="8" fill="#b08a4a"/>
+  <text x="668" y="176" class="locus">3 · CONTINUOUS — GROOMERS</text>
+  <text x="668" y="198" class="node-sub" fill="#f3e8d2">First production groomer: the Gardener</text>
+  <text x="668" y="214" class="node-sub" fill="#f3e8d2">(v1.82) stamps decay signals on the</text>
+  <text x="668" y="230" class="node-sub" fill="#f3e8d2">derived index — flag-only, adversarially</text>
+  <text x="668" y="246" class="node-sub" fill="#f3e8d2">proven write-less (two red-team agents</text>
+  <text x="668" y="262" class="node-sub" fill="#f3e8d2">with full-tree SHA256 baselines found no</text>
+  <text x="668" y="278" class="node-sub" fill="#f3e8d2">write path). Cardinal rule: never become a</text>
+  <text x="668" y="294" class="node-sub" fill="#f3e8d2">drift source. Fuller fleet not yet deployed.</text>
+
+  <rect x="948" y="148" width="272" height="152" rx="8" fill="#4a8a6b"/>
+  <text x="964" y="176" class="locus">4 · REVIEW — HUMANS + AGENTS</text>
+  <text x="964" y="198" class="node-sub" fill="#dcefe4">Self-Healing primitive: every read carries</text>
+  <text x="964" y="214" class="node-sub" fill="#dcefe4">a structural-defect pass — trivial defects</text>
+  <text x="964" y="230" class="node-sub" fill="#dcefe4">fixed in place, substantive ones filed as</text>
+  <text x="964" y="246" class="node-sub" fill="#dcefe4">tracked work; nothing flagged-and-</text>
+  <text x="964" y="262" class="node-sub" fill="#dcefe4">forgotten. The principal verifies at gates —</text>
+  <text x="964" y="278" class="node-sub" fill="#dcefe4">verification capacity, not agent capability,</text>
+  <text x="964" y="294" class="node-sub" fill="#dcefe4">is what scales.</text>
+
+  <!-- Ratchet, matured -->
+  <rect x="40" y="345" width="1200" height="162" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="60" y="373" class="panel-title">The ratchet, matured — new rules meet old data without rewriting history</text>
+
+  <rect x="60" y="388" width="580" height="106" rx="8" fill="#eef2f6" stroke="#9db4c8"/>
+  <text x="76" y="412" class="node">Named grandfathers — the WARN→ERROR pattern</text>
+  <text x="76" y="432" class="label">New checks land WARN; the ratchet to ERROR carries named grandfather</text>
+  <text x="76" y="448" class="label">exemptions at constant cutoffs — historical records exempt by name, any</text>
+  <text x="76" y="464" class="label">going-forward violation fails. Three ratchet releases in this window.</text>
+  <text x="76" y="484" class="node-sub">Honesty about the past without weakening the future. Dial settings inspectable at any time.</text>
+
+  <rect x="656" y="388" width="564" height="106" rx="8" fill="#eef2f6" stroke="#9db4c8"/>
+  <text x="672" y="412" class="node">Terminal-state carve-out — a worked example</text>
+  <text x="672" y="432" class="label">The just-shipped federation grounding check fired on eight closed, archived</text>
+  <text x="672" y="448" class="label">tasks from April. Ruling: history degrades to WARN, live records stay ERROR,</text>
+  <text x="672" y="464" class="label">and an anti-rot regression test locks the boundary against silent widening.</text>
+  <text x="672" y="484" class="node-sub">Gates bind live work; history is a lint.</text>
+
+  <!-- Verification model -->
+  <rect x="40" y="537" width="1200" height="234" rx="10" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="60" y="567" class="panel-title">The verification model — "done" is a verified state, not a declared one</text>
+
+  <rect x="60" y="585" width="280" height="168" rx="8" fill="#ffffff" stroke="#9db4c8"/>
+  <text x="76" y="611" class="node">Three-instrument verification</text>
+  <text x="76" y="631" class="label">1. Build — the author's own check</text>
+  <text x="76" y="651" class="label">2. Independent review — adversarial</text>
+  <text x="86" y="667" class="label">skeptic in a separate context</text>
+  <text x="76" y="687" class="label">3. Cold-boot stranger test — fresh</text>
+  <text x="86" y="703" class="label">context, artifact only</text>
+  <text x="76" y="727" class="node-sub">Each instrument catches what</text>
+  <text x="76" y="743" class="node-sub">the others structurally cannot.</text>
+
+  <rect x="356" y="585" width="280" height="168" rx="8" fill="#ffffff" stroke="#9db4c8"/>
+  <text x="372" y="611" class="node">Two-sided convergence</text>
+  <text x="372" y="631" class="label">On the v1.84.1 cut, the release author</text>
+  <text x="372" y="647" class="label">independently re-ran all 69 tests</text>
+  <text x="372" y="663" class="label">(69/69) rather than transcribing the</text>
+  <text x="372" y="679" class="label">verifier's counts; the verifier had read</text>
+  <text x="372" y="695" class="label">raw run logs, not labels.</text>
+  <text x="372" y="727" class="node-sub">Convergence of independent</text>
+  <text x="372" y="743" class="node-sub">measurements — the strongest signal.</text>
+
+  <rect x="652" y="585" width="280" height="168" rx="8" fill="#ffffff" stroke="#9db4c8"/>
+  <text x="668" y="611" class="node">Adversarial fleets, scaled to risk</text>
+  <text x="668" y="631" class="label">Covenant-class work gets a HEAVY</text>
+  <text x="668" y="647" class="label">fleet: a six-agent red team attacked</text>
+  <text x="668" y="663" class="label">the sovereignty publish path and</text>
+  <text x="668" y="679" class="label">found 5 real HIGH leak paths — fixed,</text>
+  <text x="668" y="695" class="label">pinned with regression plants; the</text>
+  <text x="668" y="711" class="label">re-verify fleet ran 6/6 fail-closed.</text>
+  <text x="668" y="731" class="node-sub">Routine slices get a single</text>
+  <text x="668" y="745" class="node-sub">independent check.</text>
+
+  <rect x="948" y="585" width="272" height="168" rx="8" fill="#ffffff" stroke="#9db4c8"/>
+  <text x="964" y="611" class="node">Approver ≠ executor, fail-closed</text>
+  <text x="964" y="631" class="label">A verification-class step reaches</text>
+  <text x="964" y="647" class="label">"verified" only on a real verification</text>
+  <text x="964" y="663" class="label">receipt — executor attestation</text>
+  <text x="964" y="679" class="label">alone cannot promote it.</text>
+  <text x="964" y="699" class="label">Identity resolution on approval-</text>
+  <text x="964" y="715" class="label">required work fails CLOSED:</text>
+  <text x="964" y="735" class="node-sub">a guard that can silently no-op</text>
+  <text x="964" y="749" class="node-sub">is no guard.</text>
+
+  <!-- Invariant strips -->
+  <rect x="40" y="791" width="780" height="70" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="60" y="815" class="node">The cold-boot invariant (sacrosanct)</text>
+  <text x="60" y="835" class="label">The validate gate may WARN on a hand-written file but must never hard-reject it. Structure tightens</text>
+  <text x="60" y="851" class="label">without ever breaking the plain-markdown floor — a stranger with a zip of the Studio can always boot it.</text>
+
+  <rect x="840" y="791" width="400" height="70" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="860" y="815" class="node">Locks are law</text>
+  <text x="860" y="835" class="label">Locked files are immutable without explicit principal</text>
+  <text x="860" y="851" class="label">approval; lock-breaks are logged governance events.</text>
+
+  <text x="40" y="893" class="caption">Four loci each catch what the others miss; the ratchet advances with named grandfathers and terminal-state carve-outs; and "done" is an independently re-measured state, never a self-declared one.</text>
+</svg>

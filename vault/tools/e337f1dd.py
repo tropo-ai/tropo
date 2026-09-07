@@ -696,7 +696,7 @@ def main():
     args = parser.parse_args()
 
     pipeline_uid = args.pipeline_uid.strip()
-    if not re.fullmatch(r"[0-9a-f]{8}", pipeline_uid):
+    if not re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", pipeline_uid):  # accepts-both
         print(f"ERROR: --pipeline-uid must be 8-hex; got: {pipeline_uid}", file=sys.stderr)
         sys.exit(3)
 
@@ -704,7 +704,7 @@ def main():
     dev_spec_uid = None
     if args.dev_spec_uid:
         dev_spec_uid = args.dev_spec_uid.strip()
-        if not re.fullmatch(r"[0-9a-f]{8}", dev_spec_uid):
+        if not re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", dev_spec_uid):  # accepts-both
             print(f"ERROR: --dev-spec-uid must be 8-hex; got: {dev_spec_uid}", file=sys.stderr)
             sys.exit(3)
         dev_spec_path = VAULT_FILES / f"{dev_spec_uid}.md"
@@ -753,7 +753,7 @@ def main():
         "--triggered-pipeline-class": args.triggered_pipeline_class,
     }
     for label, value in trigger_identity.items():
-        if label != "--triggered-pipeline-class" and value and not re.fullmatch(r"[0-9a-f]{8}", value):
+        if label != "--triggered-pipeline-class" and value and not re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", value):  # accepts-both
             print(f"ERROR: {label} must be 8-hex; got: {value}", file=sys.stderr)
             sys.exit(3)
     if any(trigger_identity.values()) and not all(trigger_identity.values()):
@@ -771,7 +771,7 @@ def main():
               "--release-pipeline-run-uid", file=sys.stderr)
         sys.exit(3)
     for label, value in release_identity.items():
-        if value and not re.fullmatch(r"[0-9a-f]{8}", value):
+        if value and not re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", value):  # accepts-both
             print(f"ERROR: {label} must be 8-hex; got: {value}", file=sys.stderr)
             sys.exit(3)
     if any(release_identity.values()) and not all(trigger_identity.values()):

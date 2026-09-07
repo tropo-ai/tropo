@@ -162,6 +162,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from lib import index_surfaces
+from lib.governed_path import is_governed_uid_shape
 
 # Navigation-block suppression — types where even the breadcrumb is more friction
 # than help at first-encounter (operator-target user-facing content; V47 R3
@@ -169,15 +170,15 @@ from lib import index_surfaces
 # frontmatter `nav_block: suppress | render`.
 NAV_BLOCK_SUPPRESS_TYPES: frozenset = frozenset({"kb-article"})
 
-UID_RE = re.compile(r"^[0-9a-fA-F]{8}$")
+# accepts-both (UID_SHAPES): was 8-hex-only, so a 12-hex uid on either a file's
+# own uid or its subsystem_hub/member_of parent silently lost its breadcrumb
+# header block entirely. Delegates to the shared shape authority.
+def is_uid(value: str) -> bool:
+    """8- or 12-char hex string (governed UID shape, legacy + Stage B composite)."""
+    return is_governed_uid_shape(value)
 
 # Hub-priority types — these become natural breadcrumb anchors
 HUB_TYPES: Tuple[str, ...] = ("subsystem-hub", "project")
-
-
-def is_uid(value: str) -> bool:
-    """8-char hex string."""
-    return bool(UID_RE.match(value))
 
 
 def find_vault_root(start: Path) -> Path:

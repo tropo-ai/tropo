@@ -3,8 +3,10 @@ uid: a3f1e7b2
 name: release-plan
 type: capsule-definition
 extends: core
-version: '1.6'
-supersedes_version: '1.5'
+version: '1.8'
+supersedes_version: '1.7'
+v1_8_amendment_note: 'v1.7 -> v1.8 amendment 2026-09-06 by talos-t63 under the standing amendment authority (v1.7 precedent) on the release driver''s ruling (Metis G122, v1.95 candidate #2, 4262d5fa full-release-validation M2 regression): `locked` had no meta_status_rollup bucket since v1.6 introduced it, so every locked release-plan resolved to lifecycle-N/A in the meta_status view; `locked` is the ignition and the run is in flight, so it rolls up to in-progress, between specify and active exactly as the lifecycle table orders it. One line; no rule, check, transition or instance changes. Ships in 1.96 and is disclosed on the v1.95 release entry as a carry.'
+v1_7_amendment_note: 'v1.6 -> v1.7 amendment 2026-09-06 by talos-t63 on Argus A172''s ruling (1) under task f015ef8ff398 step 2 (the --check flag; Talos half: one declared plan-status set): the §Frontmatter field table listed `status` WITHOUT `locked` while Check 2 (Validation Checks, core check 2) and `enforced_enums.status.canonical` both carried it since v1.6 -- one enum spoken three ways inside one file, and the two tool readers that grew apart (the preflight''s lock-plan-record hand list lacked `specify` and refused the v1.95 ignition) were the same defect one file over. ONE LINE: the table row now lists the seven values and names Check 2 as the enum''s home; `lib/release_capsule_contract.PLAN_STATUSES` is that enum in code and `test_release_plan_status_set_one_reader` reads Check 2 verbatim and goes red on drift. No rule, check, transition, or instance changes; status stays locked, amend-in-place per the v1.5/v1.6 precedent (the approved task carries the authority). Argus''s ruling (2) -- LOCKABLE_STATUSES = {specify} per the transitions -- is a 1.96 code change after the box seals, not this amendment. cc Metis G122.'
 v1_6_amendment_note: 'v1.5 -> v1.6 amendment 2026-08-10 by talos-t40 (lifecycle reconciliation added same day per argus-a147 stage-4 review: the enum lives on status: while the lifecycle table and transitions said stage:, and adding `locked` to one and not the other left them disagreeing about which states exist; status: is now declared canonical with stage: read as the legacy synonym, the table and transitions carry `locked`, and there is deliberately no transition out of it) under Mike-locked dev-spec 0a0a6777 (two-pipeline split), whose committed_substrate names this file with change_class: AMENDED and the scope "Add locked lifecycle, immutable dev-spec fan-in, manifest/digest, and release activation/run links." That is the lock-break authorization; status stays locked and this is an amend-in-place, following the v1.5 (Mike-A100) and v1.3/v1.4 (Mike-A98/A99-signed) precedent where the approved spec carried the authority. Implements contract §3: adds the `locked` status enum value — the release ignition, symmetric with the dev-spec lock — plus five fields (`dev_spec_uids`, `fan_in_manifest_ref`, `fan_in_digest`, `release_activation_uid`, `release_pipeline_run_uid`) and Checks 24-27. ADDITIVE: every field is optional below `status: locked`, no existing field/rule/check changes, and no existing instance is modified — the 30 pre-v1.6 release-plans stay valid because the new requirements fire only at a status none of them holds.'
 v1_5_amendment_note: 'v1.4 -> v1.5 amendment 2026-06-06 by Vela V59 per the member_of DISAMBIGUATE build (spec 6f5bb2cb v0.4; Mike-A100 approved 9 lock-breaks; core.capsule v1.5 Rule 9: member_of=parent, subsystem_hub=subsystem). Check 20 + the capabilities_touched field desc + the Composes-With derivation note retargeted from member_of: to subsystem_hub: for capabilities_touched -> hub resolution; the hardcoded 7-hub set softened to the dynamic hub set (from subsystem_name:; 11 at present). Status stays locked (amend-in-place per the approved lock-break). Exact edits drafted by Argus A101 (event 2013); landed by Vela V59 (release lane) as the independent member_of edit (Argus verified zero capability/release-plan stragglers; validator 55/0 before+after). Sibling release.capsule Rule 12 lands atomically with Talos f5e2d1c7.py; status-enum done->shipped split to a focused follow-up (e68503aa, Mike Call-1).'
 tier: os
@@ -36,6 +38,7 @@ meta_status_rollup:
     - design
     - specify
   in-progress:
+    - locked
     - active
     - build
   done:
@@ -84,7 +87,7 @@ Failure mode prevented: releases shipping without scoped streams, undeclared blo
 | `title` | string | ≤100 chars; format `"Tropo-OS v{version} — Release Plan"` |
 | `description` | string | ≤120 chars; what this release delivers |
 | `owner` | string | Agent coordinating the plan (typically `d.pm` or the Founder) |
-| `status` | enum | `design` / `specify` / `active` / `build` / `done` / `cancelled` |
+| `status` | enum | `design` / `specify` / `locked` / `active` / `build` / `done` / `cancelled` — the same set as Check 2 and `enforced_enums.status.canonical`; one enum, three places, aligned at v1.7 |
 | `state` | enum | `active` / `archived` |
 | `release_version` | string | Semver `^\d+\.\d+\.\d+$`; must match the corresponding release entry when one exists |
 | `member_of` | UID array | Projects this plan belongs to (typically the release coordination project + pipeline stage folder) |

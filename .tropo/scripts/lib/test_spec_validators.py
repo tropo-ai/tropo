@@ -440,7 +440,8 @@ def _resolve_triggering_dev_spec(
         return None, None, None
     if not isinstance(declared, str) or not spec_substrate_refs.UID_RE.fullmatch(declared):
         return None, None, (
-            f"triggered_by_dev_cycle must be an 8-hex UID, got {declared!r}"
+            f"triggered_by_dev_cycle must be a governed UID (legacy 8-hex or "
+            f"composite 12-hex), got {declared!r}"
         )
 
     dev_specs, activations = _load_spec_records(vault)

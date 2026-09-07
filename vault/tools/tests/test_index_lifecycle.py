@@ -243,6 +243,16 @@ class FixtureStudio:
                 _entry_text(uid, state="archived", status="done"),
                 encoding="utf-8",
             )
+        # Genesis pair, committed with everything else below -- per Argus
+        # A167's ruling on f015708c04f8 (2026-09-02): a real studio has
+        # committed its genesis pair by the time anyone reconciles or
+        # recovers a second time, so an uncommitted, never-landing pair is
+        # not a lighter fixture, it is one modelling a studio that cannot
+        # exist in production. `GenesisSourceCompletenessAllowanceTests`
+        # (f0159e830d57) tests genesis MINTING itself and builds its own
+        # fixture by hand rather than this one, so pre-seeding here never
+        # hides that behaviour from anything that actually exercises it.
+        _seed_genesis_artifacts(self.root)
         self.commit_sources("fixture sources")
 
     @property
@@ -266,7 +276,7 @@ class FixtureStudio:
         return self.root / rebuild.INDEX_RUN_ARTIFACT_REL
 
     def commit_sources(self, message: str) -> str:
-        _git(self.root, "add", "vault/files", ".gitignore")
+        _git(self.root, "add", "vault/files", ".gitignore", ".tropo/studio-identity.md")
         _git(self.root, "commit", "-q", "-m", message)
         return _git(self.root, "rev-parse", "HEAD")
 
@@ -322,6 +332,185 @@ class BatchInheritsTheManifestTests(unittest.TestCase):
                 "an unrelated dirty file refused a batch write -- the batch "
                 "path is what the mint uses, so this is the one that reaches "
                 "an agent doing ordinary work",
+            )
+
+
+def _seed_genesis_artifacts(root: Path) -> None:
+    """Pre-seed and commit both genesis legs (studio-identity manifest +
+    vault-entity record) so `_mint_genesis_pair` never fires at all in this
+    fixture (it fires whenever no `type: entity, subtype: vault-entity`
+    record exists yet, regardless of the manifest alone).
+
+    NOT A WORKAROUND (Argus A167's ruling on f015708c04f8, 2026-09-02, after
+    building the same-pass genesis exemption there): a real studio has
+    committed its genesis pair by the time anyone reconciles or recovers a
+    SECOND time -- an uncommitted, never-landing pair models a studio that
+    cannot exist in production. Committing it here is `FixtureStudio`
+    correctly modelling that production shape, not a fixture-side patch
+    hiding a gate gap.
+
+    Called automatically by `FixtureStudio.__init__` (below) for every
+    fixture. `GenesisSourceCompletenessAllowanceTests` (f0159e830d57), which
+    tests genesis MINTING itself, deliberately builds its own fresh vault by
+    hand instead of through `FixtureStudio` and never calls this -- so
+    pre-seeding here never hides that behaviour from the one place that
+    actually exercises it. Kept as a standalone function, not inlined into
+    `__init__`, for any future fixture that wants this same committed-
+    genesis shape without the rest of `FixtureStudio`.
+    """
+    (root / ".tropo").mkdir(exist_ok=True)
+    (root / ".tropo" / "studio-identity.md").write_text(
+        "---\n"
+        "studio_id: aaaa0000\n"
+        "mint_prefix: aaaa\n"
+        "created: '2026-07-26'\n"
+        "minted_by: fixture\n"
+        "hq_registered: false\n"
+        "schema_version: 1\n"
+        "entity_name: fixture-studio\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    files_dir = root / "vault" / "files"
+    (files_dir / "aaaa0001.md").write_text(
+        "---\n"
+        "uid: aaaa0001\n"
+        "type: entity\n"
+        "subtype: vault-entity\n"
+        "title: Fixture Vault\n"
+        "name: fixture-vault\n"
+        "state: active\n"
+        "status: active\n"
+        "principal: aaaa0000\n"
+        "owner: aaaa0000\n"
+        "inbox_project: aaaa0002\n"
+        "created: '2026-07-26'\n"
+        "created_by: genesis-bootstrap\n"
+        "modified: '2026-07-26'\n"
+        "modified_by: genesis-bootstrap\n"
+        "schema_version: 2\n"
+        "---\n\n# Fixture Vault\n",
+        encoding="utf-8",
+    )
+    (files_dir / "aaaa0002.md").write_text(
+        "---\n"
+        "uid: aaaa0002\n"
+        "type: project\n"
+        "title: 01-studio-inbox\n"
+        "owner: aaaa0001\n"
+        "state: active\n"
+        "status: active\n"
+        "lifecycle: standing\n"
+        "member_of: []\n"
+        "slug: 01-studio-inbox\n"
+        "created: '2026-07-26'\n"
+        "created_by: genesis-bootstrap\n"
+        "modified: '2026-07-26'\n"
+        "modified_by: genesis-bootstrap\n"
+        "schema_version: 2\n"
+        "---\n\n# 01-studio-inbox\n",
+        encoding="utf-8",
+    )
+    _git(root, "add", ".tropo/studio-identity.md", "vault/files")
+    _git(root, "commit", "-q", "-m", "seed genesis artifacts")
+
+
+class TitledMintChokepointTests(unittest.TestCase):
+    """A titled mint's declared slug path was refused by its own transaction.
+
+    Root cause (argus-a167, 2026-09-02, agents/argus/.tropo-capsule/workspace/
+    a167-evidence-layer/mint-chokepoint-refuses-titled-mints.md): the writer
+    (`lib.governed_path.mint_basename`) answers `slug-<uid>.md` for a titled
+    uid with no file yet; `_governed_fp` -- called independently at TWO sites
+    inside `_freshen_many_locked` -- has nothing to resolve a title against
+    for that uid and can only fall back to the bare `<uid>.md`. The guard then
+    sees the staged slug path is not the bare path it expected and refuses
+    every titled canonical mint. `tropo-mint-id.py`'s own test suite never
+    caught this because every one of its `mint_file` calls passes an explicit
+    `output_dir`, which bypasses `freshen_many` entirely (untitled mints and
+    scratch mints were never broken -- only the canonical, titled route was).
+    This exercises `freshen_many` directly, the same call `mint_file` makes
+    for a canonical (non-`output_dir`) mint, with a slug-shaped staged path
+    for a uid that does not exist yet -- reverting the `_effective_fp` pairing
+    in `_freshen_many_locked` back to two bare `_governed_fp` calls makes this
+    fail with 'staged source set exceeds requested UIDs', which is the proof
+    this test has teeth rather than just looking green.
+    """
+
+    def test_a_new_titled_uid_freshens_at_its_declared_slug_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = FixtureStudio(Path(tmp), current_count=1, archive_count=0)
+            fixture.prime()
+
+            new_uid = "deadbeef"
+            slug_path = fixture.files / f"readable-title-slug-{new_uid}.md"
+            instance = _entry_text(
+                new_uid,
+                state="active",
+                status="active",
+                title="Readable Title Slug",
+            )
+
+            stdout_buf = io.StringIO()
+            stderr_buf = io.StringIO()
+            with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(
+                stderr_buf
+            ):
+                result = rebuild.freshen_many(
+                    {new_uid},
+                    fixture.root,
+                    source_replacements={slug_path: instance.encode("utf-8")},
+                    require_absent_sources=(slug_path,),
+                )
+
+            self.assertEqual(
+                result,
+                0,
+                "a brand-new titled uid's declared slug path was refused -- "
+                "the writer and the transaction validator disagreed about a "
+                "file that does not exist yet: " + stderr_buf.getvalue(),
+            )
+            self.assertTrue(slug_path.exists())
+            self.assertFalse((fixture.files / f"{new_uid}.md").exists())
+
+    def test_an_existing_uids_own_file_is_never_repointed(self) -> None:
+        """The pairing is scoped to a uid with NO file -- it must never let a
+        second, unrelated staged path stand in for a uid that already has a
+        real file on disk."""
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = FixtureStudio(Path(tmp), current_count=1, archive_count=0)
+            fixture.prime()
+
+            existing_uid = fixture.current_uids[0]
+            impostor_path = fixture.files / f"impostor-{existing_uid}.md"
+            instance = _entry_text(
+                existing_uid,
+                state="active",
+                status="active",
+                title="Impostor",
+            )
+
+            stdout_buf = io.StringIO()
+            stderr_buf = io.StringIO()
+            with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(
+                stderr_buf
+            ):
+                result = rebuild.freshen_many(
+                    {existing_uid},
+                    fixture.root,
+                    source_replacements={impostor_path: instance.encode("utf-8")},
+                )
+
+            self.assertNotEqual(
+                result,
+                0,
+                "a staged path for a uid that already has a real file was "
+                "accepted -- the new-uid pairing must never apply to a uid "
+                "with an existing file",
+            )
+            self.assertIn(
+                "staged source set exceeds requested UIDs",
+                stderr_buf.getvalue(),
             )
 
 
@@ -1818,18 +2007,23 @@ class IndexLifecycleTests(unittest.TestCase):
                 0,
             )
             self.assertNotEqual(meta_path.read_bytes(), refused_before[3])
+            # +2 over the fixture's own current_count=2: FixtureStudio now
+            # always commits the genesis pair (vault-entity + inbox), both
+            # `state: active` and so both landing in the current surface.
             self.assertEqual(
                 len(index_surfaces.read_jsonl_strict(fixture.current_surface)),
-                2,
+                4,
             )
             self.assertEqual(
                 len(index_surfaces.read_jsonl_strict(fixture.archive_surface)),
                 3,
             )
+            # +2 over the fixture's own 2 current + 3 archive: FixtureStudio
+            # now always commits the genesis pair (vault-entity + inbox).
             with sqlite3.connect(sqlite_path) as conn:
                 self.assertEqual(
                     conn.execute("SELECT COUNT(*) FROM entries").fetchone()[0],
-                    5,
+                    7,
                 )
             self.assertEqual(rebuild.freshen_one(uid, fixture.root), 0)
 
@@ -2512,7 +2706,9 @@ class IndexLifecycleTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertIn("rejected-derivation-input-changed", stdout.getvalue())
             self.assertEqual(artifact["archive_cache_action"], "derived")
-            self.assertEqual(artifact["parsed_record_count"], 5)
+            # +2 over the fixture's own sources: FixtureStudio now always
+            # commits the genesis pair (vault-entity + inbox).
+            self.assertEqual(artifact["parsed_record_count"], 7)
             self.assertEqual(fixture.archive_surface.read_bytes(), archive_before)
             self.assertNotEqual(
                 refreshed_meta["derivation_fingerprints"]["parser"],
@@ -2613,7 +2809,9 @@ class IndexLifecycleTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertIn("rejected-derivation-input-changed", stdout.getvalue())
             self.assertEqual(artifact["archive_cache_action"], "derived")
-            self.assertEqual(artifact["parsed_record_count"], 5)
+            # +2 over the fixture's own sources: FixtureStudio now always
+            # commits the genesis pair (vault-entity + inbox).
+            self.assertEqual(artifact["parsed_record_count"], 7)
 
     def test_dirty_relevant_config_disables_reuse_but_runtime_files_do_not(
         self,
@@ -2645,7 +2843,9 @@ class IndexLifecycleTests(unittest.TestCase):
                 artifact["archive_cache_action"].startswith("not-written:")
             )
             self.assertEqual(artifact["archive_source_skip_count"], 0)
-            self.assertEqual(artifact["parsed_record_count"], 5)
+            # +2 over the fixture's own sources: FixtureStudio now always
+            # commits the genesis pair (vault-entity + inbox).
+            self.assertEqual(artifact["parsed_record_count"], 7)
 
     def test_derivation_cleanliness_strips_navblock_in_process_and_stays_fail_closed(
         self,
@@ -2807,7 +3007,9 @@ class IndexLifecycleTests(unittest.TestCase):
 
             self.assertEqual(actions, ["recreated", "reused", "reused"])
             self.assertEqual(skip_counts, [0, 3, 3])
-            self.assertEqual(parsed_counts, [5, 2, 2])
+            # +2 on each pass over the fixture's own sources: FixtureStudio
+            # now always commits the genesis pair (vault-entity + inbox).
+            self.assertEqual(parsed_counts, [7, 4, 4])
             self.assertEqual(
                 json.loads(counter.read_text(encoding="utf-8"))[
                     "writes_since_full_rebuild"
@@ -2878,7 +3080,9 @@ class IndexLifecycleTests(unittest.TestCase):
 
             self.assertEqual(actions, ["recreated", "reused", "reused"])
             self.assertEqual(skips, [0, 3, 3])
-            self.assertEqual(parsed, [5, 2, 2])
+            # +2 on each pass over the fixture's own sources: FixtureStudio
+            # now always commits the genesis pair (vault-entity + inbox).
+            self.assertEqual(parsed, [7, 4, 4])
             self.assertEqual(
                 rebuild.freshen_one(fixture.current_uids[0], fixture.root),
                 0,
@@ -3261,7 +3465,9 @@ class IndexLifecycleTests(unittest.TestCase):
                 0,
             )
             self.assertEqual(meta["schema_version"], 3)
-            self.assertEqual(meta["source_inventory"]["tracked_source_count"], 2)
+            # +2 over the fixture's own current_count=2: FixtureStudio now
+            # always commits the genesis pair (vault-entity + inbox).
+            self.assertEqual(meta["source_inventory"]["tracked_source_count"], 4)
             self.assertEqual(len(meta["source_inventory"]["sha256"]), 64)
             self.assertEqual(
                 meta["surfaces"][index_surfaces.ARCHIVE_INDEX_NAME][
@@ -3746,7 +3952,15 @@ class IndexLifecycleTests(unittest.TestCase):
                 # (8 files) while sources are inherited (6,140).
                 self.assertEqual(rebuild.freshen_one(uid_a, fixture.root), 1)
             self.assertIn("vault/tools/lib/gardener.py", stderr.getvalue())
-            self.assertIn("full --apply", stderr.getvalue())
+            # Stale until now: a NAMED-blocker refusal (manifest_blockers,
+            # tropo-rebuild-index.py ~5706) tells the caller to
+            # `--reconcile --apply`; "full --apply" is only the OTHER
+            # branch's wording, for when the blocker cannot be named at all
+            # (legacy_scope is None). This scenario always names the
+            # blocker, so it always takes the named path -- unrelated to
+            # genesis pre-seeding above; confirmed failing identically
+            # before and after that change.
+            self.assertIn("--reconcile --apply", stderr.getvalue())
             code_path.unlink()
 
             attributes = fixture.root / ".gitattributes"
@@ -4866,14 +5080,20 @@ class IndexLifecycleTests(unittest.TestCase):
             self.assertFalse(ratchet_path.exists())
             unrelated.write_bytes(unrelated_before)
 
+            # Current floor is 3, not 1: the fixture's own 1 current source
+            # plus the always-committed genesis pair (vault-entity + inbox,
+            # both `state: active`) that FixtureStudio now seeds -- real
+            # rows the recovery floor must account for, same as any other
+            # current-index content. Archive is untouched by genesis (both
+            # genesis records are active, never archived).
             stderr = io.StringIO()
             with contextlib.redirect_stderr(stderr):
-                self.assertEqual(governed_recovery("1:18"), 1)
+                self.assertEqual(governed_recovery("3:18"), 1)
             self.assertIn("below the observed 19 rows", stderr.getvalue())
             self.assertFalse(meta_path.exists())
             self.assertFalse(ratchet_path.exists())
 
-            self.assertEqual(governed_recovery("1:20"), 0)
+            self.assertEqual(governed_recovery("3:20"), 0)
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
             ratchet = json.loads(ratchet_path.read_text(encoding="utf-8"))
             sqlite_evidence = index_surfaces._load_sqlite_ratchet_evidence(
@@ -5077,7 +5297,9 @@ class IndexLifecycleTests(unittest.TestCase):
 
             self.assertEqual(after, before)
             self.assertEqual(artifact["archive_cache_action"], "reused")
-            self.assertEqual(artifact["parsed_record_count"], 2)
+            # +2 over the fixture's own current_count=2: FixtureStudio now
+            # always commits the genesis pair (vault-entity + inbox).
+            self.assertEqual(artifact["parsed_record_count"], 4)
             self.assertIsInstance(artifact["wall_clock_seconds"], (int, float))
             self.assertGreaterEqual(artifact["wall_clock_seconds"], 0)
 
@@ -5157,7 +5379,9 @@ class IndexLifecycleTests(unittest.TestCase):
             archive_text = fixture.archive_surface.read_text(encoding="utf-8")
 
             self.assertEqual(artifact["archive_cache_action"], "derived")
-            self.assertEqual(artifact["parsed_record_count"], 5)
+            # +2 over the fixture's own sources: FixtureStudio now always
+            # commits the genesis pair (vault-entity + inbox).
+            self.assertEqual(artifact["parsed_record_count"], 7)
             self.assertIn("archive source changed", archive_text)
 
     def test_reconcile_without_cache_recreates_byte_identical_surfaces(self) -> None:
@@ -5186,7 +5410,9 @@ class IndexLifecycleTests(unittest.TestCase):
             self.assertTrue(fixture.cache_jsonl.is_file())
             self.assertTrue(fixture.cache_meta.is_file())
             self.assertEqual(artifact["archive_cache_action"], "recreated")
-            self.assertEqual(artifact["parsed_record_count"], 5)
+            # +2 over the fixture's own sources: FixtureStudio now always
+            # commits the genesis pair (vault-entity + inbox).
+            self.assertEqual(artifact["parsed_record_count"], 7)
 
     def test_corrupt_truncated_hash_mismatch_cache_and_surface_refuse(self) -> None:
         """Criterion 4: four independent damage shapes all fail closed."""
@@ -5818,5 +6044,478 @@ class LifecyclePairingProjectionTests(unittest.TestCase):
                          "recompute is idempotent, not additive")
 
 
+class GenesisSourceCompletenessAllowanceTests(unittest.TestCase):
+    """f0159e830d57: the completeness proof must not refuse its own genesis
+    mint, and must still refuse anything else that appears mid-pass.
+
+    argus-a166's reproduction: fresh vault, `rebuild_index` on a vault with
+    no vault-entity mints the Studio's vault-entity + inbox pair mid-scan,
+    the before/after derivation-snapshot comparison sees those two new
+    sources and refuses — the rebuild refusing a write it performed itself.
+    These pins hold the fix to exactly that shape: the genesis pair is
+    exempted by name, nothing else is.
+    """
+
+    def _fresh_vault(self, root: Path) -> None:
+        (root / ".tropo").mkdir()
+        (root / "STUDIO.md").write_text(
+            "---\n"
+            "uid: 5747d1a0\n"
+            "tier: vault\n"
+            "vault_name: Genesis Allowance Fixture Studio\n"
+            "---\n"
+            "# Genesis Allowance Fixture Studio\n",
+            encoding="utf-8",
+        )
+        files = root / "vault" / "files"
+        files.mkdir(parents=True)
+        (files / "11111111.md").write_text(
+            "---\n"
+            'uid: "11111111"\n'
+            "type: note\n"
+            'title: "fixture source"\n'
+            "state: active\n"
+            "status: active\n"
+            "created: '2026-09-01'\n"
+            "modified: '2026-09-01'\n"
+            "schema_version: 2\n"
+            "---\n"
+            "# fixture source\n",
+            encoding="utf-8",
+        )
+
+    def test_genesis_bootstrap_does_not_trip_source_completeness(self) -> None:
+        """The exact argus-a166 reproduction: run 1 on a fresh vault must
+        not refuse on the genesis pair it just minted."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            self._fresh_vault(root)
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(stderr):
+                rc = rebuild.rebuild_index(root, True)
+            self.assertEqual(
+                rc, 0,
+                f"genesis-mint pass refused: {stderr.getvalue()}",
+            )
+            # 5854773a: composite per-Studio uids, not the retired fixed
+            # constants -- assert by TYPE, not by a predictable filename.
+            minted = [
+                p for p in (root / "vault" / "files").glob("*.md")
+                if p.stem != "11111111"  # the fixture's own seed source
+            ]
+            self.assertEqual(len(minted), 2, minted)
+            kinds = set()
+            for p in minted:
+                text = p.read_text(encoding="utf-8")
+                if "subtype: vault-entity" in text:
+                    kinds.add("vault-entity")
+                elif "title: 01-studio-inbox" in text:
+                    kinds.add("inbox")
+            self.assertEqual(kinds, {"vault-entity", "inbox"}, minted)
+            self.assertTrue(
+                (root / ".tropo" / "studio-identity.md").is_file(),
+                "genesis must also mint the studio-identity manifest",
+            )
+            self.assertNotIn("SOURCE COMPLETENESS", stderr.getvalue())
+
+    def test_foreign_source_planted_mid_pass_still_refuses(self) -> None:
+        """Negative control (argus-a166's design constraint): a source that
+        appears mid-pass and is NOT the rebuild's own genesis write must
+        still trip the refusal — the allowance is scoped to genesis by
+        name, not a general tolerance for additions."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            self._fresh_vault(root)
+            real_mint = rebuild._mint_genesis_pair
+
+            def _mint_and_plant_foreign_source(vault_root):
+                foreign = (
+                    Path(vault_root) / "vault" / "files" / "deadbeef1.md"
+                )
+                foreign.write_text(
+                    "---\n"
+                    'uid: "deadbeef1"\n'
+                    "type: note\n"
+                    'title: "concurrent write from elsewhere"\n'
+                    "state: active\n"
+                    "status: active\n"
+                    "created: '2026-09-01'\n"
+                    "modified: '2026-09-01'\n"
+                    "schema_version: 2\n"
+                    "---\n"
+                    "# concurrent write from elsewhere\n",
+                    encoding="utf-8",
+                )
+                return real_mint(vault_root)
+
+            stderr = io.StringIO()
+            with mock.patch.object(
+                rebuild,
+                "_mint_genesis_pair",
+                side_effect=_mint_and_plant_foreign_source,
+            ), contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(stderr):
+                rc = rebuild.rebuild_index(root, True)
+            self.assertEqual(rc, 1, "a foreign mid-pass write must refuse")
+            self.assertIn(
+                "exact derivation bytes/modes changed during the "
+                "collection pass",
+                stderr.getvalue(),
+            )
+
+    def test_derivation_snapshots_match_ignores_only_named_new_paths(self) -> None:
+        """Unit-level pin on the comparison itself: an allowed path is
+        exempted only when it is genuinely absent from `before`; an
+        unlisted new path, or a listed path that also changed content
+        already present in `before`, still fails the comparison."""
+        before = {
+            "manifest": (("source", "vault/files/11111111.md", "100644", "a" * 64),),
+            "source_paths": ("vault/files/11111111.md",),
+            "uncommitted_inputs": (),
+            "derived_from_uncommitted": False,
+            "git_authority_available": True,
+        }
+        genesis_entry = ("source", "vault/files/2d5f9b04.md", "100644", "b" * 64)
+        genesis_uncommitted = ("vault/files/2d5f9b04.md", "100644", "b" * 64, "")
+
+        after_genesis_only = {
+            "manifest": before["manifest"] + (genesis_entry,),
+            "source_paths": before["source_paths"] + ("vault/files/2d5f9b04.md",),
+            "uncommitted_inputs": (genesis_uncommitted,),
+            "derived_from_uncommitted": True,
+            "git_authority_available": True,
+        }
+        self.assertTrue(
+            rebuild._derivation_snapshots_match(
+                before, after_genesis_only,
+                allowed_added_paths={"vault/files/2d5f9b04.md"},
+            )
+        )
+
+        foreign_entry = ("source", "vault/files/deadbeef1.md", "100644", "c" * 64)
+        after_with_foreign = {
+            "manifest": after_genesis_only["manifest"] + (foreign_entry,),
+            "source_paths": (
+                after_genesis_only["source_paths"] + ("vault/files/deadbeef1.md",)
+            ),
+            "uncommitted_inputs": after_genesis_only["uncommitted_inputs"] + (
+                ("vault/files/deadbeef1.md", "100644", "c" * 64, ""),
+            ),
+            "derived_from_uncommitted": True,
+            "git_authority_available": True,
+        }
+        self.assertFalse(
+            rebuild._derivation_snapshots_match(
+                before, after_with_foreign,
+                allowed_added_paths={"vault/files/2d5f9b04.md"},
+            ),
+            "an unnamed new path must still fail the comparison",
+        )
+
+        modified_entry = ("source", "vault/files/11111111.md", "100644", "d" * 64)
+        after_modified_existing = {
+            "manifest": (modified_entry,),
+            "source_paths": ("vault/files/11111111.md",),
+            "uncommitted_inputs": (
+                ("vault/files/11111111.md", "100644", "d" * 64, ""),
+            ),
+            "derived_from_uncommitted": True,
+            "git_authority_available": True,
+        }
+        self.assertFalse(
+            rebuild._derivation_snapshots_match(
+                before, after_modified_existing,
+                allowed_added_paths={"vault/files/11111111.md"},
+            ),
+            "a named path that MODIFIED an existing before-entry is not a "
+            "new addition and must still fail the comparison",
+        )
+
+
+class ReconcileUncommittedRefusalGitAuthorityTests(unittest.TestCase):
+    """f015708c04f8 (argus-a166 ruling): the uncommitted-derivation-inputs
+    refusal for reconcile/allow-index-shrink/governed-floor-recovery asks
+    "is this content reviewed" -- a question git authority can discriminate
+    and a no-git vault cannot, since "uncommitted" is the ONLY possible state
+    there. The ruling conditions the refusal on git_authority_available: with
+    authority the rule is unchanged and in full force (argus-a166's own
+    discriminator B2 -- a git-authoritative vault with genuinely uncommitted
+    content still refuses even with NO genesis mint in the pass, proving a
+    genesis exemption would have cured only the reproducible symptom and left
+    the defect); without authority, the rule cannot discriminate and must say
+    so out loud rather than silently pass.
+    """
+
+    def _fresh_vault(self, root: Path, *, git_init: bool) -> None:
+        (root / ".tropo").mkdir()
+        (root / "STUDIO.md").write_text(
+            "---\n"
+            "uid: 5747d1a0\n"
+            "tier: vault\n"
+            "vault_name: Reconcile Git-Authority Fixture Studio\n"
+            "---\n"
+            "# Reconcile Git-Authority Fixture Studio\n",
+            encoding="utf-8",
+        )
+        files = root / "vault" / "files"
+        files.mkdir(parents=True)
+        (files / "11111111.md").write_text(
+            "---\n"
+            'uid: "11111111"\n'
+            "type: note\n"
+            'title: "fixture source"\n'
+            "state: active\n"
+            "status: active\n"
+            "created: '2026-09-01'\n"
+            "modified: '2026-09-01'\n"
+            "schema_version: 2\n"
+            "---\n"
+            "# fixture source\n",
+            encoding="utf-8",
+        )
+        if git_init:
+            _git(root, "init", "-q")
+            _git(root, "config", "user.email", "fixture@test.local")
+            _git(root, "config", "user.name", "fixture")
+            _git(root, "add", "-A")
+            _git(root, "commit", "-q", "-m", "fixture baseline")
+
+    def test_git_authoritative_vault_still_refuses_reconcile_on_uncommitted_input(
+        self,
+    ) -> None:
+        """The required negative control: a genuinely uncommitted governed
+        file in a git-authoritative vault must still refuse --reconcile."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            self._fresh_vault(root, git_init=True)
+            # Establish a genuinely clean, fully-committed baseline first:
+            # a plain rebuild (no reconcile) mints genesis, then commit its
+            # output so THIS test exercises a fresh plant, not genesis
+            # residue (that is the separate test below).
+            rc = rebuild.rebuild_index(root, True)
+            self.assertEqual(rc, 0)
+            _git(root, "add", "-A")
+            _git(root, "commit", "-q", "-m", "commit genesis + rebuilt index")
+            rc = rebuild.rebuild_index(root, True, reconcile=True)
+            self.assertEqual(rc, 0, "clean, fully-committed baseline must reconcile")
+
+            # Plant a genuinely uncommitted governed file -- never staged,
+            # never committed.
+            (root / "vault" / "files" / "22222222.md").write_text(
+                "---\n"
+                'uid: "22222222"\n'
+                "type: note\n"
+                'title: "uncommitted plant"\n'
+                "state: active\n"
+                "status: active\n"
+                "created: '2026-09-01'\n"
+                "modified: '2026-09-01'\n"
+                "schema_version: 2\n"
+                "---\n"
+                "# uncommitted plant\n",
+                encoding="utf-8",
+            )
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(stderr):
+                rc = rebuild.rebuild_index(root, True, reconcile=True)
+            self.assertEqual(rc, 1, "an uncommitted plant must still refuse reconcile")
+            self.assertIn(
+                "uncommitted derivation inputs are non-authoritative",
+                stderr.getvalue(),
+            )
+            self.assertIn("22222222.md", stderr.getvalue())
+
+    def test_genesis_residue_in_a_git_vault_still_refuses_a_later_reconcile(
+        self,
+    ) -> None:
+        """argus-a166's own decisive discriminator (B2): a SECOND reconcile
+        on the same git-authoritative vault, with NO genesis mint in this
+        pass (genesis already exists from the first call), still refuses --
+        because the genesis pair from the first call was never committed. A
+        genesis exemption would have cured only the first-pass symptom and
+        left this one; this test is the one a genesis exemption would have
+        gotten wrong."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            self._fresh_vault(root, git_init=True)
+
+            # First call: genesis mints (git-authoritative, no reconcile --
+            # this is the f0159e830d57 path and must succeed).
+            rc = rebuild.rebuild_index(root, True)
+            self.assertEqual(rc, 0)
+            # 5854773a: composite per-Studio uid, not a fixed constant --
+            # assert by TYPE.
+            minted_entity = any(
+                "subtype: vault-entity" in p.read_text(encoding="utf-8")
+                for p in (root / "vault" / "files").glob("*.md")
+            )
+            self.assertTrue(minted_entity, "genesis must have minted the vault-entity")
+            # The genesis pair now exists on disk but was never git-added or
+            # committed by anything -- it is real, uncommitted content.
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(stderr):
+                rc = rebuild.rebuild_index(root, True, reconcile=True)
+            self.assertEqual(
+                rc, 1,
+                "no genesis mint this pass, and the vault still has git "
+                "authority -- the refusal must still fire on the residue",
+            )
+            self.assertIn(
+                "uncommitted derivation inputs are non-authoritative",
+                stderr.getvalue(),
+            )
+
+    def test_no_git_vault_warns_and_proceeds_instead_of_refusing(self) -> None:
+        """The required second control: without git authority, the rule
+        cannot discriminate reviewed from unreviewed content (uncommitted is
+        the only state that exists), so it must emit and proceed rather than
+        unconditionally and permanently refuse reconcile in that vault."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            self._fresh_vault(root, git_init=False)
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(stdout), \
+                    contextlib.redirect_stderr(stderr):
+                rc = rebuild.rebuild_index(root, True, reconcile=True)
+            self.assertEqual(
+                rc, 0,
+                f"no-git reconcile must proceed, not refuse: {stderr.getvalue()}",
+            )
+            self.assertIn("git authority unavailable", stdout.getvalue())
+            self.assertIn(
+                "shrink safety rests on the surface ratchet alone",
+                stdout.getvalue(),
+            )
+            self.assertNotIn(
+                "uncommitted derivation inputs are non-authoritative",
+                stderr.getvalue(),
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class GenesisUncommittedInputsAllowanceTests(unittest.TestCase):
+    """f015708c04f8: the uncommitted-inputs gate must not refuse the genesis
+    pair THIS pass minted, and must still refuse everything else.
+
+    argus-a166 found this refusal while curing its sibling (f0159e830d57) and
+    deliberately left it open: "a second design call, not a mechanical
+    symmetric add… a policy question about what authoritative means for a
+    write the rebuild just made itself." Ruled by argus-a167 2026-09-02 after
+    talos-t59 measured it firing across four suites.
+
+    The ruling: reconcile, shrink and floor-recovery must never rest on bytes
+    nobody reviewed, because those operations can LOWER index state. Genesis
+    bytes are not those bytes — the rebuild wrote them itself, this pass, from
+    its own template. And without the exemption a fresh vault whose FIRST
+    rebuild carries a reconcile flag can never rebuild at all: the only
+    sanctioned repair path is gated behind the check it exists to clear.
+
+    The bound is the point, and the second test is the whole deliverable: a
+    foreign uncommitted input alongside genesis must STILL refuse, and must be
+    named alone. Widen the exemption to all uncommitted inputs and that test
+    goes red. Remove the exemption and the first goes red. A gate that cannot
+    change verdict in both directions proves nothing.
+    """
+
+    def _git(self, root: Path, *args: str) -> None:
+        subprocess.run(
+            ["git", *args], cwd=str(root),
+            check=True, capture_output=True, text=True,
+        )
+
+    def _governed(self, uid: str, title: str) -> str:
+        return (
+            "---\n"
+            f'uid: "{uid}"\n'
+            "type: note\n"
+            f'title: "{title}"\n'
+            "state: active\n"
+            "status: active\n"
+            "created: '2026-09-02'\n"
+            "modified: '2026-09-02'\n"
+            "schema_version: 2\n"
+            "---\n"
+            f"# {title}\n"
+        )
+
+    def _committed_vault(self, root: Path) -> None:
+        """A vault with git authority and a COMMITTED seed, no vault-entity."""
+        (root / ".tropo").mkdir()
+        (root / "STUDIO.md").write_text(
+            "---\n"
+            "uid: 5747d1a1\n"
+            "tier: vault\n"
+            "vault_name: Genesis Uncommitted Allowance Fixture\n"
+            "---\n"
+            "# Genesis Uncommitted Allowance Fixture\n",
+            encoding="utf-8",
+        )
+        files = root / "vault" / "files"
+        files.mkdir(parents=True)
+        (files / "22222222.md").write_text(
+            self._governed("22222222", "committed seed"), encoding="utf-8",
+        )
+        self._git(root, "init", "-q")
+        self._git(root, "config", "user.email", "fixture@test.local")
+        self._git(root, "config", "user.name", "fixture")
+        self._git(root, "add", "-A")
+        self._git(root, "commit", "-q", "-m", "seed")
+
+    def test_reconcile_on_a_fresh_vault_survives_its_own_genesis_mint(self):
+        """The deadlock case. First-ever rebuild IS the reconcile, so there is
+        no earlier moment at which the genesis pair could have been committed."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            self._committed_vault(root)
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(stderr):
+                rc = rebuild.rebuild_index(root, True, reconcile=True)
+            self.assertEqual(
+                rc, 0,
+                "reconcile refused the genesis pair it minted itself: "
+                + stderr.getvalue(),
+            )
+            self.assertNotIn(
+                "uncommitted derivation inputs", stderr.getvalue(),
+            )
+
+    def test_a_foreign_uncommitted_input_still_refuses_and_is_named_alone(self):
+        """THE CONTROL. Widening the exemption to all uncommitted inputs turns
+        this red. The genesis pair is exempt; the stranger beside it is not."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            self._committed_vault(root)
+            foreign = root / "vault" / "files" / "33333333.md"
+            foreign.write_text(
+                self._governed("33333333", "uncommitted stranger"),
+                encoding="utf-8",
+            )
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(stderr):
+                rc = rebuild.rebuild_index(root, True, reconcile=True)
+            err = stderr.getvalue()
+            self.assertEqual(rc, 1, f"foreign uncommitted input passed: {err}")
+            self.assertIn("uncommitted derivation inputs", err)
+            self.assertIn("vault/files/33333333.md", err)
+            # The genesis pair must NOT be named: it is exempt, and naming it
+            # would send an operator to "land, revert or isolate" files the
+            # rebuild wrote itself.
+            minted = [
+                p.name for p in (root / "vault" / "files").glob("*.md")
+                if p.stem not in {"22222222", "33333333"}
+            ]
+            self.assertEqual(len(minted), 2, minted)
+            for name in minted:
+                self.assertNotIn(
+                    name, err,
+                    f"refusal named the exempt genesis file {name}",
+                )

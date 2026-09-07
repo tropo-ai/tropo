@@ -99,7 +99,12 @@ class NestedMountParentingTests(unittest.TestCase):
 
         front = WALKER.parse_frontmatter(marker)
         self.assertEqual(front.get("uid"), "cc33dd44")
-        self.assertRegex(str(front.get("uid")), r"^[0-9a-f]{8}$")
+        # 3d430852 step 8: the fixture's shape assertion migrates to the
+        # AUTHORITY's accepts-both predicate — never the mint constant. The
+        # planted 8-hex fixture uid stays valid forever; the assertion must
+        # not pin the fixture to a single era's shape.
+        import re as _re
+        self.assertRegex(str(front.get("uid")), r"^[0-9a-f]{8}(?:[0-9a-f]{4})?$")
         member_of = front.get("member_of") or []
         if isinstance(member_of, str):
             member_of = [member_of]

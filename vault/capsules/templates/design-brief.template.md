@@ -1,7 +1,7 @@
 ---
 uid: '<<MINT:uid>>'
 type: design-brief
-title: "<!-- REQUIRED: problem-first title, ≤100 chars -->"
+title: "<<MINT:title>>"
 description: "<!-- REQUIRED: one-line summary, ≤120 chars -->"
 status: design
 state: active
@@ -19,7 +19,7 @@ capsule_version: '<<MINT:capsule_version>>'
 governed_by: 8dd772a0
 ---
 
-# <!-- REQUIRED: title (mirror frontmatter) -->
+# <<MINT:title>>
 
 ## The problem
 <!-- REQUIRED: what hurts today, with evidence — the reason this brief exists -->

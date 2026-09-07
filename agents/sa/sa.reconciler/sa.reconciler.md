@@ -13,6 +13,7 @@ modified: 2026-05-13
 modified_by: argus-a60
 governed_by: b4e2a718
 capsule_version: '1.4'
+cost_tier: standard  # f0153984a89f item 5, vela-v77 2026-09-04 -- see agents/sa/commission-quickref.md for the per-harness model translation
 extraction_scope: ship
 schema_version: 2
 archetype: one-shot

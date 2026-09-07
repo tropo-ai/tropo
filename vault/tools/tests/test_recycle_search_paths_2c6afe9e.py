@@ -164,3 +164,136 @@ class BareUidResolutionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class SlugNamedUidResolutionTests(unittest.TestCase):
+    """f0150ba5074d — a READABLE-named governed file must recycle BY UID.
+
+    THE DEFECT, filed by argus-a167 after recycling a probe one minute after minting it:
+    the uid branch searched for `<uid>.md` and nothing else, so every file
+    `tropo-mint-id.py --title` produces was invisible to it. SKIP, `Recycled 0/1`,
+    exit 0 — quiet enough that a script would not stop.
+
+    WHY IT IS WORSE THAN A MISSING FEATURE. Deletion Discipline (0aefe71d, Mike-pinned)
+    says never `rm`, always recycle. The canonical AUTHORING path was producing files the
+    canonical DELETION path could not address, so an agent obeying both rules correctly
+    ends up unable to delete what it just made — and the honest end of that road is
+    somebody reaching for `rm`, the one thing the discipline exists to prevent.
+
+    EVERY TEST HERE CARRIES ITS MUTATION CONTROL, matching this module's standing
+    discipline: the pre-fix behaviour is reproduced exactly and must NOT resolve the
+    file. Argus's filing named this as the part that matters most, and said why — the
+    current behaviour would pass a naive test written against bare-named fixtures, which
+    is exactly how the defect survived readable minting shipping.
+    """
+
+    SLUG_NAME = "a-readable-slug-name"
+    SLUG_UID = "f0157102b973"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        build_studio(self.root)
+        self._saved = (recycle.VAULT_ROOT, recycle.VAULT_FILES, recycle.INDEX,
+                       recycle.ARCHIVE_INDEX)
+        recycle.VAULT_ROOT = self.root
+        recycle.VAULT_FILES = self.root / "vault" / "files"
+        recycle.INDEX = self.root / "vault" / "00-index.jsonl"
+        recycle.ARCHIVE_INDEX = self.root / "vault" / "00-archive-index.jsonl"
+        self.dest = self.root / "recycle" / "agent-deletions" / "test"
+        self.dest.mkdir(parents=True)
+
+    def tearDown(self):
+        (recycle.VAULT_ROOT, recycle.VAULT_FILES, recycle.INDEX,
+         recycle.ARCHIVE_INDEX) = self._saved
+        self._tmp.cleanup()
+
+    def _slug_entry(self, subdir="files", slug=None, uid=None) -> Path:
+        slug = slug or self.SLUG_NAME
+        uid = uid or self.SLUG_UID
+        p = self.root / "vault" / subdir / f"{slug}-{uid}.md"
+        p.write_text(f"---\nuid: '{uid}'\ntype: note\n---\n# probe\n", encoding="utf-8")
+        return p
+
+    @staticmethod
+    def _pre_fix_lookup(uid, search_paths):
+        """The tool's behaviour before this cure: bare stem only.
+
+        Reproduced here rather than described, so every control below measures the real
+        old lookup instead of a paraphrase of it.
+        """
+        return [d / f"{uid}.md" for d in search_paths if (d / f"{uid}.md").exists()]
+
+    def test_a_slug_named_file_recycles_by_uid(self):
+        src = self._slug_entry()
+        ok, msg = recycle.recycle_uid(self.SLUG_UID, "test", self.dest)
+        self.assertTrue(ok, f"the canonical deletion path cannot address a canonically "
+                            f"minted file: {msg}")
+        self.assertFalse(src.exists(), "the source should have moved")
+
+    def test_it_would_have_failed_under_the_old_bare_stem_lookup(self):
+        """THE CONTROL. Without it this suite passes against the bug it describes."""
+        self._slug_entry()
+        old = self._pre_fix_lookup(self.SLUG_UID, recycle.uid_search_paths())
+        self.assertEqual(
+            old, [],
+            "the pre-fix bare-stem lookup already found the slug-named file, so the fix "
+            "changed nothing and every assertion in this class proves nothing")
+
+    def test_the_readable_name_is_preserved_in_the_bin(self):
+        """Recycling the same file BY UID and BY PATH must land it under one name.
+
+        The explicit-path branch sets `uid = src.stem`, so a path-recycled file keeps its
+        readable name. If the uid branch forced `<uid>.md`, the same file would land under
+        two different names depending on which argument the caller used — one fact, two
+        behaviours, in the tool whose entire job is that nothing is lost.
+        """
+        self._slug_entry()
+        ok, _ = recycle.recycle_uid(self.SLUG_UID, "test", self.dest)
+        self.assertTrue(ok)
+        landed = sorted(p.name for p in self.dest.glob("*.md"))
+        self.assertEqual(
+            landed, [f"{self.SLUG_NAME}-{self.SLUG_UID}.md"],
+            "the readable name was not preserved in the recycle bin")
+
+    def test_bare_named_files_still_resolve(self):
+        """The regression arm: the fast path must not have been traded away."""
+        p = self.root / "vault" / "files" / "bbbbbbbb.md"
+        p.write_text("---\nuid: bbbbbbbb\n---\n", encoding="utf-8")
+        ok, msg = recycle.recycle_uid("bbbbbbbb", "test", self.dest)
+        self.assertTrue(ok, msg)
+        self.assertTrue((self.dest / "bbbbbbbb.md").exists())
+
+    def test_slug_resolution_reaches_every_uid_bearing_directory(self):
+        """Not just vault/files/ — the 2c6afe9e property applies to both shapes."""
+        for i, subdir in enumerate(UID_DIRS):
+            uid = f"cccccc{i:02d}0000"[:12]
+            self._slug_entry(subdir=subdir, slug=f"probe-{i}", uid=uid)
+            ok, msg = recycle.recycle_uid(uid, "test", self.dest)
+            self.assertTrue(ok, f"slug-named file in vault/{subdir}/ unreachable: {msg}")
+
+    def test_one_uid_in_two_shapes_refuses_rather_than_guessing(self):
+        """The ambiguity the fix could have introduced, closed deliberately.
+
+        A bare `<uid>.md` and a `<slug>-<uid>.md` are two homes for one uid. Picking
+        either silently would soft-delete a file the caller did not name — the same
+        reasoning the existing cross-directory refusal already carries.
+        """
+        bare = self.root / "vault" / "files" / f"{self.SLUG_UID}.md"
+        bare.write_text(f"---\nuid: '{self.SLUG_UID}'\n---\n", encoding="utf-8")
+        slugged = self._slug_entry()
+
+        ok, msg = recycle.recycle_uid(self.SLUG_UID, "test", self.dest)
+        self.assertFalse(ok, "two files claim this uid; picking one is not a resolution")
+        self.assertIn("REFUSED", msg)
+        self.assertTrue(bare.exists() and slugged.exists(),
+                        "a refusal must not move anything")
+
+    def test_a_uid_that_is_merely_a_substring_is_not_matched(self):
+        """Anchoring, not searching. `*-<uid>.md` must not match `<uid>extra.md` or a
+        file whose stem merely CONTAINS the uid — that would soft-delete a stranger."""
+        decoy = self.root / "vault" / "files" / f"prefix-{self.SLUG_UID}extra.md"
+        decoy.write_text("---\nuid: 'other'\n---\n", encoding="utf-8")
+        ok, msg = recycle.recycle_uid(self.SLUG_UID, "test", self.dest)
+        self.assertFalse(ok, f"a non-matching file was resolved: {msg}")
+        self.assertTrue(decoy.exists(), "a decoy must never be moved")
+

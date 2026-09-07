@@ -336,6 +336,78 @@ class BindingAndIsolation(ReleaseValidationGateFixture):
         self.assertEqual(temp_studio.diff_fingerprints(before, after), {})
 
 
+class UidShapeNegativeControls(ReleaseValidationGateFixture):
+    """The accepts-both widening (UID_SHAPES={8,12}) made this gate's UID_RE
+    match a 12-hex composite uid it used to refuse outright. A widened FINDER
+    is unambiguously correct; a widened REFUSER also stops refusing whatever
+    the narrow pattern happened to exclude — and `resolve_release_run`'s
+    `UID_RE.fullmatch` is a real refuser (raises GateRefusal), not a finder.
+    These pin that genuinely-malformed input — never just the old-vs-new
+    shape question — is still refused after the widening. `"deadbeef"` in
+    BindingAndIsolation above is shape-VALID and merely unresolved; these are
+    shape-INVALID."""
+
+    MALFORMED_UIDS = (
+        "",
+        "a1c0000",       # 7 hex: one short of the legacy shape
+        "a1c000012",     # 9 hex: one over legacy, short of composite
+        "a1c0000123ab1", # 13 hex: one over composite
+        "a1c0000g",      # 8 chars but not hex (g is out of range)
+        "a1c 00001",     # embedded whitespace (leading/trailing alone is
+                         # legitimately stripped by resolve_release_run
+                         # before the shape check -- not tested as malformed)
+        "../../../../etc/passwd",  # path-traversal shaped, not hex at all
+        "a1c00001\x00",  # embedded NUL
+        "a1c00001.md",   # a caller passing the filename instead of the uid
+    )
+
+    def test_malformed_uid_shapes_are_refused_not_just_unresolved(self) -> None:
+        for malformed in self.MALFORMED_UIDS:
+            with self.subTest(uid=malformed):
+                with self.assertRaises(gate.GateRefusal):
+                    gate.resolve_release_run(malformed, studio_root=self.root)
+
+    def test_uppercase_hex_of_a_valid_length_is_refused(self) -> None:
+        """UID_HEX_PATTERN's character class is `[0-9a-fA-F]`, but the
+        canonical shape predicate `is_governed_uid_shape` in governed_path.py
+        is lowercase-only (`_BARE_HEX_RE = ^[0-9a-f]+$`). This gate used to
+        build its own UID_RE from UID_HEX_PATTERN, so it fullmatched
+        uppercase hex of a valid length -- the refusal only fired later, at
+        file-existence, one layer past where it should have. Now routed
+        through is_governed_uid_shape directly: the refusal fires at the
+        shape check itself, before any filesystem lookup runs at all."""
+        uppercase = self.activation_uid.upper()
+        self.assertNotEqual(
+            uppercase, self.activation_uid,
+            "fixture uid has no letters to uppercase; strengthen the fixture",
+        )
+        with self.assertRaises(gate.GateRefusal) as ctx:
+            gate.resolve_release_run(uppercase, studio_root=self.root)
+        self.assertIn(
+            "is not an 8- or 12-character hex activation UID", str(ctx.exception),
+            "must refuse at the shape gate itself, not fall through to a "
+            "file-existence lookup that might succeed on a case-insensitive "
+            "filesystem",
+        )
+
+    def test_valid_8_and_12_hex_shapes_both_reach_past_the_uid_gate(self) -> None:
+        """Positive control: the negative controls above would be
+        meaningless if this gate refused everything. 12-hex must pass the
+        UID_RE check specifically (accepts-both is real), even though it
+        still won't resolve to a file in this fixture."""
+        twelve_hex = "a1c00001b2c3"
+        with self.assertRaises(gate.GateRefusal) as ctx:
+            gate.resolve_release_run(twelve_hex, studio_root=self.root)
+        self.assertIn(
+            "does not resolve", str(ctx.exception),
+            "a 12-hex uid must fail at file-existence, not at the shape gate "
+            "itself — a shape-gate failure here would mean accepts-both regressed",
+        )
+        # And the fixture's real 8-hex activation uid resolves cleanly end to end.
+        resolved = gate.resolve_release_run(self.activation_uid, studio_root=self.root)
+        self.assertEqual(resolved["run_uid"], self.run_uid)
+
+
 class ProductionDeclarations(unittest.TestCase):
     def test_release_steps_call_the_production_tool_with_activation_binding(self) -> None:
         expected = {

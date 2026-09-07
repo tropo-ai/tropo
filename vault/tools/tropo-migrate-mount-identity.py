@@ -81,6 +81,8 @@ def _load_folder_module():
 
 folder = _load_folder_module()
 
+from lib.governed_path import UID_HEX_PATTERN
+
 EXTERNAL_CONTEXT_L0_UID = folder.EXTERNAL_CONTEXT_L0_UID  # 48f8c52c
 TROPO_WORK_L0_UID = "2d083137"
 # Handmade stand-in L0 for mindbridge-notes before mount identity existed.
@@ -89,7 +91,10 @@ HANDMADE_STANDIN_SUPERSEDED_BY = "1e6a0b5d"
 SPEC_UID = "7b1e0ae5"
 ACTOR = "talos-t41"
 FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n?", re.DOTALL)
-UID_RE = re.compile(r"^[0-9a-f]{8}$")
+# accepts-both (UID_SHAPES): was 8-hex-only, so a 12-hex (Stage B composite)
+# mount_uid/superseded_by on a governed vault/files project uid was silently
+# rejected at every one of this file's ~10 UID_RE.match() call sites.
+UID_RE = re.compile(r"^(?:%s)$" % UID_HEX_PATTERN)
 
 
 @dataclass

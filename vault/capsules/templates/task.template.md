@@ -1,7 +1,7 @@
 ---
 uid: '<<MINT:uid>>'
 type: task
-title: "<!-- REQUIRED: human-readable display title, ≤120 chars -->"
+title: "<<MINT:title>>"
 status: new
 requested_by: "<!-- REQUIRED: entity UID requesting this task -->"
 requested_of: "<!-- REQUIRED: entity UID asked to accept this task -->"
@@ -18,7 +18,7 @@ capsule_version: '<<MINT:capsule_version>>'
 governed_by: 8dd772a0
 ---
 
-# <!-- REQUIRED: title (mirror frontmatter) -->
+# <<MINT:title>>
 
 ## Intent
 <!-- REQUIRED: why this task exists, what problem it solves, and what happens if it is never done -->

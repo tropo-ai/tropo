@@ -57,6 +57,7 @@ import lib.distiller_ranker as dr  # noqa: E402
 import lib.distiller as di  # noqa: E402
 import lib.distiller_query as dq  # noqa: E402
 
+from lib.audience_context import MountAudienceBinding  # noqa: E402
 from lib.group_contract import (  # noqa: E402
     GroupContractError,
     GroupErrorCode,
@@ -93,14 +94,52 @@ OrientedItem = di.OrientedItem
 
 
 # --------------------------------------------------------------------------- #
-# Principals + segment UIDs (all 8-hex; segment UIDs double as manifest UIDs).  #
+# TWO COLLISION DOMAINS; the MOUNT joins them (ADR-050, a-prime ruling by       #
+# argus-a168 2026-09-03: evt_b51c083be28ac6fe_00000419 / f0151314da71).          #
+#                                                                               #
+#   governed-record UID : 8-hex / composite 12-hex — principals and GROUPS.     #
+#   ADR-050 vault code  : ^[a-z0-9]{4,6}$ — SEGMENT identity, what              #
+#                         derive_segment yields and what visible_segments now   #
+#                         returns.                                              #
+#                                                                               #
+# Disjoint by length ([8,12] vs [4,5,6]): no string is both. TEAM stays bound   #
+# to the VAULT CODE because that is what segment assertions mean; the group     #
+# record is TEAM_GROUP; base_context() carries the mount row joining them.      #
 # --------------------------------------------------------------------------- #
 ALICE = "a1a1a1a1"
 BOB = "b2b2b2b2"
 
-TEAM = "7ea70001"        # the shared team/vault segment (alice + bob)
-PRIV_ALICE = "b1a70001"  # alice's own private segment
-PRIV_BOB = "b1a70002"    # bob's own private segment
+TEAM_GROUP = "7ea70001"  # the team's governed GROUP record
+TEAM = "team1"           # the same team's VAULT CODE — its segment identity
+PRIV_ALICE = "palice"    # alice's own private segment
+PRIV_BOB = "pbob"        # bob's own private segment
+
+#: The group -> vault-code join, as production carries it on MountAudienceBinding.
+MOUNTS = ((TEAM_GROUP, TEAM),)
+
+
+class _MountContext:
+    """The slice of AudienceContext the ADR-050 join reads: the mounts property."""
+
+    def __init__(self, pairs=MOUNTS) -> None:
+        self._bindings = tuple(
+            MountAudienceBinding(
+                vault_uid=vault_uid,
+                manifest_path=f"{vault_uid}/.tropo/vault-manifest.md",
+                manifest_sha256="0" * 64,
+                resolved_audience_group_uid=group_uid,
+            )
+            for group_uid, vault_uid in pairs
+        )
+
+    @property
+    def mounts(self):
+        return self._bindings
+
+
+def base_context(pairs=MOUNTS) -> _MountContext:
+    return _MountContext(pairs)
+
 OS = vp.OS_SEGMENT       # "os" — the reserved always-readable top constant
 
 REVISION = "sha256:" + ("a" * 64)
@@ -138,7 +177,7 @@ def base_resolver() -> GroupResolver:
     """TEAM with alice + bob as DIRECT members (peers of each other)."""
 
     corpus = build_group_corpus(
-        {TEAM: _group(TEAM, "team", members=[ALICE, BOB])},
+        {TEAM_GROUP: _group(TEAM_GROUP, "team", members=[ALICE, BOB])},
         {ALICE: _principal(ALICE), BOB: _principal(BOB)},
     )
     projection = project_registry(
@@ -147,7 +186,7 @@ def base_resolver() -> GroupResolver:
             source_authority_uid="a1b2c3d4",
             source_revision=REVISION,
             principal_directory_revision="1",
-            source_paths={TEAM: f"vault/groups/{TEAM}.md"},
+            source_paths={TEAM_GROUP: f"vault/groups/{TEAM_GROUP}.md"},
         ),
     )
     return GroupResolver.from_projection(projection)
@@ -173,7 +212,11 @@ class _RootFactory:
             root = self.base / segment_uid
             (root / ".tropo").mkdir(parents=True, exist_ok=True)
             (root / ".tropo" / "vault-manifest.md").write_text(
-                f"---\nuid: {segment_uid}\n---\n", encoding="utf-8"
+                # vault_uid:, not uid: — lib/segment.py reads only vault_uid:
+                # since 52d7a9b71 (ADR-050). This helper is copy-pasted across
+                # the distiller family and task_circle; all cured together.
+                # (suite-health 2026-09-03)
+                f"---\nvault_uid: {segment_uid}\n---\n", encoding="utf-8"
             )
             self._roots[segment_uid] = root
         return root
@@ -258,7 +301,8 @@ class _OrientFixture:
 
     def projection(self) -> ViewerProjection:
         graph = InMemoryGraphSource(self._edges, self._records, self._node_root)
-        return ViewerProjection.from_resolver(graph, base_resolver())
+        return ViewerProjection.from_resolver(graph, base_resolver(),
+            audience_context=base_context())
 
     def circle_index(self) -> InMemoryStructuralIndex:
         return InMemoryStructuralIndex(self._structures)

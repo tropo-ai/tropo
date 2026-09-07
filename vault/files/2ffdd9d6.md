@@ -1,4 +1,5 @@
 ---
+owner: argus
 uid: 2ffdd9d6
 type: dev-spec
 title: Pipeline Activation Key — Dev-Spec (fingerprint-as-key release authorization gate)

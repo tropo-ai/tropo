@@ -24,6 +24,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 TOOLS = ROOT / "vault" / "tools"
 TOOL = TOOLS / "tropo-compact-continue.py"
+if str(TOOLS) not in sys.path:
+    # exec_module below loads tropo-validate.py in-process; it inherits THIS
+    # sys.path, not its own directory, and it does `from lib...` at top level
+    # since 2026-08-31. (suite-health 2026-09-03)
+    sys.path.insert(0, str(TOOLS))
 
 SPEC = importlib.util.spec_from_file_location("tropo_compact_continue_surfaces", TOOL)
 CC = importlib.util.module_from_spec(SPEC)

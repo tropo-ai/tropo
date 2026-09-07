@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 830" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .node { font-size: 13.5px; font-weight: bold; fill: #1a2332; }
+      .node-sub { font-size: 11px; fill: #5a6a7a; }
+      .label { font-size: 12px; fill: #44525f; }
+      .edge { stroke: #8aa0b5; stroke-width: 1.6; fill: none; }
+      .panel-title { font-size: 15px; font-weight: bold; fill: #1a2332; }
+      .mono { font-family: Menlo, Consolas, monospace; font-size: 11px; fill: #2c4a6e; }
+      .caption { font-size: 12px; fill: #5a6a7a; font-style: italic; }
+      .newtag { font-size: 11px; font-weight: bold; fill: #4a8a6b; }
+    </style>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8aa0b5"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="830" fill="#fafbfc"/>
+  <text x="40" y="48" class="title">The Capsule Type System — Schema as Governed Markdown</text>
+  <text x="40" y="72" class="subtitle">The capsule is the contract; the file obeys it; the validator enforces it. 64 capsule definitions at vault/capsules/tropo-&lt;name&gt;.capsule.md (One Home, ADR-045).</text>
+
+  <!-- Inheritance tree -->
+  <rect x="40" y="100" width="700" height="480" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="60" y="130" class="panel-title">Type inheritance — every type descends from core</text>
+
+  <!-- core -->
+  <rect x="310" y="146" width="160" height="46" rx="8" fill="#2c4a6e"/>
+  <text x="390" y="168" class="node" fill="#ffffff" text-anchor="middle">core.capsule</text>
+  <text x="390" y="184" class="node-sub" fill="#cfe0ee" text-anchor="middle">uid · type · status · state · owner</text>
+
+  <!-- tier 2 types: foundational -->
+  <g>
+    <rect x="60"  y="238" width="120" height="44" rx="6" fill="#e8f0f7" stroke="#9db4c8"/>
+    <text x="120" y="258" class="node" text-anchor="middle">task</text>
+    <text x="120" y="273" class="node-sub" text-anchor="middle">work + lifecycle</text>
+
+    <rect x="192" y="238" width="120" height="44" rx="6" fill="#e8f0f7" stroke="#9db4c8"/>
+    <text x="252" y="258" class="node" text-anchor="middle">decision</text>
+    <text x="252" y="273" class="node-sub" text-anchor="middle">ADRs, binding</text>
+
+    <rect x="324" y="238" width="120" height="44" rx="6" fill="#e8f0f7" stroke="#9db4c8"/>
+    <text x="384" y="258" class="node" text-anchor="middle">project</text>
+    <text x="384" y="273" class="node-sub" text-anchor="middle">container + board</text>
+
+    <rect x="456" y="238" width="120" height="44" rx="6" fill="#e8f0f7" stroke="#9db4c8"/>
+    <text x="516" y="258" class="node" text-anchor="middle">document</text>
+    <text x="516" y="273" class="node-sub" text-anchor="middle">specs, guides</text>
+
+    <rect x="588" y="238" width="120" height="44" rx="6" fill="#e8f0f7" stroke="#9db4c8"/>
+    <text x="648" y="258" class="node" text-anchor="middle">pipeline</text>
+    <text x="648" y="273" class="node-sub" text-anchor="middle">DAG template</text>
+  </g>
+
+  <!-- tier 3 types: earned extensions -->
+  <g>
+    <rect x="60"  y="322" width="120" height="44" rx="6" fill="#f4f8fb" stroke="#b9cad8"/>
+    <text x="120" y="342" class="node" text-anchor="middle">release</text>
+    <text x="120" y="357" class="node-sub" text-anchor="middle">what shipped</text>
+
+    <rect x="192" y="322" width="120" height="44" rx="6" fill="#f4f8fb" stroke="#b9cad8"/>
+    <text x="252" y="342" class="node" text-anchor="middle">design-brief</text>
+    <text x="252" y="357" class="node-sub" text-anchor="middle">informs, never locks</text>
+
+    <rect x="324" y="322" width="120" height="44" rx="6" fill="#f4f8fb" stroke="#b9cad8"/>
+    <text x="384" y="342" class="node" text-anchor="middle">activation</text>
+    <text x="384" y="357" class="node-sub" text-anchor="middle">agent lineage row</text>
+
+    <rect x="456" y="322" width="120" height="44" rx="6" fill="#f4f8fb" stroke="#b9cad8"/>
+    <text x="516" y="342" class="node" text-anchor="middle">events</text>
+    <text x="516" y="357" class="node-sub" text-anchor="middle">envelope contract</text>
+
+    <rect x="588" y="322" width="120" height="44" rx="6" fill="#f4f8fb" stroke="#b9cad8"/>
+    <text x="648" y="342" class="node" text-anchor="middle">memory</text>
+    <text x="648" y="357" class="node-sub" text-anchor="middle">bounded folds</text>
+  </g>
+
+  <!-- new-since-v1 row -->
+  <text x="60" y="398" class="newtag">NEW SINCE v1 — governed autonomy (v1.71) · federation (ADR-051) · one honest revival</text>
+  <g>
+    <rect x="60"  y="406" width="120" height="46" rx="6" fill="#eaf5ef" stroke="#4a8a6b"/>
+    <text x="120" y="426" class="node" text-anchor="middle">loop</text>
+    <text x="120" y="441" class="node-sub" text-anchor="middle">recurring autonomy</text>
+
+    <rect x="192" y="406" width="120" height="46" rx="6" fill="#eaf5ef" stroke="#4a8a6b"/>
+    <text x="252" y="426" class="node" text-anchor="middle">loop-run</text>
+    <text x="252" y="441" class="node-sub" text-anchor="middle">one loop execution</text>
+
+    <rect x="324" y="406" width="120" height="46" rx="6" fill="#eaf5ef" stroke="#4a8a6b"/>
+    <text x="384" y="426" class="node" text-anchor="middle">vault</text>
+    <text x="384" y="441" class="node-sub" text-anchor="middle">node manifest</text>
+
+    <rect x="456" y="406" width="120" height="46" rx="6" fill="#eaf5ef" stroke="#4a8a6b"/>
+    <text x="516" y="426" class="node" text-anchor="middle">vault-entity</text>
+    <text x="516" y="441" class="node-sub" text-anchor="middle">vault as principal</text>
+
+    <rect x="588" y="406" width="120" height="46" rx="6" fill="#eaf5ef" stroke="#4a8a6b"/>
+    <text x="648" y="426" class="node" text-anchor="middle">how-to</text>
+    <text x="648" y="441" class="node-sub" text-anchor="middle">skills schema (27)</text>
+  </g>
+
+  <g>
+    <rect x="60" y="468" width="648" height="70" rx="6" fill="#f8fafc" stroke="#d7e0e8"/>
+    <text x="76" y="492" class="label">…plus note, collection, playbook, pipeline-run, board, charter, agent, session-agent,</text>
+    <text x="76" y="509" class="label">tool, subsystem-hub, release-plan, dev/doc/test-spec, entity, registry — every type</text>
+    <text x="76" y="526" class="label">extends core directly (flat); 16 history companions preserve amendment lineage.</text>
+  </g>
+
+  <!-- edges -->
+  <path class="edge" d="M 390 192 L 120 238" marker-end="url(#arr)"/>
+  <path class="edge" d="M 390 192 L 252 238" marker-end="url(#arr)"/>
+  <path class="edge" d="M 390 192 L 384 238" marker-end="url(#arr)"/>
+  <path class="edge" d="M 390 192 L 516 238" marker-end="url(#arr)"/>
+  <path class="edge" d="M 390 192 L 648 238" marker-end="url(#arr)"/>
+  <path class="edge" d="M 310 169 L 50 169 L 50 344 L 58 344" marker-end="url(#arr)"/>
+  <path class="edge" d="M 50 344 L 50 429 L 58 429" marker-end="url(#arr)"/>
+
+  <!-- Contract panel -->
+  <rect x="770" y="100" width="470" height="480" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="790" y="130" class="panel-title">What a capsule declares (the contract)</text>
+
+  <rect x="790" y="146" width="430" height="180" rx="6" fill="#1e2a36"/>
+  <text x="806" y="170" class="mono" fill="#9fd0a8"># tropo-task.capsule.md (excerpt, illustrative)</text>
+  <text x="806" y="190" class="mono" fill="#d7e3ee">required_fields: [uid, title, owner, status]</text>
+  <text x="806" y="210" class="mono" fill="#d7e3ee">enforced_enums:</text>
+  <text x="806" y="230" class="mono" fill="#d7e3ee">  status: {canon: [backlog, active, review,</text>
+  <text x="806" y="250" class="mono" fill="#d7e3ee">           done], aliases: {complete: done}}</text>
+  <text x="806" y="270" class="mono" fill="#d7e3ee">governance_rules: approver != executor on</text>
+  <text x="806" y="290" class="mono" fill="#d7e3ee">  approval_required tasks (Rule 14)</text>
+  <text x="806" y="310" class="mono" fill="#d7e3ee">validation_checks: enforced at every rebuild</text>
+
+  <g>
+    <text x="790" y="358" class="node">Closed canon + open aliases (SKOS-style)</text>
+    <text x="790" y="376" class="label">Agents write naturally ("complete"); the substrate</text>
+    <text x="790" y="392" class="label">normalizes to one truth ("done"). Machine-enforced</text>
+    <text x="790" y="408" class="label">fleet-wide since v1.72 "One Vocabulary"; drift = ERROR.</text>
+
+    <text x="790" y="438" class="node">Per-type strictness dial</text>
+    <text x="790" y="456" class="label">task, decision, release, activation, capsule enforce</text>
+    <text x="790" y="472" class="label">hard; the free-form long tail stays loose.</text>
+
+    <text x="790" y="502" class="node">Two-tier naming (ADR-048)</text>
+    <text x="790" y="520" class="label">tropo-&lt;name&gt; = shipped OS namespace, readable at a</text>
+    <text x="790" y="536" class="label">glance. UID = immutable address; renames never break refs.</text>
+
+    <text x="790" y="566" class="node">Schema evolution is a gated act</text>
+    <text x="790" y="583" class="label">Principal-signed capsule amendment = evolution. The same</text>
+    <text x="790" y="599" class="label">value silently written by an agent = drift. The gate is the line.</text>
+  </g>
+
+  <!-- Bottom flow -->
+  <rect x="40" y="626" width="1200" height="150" rx="10" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="60" y="656" class="panel-title">Contract → instance → enforcement</text>
+
+  <rect x="60" y="674" width="300" height="80" rx="6" fill="#ffffff" stroke="#9db4c8"/>
+  <text x="76" y="698" class="node">Capsule (the contract)</text>
+  <text x="76" y="716" class="mono">vault/capsules/tropo-task.capsule.md</text>
+  <text x="76" y="734" class="node-sub">Locked; amendments are governed events</text>
+
+  <rect x="470" y="674" width="300" height="80" rx="6" fill="#ffffff" stroke="#9db4c8"/>
+  <text x="486" y="698" class="node">Instance (the file that obeys it)</text>
+  <text x="486" y="716" class="mono">vault/files/a3f2b918.md  (type: task)</text>
+  <text x="486" y="734" class="node-sub">Flat store; one row in the whole-Studio index</text>
+
+  <rect x="880" y="674" width="340" height="80" rx="6" fill="#ffffff" stroke="#9db4c8"/>
+  <text x="896" y="696" class="node">Validator (the gate)</text>
+  <text x="896" y="713" class="mono">94 check functions, ~90 per run (v1: ~58)</text>
+  <text x="896" y="730" class="node-sub">Reads enums straight from capsules; WARN→ERROR</text>
+  <text x="896" y="744" class="node-sub">ratchet with named grandfather exemptions</text>
+
+  <path class="edge" d="M 360 714 L 470 714" marker-end="url(#arr)"/>
+  <path class="edge" d="M 770 714 L 880 714" marker-end="url(#arr)"/>
+
+  <text x="40" y="808" class="caption">Gradual structure on a language base: add structure per type, per field, tighten-only — 64 contracts, each abstraction earned one at a time, retired honestly, revived when used (how-to).</text>
+</svg>

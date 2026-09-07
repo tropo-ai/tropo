@@ -19,8 +19,8 @@ input:
   properties:
     count: {type: integer, description: "how many identifiers to mint (default 1)"}
     reason: {type: string, description: "advisory note for the caller's own log (not persisted here)"}
-    kind: {type: string, description: "identifier kind — file|agent (flat 8-hex, live) or studio (genesis manifest writer, live per 32067bea) or vault (short registered code, live per 943bb220) or event (declared in the ADR-050 contract, not yet built — raises NotImplementedError)"}
-    segment: {type: string, description: "write segment (32067bea) — private (default, bare 8-hex) or team (studio-prefixed, reads the studio-identity manifest; fails loud if missing/corrupt)"}
+    kind: {type: string, description: "identifier kind — file|agent (12-hex composite since 3d430852; flat 8-hex before it, live) or studio (genesis manifest writer, live per 32067bea) or vault (short registered code, live per 943bb220) or event (declared in the ADR-050 contract, not yet built — raises NotImplementedError)"}
+    segment: {type: string, description: "write segment (32067bea) — private (default, bare composite uid) or team (studio-prefixed, reads the studio-identity manifest; fails loud if missing/corrupt)"}
     type_name: {type: string, description: "human-mintable governed type; every system-only binding refuses through the generic CLI"}
     list_types: {type: boolean, description: "list schema-v2 mint_mode=human bindings only"}
     author: {type: string, description: "writer label; registered agent-generation labels require activation provenance"}
@@ -77,18 +77,23 @@ belt_example: "python3 vault/tools/tropo-mint-id.py --count 5 --kind file"
 #
 # FEDERATION EXTENSION POINT (brainstorm a1230aff): a
 # federated, multi-Studio mint must be PREFIX-AWARE (Studio-Prefixed UIDs) so two laptops
-# minting offline cannot collide. The `--prefix <studio>` SEAM IS IMPLEMENTED (S8, v1.80):
-# output is `<prefix>-<8hex>` per the decided `[studio]-[random]` shape (d89b5da3).
+# minting offline cannot collide. RETIRED AT THE COMPOSITE FLIP (3d430852 Stage B,
+# 2026-08-31): prefix-awareness is now STRUCTURAL — every bare mint carries the issued
+# 4-hex prefix inside the 12-hex composite, so offline collision-safety holds by
+# construction. The old `--prefix <studio>` S8 seam (v1.80, `<prefix>-<8hex>` per
+# d89b5da3) PARKS with a loud refusal: its hyphen was ruled a wasted byte, and prefixing
+# a composite would double-namespace an identifier that already carries one.
 #
 # STUDIO-IDENTITY PRIMITIVE BUILT (Talos T25, 2026-07-06, dev-spec 32067bea / Federation
 # Phase A): `--kind studio` is the idempotent GENESIS gesture — mints a self-sovereign
 # studio_id + short mint_prefix locally (no HQ call) and writes the manifest at
 # `.tropo/studio-identity.md`. Re-running it never regenerates; it reads + returns the
-# existing identity. This is the PRIMITIVE that now feeds the `--prefix` seam for real:
-# `--segment team` reads the manifest and mints `<mint_prefix>-<8hex>`; `--segment private`
-# (the default) stays bare 8-hex, unchanged from today's behavior. A missing/corrupt
-# manifest on a team-segment mint raises `StudioIdentityError` — FAILS LOUD, never falls
-# back to a silent bare or fabricated identity (that would defeat the collision-safety the
+# existing identity. Since the composite flip (3d430852 Stage B, 2026-08-31) this
+# manifest feeds EVERY bare mint: each is `<mint_prefix><8-hex-local>`, 12 flat hex,
+# no separator — the hyphen was ruled a wasted byte, and the team/private segment
+# split retired with it (segment=team parks loud). A missing/corrupt manifest on
+# any mint raises `StudioIdentityError` — FAILS LOUD, never falls back to a silent
+# bare or fabricated identity (that would defeat the collision-safety the
 # prefix exists to guarantee). Cross-Studio N-member collision checking at team-JOIN time
 # (Federation Phase B) and the `teams/<uid>/` segment-storage mount (Phase C) are explicitly
 # OUT of scope here — this primitive only answers "what is MY studio's identity."
@@ -136,9 +141,15 @@ _TOOLS_DIR = Path(__file__).resolve().parent
 if str(_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOLS_DIR))
 from lib import template_leg  # noqa: E402 -- must follow the sys.path insert above
+from lib import governed_path as gp  # noqa: E402 -- the shape authority (3d430852)
 
 _HEX8 = re.compile(r"^[0-9a-f]{8}$")
-_INDEX_UID = re.compile(r'"uid"\s*:\s*"([0-9a-f]{8})"')
+#: 3d430852 Stage A (step 6): the accepts-both stem. Composite 12-hex uids are
+#: READ everywhere a collision scan or gate looks -- a mint that cannot SEE an
+#: existing uid can collide with it. Dormant until Stage B flips generation;
+#: reading both shapes breaks nothing today (no 12-hex uid exists yet).
+_UID_STEM_BOTH = re.compile(r"^[0-9a-f]{8}(?:[0-9a-f]{4})?$")
+_INDEX_UID = re.compile(r'"uid"\s*:\s*"([0-9a-f]{8}(?:[0-9a-f]{4})?)"')  # accepts-both (step 6)
 _MINT_PREFIX_SHAPE = re.compile(r"^[a-z0-9]{4,6}$")
 
 # ADR-050 Decision 3 — the typed-kind contract. file/agent share the flat-8-hex shape
@@ -165,6 +176,7 @@ _SYSTEM_ONLY_TYPES = {
 _MANIFEST_SCHEMA_VERSION = 1
 _REQUIRED_MANIFEST_FIELDS = (
     "studio_id", "mint_prefix", "created", "minted_by", "hq_registered", "schema_version",
+    "entity_name",
 )
 # d89b5da3 §"Open option": tropo- is a reserved namespace for canonical OS substrate;
 # a locally-minted studio must never accidentally claim it.
@@ -182,7 +194,12 @@ def set_studio_root(path: Path | None) -> None:
 
 
 def _effective_studio_root() -> Path:
-    return _STUDIO_ROOT_OVERRIDE if _STUDIO_ROOT_OVERRIDE is not None else VAULT_ROOT
+    if _STUDIO_ROOT_OVERRIDE is not None:
+        return _STUDIO_ROOT_OVERRIDE
+    env = os.environ.get("TROPO_MINT_STUDIO_ROOT")
+    if env:
+        return Path(env).resolve()
+    return VAULT_ROOT
 
 
 class StudioIdentityError(RuntimeError):
@@ -198,14 +215,15 @@ def _studio_identity_path(root: Path | None = None) -> Path:
     return (root if root is not None else _effective_studio_root()) / STUDIO_IDENTITY_REL
 
 
-def read_studio_identity(root: Path | None = None) -> dict:
-    """Read + structurally validate the studio-identity manifest.
-
-    Raises StudioIdentityError (never returns a partial/fabricated dict) when the
-    manifest is missing, unreadable, not valid YAML frontmatter, missing a required
-    field, or carries a malformed studio_id/mint_prefix shape.
-    """
-    path = _studio_identity_path(root)
+def _parse_manifest_frontmatter(path: Path) -> dict:
+    """Parse the manifest's YAML frontmatter with NO field-presence
+    validation -- the shape-agnostic half of read_studio_identity, split out
+    so a caller that needs to BACKFILL a missing field (mint_studio_identity,
+    for a pre-5854773a manifest) can see what is actually on disk instead of
+    being refused by the same strictness a reader-only caller correctly
+    wants. Still raises StudioIdentityError on anything that isn't a
+    parseable YAML mapping -- lenient on WHICH fields are present, never on
+    whether the file is well-formed."""
     if not path.exists():
         raise StudioIdentityError(
             f"studio-identity manifest not found at {path} — a team-segment mint requires "
@@ -232,20 +250,41 @@ def read_studio_identity(root: Path | None = None) -> dict:
         raise StudioIdentityError(f"studio-identity manifest at {path} is corrupt: invalid YAML ({e})") from e
     if not isinstance(data, dict):
         raise StudioIdentityError(f"studio-identity manifest at {path} is corrupt: frontmatter is not a mapping")
+    return data
+
+
+def _validate_manifest_fields(path: Path, data: dict) -> None:
     missing = [f for f in _REQUIRED_MANIFEST_FIELDS if f not in data]
     if missing:
         raise StudioIdentityError(
             f"studio-identity manifest at {path} is corrupt: missing field(s) {missing}"
         )
-    if not _HEX8.match(str(data["studio_id"])):
+    if not _UID_STEM_BOTH.match(str(data["studio_id"])):
         raise StudioIdentityError(
-            f"studio-identity manifest at {path} is corrupt: studio_id {data['studio_id']!r} is not 8-hex"
+            f"studio-identity manifest at {path} is corrupt: studio_id "
+            f"{data['studio_id']!r} is neither the legacy 8-hex nor the "
+            f"12-hex composite shape (accepts-both since the Stage B flip; "
+            f"legacy manifests stay first-class)"
         )
     if not _MINT_PREFIX_SHAPE.match(str(data["mint_prefix"])):
         raise StudioIdentityError(
             f"studio-identity manifest at {path} is corrupt: mint_prefix {data['mint_prefix']!r} "
-            f"is not 4-6 lowercase alphanumeric chars (d89b5da3 bound)"
+            f"is not 4-6 lowercase alphanumeric chars (d89b5da3 bound; the exactly-4-hex "
+            f"requirement for COMPOSITE minting is enforced at the mint site, where it can "
+            f"name the re-issue cure rather than call the manifest corrupt)"
         )
+
+
+def read_studio_identity(root: Path | None = None) -> dict:
+    """Read + structurally validate the studio-identity manifest.
+
+    Raises StudioIdentityError (never returns a partial/fabricated dict) when the
+    manifest is missing, unreadable, not valid YAML frontmatter, missing a required
+    field, or carries a malformed studio_id/mint_prefix shape.
+    """
+    path = _studio_identity_path(root)
+    data = _parse_manifest_frontmatter(path)
+    _validate_manifest_fields(path, data)
     return data
 
 
@@ -260,7 +299,17 @@ def _generate_mint_prefix() -> str:
     Delegates to `_generate_short_code` (943bb220) — same shape contract `vault` now
     also uses; kept as its own named function since callers (this module's tests
     included) reference `_generate_mint_prefix` by name.
+
+    3d430852 Stage B (dormant until the flip): at MINT_HEX_LEN 12 the prefix is
+    EXACTLY 4-hex — it is the issued half of every composite mint (4 + 8 local
+    = 12, no separator), so the short-code alnum bound no longer applies.
     """
+    if gp.MINT_HEX_LEN == 12:
+        for _attempt in range(64):
+            candidate = secrets.token_hex(gp.COMPOSITE_PREFIX_HEX_LEN // 2)
+            if candidate not in _RESERVED_MINT_PREFIXES:
+                return candidate
+        raise RuntimeError("composite-prefix collision storm — could not generate in 64 tries")
     return _generate_short_code(set())
 
 
@@ -283,18 +332,77 @@ def _generate_short_code(existing: set[str]) -> str:
     raise RuntimeError("short-code collision storm — could not generate in 64 tries")
 
 
-def mint_studio_identity(root: Path | None = None, minted_by: str = "tropo-mint-id") -> dict:
-    """The genesis gesture (dev-spec 32067bea): self-sovereign, mints locally, no HQ call.
+def _default_entity_name(root: Path | None) -> str:
+    """entity_name's silent default at genesis (5854773a AC3, Mike-ruled): the
+    folder name. The concierge asks once, post-greeting, and amends it through
+    `set_entity_name` — this default is never itself a user-facing prompt."""
+    base = root if root is not None else _effective_studio_root()
+    return Path(base).resolve().name
 
-    Idempotent — if a manifest already exists it is read + returned UNCHANGED (the
-    mint_prefix is stable once set and never silently regenerated). Only the first call
-    on a fresh studio actually mints; every subsequent call is a no-op read.
+
+def _write_manifest(path: Path, data: dict) -> None:
+    fm_text = yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
+    body = (
+        "\n# Studio Identity\n\n"
+        "Self-sovereign studio-identity manifest — mints locally at genesis, no HQ call\n"
+        "(dev-spec [32067bea], Federation Phase A; composes [ADR-050](../../vault/files/cb0f8e46.md)).\n"
+        "`mint_prefix` is stable once set and never silently regenerated. Since the\n"
+        "composite flip (3d430852 Stage B, 2026-08-31) every new governed mint reads it\n"
+        "and mints `<mint_prefix><8-hex-local>` — 12 flat hex, NO separator (the hyphen\n"
+        "was ruled a wasted byte); the legacy team/private segment split retired with\n"
+        "the hyphen, and a mint with no manifest refuses rather than self-assigning a\n"
+        "prefix. `hq_registered: false` — HQ Studio Registration is an optional later\n"
+        "overlay on top of this primitive, never a prerequisite.\n\n"
+        "`entity_name` is the studio's human-readable name, beside the uid, never inside\n"
+        "any identifier (5854773a, entity-reference doctrine 7191d685). Silently defaulted\n"
+        "to the folder name at genesis; amend it with `tropo-mint-id --set-entity-name\n"
+        "\"Name\"` — the setter never regenerates `studio_id` or `mint_prefix`.\n"
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"---\n{fm_text}---\n{body}", encoding="utf-8")
+
+
+def mint_studio_identity(
+    root: Path | None = None,
+    minted_by: str = "tropo-mint-id",
+    entity_name: str | None = None,
+) -> dict:
+    """The genesis gesture (dev-spec 32067bea + 5854773a): self-sovereign, mints
+    locally, no HQ call.
+
+    Idempotent on the IDENTITY fields — if a manifest already exists, studio_id
+    and mint_prefix are read + returned UNCHANGED (never silently regenerated).
+    Only the first call on a fresh studio actually mints those. `entity_name`
+    is per-artifact idempotent on its OWN narrower rule: a manifest already
+    carrying one is left alone (the setter is the sanctioned way to amend it);
+    a pre-entity_name-field manifest (minted before 5854773a) is BACKFILLED
+    with the silent default in place, matching this spec's per-artifact-gate
+    philosophy — an existing studio gains exactly the missing artifact, never
+    a second copy.
     """
     path = _studio_identity_path(root)
     if path.exists():
-        return read_studio_identity(root)
-    studio_id = secrets.token_hex(4)
+        # Lenient parse, not read_studio_identity: a pre-5854773a manifest
+        # legitimately lacks entity_name, and the strict reader would refuse
+        # it before this function ever got the chance to backfill it.
+        data = _parse_manifest_frontmatter(path)
+        if "entity_name" not in data or not data["entity_name"]:
+            data["entity_name"] = entity_name or _default_entity_name(root)
+            _write_manifest(path, data)
+        # Final shape must still be valid -- backfilling a missing name must
+        # never mask an ACTUALLY corrupt manifest (bad studio_id/mint_prefix
+        # shape, for instance); re-validate the full record before handing
+        # it back.
+        _validate_manifest_fields(path, data)
+        return data
     mint_prefix = _generate_mint_prefix()
+    # 3d430852 Stage B (dormant until the flip): the studio's own identity
+    # mints composite — its issued prefix + 8 local hex. Stage A stays the
+    # legacy flat 8-hex so observable output is unchanged.
+    if gp.MINT_HEX_LEN == 12:
+        studio_id = gp.composite_uid(mint_prefix)
+    else:
+        studio_id = secrets.token_hex(4)
     data = {
         "studio_id": studio_id,
         "mint_prefix": mint_prefix,
@@ -302,41 +410,84 @@ def mint_studio_identity(root: Path | None = None, minted_by: str = "tropo-mint-
         "minted_by": minted_by,
         "hq_registered": False,
         "schema_version": _MANIFEST_SCHEMA_VERSION,
+        "entity_name": entity_name or _default_entity_name(root),
     }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fm_text = yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
-    body = (
-        "\n# Studio Identity\n\n"
-        "Self-sovereign studio-identity manifest — mints locally at genesis, no HQ call\n"
-        "(dev-spec [32067bea], Federation Phase A; composes [ADR-050](../../vault/files/cb0f8e46.md)).\n"
-        "`mint_prefix` is stable once set and never silently regenerated; a team-segment\n"
-        "mint reads it to produce `<mint_prefix>-<8hex>`. Private-segment mints stay bare.\n"
-        "`hq_registered: false` — HQ Studio Registration is an optional later\n"
-        "overlay on top of this primitive, never a prerequisite.\n"
-    )
-    path.write_text(f"---\n{fm_text}---\n{body}", encoding="utf-8")
+    _write_manifest(path, data)
     return data
 
 
-def load_existing_uids() -> set[str]:
-    """Every 8-hex UID currently in use — the index + the governed-file filenames.
+def set_entity_name(name: str, root: Path | None = None) -> dict:
+    """The sanctioned setter (5854773a AC3): amend `entity_name` ONLY.
+    `studio_id` and `mint_prefix` are untouched — idempotency here means
+    "never regenerate the entity record uid," not "never write again."
+
+    Raises StudioIdentityError if no manifest exists yet (a name cannot be
+    set before genesis) and ValueError if `name` embeds what looks like a
+    uid (7191d685: no identifier ever embeds the name).
+    """
+    if not name or not name.strip():
+        raise ValueError("entity_name must be a non-empty string")
+    if _UID_STEM_BOTH.match(name.strip()):
+        raise ValueError(
+            f"entity_name {name!r} looks like a bare hex uid, not a human name — "
+            f"7191d685: names and uids never substitute for one another"
+        )
+    path = _studio_identity_path(root)
+    data = read_studio_identity(root)  # raises StudioIdentityError if absent/corrupt
+    before_id, before_prefix = data["studio_id"], data["mint_prefix"]
+    data["entity_name"] = name.strip()
+    _write_manifest(path, data)
+    assert data["studio_id"] == before_id and data["mint_prefix"] == before_prefix
+    return data
+
+
+def load_existing_uids(studio_root: Path | None = None) -> set[str]:
+    """Every UID currently in use — the index + the governed-file filenames.
 
     These are the two places a governed UID lives; the registries derive from the index.
+
+    `studio_root` is the ROOT-PARAMETERIZATION SEAM named by dev-spec 3d430852 AC6.
+    Omitted, it reads this module's import-time constants, which is what every existing
+    caller does and what the production path wants. Supplied, every surface resolves
+    under that root instead -- which is the only way to unit-test collision safety
+    against planted, UNINDEXED fixtures. Without it the sole way to exercise this
+    function was to patch it out entirely, and a function nobody can run against a
+    fixture is a function whose collision safety is asserted rather than proven.
+
+    SLUG-NAMED FILES COUNT, and before v1.94 they did not. The filename scan matched
+    only a bare `<uid>.md` stem, so `operating-agreement-public-edition-f0155ddd04f7.md`
+    claimed `f0155ddd04f7` and this function could not see it. An unindexed slug-named
+    file was therefore invisible to collision checking, and the mint could re-issue a
+    uid that file already held -- two bodies, one identity, discovered later by whoever
+    read the wrong one. Resolution goes through `parse_anchored_uid`, the same resolver
+    the writer and the rebuild use, rather than a second filename parser here: one fact,
+    one home. THE NAME PROPOSES, THE FRONTMATTER DECIDES -- for collision purposes the
+    proposal is enough, because a uid a filename merely CLAIMS is still a uid this mint
+    must not hand out.
     """
+    if studio_root is None:
+        index, archive_index, files_dir = INDEX, ARCHIVE_INDEX, VAULT_FILES
+    else:
+        root = Path(studio_root)
+        index = root / "vault" / "00-index.jsonl"
+        archive_index = root / "vault" / "00-archive-index.jsonl"
+        files_dir = root / "vault" / "files"
+
     uids: set[str] = set()
     # ADR-047 Layer 1: archived/superseded UIDs remain permanently in use.
     # Mint collision checks therefore opt into both disposable surfaces.
-    for index_path in (INDEX, ARCHIVE_INDEX):
+    for index_path in (index, archive_index):
         if not index_path.exists():
             continue
         for line in index_path.read_text(encoding="utf-8").splitlines():
             m = _INDEX_UID.search(line)
             if m:
                 uids.add(m.group(1))
-    if VAULT_FILES.is_dir():
-        for f in VAULT_FILES.glob("*.md"):
-            if _HEX8.match(f.stem):
-                uids.add(f.stem)
+    if files_dir.is_dir():
+        for f in files_dir.glob("*.md"):
+            parsed = gp.parse_anchored_uid(f.name)
+            if parsed is not None:
+                uids.add(parsed[1])
     return uids
 
 
@@ -429,6 +580,42 @@ def mint(count: int = 1, prefix: str = "", kind: str = "file",
         return out_codes
     if segment not in ("private", "team"):
         raise ValueError(f"unknown segment {segment!r}; must be 'private' or 'team'")
+    # --- 3d430852 Stage B (DORMANT until the flip lands MINT_HEX_LEN=12). At
+    # the flip every new bare file/agent mint becomes COMPOSITE — the
+    # studio-identity manifest's 4-hex mint_prefix + 8 random local hex, no
+    # separator. Refuse-if-absent is the design (Metis-ruled: a studio never
+    # self-assigns a prefix), so the manifest must be issued (kind='studio'
+    # genesis) in the same gesture as the flip or mints stop loudly. The team
+    # segment AND the explicit --prefix seam both park with loud refusals in
+    # the same branch: the hyphenated shapes retired, and an explicit foreign
+    # prefix would mint identity in a namespace this studio cannot assign
+    # (the issued-prefix ruling cuts both ways — no self-assigned prefixes,
+    # including other studios'). Found live by Metis at the flip verify
+    # (abcd-f015b0743329: hyphen + double-prefixed composite).
+    composite_prefix = None
+    if gp.MINT_HEX_LEN == 12:
+        if segment == "team":
+            raise ValueError(
+                "segment='team' is PARKED at the Stage B flip (3d430852): the "
+                "hyphenated <mint_prefix>-<hex> identifier retired — every new "
+                "bare mint is composite and carries the studio prefix already.")
+        if prefix:
+            raise ValueError(
+                "--prefix is PARKED at the Stage B flip (3d430852): the S8 "
+                "[studio]-[random] seam (d89b5da3) retired with the hyphen, and "
+                "every bare mint already carries this studio's issued namespace. "
+                "An explicit foreign prefix would mint identity in a space this "
+                "studio cannot assign — the issued-prefix ruling forbids "
+                "self-assigned prefixes, including other studios'.")
+        identity = read_studio_identity(root=studio_root)  # LOUD on missing/corrupt
+        composite_prefix = str(identity["mint_prefix"])
+        if not gp.is_composite_mint_prefix(composite_prefix):
+            raise StudioIdentityError(
+                f"studio-identity manifest at {STUDIO_IDENTITY_REL} carries "
+                f"mint_prefix {composite_prefix!r} — not the 4-hex composite "
+                "prefix shape (4 + 8 local = 12, no separator). The manifest "
+                "predates the flip; re-issue per the identity spec (3d430852)."
+            )
     effective_prefix = prefix
     if segment == "team":
         if prefix:
@@ -446,13 +633,19 @@ def mint(count: int = 1, prefix: str = "", kind: str = "file",
     out: list[str] = []
     for _ in range(count):
         for _attempt in range(64):
-            candidate = secrets.token_hex(4)
+            if composite_prefix is not None:
+                candidate = gp.composite_uid(composite_prefix)
+            else:
+                # Stage A: bare generation length from the AUTHORITY constant —
+                # never a local literal (AC2's chokepoint checker scopes this,
+                # the canonical minter's own site).
+                candidate = secrets.token_hex(gp.MINT_HEX_LEN // 2)
             if candidate not in existing:
                 existing.add(candidate)
                 out.append(f"{effective_prefix}-{candidate}" if effective_prefix else candidate)
                 break
         else:
-            raise RuntimeError("UID collision storm — could not mint a free 8-hex in 64 tries")
+            raise RuntimeError("UID collision storm — could not mint a free uid in 64 tries")
     return out
 
 
@@ -796,8 +989,8 @@ def _resolve_inbox_project(root: Path) -> tuple[str | None, str | None]:
 
 
 _MEMBER_OF_LINE = re.compile(
-    r'^(?P<indent>\s*-\s*)(?P<quote>["\']?)(?P<uid>[0-9a-f]{8})(?P=quote)(?P<rest>.*)$'
-)
+    r'^(?P<indent>\s*-\s*)(?P<quote>["\']?)(?P<uid>[0-9a-f]{8}(?:[0-9a-f]{4})?)(?P=quote)(?P<rest>.*)$'
+)  # accepts-both (step 6): member_of lines may cite composite uids
 
 
 def _ground_member_of(root: Path, instance_text: str) -> str:
@@ -1124,8 +1317,10 @@ def _resolve_activation_provenance(
             "(Or provide --activation-uid / TROPO_ACTIVATION_UID for a "
             "pre-lineage generation.)"
         )
-    if not _HEX8.fullmatch(activation_uid):
-        raise ValueError("activation provenance UID must be exactly 8 lowercase hex")
+    if not _UID_STEM_BOTH.fullmatch(activation_uid):
+        raise ValueError(
+            "activation provenance UID must be 8 or 12 lowercase hex "
+            "(accepts-both, 3d430852 step 6)")
     index_row = _indexed_activation_row(root, activation_uid)
     rel = Path("vault/files") / f"{activation_uid}.md"
     path = template_leg._strict_regular_file(
@@ -1259,6 +1454,7 @@ def mint_file(
     type_name: str,
     *,
     author: str,
+    title: str | None = None,
     activation_uid: str | None = None,
     output_dir: Path | None = None,
     studio_root: Path | None = None,
@@ -1307,6 +1503,11 @@ def mint_file(
         raise template_leg.TemplateLegError(
             f"mint binding for {type_name!r} has no output home"
         )
+    if title is not None and not template_leg.declares_title(leg):
+        raise ValueError(
+            f"type {type_name!r} has no <<MINT:title>> token in its template "
+            f"-- --title is not accepted for this type"
+        )
     canonical_target_dir = template_leg._strict_directory(
         root, leg.output_home, "mint_output_home"
     )
@@ -1325,6 +1526,7 @@ def mint_file(
         date=today,
         author=author,
         activation_uid=provenance_uid,
+        title=title,
     )
     instance_text = _ground_member_of(root, instance_text)
     _validate_stamped_instance(
@@ -1339,7 +1541,10 @@ def mint_file(
         target_dir = resolved_output_dir
     else:
         target_dir = canonical_target_dir
-    out_path = target_dir / f"{uid}.md"
+    # 612dcfea: THE writer entry point for the flag/filename rule, not a
+    # hand-rolled f"{uid}.md" -- this writer never routed through here, so
+    # readable minting never took effect for it regardless of the flag.
+    out_path = target_dir / gp.mint_basename(uid, title, root)
     if output_dir is not None:
         if out_path.exists() or out_path.is_symlink():
             raise RuntimeError(
@@ -1393,6 +1598,93 @@ def mint_file(
     return uid, out_path
 
 
+def _human_principal_uid(studio_root: Path, output_dir: Path | None = None) -> str | None:
+    """The founder's principal, if this Studio already has one. Presence-first.
+
+    Reads the ENTRIES, not the index: a fresh customer Studio's index may not
+    have been built yet at §1.5, and a projection that lags would let the
+    concierge mint a second founder for a Studio that already has one.
+    """
+    files_dir = Path(output_dir) if output_dir else Path(studio_root) / "vault" / "files"
+    if not files_dir.is_dir():
+        return None
+    for entry in sorted(files_dir.glob("*.md")):
+        try:
+            text = entry.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if not text.startswith("---"):
+            continue
+        head = text.split("---", 2)
+        if len(head) < 3:
+            continue
+        fm = head[1]
+        if re.search(r"^type:\s*principal\s*$", fm, re.MULTILINE) and \
+           re.search(r"^principal_class:\s*human\b", fm, re.MULTILINE):
+            m = re.search(r"^uid:\s*['\"]?([A-Za-z0-9]+)['\"]?", fm, re.MULTILINE)
+            if m:
+                return m.group(1)
+    return None
+
+
+def founder_slug(name: str) -> str:
+    """kebab-case resolution key. Immutable once minted (principal.capsule Rule 2)."""
+    slug = re.sub(r"[^a-z0-9]+", "-", (name or "").strip().lower()).strip("-")
+    return slug or "founder"
+
+
+def mint_founder_principal(
+    name: str, studio_root: Path, *, author: str = "po",
+    activation_uid: str | None = None,
+    output_dir: Path | None = None, freshen: bool = True,
+) -> tuple[str, Path | None, bool]:
+    """The founder enters the accountability graph, through the governed door.
+
+    v1.95 Spine A AC4 (f015de6b3a18), on Mike's 2026-09-05 ruling that amended
+    the principal capsule to `mint_mode: human` (8c19ed59 v1.1, argus-a171).
+    Called from the concierge's §1.5 arrival beat after the Studio is named:
+    the founder is asked their name, answers, and THAT is the deliberate
+    registration the capsule's Rule 1 requires — not a side effect of another
+    act, which Rule 1 forbids.
+
+    Returns `(uid, path, minted)`. `minted` is False when this Studio already
+    had a human principal: the beat is idempotent by presence, so a second run
+    asks nothing and mints nothing (ruled-shape point 4). The manifest is never
+    touched (point 3) — `mint_file` composes the uid from the Studio's own
+    mint_prefix, so the founder's uid carries this Studio's identity rather
+    than a constant shared with every other box.
+    """
+    root = Path(studio_root)
+    existing = _human_principal_uid(root, output_dir)
+    if existing:
+        return existing, None, False
+
+    title = "%s — Founder" % (name or "").strip()
+    # `output_dir`/`freshen` are the scratch-only override mint_file already
+    # declares, and they exist here for the same reason the studio's own
+    # MintFixture uses them: a fixture Studio has no toolchain, so the
+    # canonical freshen has no freshener to load. Production passes neither
+    # and takes the canonical path with its multi-surface transaction.
+    extra = {}
+    if output_dir is not None:
+        extra = {"output_dir": Path(output_dir), "freshen": freshen}
+    uid, path = mint_file(
+        "principal", author=author, title=title,
+        activation_uid=activation_uid, studio_root=root, **extra,
+    )
+    text = path.read_text(encoding="utf-8")
+    text = re.sub(
+        r'^slug:.*$', 'slug: "%s"' % founder_slug(name), text, count=1, flags=re.MULTILINE)
+    text = text.replace(
+        "<!-- REQUIRED: one paragraph — who this actor is and why they enter the accountability graph -->",
+        "%s is the founder of this Studio: the human who owns it, and the identity "
+        "behind every `locked_by:` and human signoff recorded here. Registered at "
+        "the arrival conversation, by name, in answer to being asked." % (name or "").strip(),
+        1)
+    path.write_text(text, encoding="utf-8")
+    return uid, path, True
+
+
 def main() -> int:
     p = argparse.ArgumentParser(
         description=(
@@ -1405,7 +1697,7 @@ def main() -> int:
             "  tropo-mint-id --list-types\n"
             "  tropo-mint-id --type note --author mike\n"
             "  tropo-mint-id --type task --author argus-a144 "
-            "--activation-uid <8hex>\n"
+            "--activation-uid <uid>\n"
             "mint_mode=system-only bindings are reserved for explicit "
             "lifecycle-writer library APIs."
         ),
@@ -1413,15 +1705,20 @@ def main() -> int:
     )
     p.add_argument("--count", type=int, default=1, help="how many identifiers to mint (default 1)")
     p.add_argument("--reason", default="", help="advisory; for the caller's own log (not persisted)")
-    p.add_argument("--prefix", default="", help="optional namespace prefix (S8 seam); output is <prefix>-<8hex>")
+    p.add_argument("--prefix", default="", help="optional namespace prefix (S8 seam); output is <prefix>-<uid>")
     p.add_argument("--kind", default="file", choices=VALID_KINDS,
                    help="identifier kind (ADR-050 Decision 3); file/agent/studio/vault live, event declared-not-built")
     p.add_argument("--segment", default="private", choices=("private", "team"),
                    help="write segment (32067bea): team reads the studio-identity manifest and "
-                        "prefixes; private (default) stays bare 8-hex")
+                        "prefixes; private (default) stays the bare composite uid")
     p.add_argument("--minted-by", default="tropo-mint-id",
                    help="advisory provenance tag written into the studio-identity manifest "
                         "for --kind studio (ignored otherwise)")
+    p.add_argument("--set-entity-name", default=None, metavar="NAME",
+                   help="5854773a AC3: amend the studio-identity manifest's entity_name "
+                        "ONLY (studio_id/mint_prefix untouched). Requires a manifest to "
+                        "already exist (run --kind studio first). Standalone action, "
+                        "mutually exclusive with --kind/--type.")
     p.add_argument("--type", default="", metavar="TYPE",
                    help="Governed Autonomy S2 (bba40cd7): mint a FULL governed file of this "
                         "type from its registry-selected visible companion, stamp it, write it, "
@@ -1431,6 +1728,10 @@ def main() -> int:
     p.add_argument("--author", default="",
                    help="author label (required with --type); registered agent-generation "
                         "labels also require activation provenance")
+    p.add_argument("--title", default=None, metavar="TITLE",
+                   help="human-readable title for the minted artifact (fills the template's "
+                        "title token where the type carries one; the note type is EXEMPT -- "
+                        "3d430852 step 6 plumbing, the leg's optional token)")
     p.add_argument("--activation-uid", default="",
                    help="artifact provenance activation UID; defaults to "
                         "TROPO_ACTIVATION_UID for registered agent-generation authors")
@@ -1438,10 +1739,48 @@ def main() -> int:
                    help="scratch-only direct write under "
                         "agents/<agent>/.tropo-capsule/workspace; canonical homes, "
                         "outside paths, and symlinks refuse")
+    p.add_argument("--founder", default=None, metavar="NAME",
+                   help="v1.95 Spine A AC4: mint THIS Studio's founder principal through the "
+                        "governed door, idempotent on presence. Prints the uid.")
     p.add_argument("--no-freshen", action="store_true",
                    help="scratch-only: skip index freshening when --output-dir is also supplied; "
                         "canonical --type birth always freshens and verifies or fails")
     args = p.parse_args()
+
+    if args.founder is not None:
+        if args.type or args.list_types:
+            print("ERROR: --founder cannot be combined with --type/--list-types",
+                  file=sys.stderr)
+            return 1
+        root = Path(args.output_dir) if args.output_dir else Path.cwd()
+        try:
+            uid, path, minted = mint_founder_principal(
+                args.founder, root, author=args.author or "po",
+                activation_uid=args.activation_uid or None)
+        except Exception as exc:  # noqa: BLE001 — the concierge needs the reason, not a stack
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        if minted:
+            print(f"founder principal minted: {uid} ({path})")
+        else:
+            # Presence is the answer. Saying so is the point: the concierge must
+            # not ask a founder for their name twice, and a silent success would
+            # read as a fresh mint to whoever runs this next.
+            print(f"founder principal already present: {uid} — nothing minted, nothing asked")
+        return 0
+
+    if args.set_entity_name is not None:
+        if args.type or args.list_types:
+            print("ERROR: --set-entity-name cannot be combined with --type/--list-types",
+                  file=sys.stderr)
+            return 1
+        try:
+            data = set_entity_name(args.set_entity_name)
+        except (StudioIdentityError, ValueError) as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            return 1
+        print(f"entity_name set: {data['entity_name']!r} (studio_id {data['studio_id']} unchanged)")
+        return 0
 
     if args.list_types:
         if args.type:
@@ -1472,6 +1811,7 @@ def main() -> int:
         try:
             uid, out_path = mint_file(
                 args.type, author=args.author,
+                title=(args.title.strip() or None) if args.title else None,
                 activation_uid=(
                     args.activation_uid
                     or os.environ.get("TROPO_ACTIVATION_UID")

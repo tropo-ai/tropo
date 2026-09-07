@@ -84,6 +84,7 @@ Called correctly here; the stale path claim is a separate, small finding.
 import argparse
 import json
 import re
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -104,19 +105,43 @@ CREW_BRIEF_RENDERER_RELATIVE_PATH = "vault/tools/6510afc7.py"
 #: docstring). A playbook amendment breaks this tool loudly, not an observer
 #: quietly going dark.
 REQUIRED_STEP_LABELS = (
-    "Session memories.",
-    "Memory fold.",
-    "The letter.",
-    "Reflection.",
-    "Captain's Log.",
-    "Event drain.",
-    "Crew surfaces.",
-    "Retirement notice.",
+    "Append session memories",
+    "Write the letter",
+    "Reflection",
+    "Captain's Log",
+    "Drain events",
+    "Crew surfaces",
+    "Retirement broadcast",
+    "One commit",
 )
 
+#: Re-pinned 2026-09-05 (talos-t62, task f0150b2a4678) to the labels the
+#: playbook has carried since Mike ruled memory curation out of the retiring
+#: agent's job on 2026-09-04: "Memory fold." is gone, "One commit." arrived, and
+#: the rest were reworded. The registry was not re-pinned with the ruling, so
+#: this driver refused every invocation from 09-04 onward and A169, A170 and
+#: A171 all retired without it — the instrument that exists so a retirement is
+#: verified on the world instead of on the agent's word was itself unverifiable.
+#:
+#: Comparison is on the label HEAD, not the rendered string: the playbook writes
+#: "Reflection — optional; research-grade short form." and "Captain's Log", and
+#: pinning punctuation would make a copy-edit look like a missing step. A
+#: rename, an addition, a removal or a reorder of the head still refuses, which
+#: is the drift this contract exists to catch.
+
+
+def _normalise_label(label: str) -> str:
+    """The step's identity: the head before any em-dash qualifier, no trailing dot."""
+    return label.split("\u2014")[0].strip().rstrip(".").strip()
+
 _BOLD_STEP_RE = re.compile(r"^\d+\.\s+\*\*(.+?)\*\*", re.MULTILINE)
+# 59682505 cure (parse side, one authority): the playbook's real heading is
+# "## The checklist — required practice, in order"; the driver defers to any
+# H2 whose title contains "required practice", so a title tweak in the ONE
+# authority (the playbook) never silently darkens this driver again.
 _SECTION_RE = re.compile(
-    r"^##\s+Required Practice.*?$(.*?)(?=^##\s+|\Z)", re.MULTILINE | re.DOTALL
+    r"^##[^\n]*required practice[^\n]*$(.*?)(?=^##\s+|\Z)",
+    re.MULTILINE | re.DOTALL | re.IGNORECASE,
 )
 
 
@@ -134,18 +159,25 @@ def parse_required_steps(root: Path) -> list[str]:
     section_match = _SECTION_RE.search(text)
     if not section_match:
         raise PlaybookDriftError(
-            f"{path} — no '## Required Practice' section found"
+            f"{path} — no H2 titled with 'required practice' found"
         )
     found = tuple(_BOLD_STEP_RE.findall(section_match.group(1)))
-    if found != REQUIRED_STEP_LABELS:
+    normalised = tuple(_normalise_label(label) for label in found)
+    if normalised != REQUIRED_STEP_LABELS:
         raise PlaybookDriftError(
             "e2c7d185 §Required Practice no longer matches this driver's step "
             f"registry. Registry: {list(REQUIRED_STEP_LABELS)!r}. "
-            f"Playbook: {list(found)!r}. A step was added, renamed, removed, "
-            "or reordered — the driver refuses rather than silently checking "
-            "a subset."
+            f"Playbook: {list(normalised)!r}. A step was added, renamed, "
+            "removed, or reordered — the driver refuses rather than silently "
+            "checking a subset.\n"
+            "CURE: the playbook is the authority and it moved. Re-pin "
+            "REQUIRED_STEP_LABELS in vault/tools/tropo-retire-driver.py to the "
+            "playbook's labels above, add or drop the matching observer in "
+            "run_driver, and update test_retire_driver_v192's fixture — the "
+            "registry-matches-live-playbook test is what should have caught "
+            "this before a retirement did."
         )
-    return list(found)
+    return list(normalised)
 
 
 def _split_frontmatter(text: str) -> Optional[dict]:
@@ -176,42 +208,6 @@ def observe_session_memories(root: Path, agent: str, gen: str) -> tuple[bool, st
     return True, str(p)
 
 
-# --- Step 2: memory fold -----------------------------------------------------
-
-def observe_memory_fold(root: Path, agent: str, gen: str) -> tuple[bool, str]:
-    p = _memory_dir(root, agent) / "agent-memory.md"
-    if not p.is_file():
-        return False, f"{p} does not exist"
-    fm = _split_frontmatter(p.read_text(encoding="utf-8", errors="replace")) or {}
-    gen_token = f"{agent}-{gen}".lower()
-    # Branch 1: in-line fold, curated_by names THIS generation.
-    if str(fm.get("curated_by", "")).lower() == gen_token:
-        return True, f"{p} curated_by={fm.get('curated_by')!r}"
-    # Branch 2 (F6, lawful): sa.memory-curator dispatch for a generation
-    # whose in-line fold would leave the surface over-bound. A dispatched
-    # curator's own frozen snapshot names the generation in its filename.
-    # ANCHORED, not a substring. This read `if gen.lower() in child.name.lower()`
-    # and false-greened on every generation prefix. Measured against the real
-    # argus tree 2026-08-25: gen 'A15' resolved COMPLETE against
-    # a153-agent-memory-snapshot.md, and gen '1' resolved COMPLETE against both
-    # a153-... and 1fee9220.md. No test in the corpus touched this branch, and
-    # BOTH real driver runs (A155 and A153) resolved step 2 through it rather
-    # than through curated_by — so the branch carrying the live verdict was a
-    # bare substring match. Found by an independent adversarial pass.
-    history_dir = _memory_dir(root, agent) / "history"
-    if history_dir.is_dir():
-        anchored = re.compile(
-            rf"(?<![a-z0-9]){re.escape(gen.lower())}(?![a-z0-9])"
-        )
-        for child in sorted(history_dir.iterdir()):
-            if anchored.search(child.name.lower()):
-                return True, f"curator dispatch snapshot {child}"
-    return False, (
-        f"{p} curated_by={fm.get('curated_by')!r} does not name {gen_token!r}, "
-        f"and no dispatched curator snapshot found under {history_dir}"
-    )
-
-
 # --- Step 3: the letter (AC4-conditioned) ------------------------------------
 
 def observe_letter(
@@ -232,18 +228,38 @@ def observe_letter(
 def observe_reflection(root: Path, agent: str, gen: str) -> tuple[bool, str]:
     p = root / "agents" / agent / "reflections" / f"{gen.lower()}-reflection.md"
     if not p.is_file():
-        return False, f"{p} does not exist"
+        # The playbook: "Write it only if you have something a future researcher
+        # could use; otherwise skip." An absent reflection is a skip the playbook
+        # authorises, not a missed step — reporting it open would push agents to
+        # write filler to satisfy an instrument.
+        return True, "no reflection — optional per the playbook, skipped"
     text = p.read_text(encoding="utf-8", errors="replace")
     # A real heading, not a bare mention (found live authoring this
     # observer's own test: "no narrative section" in ordinary prose
     # case-insensitive-matched a substring search that never required a
     # heading — the exact weak-observer class this spec warns about for
     # Captain's Log and Status-Notes applies here too).
-    has_manifest = re.search(r"^#+\s*§?File Manifest\b", text, re.IGNORECASE | re.MULTILINE) is not None
-    has_narrative = re.search(r"^#+\s*§?Narrative\b", text, re.IGNORECASE | re.MULTILINE) is not None
-    if has_manifest and has_narrative:
+    # RE-PINNED 2026-09-05 (talos-t62, task f0150b2a4678). This required
+    # "File Manifest" and "Narrative" until now. The playbook's Reflection step
+    # was rewritten to the research-grade short form and it says, verbatim,
+    # "No File Manifest, commit tables, UID inventories" — so this observer was
+    # demanding the exact structure the ruling FORBIDS, and would have reported
+    # a perfectly compliant reflection as open. Found by running the driver on
+    # A169/A170/A171: all three "missing File Manifest, Narrative", which is the
+    # shape of a stale probe, not three agents making the same mistake.
+    #
+    # The headings the playbook now requires, and the bold-lead form it renders
+    # them in (`- **Mistake** — …`) as well as a heading, since it shows both.
+    required = ("Mistake", "Surprise", "Studio change")
+    present = {
+        name: re.search(
+            r"^(?:#+\s*§?|\s*[-*]\s*\*\*)%s\b" % re.escape(name),
+            text, re.IGNORECASE | re.MULTILINE) is not None
+        for name in required
+    }
+    if all(present.values()):
         return True, str(p)
-    missing = [n for n, ok in (("File Manifest", has_manifest), ("Narrative", has_narrative)) if not ok]
+    missing = [name for name, ok in present.items() if not ok]
     return False, f"{p} exists but missing section(s): {', '.join(missing)}"
 
 
@@ -385,6 +401,93 @@ def observe_crew_surfaces(
     return ok, evidence
 
 
+# --- One commit: the checklist artifacts land together, read from git ---------
+
+def _git(root: Path, *args: str) -> tuple[int, str]:
+    """Read-only git against THIS tree, with GIT_* scrubbed.
+
+    The scrub is not decoration. An inherited GIT_DIR beats cwd, so a caller
+    with one set would have this observer read a different repository and
+    report confidently about the wrong history (the 2026-09-02 class).
+    """
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["GIT_OPTIONAL_LOCKS"] = "0"
+    try:
+        r = subprocess.run(["git", "-C", str(root), *args], capture_output=True,
+                           text=True, timeout=30, env=env)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return 1, str(exc)
+    return r.returncode, (r.stdout or "").strip()
+
+
+def observe_one_commit(
+    root: Path, agent: str, gen: str, unified_entry_uid: Optional[str] = None,
+) -> tuple[bool, str]:
+    """The playbook's step 8: the retirement's artifacts land in ONE commit.
+
+    Observed from `git log`, never from testimony. Reflection is OPTIONAL — an
+    absent reflection is not an open step, because the playbook itself marks
+    that step optional; a reflection that EXISTS but sits in a different commit
+    is a real split and is reported.
+    """
+    letter_rel = f"agents/{agent}/transfers/{gen}.md"
+    code, sha = _git(root, "log", "--format=%H", "-1", "--", letter_rel)
+    if code != 0 or not sha:
+        return False, f"no commit in this tree touches {letter_rel} — nothing to verify"
+    code, listing = _git(root, "show", "--name-only", "--format=", sha)
+    if code != 0:
+        return False, f"could not read the file list of {sha[:12]}"
+    touched = {line.strip() for line in listing.splitlines() if line.strip()}
+
+    required = {
+        "letter": letter_rel,
+        "session memories": f"agents/{agent}/.tropo-capsule/memory/agent-memories.jsonl",
+        "captain's log": "library/captains-log.md",
+    }
+    if unified_entry_uid:
+        required["status-notes"] = f"vault/agents/{unified_entry_uid}.md"
+    reflection_rel = f"agents/{agent}/reflections/{gen.lower()}-reflection.md"
+    if (root / reflection_rel).is_file():
+        required["reflection"] = reflection_rel
+
+    missing = sorted(name for name, rel in required.items() if rel not in touched)
+
+    # The commit must not come AFTER the lineage `retired` line was recorded.
+    lineage_rel = f"agents/{agent}/lineage.jsonl"
+    code, lineage_sha = _git(root, "log", "--format=%H", "-1", "-S", f'"gen": "{gen}"',
+                             "--", lineage_rel)
+    order = ""
+    if code == 0 and lineage_sha and lineage_sha != sha:
+        anc, _ = _git(root, "merge-base", "--is-ancestor", sha, lineage_sha)
+        order = "" if anc == 0 else (
+            f"; the artifact commit {sha[:12]} does NOT precede the lineage "
+            f"commit {lineage_sha[:12]}")
+
+    if missing or order:
+        # Name WHERE each stray artifact actually landed. "not in this commit"
+        # reads as "absent", and absent is a different and much worse finding
+        # than "split across two commits" — which is what the step is for.
+        elsewhere = []
+        for name in missing:
+            rel = required[name]
+            # captains-log.md and agent-memories.jsonl are SHARED, append-only
+            # files: "the last commit that touched this path" is whoever wrote
+            # to them most recently, not where THIS generation's entry landed.
+            # The pickaxe finds the commit that introduced the generation's own
+            # text, which is the honest answer to "where did it go".
+            code2, other = _git(root, "log", "--format=%H", "-1", "-S", gen, "--", rel)
+            if code2 != 0 or not other:
+                code2, other = _git(root, "log", "--format=%H", "-1", "--", rel)
+            elsewhere.append(
+                f"{name} in {other[:12]}" if code2 == 0 and other else f"{name} in no commit")
+        return False, (
+            f"split across commits — {sha[:12]} carries "
+            f"{sorted(set(required) - set(missing))}; " + "; ".join(elsewhere) + order
+            if missing else f"commit {sha[:12]} carries every artifact{order}")
+    reflection_note = "" if "reflection" in required else " (no reflection — optional, n/a)"
+    return True, f"one commit {sha[:12]}: {sorted(required)}{reflection_note}"
+
+
 # --- Step 8: retirement notice (READ ONLY — never emits) --------------------
 
 def observe_retirement_notice(root: Path, agent: str, gen: str) -> tuple[bool, str]:
@@ -409,18 +512,6 @@ def observe_retirement_notice(root: Path, agent: str, gen: str) -> tuple[bool, s
     return True, f"{len(matches)} matching broadcast(s) on the bus"
 
 
-STEP_OBSERVERS = (
-    "Session memories.",
-    "Memory fold.",
-    "The letter.",
-    "Reflection.",
-    "Captain's Log.",
-    "Event drain.",
-    "Crew surfaces.",
-    "Retirement notice.",
-)
-
-
 def run_driver(
     root: Path, agent: str, gen: str, *,
     party_uid: Optional[str] = None,
@@ -439,28 +530,28 @@ def run_driver(
     steps: dict[str, dict] = {}
 
     ok, ev = observe_session_memories(root, agent, gen)
-    steps["Session memories."] = {"status": "complete" if ok else "open", "evidence": ev}
-
-    ok, ev = observe_memory_fold(root, agent, gen)
-    steps["Memory fold."] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["Append session memories"] = {"status": "complete" if ok else "open", "evidence": ev}
 
     ok, ev = observe_letter(root, agent, gen, letter_source)
-    steps["The letter."] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["Write the letter"] = {"status": "complete" if ok else "open", "evidence": ev}
 
     ok, ev = observe_reflection(root, agent, gen)
-    steps["Reflection."] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["Reflection"] = {"status": "complete" if ok else "open", "evidence": ev}
 
     ok, ev = observe_captains_log(root, agent, gen)
-    steps["Captain's Log."] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["Captain's Log"] = {"status": "complete" if ok else "open", "evidence": ev}
 
     ok, ev = observe_event_drain(root, agent, gen, party_uid, agent_root_uid, flagged_thread_ids)
-    steps["Event drain."] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["Drain events"] = {"status": "complete" if ok else "open", "evidence": ev}
 
     ok, ev = observe_crew_surfaces(root, agent, gen, unified_entry_uid, perform=perform_acts)
-    steps["Crew surfaces."] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["Crew surfaces"] = {"status": "complete" if ok else "open", "evidence": ev}
 
     ok, ev = observe_retirement_notice(root, agent, gen)
-    steps["Retirement notice."] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["Retirement broadcast"] = {"status": "complete" if ok else "open", "evidence": ev}
+
+    ok, ev = observe_one_commit(root, agent, gen, unified_entry_uid)
+    steps["One commit"] = {"status": "complete" if ok else "open", "evidence": ev}
 
     open_steps = [label for label in REQUIRED_STEP_LABELS if steps[label]["status"] == "open"]
     overall = "complete" if not open_steps else "incomplete"

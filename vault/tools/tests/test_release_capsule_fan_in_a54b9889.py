@@ -836,7 +836,11 @@ class LiveRule10Tests(unittest.TestCase):
             "receipt_kind": "release-verification-receipt",
             "instrument": instrument,
             "release_run_uid": self.RUN,
-            "package_sha256": PACKAGE_SHA,
+            # A155's v1.91 S2 ruling (3fb41c99): a receipt binds candidate_sha256,
+            # not package_sha256 - it is written at VERIFY time, before a freeze
+            # exists. The fixture kept the pre-ruling key and RECEIPT_FIELDS moved
+            # without it. Same value here; a freeze makes the two equal by identity.
+            "candidate_sha256": PACKAGE_SHA,
             "verdict": "pass",
             "executor_or_attester": "talos-t41",
             "execution_mode": "machine",
@@ -872,7 +876,11 @@ class LiveRule10Tests(unittest.TestCase):
 
     def test_a_receipt_over_a_different_package_fails(self) -> None:
         drifted = self.receipts()
-        drifted[2]["package_sha256"] = "e" * 64
+        # Must mutate the field Rule 10 actually binds (A155's candidate_sha256).
+        # Mutating the retired package_sha256 key merely added an ignored field:
+        # the control then passed on the MISSING candidate_sha256 rather than on
+        # drifted bytes, so it would have passed whatever it mutated.
+        drifted[2]["candidate_sha256"] = "e" * 64
         self.assertTrue(contract().check_rule_10(self.release(), drifted),
                         "an instrument that approved other bytes counted")
 

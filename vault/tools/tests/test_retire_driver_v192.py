@@ -24,6 +24,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import git_env  # noqa: E402  (contained git for the one-commit fixture)
+
 TOOLS = Path(__file__).resolve().parents[1]
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
@@ -36,14 +39,14 @@ SYNTHETIC_PLAYBOOK = """# Agent Retirement Playbook (fixture)
 
 ## Required Practice
 
-1. **Session memories.** Append learnings.
-2. **Memory fold.** Fold into agent-memory.md.
-3. **The letter.** Author the successor letter.
-4. **Reflection.** Write the reflection.
-5. **Captain's Log.** Append a personal note.
-6. **Event drain.** Answer or flag every open reply_required.
-7. **Crew surfaces.** Re-render the crew brief; update Status-Notes.
-8. **Retirement notice.** One tropo.broadcast.crew, category retirement.
+1. **Append session memories** Append learnings.
+2. **Write the letter** Author the successor letter.
+3. **Reflection — optional; research-grade short form.** Write the reflection.
+4. **Captain's Log** Append a personal note.
+5. **Drain events** Answer or flag every open reply_required.
+6. **Crew surfaces** Re-render the crew brief; update Status-Notes.
+7. **Retirement broadcast** One tropo.broadcast.crew, category retirement.
+8. **One commit.** The artifacts land together.
 
 ## Next Section
 
@@ -71,6 +74,17 @@ class RetireDriverFixture(unittest.TestCase):
         p.write_text(content, encoding="utf-8")
         return p
 
+    def _commit_world(self) -> None:
+        """Step 8 reads git, so the complete world is a real repository.
+
+        Contained through tests/git_env.py: an inherited GIT_DIR beats cwd, and
+        a fixture that ran `git init` on the caller's environment is how the
+        real studio was once re-initialised as bare.
+        """
+        git_env.init_repo(self.root)
+        git_env.git_run("add", "-A", cwd=self.root)
+        git_env.git_run("commit", "-q", "-m", "fixture retirement, one commit", cwd=self.root)
+
     def _build_complete_world(self) -> None:
         self._write("vault/playbooks/e2c7d185.md", SYNTHETIC_PLAYBOOK)
 
@@ -80,19 +94,15 @@ class RetireDriverFixture(unittest.TestCase):
             json.dumps({"learning": "something real"}) + "\n",
         )
 
-        # Step 2: memory fold, in-line branch.
-        self._write(
-            f"agents/{AGENT}/.tropo-capsule/memory/agent-memory.md",
-            f"---\ncurated_by: {AGENT}-{GEN}\n---\n\n# memory\n",
-        )
-
         # Step 3: the letter.
         self._write(f"agents/{AGENT}/transfers/{GEN}.md", "Dear successor,\n\nBuild the ship.\n")
 
         # Step 4: reflection.
         self._write(
             f"agents/{AGENT}/reflections/{GEN.lower()}-reflection.md",
-            "## File Manifest\n\n- one file\n\n## Narrative\n\nWhat mattered.\n",
+            "- **Mistake** — one reusable failure mode.\n"
+            "- **Surprise** — what violated the model.\n"
+            "- **Studio change** — one concrete improvement.\n",
         )
 
         # Step 5: Captain's Log, real entry marker.
@@ -134,6 +144,8 @@ class RetireDriverFixture(unittest.TestCase):
             }) + "\n",
         )
 
+        self._commit_world()
+
     def _run(self):
         return driver.run_driver(
             self.root, AGENT, GEN,
@@ -154,33 +166,49 @@ class RetireDriverFixture(unittest.TestCase):
     def test_mutation_step_1_session_memories(self) -> None:
         (self.root / f"agents/{AGENT}/.tropo-capsule/memory/agent-memories.jsonl").unlink()
         report = self._run()
-        self.assertEqual(report["open_steps"], ["Session memories."])
+        self.assertEqual(report["open_steps"], ["Append session memories"])
 
-    def test_mutation_step_2_memory_fold(self) -> None:
-        self._write(
-            f"agents/{AGENT}/.tropo-capsule/memory/agent-memory.md",
-            "---\ncurated_by: someone-else\n---\n\n# memory\n",
-        )
+    def test_mutation_step_8_one_commit_split_across_two(self) -> None:
+        """The step Mike's 2026-09-04 ruling added: the artifacts land together.
+
+        The complete world commits everything once. Re-committing the letter on
+        its own is exactly the split this step exists to catch, and it is the
+        shape A169 and A171 actually retired in (measured on the real tree)."""
+        letter = self.root / f"agents/{AGENT}/transfers/{GEN}.md"
+        letter.write_text("Dear successor,\n\nBuild the ship. Then sail it.\n", encoding="utf-8")
+        git_env.git_run("add", "-A", cwd=self.root)
+        git_env.git_run("commit", "-q", "-m", "letter, on its own", cwd=self.root)
         report = self._run()
-        self.assertEqual(report["open_steps"], ["Memory fold."])
+        self.assertEqual(report["open_steps"], ["One commit"])
+        self.assertIn("split across commits", report["steps"]["One commit"]["evidence"])
 
     def test_mutation_step_3_the_letter(self) -> None:
         (self.root / f"agents/{AGENT}/transfers/{GEN}.md").unlink()
         report = self._run()
-        self.assertEqual(report["open_steps"], ["The letter."])
+        self.assertEqual(report["open_steps"], ["Write the letter"])
 
     def test_mutation_step_4_reflection(self) -> None:
+        """One of the three required headings is not the three."""
         self._write(
             f"agents/{AGENT}/reflections/{GEN.lower()}-reflection.md",
-            "## File Manifest\n\nonly this section exists\n",
+            "- **Mistake** — only one of the three headings is here.\n",
         )
         report = self._run()
-        self.assertEqual(report["open_steps"], ["Reflection."])
+        self.assertEqual(report["open_steps"], ["Reflection"])
+
+    def test_an_absent_reflection_is_a_skip_the_playbook_authorises(self) -> None:
+        """"Write it only if you have something a future researcher could use;
+        otherwise skip." An absent reflection is not a missed step — reporting
+        it open would push agents to write filler to satisfy an instrument."""
+        (self.root / f"agents/{AGENT}/reflections/{GEN.lower()}-reflection.md").unlink()
+        report = self._run()
+        self.assertNotIn("Reflection", report["open_steps"])
+        self.assertIn("optional", report["steps"]["Reflection"]["evidence"])
 
     def test_mutation_step_5_captains_log(self) -> None:
         self._write("library/captains-log.md", "Nothing about this generation at all.\n")
         report = self._run()
-        self.assertEqual(report["open_steps"], ["Captain's Log."])
+        self.assertEqual(report["open_steps"], ["Captain's Log"])
 
     def test_mutation_step_6_event_drain(self) -> None:
         self._write(
@@ -198,17 +226,17 @@ class RetireDriverFixture(unittest.TestCase):
             }) + "\n",
         )
         report = self._run()
-        self.assertEqual(report["open_steps"], ["Event drain."])
+        self.assertEqual(report["open_steps"], ["Drain events"])
 
     def test_mutation_step_7_crew_surfaces(self) -> None:
         self._write("vault/agents/fixture-uid.md", "# fixture agent\n\nno status-notes retirement declaration\n")
         report = self._run()
-        self.assertEqual(report["open_steps"], ["Crew surfaces."])
+        self.assertEqual(report["open_steps"], ["Crew surfaces"])
 
     def test_mutation_step_8_retirement_notice(self) -> None:
         (self.root / "vault/events/streams/fixture-stream.jsonl").unlink()
         report = self._run()
-        self.assertEqual(report["open_steps"], ["Retirement notice."])
+        self.assertEqual(report["open_steps"], ["Retirement broadcast"])
 
     # --- Known-negatives for the two weak (token-shaped) observers ---------
 
@@ -220,7 +248,7 @@ class RetireDriverFixture(unittest.TestCase):
             f"## Someone Else G1 — 2026-08-24\n\nI was helped by {GEN} today.\n",
         )
         report = self._run()
-        self.assertIn("Captain's Log.", report["open_steps"])
+        self.assertIn("Captain's Log", report["open_steps"])
 
     def test_known_negative_reflection_bare_mention_is_not_a_real_section(self) -> None:
         """Found live authoring observe_reflection's own test: a case-
@@ -229,10 +257,10 @@ class RetireDriverFixture(unittest.TestCase):
         Fixed to require a real markdown heading; this pins the fix."""
         self._write(
             f"agents/{AGENT}/reflections/{GEN.lower()}-reflection.md",
-            "## File Manifest\n\n- one file\n\nI have no narrative to add this time.\n",
+            "# Reflection\n\nI made a mistake and had a surprise, but wrote no headings.\n",
         )
         report = self._run()
-        self.assertIn("Reflection.", report["open_steps"])
+        self.assertIn("Reflection", report["open_steps"])
 
     def test_known_negative_status_notes_generation_string_alone_is_not_an_observer(self) -> None:
         """The generation string appears, but nothing declares it RETIRED."""
@@ -241,14 +269,14 @@ class RetireDriverFixture(unittest.TestCase):
             f"# fixture agent\n\n## §Status-Notes\n\n**{GEN} ACTIVE, building v1.92.**\n",
         )
         report = self._run()
-        self.assertIn("Crew surfaces.", report["open_steps"])
+        self.assertIn("Crew surfaces", report["open_steps"])
 
     # --- Playbook-delta refusal ---------------------------------------------
 
     def test_a_renamed_step_label_refuses_and_names_it(self) -> None:
         self._write(
             "vault/playbooks/e2c7d185.md",
-            SYNTHETIC_PLAYBOOK.replace("**Memory fold.**", "**Memory Consolidation.**"),
+            SYNTHETIC_PLAYBOOK.replace("**One commit.**", "**Memory Consolidation.**"),
         )
         with self.assertRaises(driver.PlaybookDriftError) as caught:
             self._run()
@@ -256,61 +284,41 @@ class RetireDriverFixture(unittest.TestCase):
 
     def test_a_missing_step_refuses(self) -> None:
         lines = SYNTHETIC_PLAYBOOK.splitlines()
-        mutated = "\n".join(l for l in lines if "Reflection." not in l)
+        mutated = "\n".join(l for l in lines if "Reflection" not in l)
         self._write("vault/playbooks/e2c7d185.md", mutated)
         with self.assertRaises(driver.PlaybookDriftError):
             self._run()
 
     def test_a_reordered_pair_refuses(self) -> None:
-        mutated = SYNTHETIC_PLAYBOOK.replace(
-            "5. **Captain's Log.** Append a personal note.\n"
-            "6. **Event drain.** Answer or flag every open reply_required.\n",
-            "5. **Event drain.** Answer or flag every open reply_required.\n"
-            "6. **Captain's Log.** Append a personal note.\n",
-        )
+        """Known-negative: swap two steps and the driver must refuse.
+
+        This control silently stopped mutating when the fixture playbook was
+        re-pinned on 2026-09-05: its .replace() named the OLD numbering, matched
+        nothing, and the test passed by asserting a refusal that a no-op
+        mutation happened to still produce. The assert below is the cure — a
+        mutation that does not change the text is not a control."""
+        before = "4. **Captain's Log** Append a personal note.\n5. **Drain events** Answer or flag every open reply_required.\n"
+        after = "4. **Drain events** Answer or flag every open reply_required.\n5. **Captain's Log** Append a personal note.\n"
+        mutated = SYNTHETIC_PLAYBOOK.replace(before, after)
+        self.assertNotEqual(mutated, SYNTHETIC_PLAYBOOK,
+                            "the mutation matched nothing — this control is not controlling")
         self._write("vault/playbooks/e2c7d185.md", mutated)
         with self.assertRaises(driver.PlaybookDriftError):
             self._run()
 
+    def test_a_renamed_step_refuses_but_a_punctuation_tweak_does_not(self) -> None:
+        """The tolerance is exactly as wide as the task asked and no wider."""
+        tweaked = SYNTHETIC_PLAYBOOK.replace("**Captain's Log**", "**Captain's Log.**")
+        self.assertNotEqual(tweaked, SYNTHETIC_PLAYBOOK)
+        self._write("vault/playbooks/e2c7d185.md", tweaked)
+        self._run()   # a trailing dot is not drift
 
+        renamed = SYNTHETIC_PLAYBOOK.replace("**Captain's Log**", "**Skipper's Log**")
+        self.assertNotEqual(renamed, SYNTHETIC_PLAYBOOK)
+        self._write("vault/playbooks/e2c7d185.md", renamed)
+        with self.assertRaises(driver.PlaybookDriftError):
+            self._run()
 
-class TheMemoryFoldObserverIsAnchored(unittest.TestCase):
-    """The branch that carried the LIVE verdict was a bare substring match.
-
-    `observe_memory_fold` branch 2 read `if gen.lower() in child.name.lower()`
-    over `memory/history/`. No test in the corpus touched it, and BOTH real
-    driver runs (A155 and A153) resolved step 2 through it rather than through
-    `curated_by` — so the observer deciding real retirements was matching
-    substrings. Measured against the real argus tree before the fix:
-
-        gen 'A155' -> COMPLETE   (correct: a155-agent-memory-snapshot.md)
-        gen 'A15'  -> COMPLETE   (WRONG: matched a153-agent-memory-snapshot.md)
-        gen 'A1'   -> COMPLETE   (WRONG: same)
-        gen '1'    -> COMPLETE   (WRONG: matched a153-... and 1fee9220.md)
-
-    Found by an independent adversarial pass. A generation prefix must not
-    inherit a longer generation's fold.
-    """
-
-    ROOT = Path(__file__).resolve().parents[3]
-
-    def _observe(self, gen: str):
-        return driver.observe_memory_fold(self.ROOT, "argus", gen)[0]
-
-    def test_a_real_generation_still_resolves(self) -> None:
-        self.assertTrue(self._observe("A155"))
-
-    def test_a_prefix_of_a_real_generation_does_not_inherit_it(self) -> None:
-        for prefix in ("A15", "A1", "1"):
-            with self.subTest(gen=prefix):
-                self.assertFalse(
-                    self._observe(prefix),
-                    f"generation {prefix!r} resolved the memory fold complete "
-                    f"by matching a longer generation's snapshot filename",
-                )
-
-    def test_an_unrelated_token_does_not_resolve(self) -> None:
-        self.assertFalse(self._observe("ZZ99"))
 
 
 class TheDeclaredCommandsActuallyRun(unittest.TestCase):
@@ -370,3 +378,33 @@ class TheDeclaredCommandsActuallyRun(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheRegistryTracksTheLivePlaybook(unittest.TestCase):
+    """The regression the task asked for (f0150b2a4678 item 5).
+
+    The driver refused every invocation from 2026-09-04 to 2026-09-05 because
+    the playbook was amended and this registry was not — and NOTHING went red,
+    because every existing test asserted against the suite's own synthetic
+    fixture. Three homes for one list, and the two that agreed were both copies.
+
+    This reads the LIVE playbook. The next amendment goes red here, in the
+    suite, instead of silently at the next agent's retirement.
+    """
+
+    def test_registry_equals_the_live_playbook_labels(self) -> None:
+        root = Path(__file__).resolve().parents[3]
+        parsed = driver.parse_required_steps(root)   # raises on drift
+        self.assertEqual(parsed, list(driver.REQUIRED_STEP_LABELS))
+
+    def test_the_refusal_names_the_cure_not_only_the_delta(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "vault" / "playbooks").mkdir(parents=True)
+            (root / "vault" / "playbooks" / "e2c7d185.md").write_text(
+                SYNTHETIC_PLAYBOOK.replace("**One commit.**", "**Two commits.**"),
+                encoding="utf-8")
+            with self.assertRaises(driver.PlaybookDriftError) as cm:
+                driver.parse_required_steps(root)
+        self.assertIn("CURE:", str(cm.exception))
+        self.assertIn("REQUIRED_STEP_LABELS", str(cm.exception))

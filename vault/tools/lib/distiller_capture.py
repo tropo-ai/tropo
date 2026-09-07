@@ -1,7 +1,6 @@
 """Append one strict, segment-attested distillation usage event."""
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
@@ -12,12 +11,12 @@ from lib.capture_segment import (
     CaptureSegmentError,
     derive_capture_segment,
 )
+from lib.governed_path import is_governed_uid_shape
 
 
 USAGE_EVENT_TYPE = "tropo.distill.usage.recorded"
 _EMITTER_SOURCE = "/tools/emit-event"
 _EMITTER_SOURCE_UID = "ca90f098"
-_HEX8 = re.compile(r"^[0-9a-f]{8}$")
 
 
 class CaptureUsageErrorCode(str, Enum):
@@ -53,10 +52,14 @@ class CaptureReceipt:
 
 
 def _require_uid(value: object, field: str) -> str:
-    if not isinstance(value, str) or not _HEX8.fullmatch(value):
+    # accepts-both (UID_SHAPES): task_uid and viewer_principal_uid were gated
+    # to exactly 8 hex, rejecting post-flip 12-hex composite uids for these
+    # same fields (same bug class as the tropo-emit-event.py fix on these
+    # exact field names).
+    if not isinstance(value, str) or not is_governed_uid_shape(value):
         raise CaptureUsageError(
             CaptureUsageErrorCode.IDENTITY_INVALID,
-            f"{field} must be an 8-character lowercase hexadecimal UID",
+            f"{field} must be an 8-character or 12-character lowercase hexadecimal UID",
         )
     return value
 

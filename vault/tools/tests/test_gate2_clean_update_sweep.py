@@ -242,13 +242,21 @@ def b11_covenant_gauntlet_wired():
     # effects: version bump, release-dir creation, Pipeline Activation Key requirement).
     # Confirms Step 10.7 exists and is wired to call the floor test in both modes and
     # sys.exit on failure, matching the mechanism b10 already proved works standalone.
-    text = (ROOT / "vault" / "tools" / "tropo-build-release.py").read_text()
-    has_step107 = "Step 10.7" in text and "Covenant Gate" in text
-    calls_gauntlet = "'--gauntlet'" in text
-    hard_exits = "sys.exit(7)" in text
-    ok = has_step107 and calls_gauntlet and hard_exits
-    check(11, "Covenant gauntlet wired as a blocking build gate (Step 10.7, structural — not a real build run)",
-          ok, f"has_step107={has_step107} calls_gauntlet={calls_gauntlet} hard_exits={hard_exits}")
+    # v1.95 Spine B (f015997f8d8e AC1, 2026-09-05): Step 10.7 is no longer a direct
+    # call in the build tool. THE FLOOR TEST is the registered gate
+    # build-covenant-floor in tropo-release-preflight.py, whose decision is
+    # lib/build_guards.covenant_floor_problems (both modes, refusal on either),
+    # computed to LOCK-STATIC so it speaks before a build is attempted; the
+    # runner refuses to invoke the build without that row. The structural check
+    # follows the mechanism to where it now lives.
+    preflight = (ROOT / "vault" / "tools" / "tropo-release-preflight.py").read_text()
+    guards = (ROOT / "vault" / "tools" / "lib" / "build_guards.py").read_text()
+    registered = '"build-covenant-floor"' in preflight and "_build_covenant_floor" in preflight
+    calls_gauntlet = '"--gauntlet"' in guards and "def covenant_floor_problems" in guards
+    refuses = "cannot be skipped by" in guards and "THE FLOOR TEST failed" in guards
+    ok = registered and calls_gauntlet and refuses
+    check(11, "Covenant gauntlet wired as a blocking gate (registered build-covenant-floor at lock-static; structural — not a real build run)",
+          ok, f"registered={registered} calls_gauntlet={calls_gauntlet} refuses={refuses}")
 
 
 def b12_po_walk():

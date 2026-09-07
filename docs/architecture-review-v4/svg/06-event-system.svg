@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 910" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .panel-title { font-size: 15px; font-weight: bold; fill: #1a2332; }
+      .node { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .node-sub { font-size: 11px; fill: #5a6a7a; }
+      .label { font-size: 12px; fill: #44525f; }
+      .mono { font-family: Menlo, Consolas, monospace; font-size: 11px; fill: #2c4a6e; }
+      .guard { font-size: 11.5px; font-weight: bold; fill: #9c2b2b; }
+      .state { font-size: 17px; font-weight: bold; fill: #ffffff; }
+      .state-sub { font-size: 11.5px; fill: #ffffff; }
+      .edge { stroke: #8aa0b5; stroke-width: 1.8; fill: none; }
+      .caption { font-size: 12px; fill: #5a6a7a; font-style: italic; }
+    </style>
+    <marker id="arr6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8aa0b5"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="910" fill="#fafbfc"/>
+  <text x="40" y="48" class="title">The Event System — One Log, Guarded Writes, a Three-State Delivery Contract</text>
+  <text x="40" y="72" class="subtitle">All coordination — agent↔agent, agent↔human, tool telemetry — flows through one CloudEvents-enveloped JSONL log. Delivered → read → answered; views are projections.</text>
+
+  <!-- Producers -->
+  <rect x="40" y="110" width="300" height="300" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="60" y="140" class="panel-title">Producers</text>
+  <rect x="60" y="156" width="260" height="64" rx="6" fill="#eef2f6"/>
+  <text x="74" y="178" class="node">Agents + humans</text>
+  <text x="74" y="194" class="node-sub">directed messages, replies, acks,</text>
+  <text x="74" y="208" class="node-sub">crew broadcasts</text>
+  <rect x="60" y="230" width="260" height="64" rx="6" fill="#eef2f6"/>
+  <text x="74" y="252" class="node">Substrate-write tools (auto-emit)</text>
+  <text x="74" y="268" class="node-sub">rebuilds, recycles, activation writes,</text>
+  <text x="74" y="282" class="node-sub">pipeline ops, validator runs, releases</text>
+  <rect x="60" y="304" width="260" height="64" rx="6" fill="#eef2f6"/>
+  <text x="74" y="326" class="node">Lifecycle events</text>
+  <text x="74" y="342" class="node-sub">cycle opened/closed, ship-gate</text>
+  <text x="74" y="356" class="node-sub">progress, fleet-ops dispatches</text>
+  <text x="60" y="386" class="label">Every actor has a registered UID —</text>
+  <text x="60" y="402" class="label">including the human principal.</text>
+
+  <!-- emit guard -->
+  <rect x="380" y="150" width="240" height="220" rx="10" fill="#fbeeee" stroke="#cf9d9d"/>
+  <text x="400" y="180" class="panel-title">emit-event (the gate)</text>
+  <text x="400" y="206" class="guard">GUARD: source must be a</text>
+  <text x="400" y="222" class="guard">registered party UID</text>
+  <text x="400" y="246" class="guard">GUARD: directed messages must</text>
+  <text x="400" y="262" class="guard">be ADDRESSED to a party UID</text>
+  <text x="400" y="284" class="node-sub">(agent-root / lineage UIDs rejected on</text>
+  <text x="400" y="298" class="node-sub">both axes — wrong-axis messaging is</text>
+  <text x="400" y="312" class="node-sub">structurally impossible to send)</text>
+  <text x="400" y="336" class="node-sub">Strict mode default;</text>
+  <text x="400" y="350" class="node-sub">schema-validated envelope</text>
+
+  <!-- Log -->
+  <rect x="660" y="130" width="300" height="260" rx="10" fill="#2c4a6e"/>
+  <text x="680" y="162" class="panel-title" fill="#ffffff">The canonical log</text>
+  <text x="680" y="186" class="mono" fill="#cfe0ee">vault/events/00-events.jsonl</text>
+  <text x="680" y="212" class="node-sub" fill="#cfe0ee">append-only · tool-mediated writes only</text>
+  <text x="680" y="230" class="node-sub" fill="#cfe0ee">CloudEvents v1.0 envelope per event</text>
+  <text x="680" y="248" class="node-sub" fill="#cfe0ee">correlation IDs for reply chains</text>
+  <text x="680" y="266" class="node-sub" fill="#cfe0ee">reply_required flags surface obligations</text>
+  <text x="680" y="292" class="node-sub" fill="#cfe0ee">6,103 events as of 2026-07-10 (v1:</text>
+  <text x="680" y="308" class="node-sub" fill="#cfe0ee">3,900+) — who said what, when, in reply</text>
+  <text x="680" y="324" class="node-sub" fill="#cfe0ee">to what; grows hundreds/week under load</text>
+  <text x="680" y="352" class="mono" fill="#cfe0ee">+ derived SQLite view for query</text>
+
+  <!-- Consumers -->
+  <rect x="1000" y="110" width="240" height="300" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="1020" y="140" class="panel-title">Consumers</text>
+  <rect x="1020" y="156" width="200" height="60" rx="6" fill="#eef2f6"/>
+  <text x="1034" y="176" class="node">query-events</text>
+  <text x="1034" y="191" class="node-sub">per-party cursors; boot drains;</text>
+  <text x="1034" y="204" class="node-sub">drain writes read-receipts</text>
+  <rect x="1020" y="226" width="200" height="60" rx="6" fill="#eef2f6"/>
+  <text x="1034" y="246" class="node">Rendered projections</text>
+  <text x="1034" y="261" class="node-sub">user-facing channels, crew</text>
+  <text x="1034" y="274" class="node-sub">brief, status surfaces</text>
+  <rect x="1020" y="296" width="200" height="60" rx="6" fill="#eef2f6"/>
+  <text x="1034" y="316" class="node">Wakeup triggers</text>
+  <text x="1034" y="331" class="node-sub">reply_required drives the</text>
+  <text x="1034" y="344" class="node-sub">continuous-listen cadence</text>
+  <text x="1020" y="376" class="label">Recovery primitive rebuilds the</text>
+  <text x="1020" y="392" class="label">SQLite view from the log anytime.</text>
+
+  <path class="edge" d="M 340 250 L 380 250" marker-end="url(#arr6)"/>
+  <path class="edge" d="M 620 250 L 660 250" marker-end="url(#arr6)"/>
+  <path class="edge" d="M 960 250 L 1000 250" marker-end="url(#arr6)"/>
+
+  <!-- Three-state delivery contract -->
+  <rect x="40" y="440" width="1200" height="210" rx="10" fill="#f8f3ea" stroke="#d3c2a3"/>
+  <text x="60" y="470" class="panel-title">The three-state delivery contract (new since v1) — every state is derived from the log, none is claimed</text>
+
+  <rect x="60" y="486" width="340" height="104" rx="8" fill="#2c4a6e"/>
+  <text x="76" y="514" class="state">1 · DELIVERED</text>
+  <text x="76" y="536" class="state-sub">the event exists in the canonical log</text>
+  <text x="76" y="556" class="mono" fill="#cfe0ee">vault/events/00-events.jsonl</text>
+  <text x="76" y="576" class="state-sub">appended = delivered — no separate flag</text>
+
+  <rect x="470" y="486" width="340" height="104" rx="8" fill="#3a6b8a"/>
+  <text x="486" y="514" class="state">2 · READ</text>
+  <text x="486" y="536" class="state-sub">receipt in the per-reader ledger</text>
+  <text x="486" y="556" class="mono" fill="#d8e6ef">vault/events/receipts/&lt;party&gt;.jsonl</text>
+  <text x="486" y="576" class="state-sub">written by the drain tool on read</text>
+
+  <rect x="880" y="486" width="340" height="104" rx="8" fill="#4a8a6b"/>
+  <text x="896" y="514" class="state">3 · ANSWERED</text>
+  <text x="896" y="536" class="state-sub">a reply whose correlation ID matches</text>
+  <text x="896" y="552" class="state-sub">the original event exists in the log</text>
+  <text x="896" y="576" class="state-sub" font-weight="bold">computed from correlations — never claimed</text>
+
+  <path class="edge" d="M 400 538 L 470 538" marker-end="url(#arr6)"/>
+  <path class="edge" d="M 810 538 L 880 538" marker-end="url(#arr6)"/>
+
+  <text x="60" y="614" class="label">A reply_required flag creates a visible obligation that stays open until a correlated answer lands — the answered-state is derived by query, never asserted by an agent.</text>
+  <text x="60" y="636" class="label" font-weight="bold">The operating bar, set by the principal after lived failure: a message addressed to an agent cannot be missed, and a completion cannot be invisible — by construction.</text>
+
+  <!-- Identity guards detail -->
+  <rect x="40" y="680" width="585" height="170" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="60" y="710" class="panel-title">Identity-guarded writes (hardened iteratively, incident-driven)</text>
+  <text x="60" y="738" class="label">• Two UIDs per agent, two axes: party UID (messaging) vs agent-root (lineage).</text>
+  <text x="60" y="760" class="label">• Wrong-axis traffic rejected at emission — on both send and address axes.</text>
+  <text x="60" y="782" class="label">• Superseded identities persist as resolvable tombstones; rejected as signers.</text>
+  <text x="60" y="808" class="label" font-weight="bold">• Known limitation: no cryptographic log integrity yet — event signing /</text>
+  <text x="60" y="826" class="label" font-weight="bold">  hash-chaining is the named next frontier (tracked on the roadmap).</text>
+
+  <!-- Projections detail -->
+  <rect x="655" y="680" width="585" height="170" rx="10" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="675" y="710" class="panel-title">Projections, not authored surfaces</text>
+  <text x="675" y="738" class="label">• Sixteen hand-authored coordination channels retired over a six-release arc.</text>
+  <text x="675" y="760" class="label">• Agents read the log directly; surviving human surfaces are rendered views.</text>
+  <text x="675" y="782" class="label">• Tool telemetry lands in the same log — "what happened, in order" is one</text>
+  <text x="675" y="800" class="label">  query over one file.</text>
+  <text x="675" y="826" class="label" font-weight="bold">• One source of truth, many views — the same doctrine as the vault index.</text>
+
+  <text x="40" y="886" class="caption">One append-only CloudEvents log — 6,103 events — with identity-guarded emission and a delivery contract (delivered → read → answered) whose every state is derived from the log, never claimed.</text>
+</svg>

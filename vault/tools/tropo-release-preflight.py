@@ -46,7 +46,9 @@ reads — never by naming the phase it would like to run at.
 from __future__ import annotations
 
 import argparse
+import ast
 import importlib.util
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -56,11 +58,14 @@ if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 
 from lib import release_gate_inputs as gate_inputs  # noqa: E402
+from lib import build_guards  # noqa: E402
+from lib import release_capsule_contract as contract  # noqa: E402
 from lib.release_gates import (  # noqa: E402
     PHASES,
     VERDICT_ERROR,
     VERDICT_PASS,
     VERDICT_REFUSED,
+    VERDICT_SKIPPED,
     Gate,
     GateOutcome,
     GateRegistry,
@@ -94,7 +99,7 @@ def _ship_python_floor(context: Dict[str, Any]) -> GateOutcome:
     tree, which exists before anything is built, so there is no honest reason
     for it to first speak after the package is published.
     """
-    vault = Path(context["source_tree"])
+    vault = Path(_tree(context, "source_tree"))
     try:
         validator = _load_validator()
         findings, checked, defects = validator.check_ship_python_interpreter_floor(vault)
@@ -269,8 +274,15 @@ def _lock_plan_record(context: Dict[str, Any]) -> GateOutcome:
     failures = []
     if not fm.get("uid"):
         failures.append("the plan record names no uid")
-    if str(fm.get("status") or "") not in ("locked", "active", "design"):
-        failures.append("plan status is %r, not a plan state" % fm.get("status"))
+    # The capsule's enum, ONE declared set (lib/release_capsule_contract.PLAN_STATUSES).
+    # This gate carried its own hand list of three states (locked, active, design), which lacked
+    # `specify` -- the plan's correct post-walk state -- and refused Mike's v1.95
+    # ignition on it. Two readers of one fact, one of them wrong (talos-t63, 2026-09-06,
+    # f015ef8ff398 step 2).
+    status = str(fm.get("status") or "").strip().lower()
+    if status not in contract.PLAN_STATUSES:
+        failures.append("plan status is %r, not a plan state (%s)"
+                        % (fm.get("status"), "/".join(sorted(contract.PLAN_STATUSES))))
     return _governance_outcome("lock-plan-record", failures, "release plan")
 
 
@@ -324,27 +336,154 @@ def _lock_criteria_readable(context: Dict[str, Any]) -> GateOutcome:
     return _governance_outcome("lock-criteria-readable", failures, "acceptance criteria")
 
 
+#: v1.95 Spine B, plan-owner ruling 2026-09-05 (metis-g121, verbatim "REFUSE"):
+#: an unresolvable `python3 -m unittest` id is the SAME defect as a missing path
+#: in another notation, and whether an id resolves is mechanically decidable —
+#: which is where Mike's 2026-09-01 rule allows a refusal rather than a warning.
+#: Her harm, in her sentence: a spec whose declared verification surface does not
+#: exist can be closed and locked carrying a criterion nobody can ever run, and
+#: the plan's Definition of Done becomes a false claim at fire.
+#:
+#: Resolution is STATIC — ast.parse, never import. Importing a test module to
+#: check a name would execute it, at lock, on the plan owner's tree.
+
+def _unittest_ids(command: str) -> list:
+    """The dotted ids a `python3 -m unittest ...` command names."""
+    tokens = command.split()
+    if "unittest" not in tokens:
+        return []
+    ident = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$")
+    found = []
+    for token in tokens[tokens.index("unittest") + 1:]:
+        if token.startswith("-"):
+            continue
+        if not ident.match(token):
+            break   # the command ended; prose follows ("then on the v1.95 run:")
+        found.append(token)
+    return found
+
+
+def _unresolvable_id(root: Path, dotted: str):
+    """None if the id resolves in this tree, else a one-line reason."""
+    parts = dotted.split(".")
+    rest = None
+    for cut in range(len(parts), 0, -1):
+        candidate = root.joinpath(*parts[:cut]).with_suffix(".py")
+        if candidate.is_file():
+            rest = parts[cut:]
+            break
+    if rest is None:
+        return "no module file for %s" % dotted
+    if not rest:
+        return None
+    try:
+        tree = ast.parse(candidate.read_text(encoding="utf-8", errors="replace"))
+    except SyntaxError as exc:
+        return "%s does not parse (%s)" % (candidate.name, exc.msg)
+    node = tree
+    for name in rest:
+        found = None
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) \
+                    and child.name == name:
+                found = child
+                break
+        if found is None:
+            # An inherited member is legitimate: a TestCase subclass may declare
+            # none of the methods it runs. Only an unresolvable name on a class
+            # with NO bases is decidably absent.
+            if isinstance(node, ast.ClassDef) and node.bases:
+                return None
+            return "%s has no %s" % (candidate.name, name)
+        node = found
+    return None
+
+
 def _lock_verify_commands_runnable(context: Dict[str, Any]) -> GateOutcome:
     members = context.get("fan_in_manifest") or []
     index = context.get("governed_index") or {}
     root = Path(str(context.get("shipped_tool_corpus") or "."))
     failures = []
+    skipped_manual = []
+    skipped_placeholders = []
     for uid in members:
         row = index.get(uid) or {}
         for crit in (row.get("acceptance_criteria") or []):
             if not isinstance(crit, dict):
                 continue
-            command = str((crit.get("verify") or {}).get("command") or "")
-            for token in command.split():
-                if "/" not in token or token.startswith("-"):
-                    continue
-                if not (root / token).exists():
+            verify = crit.get("verify") or {}
+            # A MANUAL criterion's `command` is prose by the capsule's own design
+            # ("recorded at lock / walk"), not a shell line. Reading its slashes as
+            # paths refused the v1.94 lock on 5854773a AC6 ("Mike's one-word
+            # keep/suppress recorded here"). Skip it -- and EMIT the skip, so a
+            # gate that evaluated nothing cannot read as a gate that passed
+            # (2026-09-03, metis-g118; Talos owns this tool and was told).
+            if str(verify.get("method") or "").strip().lower() == "manual":
+                skipped_manual.append("%s %s" % (uid, crit.get("id") or "?"))
+                continue
+            command = str(verify.get("command") or "")
+            # A verify command is a SHELL LINE, not a path list. Reading each
+            # raw whitespace token as a path made this gate refuse two TRUE rows
+            # at the v1.95 ignition: AC6's token is the literal
+            # `open('vault/00-index.jsonl')` — a valid `python -c`, and the file
+            # is on disk — and AC5's is `vault/pipeline-runs/<v195-run>`, a
+            # declared placeholder for a folder that cannot exist before the run
+            # is created. Mike 2026-09-01: a gate asserts only what is
+            # mechanically decidable; everything else warns.
+            # (argus-a172 + metis-g121, 2026-09-05.)
+            for dotted in _unittest_ids(command):
+                why = _unresolvable_id(root, dotted)
+                if why:
                     failures.append(
-                        "%s %s names %s, which does not exist"
-                        % (uid, crit.get("id") or "?", token)
-                    )
-    return _governance_outcome(
+                        "%s %s names test id %s, which does not resolve (%s)"
+                        % (uid, crit.get("id") or "?", dotted, why))
+            for raw in command.split():
+                # A path inside a call expression is not at the token's ends,
+                # so trimming leaves `open('vault/00-index.jsonl`. Decompose the
+                # token on wrapper punctuation instead and judge each piece.
+                #
+                # NOT by pairing quotes: `"rows=open('p')"` nests them, and a
+                # paired regex captured `rows=open(` and `)` while never seeing
+                # the path — so the positive arm passed VACUOUSLY, with the path
+                # unchecked. The absent-path known-negative is what exposed that;
+                # a cure with only the happy arm would have shipped it.
+                for token in re.split(r"""['"()`,;\[\]{}]""", raw):
+                    token = token.strip()
+                    if "<" in token and ">" in token:
+                        # A parameter, by every spec convention. EMIT the skip:
+                        # a gate that quietly evaluated nothing must not read as
+                        # a gate that passed — the rule the manual-criteria skip
+                        # above already follows.
+                        skipped_placeholders.append(
+                            "%s %s %s" % (uid, crit.get("id") or "?", token))
+                        continue
+                    if "/" not in token or token.startswith("-"):
+                        continue
+                    if not (root / token).exists():
+                        failures.append(
+                            "%s %s names %s, which does not exist"
+                            % (uid, crit.get("id") or "?", token)
+                        )
+    outcome = _governance_outcome(
         "lock-verify-commands-runnable", failures, "verify commands")
+    notes = []
+    if skipped_manual:
+        notes.append("%d manual criteria not evaluated (manual by declaration): %s"
+                     % (len(skipped_manual), ", ".join(skipped_manual)))
+    if skipped_placeholders:
+        notes.append("%d placeholder token(s) not resolved (parameters, by declaration): %s"
+                     % (len(skipped_placeholders), ", ".join(skipped_placeholders)))
+    if notes and not failures:
+        outcome = GateOutcome(
+            gate_id="lock-verify-commands-runnable", verdict=VERDICT_PASS,
+            detail="; ".join(notes),
+            evidence={"skipped_manual": list(skipped_manual),
+                      "skipped_placeholders": list(skipped_placeholders)},
+        )
+    elif notes:
+        outcome.evidence["skipped_manual"] = list(skipped_manual)
+        outcome.evidence["skipped_placeholders"] = list(skipped_placeholders)
+    return outcome
 
 
 def _lock_target_release_current(context: Dict[str, Any]) -> GateOutcome:
@@ -444,12 +583,315 @@ def register_pre_outward_fire_gates(
     return registry
 
 
+# ---------------------------------------------------------------------------
+# v1.95 Spine B (f015997f8d8e): the BUILD's own guards, registered.
+#
+# tropo-build-release.py called its guards directly, in sequence, so the box
+# failed at the first one each attempt — v1.94 took eight — and this preflight
+# could not see them. Each row here wraps a pure check from lib/build_guards
+# (one definition, two readers). A guard reading the assembled box declares
+# ("extracted_tree",) and the registry computes it to candidate; a guard
+# reading only the source tree declares ("source_tree",) and lands at
+# lock-static. No row names its phase. First guard registered 2026-09-05 by
+# argus-a171 as the shape proof; the census in AC1 follows in this roster.
+# ---------------------------------------------------------------------------
+
+BUILD_GUARD_ROSTER = (
+    # ── candidate: readers of the assembled box ──
+    ("build-mission-brief-slot", "confidentiality-leak-in-boot-slot",
+     ("extracted_tree",),
+     "the shipped .tropo-studio/mission-brief.md is present and is the generic "
+     "<FILL: …> template — Argo's real crew brief once shipped verbatim as every "
+     "customer studio's own mission, and that publication cannot be recalled "
+     "(task 2ffda37e defect #1)"),
+    ("build-shipped-surfaces", "box-missing-declared-surface",
+     ("extracted_tree",),
+     "the box carries 00-tropo-nav (non-empty) and the five workspace folders — "
+     "both shipped silently missing in the v1.74 release walk (RT1/RT2, 1ee11d09); "
+     "a box without its declared surfaces is a quiet hole every stranger opens"),
+    ("build-no-stale-system-dir", "one-home-layout-regression",
+     ("extracted_tree",),
+     "system/ is absent and vault/updates/ present — ADR-045 One Home moved them "
+     "together; a box on neither layout cannot apply its own updates"),
+    ("build-no-studio-identity", "shipped-studio-identity",
+     ("extracted_tree",),
+     "no .tropo/studio-identity.md and no vault-entity record in the box — every "
+     "customer who unzips a box carrying one begins life as the SAME Studio and "
+     "their uids collide at the first federation; not recallable once downloaded "
+     "(v1.95 Spine A AC1, Mike-ruled 2026-09-05)"),
+    ("build-shadow-substitutions", "shadow-pair-unfulfilled",
+     ("source_tree", "extracted_tree"),
+     "every SHADOW designation substituted: twin in the box, source out — a "
+     "withheld source with no twin is a hole where a document was promised"),
+    ("build-release-harness", "box-fails-own-regression",
+     ("source_tree", "extracted_tree"),
+     "the box passes .tropo/scripts/test-harness-check.py — a release that fails "
+     "its own mechanical regression froze a package digest every receipt then "
+     "attested (Step 10.5, brief f13cc214)"),
+    ("build-box-self-test", "box-self-test-red",
+     ("extracted_tree",),
+     "the shipped tropo-test.py --quick runs GREEN or YELLOW inside the box; RED "
+     "refuses — a box whose own test surface fails inside itself was frozen and "
+     "green-lit (v1.80 S2, be1979b6)"),
+    ("build-box-registry-rows", "box-registry-empty",
+     ("extracted_tree",),
+     "subsystem-registry.jsonl in the box carries rows — an empty registry means "
+     "regeneration never landed and the box is incomplete (v1.80 S2)"),
+    # ── candidate: Spine A's reachability rows (f015de6b3a18 AC7), declared there,
+    # registered here; none can pass on an empty box ──
+    ("build-doc-currency", "dead-shipped-instruction",
+     ("source_tree", "extracted_tree"),
+     "every path a shipped instruction document names resolves inside the box — "
+     "a reader following a dead link in a playbook is stranded in a box that "
+     "certified itself complete (Spine A AC7 row a)"),
+    ("build-no-shell-instructions", "shell-command-as-instruction",
+     ("extracted_tree",),
+     "no shipped concierge instruction is a bare shell command presented as prose "
+     "— Po renders a clickable link, else an absolute path, never `open <path>` "
+     "(Mike-ruled 2026-09-05; Spine A AC7 row b)"),
+    ("build-changelog-names-version", "changelog-drift",
+     ("extracted_tree", "version_string"),
+     "the shipped CHANGELOG.md carries a `## [version]` entry for the version being "
+     "shipped — a plain header promise drifted twice before the G83 gate (AC7 row c)"),
+    ("build-memory-surfaces", "memory-sovereignty-surface-missing",
+     ("extracted_tree",),
+     "every boot-routed memory-sovereignty surface tropo-memory.capsule names ships "
+     "and carries the rule (OP-14 in the principles; CLAUDE.md §Memory Writes) — "
+     "an agent this box creates must never learn to pin memory in a harness store "
+     "(Spine A AC6/AC7 row i)"),
+    # ── lock-static: readers of the source tree only — these now speak BEFORE a
+    # build is attempted, which is the whole compiler-loop point ──
+    ("build-covenant-floor", "update-covenant-violation",
+     ("source_tree",),
+     "THE FLOOR TEST (ADR-049 layer 2, fc4874f4): the gauntlet catches a planted "
+     "violation and the real run shows zero user-file churn — an update built "
+     "from this tree would otherwise overwrite files a customer authored"),
+    ("build-overwrite-guard", "deletion-of-governed-substrate",
+     ("version_string",),
+     "no existing build/testing dir for this version disagrees with it or lacks a "
+     "version.md stamp — the V36 2026-04-30 scenario handed prior working content "
+     "to an unconditional rmtree; --force is the deliberate case, via context"),
+    ("build-no-absolute-paths", "machine-path-leak",
+     ("source_tree",),
+     "no file in the shipped tool corpus (vault/tools, .tropo/scripts) outside the "
+     "allowlist carries an absolute machine path — "
+     "v1.90 came one paste from public with three maintainer scripts hard-coded "
+     "to one machine while the box's test-report certified their absence"),
+    ("build-activation-key", "unreconstructable-identity-or-lineage",
+     ("pipeline_run", "version_string"),
+     "the Pipeline Activation Key minted at produce-release-folder verifies for "
+     "this activation (or the attested-build fallback for this version) — a box "
+     "built standalone is believed to have passed gates that never ran"),
+)
+
+
+def _tree(context: Dict[str, Any], key: str) -> str:
+    """A path input the verifier is about to judge. Talos T62 measured
+    (2026-09-05, evt_32a4374c291f9a09_00000005): run_phase treats an EMPTY
+    string as present, so Path('') is the current directory and five box gates
+    PASSED while judging the live Studio. The registry's absence rule is by
+    phase, not by type (a settled Gate contract), so the cure lives here, in
+    the verifiers that read paths: a blank path is an operational error that
+    names itself, never a tree to judge."""
+    value = context.get(key)
+    if value is None or not str(value).strip():
+        raise _BlankTreeInput("%s is blank in the context — the gate would judge the "
+                              "current directory, not the box" % key)
+    return str(value)
+
+
+class _BlankTreeInput(RuntimeError):
+    pass
+
+
+def _problems_outcome(gate_id: str, problems, detail_ok: str, evidence=None) -> GateOutcome:
+    """One shape for every build guard: name every problem, never only the first."""
+    if problems:
+        return GateOutcome(
+            gate_id=gate_id, verdict=VERDICT_REFUSED,
+            detail="; ".join(problems),
+            evidence={"problems": list(problems), "count": len(problems), **(evidence or {})},
+        )
+    return GateOutcome(gate_id=gate_id, verdict=VERDICT_PASS, detail=detail_ok,
+                       evidence=dict(evidence or {}))
+
+
+def _build_shipped_surfaces(context: Dict[str, Any]) -> GateOutcome:
+    return _problems_outcome(
+        "build-shipped-surfaces",
+        build_guards.shipped_surfaces_problems(_tree(context, "extracted_tree")),
+        "00-tropo-nav + %d workspace folders present" % (len(build_guards.SHIPPED_SURFACES) - 1))
+
+
+def _build_no_stale_system_dir(context: Dict[str, Any]) -> GateOutcome:
+    return _problems_outcome(
+        "build-no-stale-system-dir",
+        build_guards.stale_system_dir_problems(_tree(context, "extracted_tree")),
+        "system/ absent; vault/updates/ present")
+
+
+def _build_no_studio_identity(context: Dict[str, Any]) -> GateOutcome:
+    return _problems_outcome(
+        "build-no-studio-identity",
+        build_guards.studio_identity_problems(_tree(context, "extracted_tree")),
+        "no studio-identity manifest and no vault-entity record in the box")
+
+
+def _build_shadow_substitutions(context: Dict[str, Any]) -> GateOutcome:
+    from lib import ship_verdict
+    resolver = ship_verdict.build_resolver(_tree(context, "source_tree"))
+    pairs = resolver.shadow_pairs()
+    if not pairs:
+        return GateOutcome(gate_id="build-shadow-substitutions", verdict=VERDICT_PASS,
+                           detail="no SHADOW designations in this manifest")
+    problems, confirmed = build_guards.shadow_substitution_problems(
+        _tree(context, "extracted_tree"), pairs)
+    return _problems_outcome(
+        "build-shadow-substitutions", problems,
+        "%d SHADOW pair(s) substituted" % len(confirmed), {"confirmed": confirmed})
+
+
+def _build_release_harness(context: Dict[str, Any]) -> GateOutcome:
+    problems, out = build_guards.release_harness_problems(
+        _tree(context, "source_tree"), _tree(context, "extracted_tree"))
+    return _problems_outcome("build-release-harness", problems,
+                             "test-harness regression PASS", {"output": out[-2000:]})
+
+
+def _build_box_self_test(context: Dict[str, Any]) -> GateOutcome:
+    problems, out = build_guards.box_self_test_problems(_tree(context, "extracted_tree"))
+    return _problems_outcome("build-box-self-test", problems,
+                             "shipped self-test in-box GREEN/YELLOW", {"output": out[-2000:]})
+
+
+def _build_box_registry_rows(context: Dict[str, Any]) -> GateOutcome:
+    problems, note = build_guards.box_registry_rows_problems(_tree(context, "extracted_tree"))
+    return _problems_outcome("build-box-registry-rows", problems, note)
+
+
+def _build_covenant_floor(context: Dict[str, Any]) -> GateOutcome:
+    problems, out = build_guards.covenant_floor_problems(_tree(context, "source_tree"))
+    return _problems_outcome("build-covenant-floor", problems,
+                             "gauntlet caught the planted violation; real run shows zero churn",
+                             {"output": out[-2000:]})
+
+
+def _build_mission_brief_slot(context: Dict[str, Any]) -> GateOutcome:
+    problems = build_guards.mission_brief_slot_problems(_tree(context, "extracted_tree"))
+    if problems:
+        return GateOutcome(
+            gate_id="build-mission-brief-slot",
+            verdict=VERDICT_REFUSED,
+            detail="mission-brief slot: %s" % "; ".join(problems),
+            evidence={"problems": list(problems), "count": len(problems)},
+        )
+    return GateOutcome(
+        gate_id="build-mission-brief-slot", verdict=VERDICT_PASS,
+        detail="%s is the generic <FILL: …> template" % build_guards.MISSION_BRIEF_SLOT_REL,
+    )
+
+
+def _build_overwrite_guard(context: Dict[str, Any]) -> GateOutcome:
+    releases_root = context.get("releases_root")
+    if not releases_root:
+        return GateOutcome(gate_id="build-overwrite-guard", verdict=VERDICT_ERROR,
+                           detail="releases_root is not in the context; the roots seam could not be read")
+    return _problems_outcome(
+        "build-overwrite-guard",
+        build_guards.overwrite_problems(context["version_string"], releases_root,
+                                        force=bool(context.get("force"))),
+        "no conflicting build/testing dir for v%s under %s" % (context["version_string"], releases_root))
+
+
+def _build_no_absolute_paths(context: Dict[str, Any]) -> GateOutcome:
+    return _problems_outcome(
+        "build-no-absolute-paths",
+        build_guards.absolute_path_problems(_tree(context, "source_tree")),
+        "no absolute machine paths in committed files outside the allowlist")
+
+
+def _build_activation_key(context: Dict[str, Any]) -> GateOutcome:
+    problems, detail = build_guards.activation_key_problems(
+        _tree(context, "source_tree"), context["pipeline_run"], context["version_string"])
+    return _problems_outcome("build-activation-key", problems, detail)
+
+
+def _build_doc_currency(context: Dict[str, Any]) -> GateOutcome:
+    return _problems_outcome("build-doc-currency",
+                             build_guards.doc_currency_problems(_tree(context, "source_tree"), _tree(context, "extracted_tree")),
+                             "every shipped instruction reference resolves inside the box")
+
+
+def _build_no_shell_instructions(context: Dict[str, Any]) -> GateOutcome:
+    return _problems_outcome("build-no-shell-instructions",
+                             build_guards.shell_instruction_problems(_tree(context, "extracted_tree")),
+                             "no shipped concierge instruction is a shell command presented as prose")
+
+
+def _build_changelog_names_version(context: Dict[str, Any]) -> GateOutcome:
+    return _problems_outcome("build-changelog-names-version",
+                             build_guards.changelog_names_version_problems(_tree(context, "extracted_tree"), context["version_string"]),
+                             "CHANGELOG.md names v%s" % context["version_string"])
+
+
+def _build_memory_surfaces(context: Dict[str, Any]) -> GateOutcome:
+    return _problems_outcome("build-memory-surfaces",
+                             build_guards.memory_surfaces_problems(_tree(context, "extracted_tree")),
+                             "both memory-sovereignty surfaces ship and carry the rule")
+
+
+BUILD_GUARD_VERIFIERS = {
+    "build-mission-brief-slot": _build_mission_brief_slot,
+    "build-doc-currency": _build_doc_currency,
+    "build-no-shell-instructions": _build_no_shell_instructions,
+    "build-changelog-names-version": _build_changelog_names_version,
+    "build-memory-surfaces": _build_memory_surfaces,
+    "build-overwrite-guard": _build_overwrite_guard,
+    "build-no-absolute-paths": _build_no_absolute_paths,
+    "build-activation-key": _build_activation_key,
+    "build-shipped-surfaces": _build_shipped_surfaces,
+    "build-no-stale-system-dir": _build_no_stale_system_dir,
+    "build-no-studio-identity": _build_no_studio_identity,
+    "build-shadow-substitutions": _build_shadow_substitutions,
+    "build-release-harness": _build_release_harness,
+    "build-box-self-test": _build_box_self_test,
+    "build-box-registry-rows": _build_box_registry_rows,
+    "build-covenant-floor": _build_covenant_floor,
+}
+
+
+def register_build_gates(registry: GateRegistry) -> GateRegistry:
+    """Bind the build-guard roster. Same one-list discipline as the other two."""
+    stray = sorted(set(BUILD_GUARD_VERIFIERS) - {r[0] for r in BUILD_GUARD_ROSTER})
+    if stray:
+        raise ReleaseGateError(
+            "verifier(s) for gate(s) not on BUILD_GUARD_ROSTER: %s" % ", ".join(stray)
+        )
+    for gate_id, refusal_class, inputs, description in BUILD_GUARD_ROSTER:
+        verifier = BUILD_GUARD_VERIFIERS.get(gate_id)
+        if verifier is None:
+            raise ReleaseGateError("no verifier for build guard %r" % gate_id)
+        registry.register(
+            Gate(
+                gate_id=gate_id,
+                refusal_class=refusal_class,
+                required_inputs=tuple(inputs),
+                verifier=verifier,
+                description=description,
+            )
+        )
+    return registry
+
+
 def build_registry(fire_verifiers: Optional[Dict[str, Any]] = None) -> GateRegistry:
     registry = GateRegistry()
     # Stream 1 AC1: the governance preconditions, at the boundary the registry
     # computes for them — which is lock-static, because their inputs are all
     # planning facts. v1.91 met these one at a time from inside the build.
     register_governance_gates(registry)
+    # v1.95 Spine B: the build's guards, at the boundary the registry computes
+    # for each (candidate for box readers, lock-static for tree readers).
+    register_build_gates(registry)
     registry.register(
         Gate(
             gate_id="ship-python-floor",
@@ -493,6 +935,11 @@ def main(argv=None) -> int:
              "needing no plan can fire.",
     )
     parser.add_argument("--version-string", default="")
+    parser.add_argument(
+        "--activation-uid", default=None,
+        help="the release activation whose run minted the Pipeline Activation Key; "
+             "omitted, build-activation-key reports skipped-inputs-absent (v1.95 Spine B)",
+    )
     args = parser.parse_args(argv)
 
     vault = Path(args.vault).resolve()
@@ -530,7 +977,8 @@ def main(argv=None) -> int:
     # lock-verify-commands-runnable refuse on files that exist.
     try:
         context = gate_inputs.build_context(
-            vault, args.plan_uid, version_string=args.version_string
+            vault, args.plan_uid, version_string=args.version_string,
+            activation_uid=args.activation_uid,
         )
     except gate_inputs.GateInputError as exc:
         # An input that cannot be read is operational, never a verdict.
@@ -555,7 +1003,8 @@ def main(argv=None) -> int:
         return EXIT_MISUSE
 
     if args.run_dir:
-        path = write_evidence(Path(args.run_dir), args.phase, outcomes, registry)
+        path = write_evidence(Path(args.run_dir), args.phase, outcomes, registry,
+                              tree_commit=context.get("tree_commit"))
         print("evidence: %s" % path)
 
     unreached = registry.unreached_gates(phases)

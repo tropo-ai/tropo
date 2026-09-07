@@ -160,6 +160,13 @@ def load_builder(studio: Path):
         studio / "vault" / "capsules" / "tropo-ship-artifact.capsule.md"
     )
     builder.DRY_RUN = False
+    # ARM THE SHIP-VERDICT RESOLVER, as the release build does first thing in
+    # main() (init_ship_verdicts, :4280). Unarmed, copy_file ships everything:
+    # no ROOT MANIFEST row or ship-artifact DENY applied to any candidate ever
+    # built here, so a walker could be handed content the release box denies
+    # (measured 2026-09-06 by argus-a172: four DENY'd kernel history companions
+    # still in the candidate). The census the gate prints is the loud half.
+    builder.init_ship_verdicts(studio, builder.INDEX_PATH)
     return builder
 
 
@@ -176,6 +183,23 @@ def emit_box(builder, box: Path) -> dict:
     # missing-file finding that exists only in the candidate. A walk is only
     # worth the paper it prints if the thing walked is the thing shipped.
     builder.step_3_copy_kernel(str(box))
+    # The real build's wholesale playbook channel (step_3d), so a candidate box
+    # carries what a release box carries -- the AC7 doc-currency exit instrument
+    # (scripts/doc-currency-candidate-gate.py) reads this box as the build's
+    # stand-in. Before this line the candidate shipped only the manifest-channel
+    # playbooks (25 of 28 at HEAD 2026-09-05) and under-counted the gate by the
+    # three superseded files the release build still copied (argus-a172).
+    builder.step_3d_copy_vault_playbooks(str(box))
+    # The release build's other wholesale channels (the ship-manifest suite's
+    # "every emitter a real build runs" list): vault/tools/ recursively by the A92
+    # ruling fdef56ea (the scripting layer is atomic; per-tool tagging re-opens
+    # the omission bug), vault/updates/, vault/schema/. Without 3b this candidate
+    # carried 83 of 114 tools and the doc-currency exit instrument reported the
+    # join ceremony's four group tools "absent" when every release box has
+    # shipped them (argus-a172, 2026-09-06, second under-count found).
+    builder.step_3b_copy_vault_tools(str(box))
+    builder.step_3e_copy_vault_updates(str(box))
+    builder.step_3j_copy_vault_schema(str(box))
     builder.step_4_copy_ship_entries(
         str(box), builder.load_ship_entries(builder.INDEX_PATH)
     )
@@ -189,7 +213,26 @@ def emit_box(builder, box: Path) -> dict:
     # exited 0 sent Metis a box whose update leg could not be walked (AC8
     # verdict 62a22664, Argus ruling 3). So an unresolved address is now fatal
     # here: a walkable candidate cannot be missing a required leg.
+    # The release build's Step 3f: the two per-studio boot derivations
+    # (.tropo/boot-digest.md, .tropo/boot-fast-path.md) leave the box and their
+    # index rows are pruned. This tool never ran it, so every candidate carried
+    # both files and the doc-currency exit instrument read 0 where the release
+    # build read 2 (v1.95 candidate #1, 2026-09-06 -- the canonical playbook's
+    # line 58 links both). Third channel the candidate under-represented; the
+    # instrument must predict the build (argus-a172, driver evt _00000159).
+    # Placed where the release build places it: AFTER every copy channel (the
+    # derivations are governed entries and arrive through step_4's ship entries,
+    # so a 3f before step_4 removed nothing -- measured on the first rebuild).
+    builder.step_3f_remove_per_studio_boot_derivations(str(box))
     builder.step_3g_write_update_source(str(box))
+    # Step 9b (the box's own index, --no-genesis) then 9b2 (the Studio Map rendered
+    # inside the box, AC8's build-step half): the release build runs both before
+    # sanitize; without them a candidate has no boards/po/studio-map.html and AC8's
+    # zip-listing check can never pass on it (argus-a172, 2026-09-06, rehearsing
+    # the box-dependent rows on a HEAD candidate). 9b's index is purged by 10.2
+    # below exactly as in a release box.
+    builder.step_9b_regenerate_tropo_nav(str(box))
+    builder.step_9b2_render_studio_map(str(box))
 
     # A candidate that represents the FINAL box must end where the official
     # build ends. Stopping earlier shipped an intermediate shape: an unsanitized
@@ -313,7 +356,11 @@ def main(argv: list | None = None) -> int:
 
     commit = source_commit(args.commit)
     out.mkdir(parents=True, exist_ok=True)
-    workspace = out / "_source" if args.keep_source else Path(tempfile.mkdtemp(prefix="candidate-src-"))
+    # .resolve(): the verdict resolver compares Studio-relative paths, and on macOS
+    # tempfile hands back /var/... while the loaded builder sees /private/var/...
+    # through the symlink -- every kernel file then reads as "outside the root"
+    # and the armed build refuses (argus-a172, 2026-09-06).
+    workspace = (out / "_source" if args.keep_source else Path(tempfile.mkdtemp(prefix="candidate-src-"))).resolve()
     workspace.mkdir(parents=True, exist_ok=True)
     box = out / "box"
     box.mkdir()

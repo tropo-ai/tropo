@@ -216,8 +216,29 @@ def discover_crew() -> list[dict]:
             'status': status,
             'last_session': last_session,
             'status_card_uid': status_card_uid,
+            'pronouns': read_pronouns(status_card_path),
         })
     return crew
+
+
+def read_pronouns(card_path) -> str:
+    """The agent's own declared pronouns, from its own entry.
+
+    Not frontmatter -- the unified entries state pronouns in the body, under
+    §Charter §Identity, e.g. "**Your pronouns:** She/her. Chosen." That word
+    matters: it is a choice the agent recorded, and rendering it here is the
+    difference between a reader finding it and a reader guessing.
+
+    Returns an em dash when an entry declares none, rather than inventing one.
+    """
+    if not card_path:
+        return ""
+    try:
+        text = card_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    m = re.search(r"[Pp]ronouns:?\**\s*([A-Za-z]+/[A-Za-z]+)", text)
+    return m.group(1) if m else ""
 
 
 def classify(status: str) -> str:
@@ -241,6 +262,17 @@ def render_row(agent: dict) -> str:
     last = agent['last_session']
     status = agent['status']
     sc_uid = agent['status_card_uid']
+    # PRONOUNS, rendered from the agent's own entry rather than hand-maintained.
+    # Every unified entry carries them -- Orpheus's reads "She/her. Chosen." --
+    # but this brief, the ONE crew surface every agent reads at boot, carried
+    # none. An agent only ever reads its OWN unified entry (via agent_uid), so
+    # the authoritative fact was unreachable from the place readers actually
+    # consult, and the only hint was a parenthetical in the Aliases column.
+    # Mike corrected a misgendering of Orpheus on 2026-09-01 that this would have
+    # prevented. Rendered, never typed: a hand-kept second copy is exactly what
+    # the Aliases column's own note warns about. (argus-a165)
+    pronouns = agent.get('pronouns') or '—'
+
     # Legacy status card paths (Tropo + similar) are stored as relative paths;
     # vault/files/<uid>.md cases get the canonical link shape; v1.69 unified
     # entries (vault/agents/<uid>.md exists) link there instead.
@@ -250,7 +282,8 @@ def render_row(agent: dict) -> str:
         sc_link = f"[{sc_uid}](vault/agents/{sc_uid}.md)"
     else:
         sc_link = f"[{sc_uid}](vault/files/{sc_uid}.md)"
-    return f"| {name} | {gen} | {last} | {status} (status card: {sc_link}) |"
+    return (f"| {name} | {pronouns} | {gen} | {last} | "
+            f"{status} (status card: {sc_link}) |")
 
 
 def render_tables(crew: list[dict]) -> str:
@@ -268,17 +301,21 @@ def render_tables(crew: list[dict]) -> str:
     out = []
     out.append("**Operating crew (active executors right now):**")
     out.append("")
-    out.append("| Agent | Generation | Last Session | Status |")
-    out.append("|---|---|---|---|")
+    out.append("| Agent | Pronouns | Generation | Last Session | Status |")
+    out.append("|---|---|---|---|---|")
     # Mike is the founder — special-cased; not derivable from agent_root projects
-    out.append(f"| Mike | Founder | {today} | ACTIVE |")
+    # He/him from his own charter (§4 WHO MIKE IS is the crew's record of him).
+    # The column count must match the header or the whole table stops rendering
+    # as a table -- adding a column to the agent row and not to this one is the
+    # one-line-over defect, in the fix for a missing-field defect.
+    out.append(f"| Mike | He/him | Founder | {today} | ACTIVE |")
     for a in active:
         out.append(render_row(a))
     out.append("")
     out.append("**Dormant / on-hold / retired:**")
     out.append("")
-    out.append("| Agent | Generation | Last Session | Status |")
-    out.append("|---|---|---|---|")
+    out.append("| Agent | Pronouns | Generation | Last Session | Status |")
+    out.append("|---|---|---|---|---|")
     for a in dormant:
         out.append(render_row(a))
     out.append("")

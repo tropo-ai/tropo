@@ -3,14 +3,14 @@ uid: toolbelt
 name: toolbelt
 type: catalog
 kind: belt
-generated_at: 2026-08-28
+generated_at: 2026-09-06
 generated_by: generate-capability-catalogs.py
 extraction_scope: ship
 ---
 
 # Tropo Toolbelt
 
-*18 core tools. Derived from `belt: true` frontmatter — do not hand-edit.*
+*19 core tools. Derived from `belt: true` frontmatter — do not hand-edit.*
 
 ---
 
@@ -76,6 +76,13 @@ Regenerate the typed mint registry after capsule or companion-template changes.
 python3 vault/tools/tropo-generate-mint-registry.py
 ```
 *Example:* `python3 vault/tools/tropo-generate-mint-registry.py --check`
+
+### tropo-genesis-companions
+Materialize Cal and Darin locally from identity-free shipped templates.
+
+```
+python3 vault/tools/tropo-genesis-companions.py --studio . (--po | --accept cal|darin|cal,darin)
+```
 
 ### mint-id
 Mint a bare collision-checked identifier, list human typed bindings, or atomically birth a registry-bound human artifact.
@@ -161,4 +168,4 @@ python3 vault/tools/tropo-vault-search.py \"<query>\"
 
 *Anything not here? → `python3 vault/tools/tropo-vault-search.py <query>`*
 
-*Tropo Toolbelt | 2026-08-28 | v1.15 substrate*
+*Tropo Toolbelt | 2026-09-06 | v1.15 substrate*

@@ -9,16 +9,17 @@ owner: tropo
 created: 2026-04-15
 modified: 2026-08-09
 modified_by: argus-a147
-v2_0_1_hygiene_note: Argus A97 2026-06-04 — v1.61 channel-retirement tail fix (no contract change). The degraded-mode fallback block instructed agents to post to retired channels/alerts.md (substrate-resolution failure) + channels/ops.md (ADR-016 HALT); both retired at v1.61 per Rule 13. Replaced with the canonical event-log pattern (emit tropo.broadcast.crew severity:flash / category:ops), matching the activation playbook v2.12 + canonical Tier 1 substrate 8f6ea459. Low-traffic fallback block missed by the v1.61 sweep; surfaced at A97 boot diagnostic, fixed per Mike-A97 self-healing directive. Boot semantics unchanged; only the coordination mechanism corrected to reality.
 governed_by: 78c2126d
 canonical_substrate_uid: '99341618'
 subsystem_hub:
-  - 8dd772a0
+- 8dd772a0
+history: Amendment history and provenance notes (1 blocks as of 2026-09-04) live in .tropo/boot-config.history.md; this file
+  carries the current rule only (f0153984a89f item 3, argus-a169).
 ---
 
 # Tropo — Boot Configuration (Tier 1 Minimal Pointer)
 
-The single authored boot procedure is [Agent Activation (`99341618`)](../vault/playbooks/99341618.md). Established agents may use [the fingerprint-gated fast path](boot-fast-path.md) plus [doctrine digest](boot-digest.md).
+The single authored boot procedure is [Agent Activation (`99341618`)](../vault/playbooks/99341618.md). Established agents may use [the fingerprint-gated fast path](boot-fast-path.md) plus [doctrine digest](boot-digest.md) **when present — both are deliberately excluded from the release box (per-studio derivations carry their rendering studio's fingerprints), so on a fresh box read the canonical and proceed. Their absence is not a partial extraction.**
 
 **Compacted same session — do NOT activate and do NOT run `born`.** A cold start without a
 completed current-generation activation run is a birth. A compacted session WITH one is a
@@ -40,3 +41,5 @@ Studio additions resolve through [Tier 2 canonical config (`cf8c3be9`)](../vault
 ---
 
 *Tier 1 minimal pointer | v3.0 | S4 single-source amendment 2026-08-09 by Argus A147*
+
+*History: [boot-config.history.md](boot-config.history.md) — never read at boot.*

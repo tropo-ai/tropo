@@ -5,7 +5,7 @@ ship_scope_lock_break: 'extraction_scope: ship ADDED 2026-07-02 per Mike verbati
 name: document
 type: capsule-definition
 extends: core
-version: 3.2
+version: 3.3
 template_enforced_from: '2026-07-13'
 template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
 supersedes_version: '3.1'
@@ -32,6 +32,9 @@ meta_status_rollup:
   in-progress:
     - draft
     - active
+    - review   # A16 (00d776ae W1 lock-break): document+review had NO bucket — an M2 ERROR on a
+               # legitimate review state. Data-only list addition per the comprehensive-rollup
+               # doctrine (A116); enforced_enums unchanged.
   done:
     - published
     - archived

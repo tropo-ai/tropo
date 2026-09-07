@@ -198,8 +198,12 @@ def resolve_identity(agent_name: str) -> tuple[str, str | None]:
                 continue
             slug = m_slug.group(1).strip().strip('"').strip("'").lower()
             if slug == name_lower:
-                m_party = re.search(r"^party_uid:\s*([0-9a-f]{8})", txt, re.MULTILINE)
-                m_root = re.search(r"^agent_root_uid:\s*([0-9a-f]{8})", txt, re.MULTILINE)
+                # 3d430852 step 9 (AC9 read-back): accepts-both via authority --
+                # a 12-hex party uid today silently truncates to its first 8.
+                m_party = re.search(
+                    r"^party_uid:\s*([0-9a-f]{8}(?:[0-9a-f]{4})?)", txt, re.MULTILINE)
+                m_root = re.search(
+                    r"^agent_root_uid:\s*([0-9a-f]{8}(?:[0-9a-f]{4})?)", txt, re.MULTILINE)
                 if not m_party:
                     print(f"ERROR: agent '{agent_name}' found in {p.name} but has no party_uid",
                           file=sys.stderr)
@@ -227,7 +231,8 @@ def resolve_identity(agent_name: str) -> tuple[str, str | None]:
                     or ""
                 ).lower()
                 if name == name_lower or f"/{name_lower}/" in path:
-                    if re.fullmatch(r"[0-9a-f]{8}", str(uid)):
+                    if re.fullmatch(r"[0-9a-f]{8}(?:[0-9a-f]{4})?", str(uid)):
+                        # accepts-both (step 9): composite registry uids resolve
                         return str(uid), None
     except (OSError, ValueError, TypeError):
         pass

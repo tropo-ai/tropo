@@ -20,6 +20,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
+from lib.governed_path import is_governed_uid_shape
+
 
 SCHEMA_VERSION = "1.0.0"
 RECEIPT_KIND = "verify-live-public-release"
@@ -703,7 +705,11 @@ def validate_release_receipt_v2(value: Any) -> dict[str, Any]:
                   "release_activation_uid", "release_pipeline_run_uid",
                   "activation_root_uid"):
         uid = value[field]
-        if not isinstance(uid, str) or not re.fullmatch(r"[0-9a-f]{8}", uid):
+        # accepts-both (UID_SHAPES): legacy 8-hex uids stay first-class
+        # forever; every new governed mint is 12-hex composite since the
+        # Stage B flip (2026-08-31). The literal 8-only regex this replaced
+        # refused a freshly-minted composite uid in any of these five fields.
+        if not isinstance(uid, str) or not is_governed_uid_shape(uid):
             raise ReleaseReceiptError(f"{field} must be a governed uid")
 
     for field in ("package_sha256", "fan_in_digest"):

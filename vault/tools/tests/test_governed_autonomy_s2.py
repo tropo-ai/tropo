@@ -63,6 +63,10 @@ class GovernedAutonomyS2Tests(unittest.TestCase):
                 # rebuild-index --apply shells out to this sibling by a path
                 # derived from its own location; copying the script alone exits 8.
                 "tropo-generate-mint-registry.py",
+                # The GENESIS path (_mint_module, tropo-rebuild-index.py:7113,
+                # :7424) loads this as a literal sibling too; the fixture at
+                # line ~180 already copies it. (suite-health 2026-09-03)
+                "tropo-mint-id.py",
             ):
                 shutil.copy2(TOOLS / name, tools / name)
             shutil.copytree(TOOLS / "lib", tools / "lib")

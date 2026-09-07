@@ -41,7 +41,7 @@ SAGA = "release:934436ca"
 
 class FreezeDecisionTests(unittest.TestCase):
     def build(self, *, receipts=None, invalidate=False, already_frozen=False,
-              mutate_bytes=False, wrong_run=False) -> Path:
+              mutate_bytes=False, wrong_run=False, frozen_sha=None) -> Path:
         tmp = Path(tempfile.mkdtemp(prefix="freeze-"))
         self.addCleanup(shutil.rmtree, tmp, True)
 
@@ -82,7 +82,8 @@ class FreezeDecisionTests(unittest.TestCase):
                                   "reason": "prose fix"}})
         if already_frozen:
             rows.append({"event": "tropo.release.package_frozen",
-                         "data": {"pipeline_run_uid": RUN, "package_sha256": sha}})
+                         "data": {"pipeline_run_uid": RUN,
+                                  "package_sha256": frozen_sha or sha}})
 
         (tmp / "run.jsonl").write_text(
             "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8"
@@ -125,10 +126,49 @@ class FreezeDecisionTests(unittest.TestCase):
         self.assertIsNotNone(refusal)
         self.assertIn("invalidation", refusal)
 
-    def test_a_second_freeze_is_a_supersession_not_a_freeze(self):
-        _, refusal = self.decide(self.build(already_frozen=True))
+    def test_a_freeze_on_different_bytes_is_a_supersession_not_a_freeze(self):
+        other = hashlib.sha256(b"some other package").hexdigest()
+        payload, refusal = self.decide(self.build(already_frozen=True, frozen_sha=other))
         self.assertIsNotNone(refusal)
         self.assertIn("supersession", refusal)
+        self.assertEqual(payload["verdict"], "fail")
+
+    def test_a_freeze_already_bound_to_these_bytes_is_the_post_state_pass(self):
+        """The verification re-run AFTER the act (talos-t63, v1.95 post-lock inclusion).
+
+        The runner executes this command as the step's verification after the
+        step has emitted its freeze. Criterion 4 reads "exactly one active
+        package_frozen exists for this run after the step", so a freeze that
+        binds these same bytes is that criterion satisfied — not the refusal
+        that made v1.90, v1.93 and v1.94 amend the step to a hand script.
+        RED without the change: decide() refused every active freeze flat.
+        """
+        payload, refusal = self.decide(self.build(already_frozen=True))
+        self.assertIsNone(refusal, refusal)
+        self.assertEqual(payload["verdict"], "pass")
+        self.assertEqual(payload["frozen_event_uid"], "existing")
+        self.assertIn("post-state", payload["rationale"])
+        self.assertEqual(len(payload["instrument_receipts"]), 4,
+                         "the four receipts are still checked on the post-state pass")
+
+    def test_the_post_state_pass_still_needs_the_bytes_and_the_receipts(self):
+        """Idempotence is on the digest, not a bypass of criteria 1 to 3."""
+        _, refusal = self.decide(self.build(already_frozen=True, mutate_bytes=True))
+        self.assertIsNotNone(refusal)
+        self.assertIn("recorded", refusal)
+        present = [u for u in freeze.INSTRUMENTS][:3]
+        _, refusal = self.decide(self.build(already_frozen=True, receipts=present))
+        self.assertIsNotNone(refusal)
+
+    def test_emit_on_the_post_state_pass_writes_no_second_freeze(self):
+        run_dir = self.build(already_frozen=True)
+        before = (run_dir / "run.jsonl").read_text()
+        code = freeze.main(["--run-dir", str(run_dir),
+                            "--candidate", str(run_dir / "tropo-1.89.0.zip"), "--emit"])
+        self.assertEqual(code, freeze.EXIT_FROZEN)
+        after = (run_dir / "run.jsonl").read_text()
+        self.assertEqual(before, after, "a second identical freeze was written")
+        self.assertEqual(after.count("package_frozen"), 1)
 
     def test_receipts_from_another_run_do_not_count(self):
         _, refusal = self.decide(self.build(wrong_run=True))

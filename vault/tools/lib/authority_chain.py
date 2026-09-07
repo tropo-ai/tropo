@@ -38,6 +38,8 @@ import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from lib.governed_path import UID_HEX_PATTERN, is_governed_uid_shape
+
 # Shared, memoized YAML parse (talos-t40 2026-08-09). One `tropo-validate` run
 # parsed 108,000+ documents of which ~91% were byte-identical repeats, because
 # each validator module carried its own private frontmatter parser. Routing them
@@ -574,7 +576,10 @@ def public_key_from_blob(blob: bytes) -> OpenSSHPublicKey:
 
 
 def _validate_activation_uid(activation_uid: str) -> None:
-    if not re.fullmatch(r"[0-9a-f]{8}", activation_uid):
+    # accepts-both (UID_SHAPES): Stage B mints 12-hex activation UIDs; an
+    # 8-only check rejected every post-flip activation from session-key
+    # containment.
+    if not is_governed_uid_shape(activation_uid):
         _fail(
             AuthorityErrorCode.KEY_ROOT_UNSAFE,
             "activation UID is not safe for session-key containment",
@@ -1129,7 +1134,11 @@ def cleanup_stale_agent_keypairs(
     except OSError as error:
         _fail(AuthorityErrorCode.KEY_ROOT_UNSAFE, f"cannot enumerate key runtime root: {error}")
     for directory in children:
-        match = re.fullmatch(r"([0-9a-f]{8})-[A-Za-z0-9_-]+", directory.name)
+        # accepts-both (UID_SHAPES): Stage B mints 12-hex activation UIDs, so a
+        # bare {8} prefix would either miss 12-hex directories or truncate the
+        # captured uid to the first 8 hex chars of a 12-hex name. UID_HEX_PATTERN
+        # tries 12 before 8, so the whole hex run is captured as one group.
+        match = re.fullmatch(r"(%s)-[A-Za-z0-9_-]+" % UID_HEX_PATTERN, directory.name)
         if not match:
             continue
         activation_uid = match.group(1)
@@ -1960,7 +1969,10 @@ def load_canonical_current_activation_uids(repo: Path) -> dict[str, str]:
                 sources=[str(path) for _uid, path in entries],
             )
         pointer = next(iter(values))
-        if not re.fullmatch(r"[0-9a-f]{8}", pointer):
+        # accepts-both (UID_SHAPES): the canonical current_activation_uid
+        # pointer can now be a Stage B 12-hex mint; see event_identity.py's
+        # sibling fix for the same field.
+        if not is_governed_uid_shape(pointer):
             _fail(
                 AuthorityErrorCode.ACTIVATION_PREDECESSOR_INVALID,
                 "canonical current activation UID is malformed",
@@ -2573,8 +2585,10 @@ def _lineage_anchor_problem(
             f"activation {successor_uid} predecessor {predecessor.uid} is "
             f"available only in Git history {_history_only_cause(predecessor)}"
         )
-    if not predecessor.uid_declared or not re.fullmatch(
-        r"[0-9a-f]{8}", predecessor.uid
+    # accepts-both (UID_SHAPES): predecessor activation UIDs in the
+    # genesis/continuity chain walk can be Stage B 12-hex mints now.
+    if not predecessor.uid_declared or not is_governed_uid_shape(
+        predecessor.uid
     ):
         return (
             f"activation {successor_uid} predecessor {predecessor.uid!r} "
@@ -2791,7 +2805,9 @@ def _predecessor_lineage_problem(
                     tuple(sorted(visited)),
                 )
             break
-        if not re.fullmatch(r"[0-9a-f]{8}", predecessor_uid):
+        # accepts-both (UID_SHAPES): predecessor UID during genesis-chain
+        # traversal can be a Stage B 12-hex mint.
+        if not is_governed_uid_shape(predecessor_uid):
             return (
                 (
                     f"activation {current.uid} declares malformed predecessor "
@@ -2937,7 +2953,9 @@ def derive_new_activation_predecessor(
         return None
     candidates = _candidate_predecessors(matching)
     if expected_predecessor_uid:
-        if not re.fullmatch(r"[0-9a-f]{8}", expected_predecessor_uid):
+        # accepts-both (UID_SHAPES): expected_predecessor_uid for canonical
+        # current-activation resolution can be a Stage B 12-hex mint.
+        if not is_governed_uid_shape(expected_predecessor_uid):
             _fail(
                 AuthorityErrorCode.ACTIVATION_PREDECESSOR_INVALID,
                 "canonical current activation UID is malformed",

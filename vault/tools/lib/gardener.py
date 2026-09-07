@@ -13,6 +13,27 @@ from pathlib import Path
 from typing import Any, Optional
 
 from lib.decay_gate import TERMINAL_STATES, TERMINAL_STATUSES
+from lib.governed_path import is_governed_uid_shape
+
+
+def load_principal_registry(vault_root: Path) -> Optional[dict]:
+    """The join ceremony's principal directory, uid -> record, or None.
+
+    ONE reader of residency exists (this module's authorship leg) and ONE
+    writer (tropo-join-teammate's apply) — bb3911f5's one-writer-one-reader
+    contract. A missing directory yields None, which keeps resolve_effective_
+    scope on exactly today's behavior (the regression pin's world).
+    """
+    path = Path(vault_root) / '.tropo-studio' / 'group-authority' / 'principals.jsonl'
+    if not path.is_file():
+        return None
+    try:
+        rows = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(rows, list):
+        return None
+    return {r['principal_uid']: r for r in rows if isinstance(r, dict) and r.get('principal_uid')}
 
 MANIFEST_ROOT_UID = 'b2e7d4a9'
 CONFIG_UID = 'be2296f9'
@@ -139,23 +160,70 @@ def compute_ship_manifest_uids(records: list[dict]) -> set[str]:
     return manifest
 
 
+#: Scopes whose records cross the publish boundary (the 'os' segment).
+#: team-reference joined at the Stage B/Stream-2 era (bb3911f5): a teammate's
+#: authorship-derived scope crosses exactly as ship does — the whole point of
+#: the residency leg is that their work CAN leave the building.
+CROSSING_SCOPES = frozenset({'ship', 'team-reference'})
+
+
 def discriminate_segment(
     rec: dict,
     effective_scope: Optional[str],
     ship_manifest_uids: set[str],
 ) -> str:
-    """os iff extraction_scope:ship OR in ship-manifest; else private."""
+    """os iff a crossing extraction_scope OR in ship-manifest; else private."""
     uid = rec.get('uid', '')
-    if effective_scope == 'ship' or uid in ship_manifest_uids:
+    if effective_scope in CROSSING_SCOPES or uid in ship_manifest_uids:
         return 'os'
     return 'private'
 
 
-def resolve_effective_scope(rec: dict) -> tuple[str, bool]:
-    """Return (effective extraction_scope, was_backfilled)."""
+def resolve_effective_scope(rec: dict,
+                            principal_registry: Optional[dict] = None
+                            ) -> tuple[str, bool]:
+    """Return (effective extraction_scope, was_backfilled).
+
+    Precedence (bb3911f5 AC3, exact):
+    1. Explicit frontmatter wins, both directions, unchanged.
+    2. NEW authorship residency — resolve created_by/owner to an entity UID
+       against the injected principal registry and read that entity's
+       residency: a team-resident teammate derives the team-shareable class
+       (team-reference); an argo-crew principal derives argo-reference exactly
+       as the path rule would. UIDs only — a display name that string-matches
+       a registered principal MUST NOT resolve (AC4: names are for humans,
+       UIDs are for records). Unresolvable attribution falls through to the
+       path rule rather than being matched by string.
+    3. Path backfill stays the last fallback, byte-identical for everything
+       it handles today. registry=None preserves today's behavior exactly
+       (the regression pin's world).
+    """
     scope = rec.get('extraction_scope')
     if scope:
         return str(scope), False
+    # 5854773a AC5 vocabulary cure: a genesis-minted record (this studio's
+    # own vault-entity + inbox, `_mint_genesis_pair` in
+    # tropo-rebuild-index.py) is DELIBERATELY unscoped -- it belongs to
+    # whichever studio minted it, never to argo. Below this point the path
+    # backfill stamps everything under vault/files/ as argo-reference
+    # regardless of what minted it, which would silently claim a customer's
+    # own identity records as vendor content. `created_by: genesis-bootstrap`
+    # is the one field only genesis mints carry; checked before the path
+    # rule so it can never be shadowed by it.
+    if str(rec.get('created_by') or '') == 'genesis-bootstrap':
+        return '', True
+    if principal_registry is not None:
+        author = str(rec.get('created_by') or rec.get('owner') or '').strip()
+        if author and is_governed_uid_shape(author):
+            principal = principal_registry.get(author)
+            if principal is not None:
+                residency = str(principal.get('residency') or '')
+                if residency == 'team-resident':
+                    return 'team-reference', True
+                # argo-crew and any other resident derive exactly what the
+                # path rule gives — the leg only ever WIDENS to team-reference,
+                # never narrows (AC3's unattributed pin is the same guarantee
+                # for the fall-through).
     path = rec.get('path', '')
     backfilled = backfill_extraction_scope_by_path(path)
     if backfilled:
@@ -552,7 +620,9 @@ def build_illegal_member_of_edge_set(
     # prior default lattice.
     if lattice is None:
         lattice = default_two_segment_lattice()
-    work_item_types = {'task', 'work-item', 'workitem'}
+    # 'project' joins at 00d776ae W1. TWIN of tropo-validate.py's work_item_types
+    # (~:10822): the two widen together or they drift.
+    work_item_types = {'task', 'work-item', 'workitem', 'project'}
 
     for rec in records:
         uid = rec.get('uid')
@@ -651,12 +721,16 @@ def apply_gardener_pass(
     segments: dict[str, str] = {}
     backfill_count = 0
 
+    # bb3911f5: the authorship leg's registry, threaded here (the spec's named
+    # call site). None = no principal directory = exactly today's behavior.
+    principal_registry = load_principal_registry(vault_root)
+
     # ── S0: extraction_scope backfill + segment discriminator ──
     for rec in records:
         uid = rec.get('uid')
         if not uid:
             continue
-        scope, was_bf = resolve_effective_scope(rec)
+        scope, was_bf = resolve_effective_scope(rec, principal_registry)
         if was_bf and scope:
             rec['extraction_scope'] = scope
             backfill_count += 1

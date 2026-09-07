@@ -32,6 +32,20 @@ except ImportError:  # direct path-load used by tropo-validate.py
 import yaml
 
 try:
+    from .governed_path import UID_SHAPES
+except ImportError:  # direct path-load used by tropo-validate.py
+    _gp_path = Path(__file__).resolve().with_name("governed_path.py")
+    _gp_spec = importlib.util.spec_from_file_location(
+        "_pruning_contract_governed_path", _gp_path
+    )
+    if _gp_spec is None or _gp_spec.loader is None:
+        raise ImportError(f"cannot load canonical governed_path from {_gp_path}")
+    _gp_module = importlib.util.module_from_spec(_gp_spec)
+    sys.modules[_gp_spec.name] = _gp_module
+    _gp_spec.loader.exec_module(_gp_module)
+    UID_SHAPES = _gp_module.UID_SHAPES
+
+try:
     from .normalized_body_hash import normalized_body_sha256, raw_body_sha256
 except ImportError:  # direct path-load used by tropo-validate.py
     _hash_path = Path(__file__).resolve().with_name("normalized_body_hash.py")
@@ -48,7 +62,26 @@ except ImportError:  # direct path-load used by tropo-validate.py
     raw_body_sha256 = _hash_module.raw_body_sha256
 
 
-UID_RE = re.compile(r"^[0-9a-f]{8}$")
+# accepts-both (UID_SHAPES): this single shared pattern gates every governed
+# uid this module reads (judge_policy_uid, override.by, a resolved STUDIO.md
+# origin_studio, and each pruning subject's own frontmatter uid). None of
+# them is a pinned constant, so an 8-only pattern rejected every one of those
+# once minted post the Stage B composite flip -- most sharply origin_studio,
+# whose whole job (per this module's federation-boundary docstring) is
+# validating verdicts produced by OTHER studios, including ones genesis'd
+# after the flip with 12-hex uids. Widened in place, rather than introduced
+# at each of this file's ~10 call sites, so `pruning_contract.UID_RE`
+# (exported in __all__ for external callers such as
+# tropo-gardener-body-judge.py) keeps its existing compiled-Pattern interface
+# and gets the same fix for free. Lengths are read from the shared UID_SHAPES
+# set rather than typed as literals -- but the char class is deliberately
+# `[0-9a-f]`, NOT governed_path's own `UID_HEX_PATTERN` (`[0-9a-fA-F]`):
+# this module's existing contract (test_origin_studio_must_be_eight_lowercase_hex)
+# rejects uppercase hex, and interpolating UID_HEX_PATTERN directly silently
+# widened case-acceptance too, which is a second, unrelated behavior change.
+UID_RE = re.compile(
+    r"^(?:%s)$" % "|".join("[0-9a-f]{%d}" % n for n in sorted(UID_SHAPES, reverse=True))
+)
 HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 TOP_LEVEL_PRUNING_RE = re.compile(
     rb"""(?mx)
@@ -396,7 +429,7 @@ def validate_pruning_block(block: object) -> dict:
 
     policy_uid = block.get("judge_policy_uid")
     if not isinstance(policy_uid, str) or not UID_RE.fullmatch(policy_uid):
-        raise PruningContractError("pruning.judge_policy_uid must be 8 lowercase hex")
+        raise PruningContractError("pruning.judge_policy_uid must be 8-hex or 12-hex lowercase hex")
     _validate_utf8_string(block.get("judge_version"), "pruning.judge_version")
 
     # Federation portability (Metis G93, 2026-07-25): a verdict crossing a mount
@@ -406,7 +439,7 @@ def validate_pruning_block(block: object) -> dict:
     # stamp rather than only in the run directory.
     origin_studio = block.get("origin_studio")
     if not isinstance(origin_studio, str) or not UID_RE.fullmatch(origin_studio):
-        raise PruningContractError("pruning.origin_studio must be 8 lowercase hex")
+        raise PruningContractError("pruning.origin_studio must be 8-hex or 12-hex lowercase hex")
     prompt_sha = block.get("judge_prompt_sha256")
     if prompt_sha is not None:
         _validate_hash(prompt_sha, "pruning.judge_prompt_sha256")
@@ -429,7 +462,7 @@ def validate_pruning_block(block: object) -> dict:
             raise PruningContractError("pruning.override.action must be 'keep'")
         by = override.get("by")
         if not isinstance(by, str) or not UID_RE.fullmatch(by):
-            raise PruningContractError("pruning.override.by must be 8 lowercase hex")
+            raise PruningContractError("pruning.override.by must be 8-hex or 12-hex lowercase hex")
         _validate_timezone_datetime(override.get("at"), "override.at")
         _validate_utf8_string(override.get("reason"), "pruning.override.reason")
     return block
@@ -494,7 +527,7 @@ def resolve_active_policy(
     current_records: Sequence[dict],
 ) -> dict:
     if not UID_RE.fullmatch(policy_uid):
-        raise PruningContractError("judge_policy_uid must be 8 lowercase hex")
+        raise PruningContractError("judge_policy_uid must be 8-hex or 12-hex lowercase hex")
     _validate_utf8_string(judge_version, "judge_version")
     candidates = active_policy_candidates(current_records)
     if len(candidates) != 1:
@@ -519,7 +552,7 @@ def resolve_active_policy(
 
 def resolve_human_principal(uid: str, current_records: Sequence[dict]) -> dict:
     if not UID_RE.fullmatch(uid):
-        raise PruningContractError("override principal UID must be 8 lowercase hex")
+        raise PruningContractError("override principal UID must be 8-hex or 12-hex lowercase hex")
     matches = [
         row
         for row in current_records
@@ -621,10 +654,10 @@ def resolve_origin_studio(vault_root: Path | str) -> str:
     hand in is a gate defended with a caller-controlled value. The writer
     derives it from the studio it is actually running in.
 
-    Fail-closed: a missing, unreadable, or non-8-hex ``uid:`` in ``STUDIO.md``
-    raises rather than falling back to a placeholder. A verdict with a guessed
-    origin is worse at a federation boundary than a verdict that refused to be
-    written.
+    Fail-closed: a missing, unreadable, or non-governed-shape ``uid:`` in
+    ``STUDIO.md`` raises rather than falling back to a placeholder. A verdict
+    with a guessed origin is worse at a federation boundary than a verdict
+    that refused to be written.
 
     (When per-vault-node ``vault-entity`` instances land under ADR-051, this
     resolution tightens to that entity's UID; the studio config UID is today's
@@ -659,7 +692,7 @@ def resolve_origin_studio(vault_root: Path | str) -> str:
     uid = frontmatter.get("uid")
     if not isinstance(uid, str) or not UID_RE.fullmatch(uid):
         raise PruningContractError(
-            "origin studio identity is unresolvable: STUDIO.md uid must be 8 lowercase hex"
+            "origin studio identity is unresolvable: STUDIO.md uid must be 8-hex or 12-hex lowercase hex"
         )
     return uid
 
@@ -1148,7 +1181,7 @@ def check_pruning_path(
         snapshot = parse_markdown_bytes(raw, path_label)
         source_uid = source_scalar(snapshot.frontmatter_text, "uid")
         if source_uid is None or not UID_RE.fullmatch(source_uid):
-            raise PruningContractError("source uid must be exactly 8 lowercase hex")
+            raise PruningContractError("source uid must be 8-hex or 12-hex lowercase hex")
         if expected_uid is not None and source_uid != expected_uid:
             raise PruningContractError(
                 f"requested UID {expected_uid} does not match source UID {source_uid}"
@@ -1473,7 +1506,7 @@ def check_pruning_vault(
                 _index_repair_result(
                     "<invalid-uid>",
                     str(row.get("path") or "<index>"),
-                    "target-index pruning row has no valid 8-hex UID",
+                    "target-index pruning row has no valid 8-hex or 12-hex UID",
                 )
             )
             continue

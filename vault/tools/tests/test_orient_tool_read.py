@@ -19,8 +19,8 @@ sees and what a person is charged:
      this go on the website". Whether a document may cross to a model provider
      is a different question, and the tool must not answer one with the other
      in either direction — agent-authored governed content is eligible
-     whatever its publishing label, and an imported artifact is not, whatever
-     its publishing label.
+     whatever its publishing label, and W5 makes imported artifacts eligible
+     too while preserving their outside-origin label.
   3. **Spending is opt-in and stated.** Without ``--read`` there is no edge,
      no reservation and no read block at all. With it, the block says what the
      run cost even when the answer is that it cost nothing.
@@ -262,7 +262,7 @@ class EgressClassificationTests(ToolCase):
             tool.egress_class("aa000001", self.records), vp.OS_SEGMENT
         )
 
-    def test_each_mark_of_an_outside_origin_carves_out_on_its_own(self):
+    def test_each_mark_of_an_outside_origin_labels_without_refusing(self):
         """Three marks, one per fixture, and none of the fixtures carries two.
 
         Any one of them can be edited away, so the carve-out cannot rest on
@@ -289,7 +289,8 @@ class EgressClassificationTests(ToolCase):
                         f"{uid} also carries {name}, so this subtest does not "
                         f"isolate {field}",
                     )
-                self.assertEqual(tool.egress_class(uid, self.records), "private")
+                self.assertTrue(tool._imported(uid, self.records[uid]))
+                self.assertEqual(tool.egress_class(uid, self.records), vp.OS_SEGMENT)
 
     def test_the_provenance_stamp_is_read_off_disk_without_an_index_row(self):
         """A governed file with no index row still has an origin.
@@ -298,7 +299,8 @@ class EgressClassificationTests(ToolCase):
         refused everything unindexed. The file is on disk and so is its
         frontmatter, so the question is answerable.
         """
-        self.assertEqual(tool.egress_class("dd000004", {}), "private")
+        self.assertTrue(tool._imported("dd000004", {}))
+        self.assertEqual(tool.egress_class("dd000004", {}), vp.OS_SEGMENT)
         self.assertEqual(tool.egress_class("aa000001", {}), vp.OS_SEGMENT)
 
     def test_the_publishing_answer_does_not_move_the_egress_answer(self):
@@ -325,7 +327,8 @@ class EgressClassificationTests(ToolCase):
                 self.assertEqual(self._scope_of(uid), scope)
                 self.assertEqual(tool.egress_class(uid, {}), vp.OS_SEGMENT)
         moved = self.fx.add("20000000", "extraction_scope: external\n")
-        self.assertEqual(tool.egress_class(moved, {}), "private")
+        self.assertTrue(tool._imported(moved, {}))
+        self.assertEqual(tool.egress_class(moved, {}), vp.OS_SEGMENT)
 
     def _scope_of(self, uid: str) -> str:
         for line in (
@@ -350,15 +353,12 @@ class DegradedBlockTests(ToolCase):
                  ("aa000001", "bb000002", "cc000003", "dd000004", "ffffffff")]
         uids, dropped = tool._read_set(items, self.records)
 
-        self.assertEqual(uids, ["aa000001"])
+        self.assertEqual(
+            uids, ["aa000001", "bb000002", "cc000003", "dd000004"]
+        )
         self.assertEqual(
             {entry["uid"]: entry["reason"] for entry in dropped},
-            {
-                "bb000002": tool.DROP_IMPORTED,
-                "cc000003": tool.DROP_IMPORTED,
-                "dd000004": tool.DROP_IMPORTED,
-                "ffffffff": tool.DROP_UNGOVERNED,
-            },
+            {"ffffffff": tool.DROP_UNGOVERNED},
         )
         for entry in dropped:
             with self.subTest(uid=entry["uid"]):
@@ -371,7 +371,6 @@ class DegradedBlockTests(ToolCase):
         # not given an invented one — "vault/files/ffffffff.md — this is not
         # a governed body" names a file in order to say the file is absent.
         cited = {entry["uid"]: entry["where"] for entry in dropped}
-        self.assertEqual(cited["bb000002"], "vault/files/bb000002.md")
         self.assertEqual(cited["ffffffff"], "")
         rendered = "\n".join(tool._read_lines(
             {**self._block(dropped=dropped), "considered": 5}
@@ -398,12 +397,12 @@ class DegradedBlockTests(ToolCase):
             provider_call=mock.Mock(side_effect=AssertionError("edge reached")),
         )
         block = tool.read_block(
-            "aa000001", "A task", [item("bb000002"), item("ffffffff")],
+            "aa000001", "A task", [item("ffffffff")],
             vp.Viewer(principal_uid="7b921d17"), None, tool.INDEX_AS_OF, edge,
         )
         self.assertEqual(block["status"], "nothing-eligible")
         self.assertEqual(block["read"], [])
-        self.assertEqual(block["dropped_count"], 2)
+        self.assertEqual(block["dropped_count"], 1)
         self.assertEqual(block["spend"]["calls"], [])
 
         text = "\n".join(tool._read_lines(block))
@@ -420,7 +419,7 @@ class DegradedBlockTests(ToolCase):
         block = self._block(dropped=[
             {"uid": "bb000002", "title": "A deck that came from outside",
              "where": "vault/files/bb000002.md", "archived": False,
-             "reason": tool.DROP_IMPORTED},
+             "reason": tool.DROP_BATCH},
             {"uid": "cc000003", "title": "An outside publishing label",
              "where": "vault/files/cc000003.md", "archived": False,
              "reason": tool.DROP_UNGOVERNED},
@@ -434,7 +433,7 @@ class DegradedBlockTests(ToolCase):
                 self.assertIn("A deck that came from outside", rendered)
                 self.assertIn("An outside publishing label", rendered)
                 self.assertIn(
-                    tool._DROP_SENTENCE[tool.DROP_IMPORTED], rendered
+                    tool._DROP_SENTENCE[tool.DROP_BATCH], rendered
                 )
                 self.assertIn(
                     tool._DROP_SENTENCE[tool.DROP_UNGOVERNED], rendered
@@ -498,8 +497,7 @@ class DegradedBlockTests(ToolCase):
 
     def test_every_drop_reason_in_the_vocabulary_can_be_rendered(self):
         """A reason with no sentence is a KeyError in front of Mike."""
-        for reason in (tool.DROP_UNGOVERNED, tool.DROP_IMPORTED,
-                       tool.DROP_BATCH, tool.DROP_SPEND):
+        for reason in (tool.DROP_UNGOVERNED, tool.DROP_BATCH, tool.DROP_SPEND):
             with self.subTest(reason=reason):
                 block = self._block(dropped=[{
                     "uid": "aa000001", "title": "What the studio wrote",
@@ -658,7 +656,9 @@ class SpendVisibilityTests(ToolCase):
         parser_default = tool.main.__doc__  # placeholder-free: check the flag
         source = (TOOLS / "tropo-orient.py").read_text()
         self.assertIn('"--read", action="store_true"', source)
-        self.assertIn("MeteredEdge() if args.read else None", source)
+        self.assertIn("if args.read and answer.get(\"ok\")", source)
+        self.assertIn("MeteredEdge()", source)
+        self.assertIn("approved and preview.get(\"admitted\")", source)
         self.assertIsNone(parser_default)
 
     #: Wording only a read block can produce. Deliberately not the bare
@@ -790,10 +790,13 @@ class ReadEndToEndTests(ToolCase):
             tool.INDEX_AS_OF, edge,
         )
         self.assertEqual(block["status"], "read", block["detail"])
-        self.assertEqual([entry["uid"] for entry in block["read"]], ["aa000001"])
+        self.assertEqual(
+            [entry["uid"] for entry in block["read"]],
+            ["aa000001", "bb000002"],
+        )
         self.assertEqual(
             sorted(entry["reason"] for entry in block["dropped"]),
-            [tool.DROP_IMPORTED, tool.DROP_UNGOVERNED],
+            [tool.DROP_UNGOVERNED],
         )
 
         # CONTROL: the survivors that were dropped never reached the wire.
@@ -801,7 +804,7 @@ class ReadEndToEndTests(ToolCase):
             if task != tool.stage_c.C2_TASK_CLASS:
                 continue
             crossed = {entry["uid"] for entry in payload["survivors"]}
-            self.assertEqual(crossed, {"aa000001"})
+            self.assertEqual(crossed, {"aa000001", "bb000002"})
 
         # The emitted span is the file's bytes at the locator, not the model's.
         span = block["spans"][0]
@@ -814,8 +817,8 @@ class ReadEndToEndTests(ToolCase):
         self.assertEqual(span["title"], "What the studio wrote")
 
         text = "\n".join(tool._read_lines(block))
-        self.assertIn("WHAT THEY SAY — read from 1 of 3 documents", text)
-        self.assertIn("2 of the 3 were not read", text)
+        self.assertIn("WHAT THEY SAY — read from 2 of 3 documents", text)
+        self.assertIn("1 of the 3 were not read", text)
         self.assertIn("A deck that came from outside", text)
         self.assertIn("This read cost", text)
 
@@ -841,37 +844,23 @@ class ReadEndToEndTests(ToolCase):
         self.assertEqual(block["status"], "read", block["detail"])
         self.assertEqual(block["spans"][0]["text"], on_disk)
 
-    def test_an_imported_task_refuses_before_anything_crosses(self):
-        """The task's own words go over the wire in the brief, so the task
-        itself has to clear the same gate its survivors do."""
+    def test_an_imported_task_is_disclosed_and_can_be_read(self):
+        """Outside origin no longer becomes a tool-local refusal."""
         edge = tool.MeteredEdge(
             studio_root=self.fx.root,
-            provider_call=mock.Mock(side_effect=AssertionError("edge reached")),
+            run_uid="0a1b2c41",
+            provider_call=self._provider(
+                [{"uid": "aa000001", "span_text": "The studio wrote this sentence."}]
+            ),
         )
         block = tool.read_block(
             "bb000002", "A deck", [item("aa000001")],
             vp.Viewer(principal_uid="7b921d17"), circle_of("aa000001"),
             tool.INDEX_AS_OF, edge,
         )
-        self.assertEqual(block["status"], "refused")
-        self.assertEqual(block["refusal"], "TASK_NOT_OURS_TO_SEND")
-        self.assertEqual(block["spend"]["calls"], [])
-        # CONTROL: the same call with an eligible task does reach the edge.
-        self.assertEqual(
-            tool.read_block(
-                "aa000001", "A task", [item("aa000001")],
-                vp.Viewer(principal_uid="7b921d17"), circle_of("aa000001"),
-                tool.INDEX_AS_OF,
-                tool.MeteredEdge(
-                    studio_root=self.fx.root, run_uid="0a1b2c3f",
-                    provider_call=self._provider(
-                        [{"uid": "aa000001",
-                          "span_text": "The studio wrote this sentence."}]
-                    ),
-                ),
-            )["status"],
-            "read",
-        )
+        self.assertEqual(block["status"], "read", block["detail"])
+        self.assertTrue(tool._imported("bb000002", self.records))
+        self.assertEqual(tool.egress_class("bb000002", self.records), vp.OS_SEGMENT)
 
     def test_a_whole_read_rewrites_no_governed_file(self):
         """The other way to widen the publishing boundary is to move it.
@@ -896,9 +885,7 @@ class ReadEndToEndTests(ToolCase):
         # CONTROL: a run that refused early would leave the files untouched
         # for a reason that has nothing to do with the claim.
         self.assertEqual(block["status"], "read", block["detail"])
-        self.assertEqual(
-            [entry["reason"] for entry in block["dropped"]], [tool.DROP_IMPORTED]
-        )
+        self.assertEqual(block["dropped"], [])
         self.assertEqual(self.fx.files(), before)
 
 

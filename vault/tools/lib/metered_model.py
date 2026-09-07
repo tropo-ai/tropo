@@ -373,6 +373,55 @@ class ModelRefusal:
     worst_case_retained: bool = False
 
 
+@dataclass(frozen=True)
+class RequestAdmissionQuote:
+    """Exact serialized request admission, shared by preview and edge."""
+
+    task: str
+    model: str
+    request_bytes: int
+    request_sha256: str
+    max_tokens: int
+    worst_case_nano_usd: int
+    ceiling_nano_usd: int
+    admitted: bool
+
+
+def quote_request_admission(
+    task: str,
+    messages: list,
+    *,
+    max_tokens: int,
+    system: str,
+    model: str,
+    ceiling_nano_usd: int,
+) -> RequestAdmissionQuote:
+    """Serialize and price exactly once with the production gate arithmetic."""
+
+    request = llm.serialize_locked_request(
+        task,
+        messages,
+        max_tokens=max_tokens,
+        system=system,
+    )
+    worst_case = worst_case_request_cost_nano_usd(
+        model,
+        request_bytes=len(request),
+        max_tokens=max_tokens,
+        cache_mode="none",
+    )
+    return RequestAdmissionQuote(
+        task=task,
+        model=model,
+        request_bytes=len(request),
+        request_sha256=hashlib.sha256(request).hexdigest(),
+        max_tokens=max_tokens,
+        worst_case_nano_usd=worst_case,
+        ceiling_nano_usd=ceiling_nano_usd,
+        admitted=worst_case <= ceiling_nano_usd,
+    )
+
+
 def _refusal(
     code: str,
     message: str,
@@ -654,6 +703,7 @@ def _call(
     clock: Callable[[], datetime] | None = None,
     reservation_id_factory: Callable[[], str] | None = None,
     environment: Mapping[str, str] | None = None,
+    approved_ceiling_nano_usd: int | None = None,
 ) -> MeteredModelResult | ModelRefusal:
     """Shared reserve/call/reconcile implementation for both admission modes."""
     if admission_mode not in {PRODUCTION_ADMISSION, CANARY_ADMISSION}:
@@ -724,21 +774,24 @@ def _call(
                 run_uid=binding.run_uid,
                 contract_sha256=canary_contract_hash,
             )
-        request_bytes = llm.serialize_locked_request(
+        ceiling_nano_usd = route.per_call_ceiling_nano_usd
+        if approved_ceiling_nano_usd is not None:
+            # W5 AC5 — bind admission to the figure the human already approved,
+            # never to a bounded preview figure re-realized after the fact. The
+            # route ceiling still applies: this can only ever tighten it.
+            ceiling_nano_usd = min(ceiling_nano_usd, approved_ceiling_nano_usd)
+        admission_quote = quote_request_admission(
             task,
             messages,
             max_tokens=max_tokens,
             system=system,
+            model=route.model,
+            ceiling_nano_usd=ceiling_nano_usd,
         )
-        worst_case = worst_case_request_cost_nano_usd(
-            route.model,
-            request_bytes=len(request_bytes),
-            max_tokens=max_tokens,
-            cache_mode="none",
-        )
+        worst_case = admission_quote.worst_case_nano_usd
     except (ValueError, MeteringContractError) as exc:
         return _refusal("PREFLIGHT_REFUSED", str(exc))
-    if worst_case > route.per_call_ceiling_nano_usd:
+    if not admission_quote.admitted:
         return _refusal(
             "PER_CALL_LIMIT",
             "exact worst-case request cost exceeds the locked per-call ceiling",
@@ -757,7 +810,7 @@ def _call(
         reservation_id = (
             reservation_id_factory()
             if reservation_id_factory is not None
-            else secrets.token_hex(4)
+            else secrets.token_hex(4)  # RUN-RECORD DEFERRAL MARKER (3d430852): run-record identity, the spec's declared deferral class
         )
 
         def reserve() -> None:
@@ -922,6 +975,7 @@ def call(
     clock: Callable[[], datetime] | None = None,
     reservation_id_factory: Callable[[], str] | None = None,
     environment: Mapping[str, str] | None = None,
+    approved_ceiling_nano_usd: int | None = None,
 ) -> MeteredModelResult | ModelRefusal:
     """Attempt one production route or return a typed, non-escalating refusal."""
     return _call(
@@ -937,6 +991,7 @@ def call(
         clock=clock,
         reservation_id_factory=reservation_id_factory,
         environment=environment,
+        approved_ceiling_nano_usd=approved_ceiling_nano_usd,
     )
 
 

@@ -332,6 +332,12 @@ class IndexProjectionTests(StageEradicationStudio):
         Absence is the assertion, same class as the retired R-3 control: a
         dormant function is one rename away from being wired back in."""
         import importlib.util
+        tools = str(REPO / "vault" / "tools")
+        if tools not in sys.path:
+            # in-process exec inherits this sys.path; tropo-rebuild-index.py
+            # does `from lib.governed_path import ...` at top level since
+            # 51a7e3660 (2026-08-29). (suite-health 2026-09-03)
+            sys.path.insert(0, tools)
         spec = importlib.util.spec_from_file_location(
             "rebuild_mod", REPO / "vault" / "tools" / "tropo-rebuild-index.py")
         mod = importlib.util.module_from_spec(spec)

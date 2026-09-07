@@ -1,4 +1,5 @@
 ---
+owner: talos
 uid: b7e9c41d
 title: OSS License Research — Apache 2.0 vs MIT for Tropo-OS
 type: note

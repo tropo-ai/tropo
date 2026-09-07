@@ -19,8 +19,8 @@ input:
   description: "See --help for full argument details"
 created: '2026-07-08'
 created_by: talos-t26
-modified: '2026-07-08'
-modified_by: talos-t26
+modified: '2026-08-31'
+modified_by: talos-t56
 governed_by: 8dd772a0
 member_of:
   - 44ba7c82
@@ -142,6 +142,11 @@ NOW = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 FRONTMATTER_RE = re.compile(r'^---\n(.*?\n)---\n', re.DOTALL)
 
+# Path-loaded consumers (including the locked mount-gate test command) do not
+# automatically put vault/tools on sys.path. Establish the tool's own import
+# root before path-loading any sibling that imports from lib/.
+sys.path.insert(0, str(SCRIPT_DIR))
+
 
 # ---------------------------------------------------------------------------
 # Cross-file import: validate_vault_manifest_fields() from tropo-validate.py
@@ -189,7 +194,6 @@ def _b4a_audience_refusal(studio_root: Path, declared_audience) -> Optional[str]
 # validator re-check) — same functions, so mount-time enforcement and
 # audit-time re-check cannot silently disagree on what "clean" means.
 # ---------------------------------------------------------------------------
-sys.path.insert(0, str(SCRIPT_DIR))
 from lib.segment import (
     TEAM_BRANCH_DEFAULT,
     check_no_shallow_clone,
@@ -198,6 +202,8 @@ from lib.segment import (
     verify_clean_ancestry,
     find_boundary_violations_in_committed_tree,
 )
+from lib.governed_path import is_governed_uid_shape
+from lib.audience_context import VAULT_UID_RE
 
 
 # ---------------------------------------------------------------------------
@@ -705,13 +711,19 @@ def run_mount(mount_path: Path, consent: bool, force_remount: bool,
     if audience_err is not None:
         raise MountRefused(f"audience refused (B4a strict): {audience_err}")
 
-    vault_uid = manifest.get("uid") or manifest.get("vault_uid")
-    if not vault_uid or not re.match(r'^[0-9a-f]{8}$', str(vault_uid)):
+    manifest_uid = manifest.get("uid")
+    if not manifest_uid or not is_governed_uid_shape(str(manifest_uid)):
         raise MountRefused(
-            f"manifest has no resolvable 8-hex vault UID (uid: {vault_uid!r}) — cannot "
-            f"key a compose.lock record without one"
+            f"manifest has no resolvable governed record UID (uid: {manifest_uid!r}) — "
+            f"the manifest itself must carry a legacy or composite governed identity"
         )
-    vault_uid = str(vault_uid)
+    vault_uid = manifest.get("vault_uid")
+    if not isinstance(vault_uid, str) or not VAULT_UID_RE.fullmatch(vault_uid):
+        raise MountRefused(
+            f"manifest has no resolvable ADR-050 vault code "
+            f"(vault_uid: {vault_uid!r}, expected ^[a-z0-9]{{4,6}}$) — cannot key a "
+            f"compose.lock record without one"
+        )
 
     contract = manifest.get("contract")
     if not isinstance(contract, dict):

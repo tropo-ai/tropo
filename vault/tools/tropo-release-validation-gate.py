@@ -23,7 +23,7 @@ input:
       enum: [capture, compare]
     activation_uid:
       type: string
-      pattern: "^[0-9a-f]{8}$"
+      pattern: "^[0-9a-f]{8}([0-9a-f]{4})?$"
 output:
   type: object
   required: [verdict, run_uid]
@@ -109,6 +109,7 @@ import sys as _sys
 from pathlib import Path as _P
 _sys.path.insert(0, str(_P(__file__).resolve().parent))
 from lib.debt_rule import debt_verdict  # v1.91 S1 AC4: the ONE debt predicate
+from lib.governed_path import UID_HEX_PATTERN, is_governed_uid_shape
 import shlex
 import subprocess
 import sys
@@ -144,7 +145,6 @@ PIPELINE_BINDINGS = (
         "description": "re-run the full validator and compare against the baseline",
     },
 )
-UID_RE = re.compile(r"^[0-9a-f]{8}$")
 ANSI_RE = re.compile(
     r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])"
 )
@@ -221,9 +221,13 @@ _AGGREGATE_HAS_RE = re.compile(
 #: Both made the gate measure CORPUS GROWTH as REGRESSION — and since a release writes its
 #: own governed records between baseline and compare, the corpus always grows.
 _AGGREGATE_CHECKED_RE = re.compile(r"\bchecked\s*[;,]\s*(\d+)\b", re.IGNORECASE)
+# accepts-both (UID_SHAPES): a bare \b...\b widen from {8} to {8,12} would not
+# anchor correctly inside a 12-hex run of the same character class, so a full
+# 12-hex token could match only partially. UID_HEX_PATTERN is already ordered
+# 12-then-8, so the alternation tries the full 12-hex token first.
 _IDENTITY_RE = re.compile(
     r"(?:^|\s)(?:\.{0,2}/|[A-Za-z0-9_.-]+/)\S+|"
-    r"\b[0-9a-f]{8}\b"
+    r"\b(?:%s)\b" % UID_HEX_PATTERN
 )
 
 
@@ -268,9 +272,9 @@ def resolve_release_run(activation_uid: str, studio_root: Path = ROOT) -> dict:
     """Resolve activation -> run -> run_folder and require every link to agree."""
     root = Path(studio_root).resolve()
     activation_uid = str(activation_uid or "").strip()
-    if not UID_RE.fullmatch(activation_uid):
+    if not is_governed_uid_shape(activation_uid):
         raise GateRefusal(
-            f"{activation_uid!r} is not an 8-character lowercase hex activation UID"
+            f"{activation_uid!r} is not an 8- or 12-character hex activation UID"
         )
 
     files = root / "vault" / "files"
@@ -303,7 +307,7 @@ def resolve_release_run(activation_uid: str, studio_root: Path = ROOT) -> dict:
         )
 
     run_uid = str(activation.get("pipeline_run_uid") or "").strip()
-    if not UID_RE.fullmatch(run_uid):
+    if not is_governed_uid_shape(run_uid):
         raise GateRefusal(
             f"activation {activation_uid} names invalid pipeline_run_uid {run_uid!r}"
         )

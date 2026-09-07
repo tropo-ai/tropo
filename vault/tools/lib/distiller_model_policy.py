@@ -18,6 +18,7 @@ from typing import Any, Iterator
 import yaml
 
 from lib import daily_spend, llm, loop_metering
+from lib.governed_path import is_governed_uid_shape
 
 
 POLICY_UID = "0c938a95"
@@ -305,6 +306,14 @@ PRICING_NANO_USD_PER_TOKEN = {
         "cache_read_input_tokens": 300,
     },
 }
+# EXEMPT (do not widen): _UID_RE stays 8-only on purpose. It still gates
+# run_uid (attempt-tracked against the fixed PRIOR_RUN_UIDS history),
+# metered_canary.canary_run_uid/verified_by (same attempt-tracked family),
+# and reservation_id/POLICY_UID comparisons elsewhere in this module — all
+# pinned 8-hex forever by a design contract separate from the governed-vault
+# mint (3d430852 Stage B does not apply to them). The two REAL governed-uid
+# call sites below (_registered_runner's tool lookup, egress_approved_by) use
+# is_governed_uid_shape instead of this pattern.
 _UID_RE = re.compile(r"^[0-9a-f]{8}$")
 _VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -1295,8 +1304,11 @@ def _read_runner_frontmatter(path: Path) -> dict:
 
 
 def _registered_runner(rows: list[dict], root: Path, runner_ref: object) -> str:
-    if not isinstance(runner_ref, str) or not _UID_RE.fullmatch(runner_ref):
-        raise PolicyError("policy.ref must be one registered 8-hex tool UID")
+    # accepts-both (UID_SHAPES): policy.ref names a `type: tool` vault entry
+    # by its governed uid; an 8-only check rejected any tool minted after the
+    # Stage B composite flip.
+    if not isinstance(runner_ref, str) or not is_governed_uid_shape(runner_ref):
+        raise PolicyError("policy.ref must be one registered 8-hex or 12-hex tool UID")
     matches = [
         row
         for row in rows
@@ -1311,8 +1323,12 @@ def _registered_runner(rows: list[dict], root: Path, runner_ref: object) -> str:
         )
     row = matches[0]
     uid = row.get("uid")
-    if not isinstance(uid, str) or not _UID_RE.fullmatch(uid):
-        raise PolicyError("registered runner UID must be 8 lowercase hex")
+    # accepts-both (UID_SHAPES): re-validates the SAME uid the `matches`
+    # filter above already joined on `== runner_ref`. Left at 8-only, this
+    # would immediately re-reject the 12-hex value the check above was just
+    # widened to accept, making that fix a no-op end to end.
+    if not isinstance(uid, str) or not is_governed_uid_shape(uid):
+        raise PolicyError("registered runner UID must be 8-hex or 12-hex lowercase hex")
     # The registered runner ships under its tropo- name (naming-conform sweep,
     # 472ebfcc). Deriving the expected path from the NAME keeps the strict
     # equality; the UID-filename form this replaced was the pre-migration
@@ -2455,8 +2471,12 @@ def _validate_policy(
     if type(fm.get("egress_approved")) is not bool:
         raise PolicyError("egress_approved must be boolean")
     approved_by = fm.get("egress_approved_by")
+    # accepts-both (UID_SHAPES): egress_approved_by is a principal uid, not
+    # the pinned run_uid/reservation_id/POLICY_UID family above — an 8-only
+    # check rejected an approver whose own principal uid was minted after
+    # the Stage B composite flip.
     if approved_by is not None and (
-        not isinstance(approved_by, str) or not _UID_RE.fullmatch(approved_by)
+        not isinstance(approved_by, str) or not is_governed_uid_shape(approved_by)
     ):
         raise PolicyError("egress_approved_by must be null or a principal UID")
 

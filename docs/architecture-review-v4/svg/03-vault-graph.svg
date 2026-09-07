@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .panel-title { font-size: 15px; font-weight: bold; fill: #1a2332; }
+      .node { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .node-sub { font-size: 11px; fill: #5a6a7a; }
+      .label { font-size: 12px; fill: #44525f; }
+      .mono { font-family: Menlo, Consolas, monospace; font-size: 11px; fill: #2c4a6e; }
+      .file { font-size: 10.5px; fill: #2c4a6e; font-family: Menlo, Consolas, monospace; }
+      .barlab { font-size: 10.5px; fill: #44525f; font-family: Menlo, Consolas, monospace; }
+      .barval { font-size: 10.5px; fill: #1a2332; font-family: Menlo, Consolas, monospace; }
+      .edge { stroke: #8aa0b5; stroke-width: 1.6; fill: none; }
+      .edge-d { stroke: #b08a4a; stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; }
+      .caption { font-size: 12px; fill: #5a6a7a; font-style: italic; }
+    </style>
+    <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8aa0b5"/>
+    </marker>
+    <marker id="arr2d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b08a4a"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="900" fill="#fafbfc"/>
+  <text x="40" y="48" class="title">The Vault — Flat Files, Graph Semantics, Derived Surfaces</text>
+  <text x="40" y="72" class="subtitle">4,239 governed records · 18,168 typed edges across 4,122 connected nodes (2026-07-10). Files are authoritative; every index and view is derived and rebuildable.</text>
+
+  <!-- Panel 1: Authoritative store -->
+  <rect x="40" y="100" width="380" height="360" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="60" y="130" class="panel-title">Authoritative store — flat by design</text>
+  <text x="60" y="152" class="mono">vault/files/ — 3,740 UID-named files</text>
+  <g>
+    <rect x="60" y="164" width="340" height="26" rx="4" fill="#eef2f6"/><text x="72" y="182" class="file">bfcd1a5b.md  type: decision   (ADR-044)</text>
+    <rect x="60" y="196" width="340" height="26" rx="4" fill="#eef2f6"/><text x="72" y="214" class="file">d409c333.md  type: activation (Argus A106)</text>
+    <rect x="60" y="228" width="340" height="26" rx="4" fill="#eef2f6"/><text x="72" y="246" class="file">eca73d77.md  type: document   (L1 entry)</text>
+    <rect x="60" y="260" width="340" height="26" rx="4" fill="#eef2f6"/><text x="72" y="278" class="file">…one UID-named file per governed record…</text>
+  </g>
+  <text x="60" y="312" class="node">One-Home directories — one per type:</text>
+  <text x="60" y="332" class="mono">capsules/ 64     tools/ 61    skills/ 25</text>
+  <text x="60" y="350" class="mono">playbooks/ 24    actions/ 10</text>
+  <text x="60" y="368" class="mono">session-agents/ · agents/</text>
+  <text x="60" y="398" class="label">No nested folders to rot; renames can never</text>
+  <text x="60" y="414" class="label">break references — everything cites by UID,</text>
+  <text x="60" y="430" class="label">not path. The whole-studio index carries</text>
+  <text x="60" y="446" class="label">4,239 governed records.</text>
+
+  <!-- Panel 2: Graph semantics -->
+  <rect x="450" y="100" width="380" height="360" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="470" y="130" class="panel-title">Graph semantics in frontmatter</text>
+  <rect x="470" y="146" width="340" height="112" rx="6" fill="#1e2a36"/>
+  <text x="486" y="170" class="mono" fill="#d7e3ee">member_of: [6dff0111]    # home project(s)</text>
+  <text x="486" y="190" class="mono" fill="#d7e3ee">governed_by: 8dd772a0    # governance edge</text>
+  <text x="486" y="210" class="mono" fill="#d7e3ee">refs: [476fef2e, …]      # citations</text>
+  <text x="486" y="230" class="mono" fill="#d7e3ee">subsystem_hub: [8dd772a0] # owning hub</text>
+  <text x="486" y="250" class="mono" fill="#d7e3ee">superseded_by: …         # honest history</text>
+
+  <text x="470" y="284" class="node">18,168 directed edges · 4,122 nodes</text>
+  <g>
+    <text x="470" y="306" class="barlab">mentions</text>
+    <rect x="580" y="296" width="150" height="12" rx="2" fill="#b08a4a"/>
+    <text x="738" y="306" class="barval">6,561</text>
+
+    <text x="470" y="324" class="barlab">member_of</text>
+    <rect x="580" y="314" width="91" height="12" rx="2" fill="#3a6b8a"/>
+    <text x="679" y="324" class="barval">3,981</text>
+
+    <text x="470" y="342" class="barlab">refs</text>
+    <rect x="580" y="332" width="68" height="12" rx="2" fill="#3a6b8a"/>
+    <text x="656" y="342" class="barval">2,969</text>
+
+    <text x="470" y="360" class="barlab">governed_by</text>
+    <rect x="580" y="350" width="38" height="12" rx="2" fill="#3a6b8a"/>
+    <text x="626" y="360" class="barval">1,677</text>
+
+    <text x="470" y="378" class="barlab">subsystem_hub</text>
+    <rect x="580" y="368" width="35" height="12" rx="2" fill="#3a6b8a"/>
+    <text x="623" y="378" class="barval">1,522</text>
+
+    <text x="470" y="396" class="barlab">other classes</text>
+    <rect x="580" y="386" width="30" height="12" rx="2" fill="#8aa0b5"/>
+    <text x="618" y="396" class="barval">~1,300</text>
+
+    <text x="470" y="414" class="barlab">superseded_by</text>
+    <rect x="580" y="404" width="4" height="12" rx="2" fill="#3a6b8a"/>
+    <text x="592" y="414" class="barval">157</text>
+  </g>
+  <text x="470" y="434" class="node-sub">mentions is body-extracted (new since v1);</text>
+  <text x="470" y="448" class="node-sub">the others are declared in frontmatter.</text>
+
+  <!-- Panel 3: Derived surfaces -->
+  <rect x="860" y="100" width="380" height="360" rx="10" fill="#fdf8ef" stroke="#d8c49a"/>
+  <text x="880" y="130" class="panel-title">Derived surfaces — rebuilt, never truth</text>
+  <g>
+    <rect x="880" y="146" width="340" height="38" rx="6" fill="#ffffff" stroke="#d8c49a"/>
+    <text x="894" y="163" class="node">00-index.jsonl + per-type shards</text>
+    <text x="894" y="177" class="node-sub">one JSONL row per record; sharded by type</text>
+
+    <rect x="880" y="190" width="340" height="38" rx="6" fill="#ffffff" stroke="#d8c49a"/>
+    <text x="894" y="207" class="node">SQLite query runtime</text>
+    <text x="894" y="221" class="node-sub">entries · edges · FTS5 full-text over 4,239 rows</text>
+
+    <rect x="880" y="234" width="340" height="38" rx="6" fill="#ffffff" stroke="#d8c49a"/>
+    <text x="894" y="251" class="node">00-graph-index.json</text>
+    <text x="894" y="265" class="node-sub">O(1) edge traversal by UID</text>
+
+    <rect x="880" y="278" width="340" height="38" rx="6" fill="#ffffff" stroke="#d8c49a"/>
+    <text x="894" y="295" class="node">nav tree + boards + crew brief</text>
+    <text x="894" y="309" class="node-sub">rendered human navigation and dashboards</text>
+
+    <rect x="880" y="322" width="340" height="38" rx="6" fill="#ffffff" stroke="#d8c49a"/>
+    <text x="894" y="339" class="node">decay signals — Gardener (v1.82)</text>
+    <text x="894" y="353" class="node-sub">flag-only grooming; proven unable to write sources</text>
+  </g>
+  <text x="880" y="388" class="label">tropo-rebuild-vault.py regenerates everything;</text>
+  <text x="880" y="404" class="label">rebuild --only &lt;uid&gt; freshens one entry.</text>
+  <text x="880" y="420" class="label">Indexes are self-healing — corruption is</text>
+  <text x="880" y="436" class="label">recoverable from the files.</text>
+
+  <!-- flow arrows between panels -->
+  <path class="edge" d="M 420 280 L 450 280" marker-end="url(#arr2)"/>
+  <path class="edge-d" d="M 830 280 L 860 280" marker-end="url(#arr2d)"/>
+
+  <!-- Bottom: the cycle -->
+  <rect x="40" y="490" width="1200" height="230" rx="10" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="60" y="520" class="panel-title">The read/write cycle — files first, derived views second</text>
+
+  <rect x="80" y="545" width="250" height="80" rx="8" fill="#2c4a6e"/>
+  <text x="205" y="573" class="node" fill="#ffffff" text-anchor="middle">AGENTS + HUMANS</text>
+  <text x="205" y="591" class="node-sub" fill="#cfe0ee" text-anchor="middle">write typed markdown</text>
+  <text x="205" y="607" class="node-sub" fill="#cfe0ee" text-anchor="middle">(tool-mediated for structured ops)</text>
+
+  <rect x="430" y="545" width="250" height="80" rx="8" fill="#3a6b8a"/>
+  <text x="555" y="573" class="node" fill="#ffffff" text-anchor="middle">VAULT FILES</text>
+  <text x="555" y="591" class="node-sub" fill="#d6e6ef" text-anchor="middle">vault/files/&lt;uid&gt;.md + One-Home dirs</text>
+  <text x="555" y="607" class="node-sub" fill="#d6e6ef" text-anchor="middle">the single source of truth</text>
+
+  <rect x="780" y="545" width="250" height="80" rx="8" fill="#b08a4a"/>
+  <text x="905" y="573" class="node" fill="#ffffff" text-anchor="middle">REBUILD PASS</text>
+  <text x="905" y="591" class="node-sub" fill="#f3e8d2" text-anchor="middle">index · shards · graph · SQLite · nav</text>
+  <text x="905" y="607" class="node-sub" fill="#f3e8d2" text-anchor="middle">boards · decay signals · validator</text>
+
+  <rect x="1080" y="545" width="140" height="80" rx="8" fill="#4a8a6b"/>
+  <text x="1150" y="578" class="node" fill="#ffffff" text-anchor="middle">VIEWS</text>
+  <text x="1150" y="596" class="node-sub" fill="#dcefe4" text-anchor="middle">query + navigate</text>
+
+  <path class="edge" d="M 330 585 L 430 585" marker-end="url(#arr2)"/>
+  <path class="edge" d="M 680 585 L 780 585" marker-end="url(#arr2)"/>
+  <path class="edge" d="M 1030 585 L 1080 585" marker-end="url(#arr2)"/>
+  <path class="edge" d="M 1150 625 C 1150 690, 205 690, 205 625" marker-end="url(#arr2)"/>
+  <text x="640" y="664" class="label" text-anchor="middle">humans and agents read derived views; truth round-trips through the files</text>
+
+  <!-- Lifecycle strip -->
+  <rect x="40" y="740" width="1200" height="92" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="60" y="766" class="panel-title">Lifecycle honesty — nothing vanishes silently</text>
+  <text x="60" y="790" class="node">Forward pointers (ADR-047)</text>
+  <text x="60" y="808" class="label">Every archived or superseded record carries a forward-pointer</text>
+  <text x="60" y="824" class="label">to its successor — enforced as a validator ERROR, not advisory.</text>
+  <text x="660" y="790" class="node">Soft delete only</text>
+  <text x="660" y="808" class="label">tropo-recycle.py moves entries to a dated recycle folder with a</text>
+  <text x="660" y="824" class="label">logged reason; the disposition tool refuses referenced nodes.</text>
+
+  <text x="40" y="870" class="caption">Takeaway: flat UID-named files are the only truth; 18,168 typed edges organize them; every index is a disposable projection — and retired records must point forward.</text>
+</svg>

@@ -13,6 +13,7 @@ could not catch.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -607,7 +608,7 @@ class EvidenceBeforeFreezeTests(unittest.TestCase):
                          "data": {"candidate_sha256": sha, "reason": "prose fix"}})
         if frozen:
             rows.append({"event": "tropo.release.package_frozen",
-                         "data": {"package_sha256": sha}})
+                         "data": {"package_sha256": frozen if isinstance(frozen, str) else sha}})
         (tmp / "run.jsonl").write_text(
             "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
         if mutate:
@@ -641,10 +642,22 @@ class EvidenceBeforeFreezeTests(unittest.TestCase):
         _p, refusal = self.freeze.decide(run, run / "pkg.zip")
         self.assertIn("invalidation", refusal)
 
-    def test_a_second_freeze_is_a_supersession(self):
-        run = self.build(frozen=True)
+    def test_a_freeze_on_different_bytes_is_a_supersession(self):
+        other = hashlib.sha256(b"a different package").hexdigest()
+        run = self.build(frozen=other)
         _p, refusal = self.freeze.decide(run, run / "pkg.zip")
         self.assertIn("supersession", refusal)
+
+    def test_a_freeze_on_these_bytes_is_the_post_state_pass(self):
+        """The verification re-run after the act (talos-t63, v1.95 post-lock
+        inclusion): criterion 4 holds when the run's one active freeze binds
+        these same bytes. v1.90/v1.93/v1.94 hand-amended the step around the
+        old flat refusal."""
+        run = self.build(frozen=True)
+        payload, refusal = self.freeze.decide(run, run / "pkg.zip")
+        self.assertIsNone(refusal, refusal)
+        self.assertEqual(payload["verdict"], "pass")
+        self.assertEqual(payload["frozen_event_uid"], "existing")
 
     def test_the_freeze_node_names_a_runnable_verdict_source(self):
         command = scalar(FREEZE, "verification_command")
@@ -738,7 +751,7 @@ class ReleaseEventVocabularyTests(unittest.TestCase):
         return self.ev.AuthorizationContext(**base)
 
     def envelope(self, event, data, **over):
-        row = {"event": event, "ts": "2026-08-16T21:00:00Z", "actor": "talos-t44",
+        row = {"event": event, "ts": "2026-08-16T21:00:00Z", "actor": "34cf0f1c",  # 3d8d4351: actor carries the UID (names -> actor_label_resolved)
                "data": data, "schema_version": 2, "trace_id": self.ACTIVATION,
                "span_id": "span-1", "step": None}
         row.update(over)

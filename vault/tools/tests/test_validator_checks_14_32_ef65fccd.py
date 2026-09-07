@@ -298,6 +298,63 @@ class TestPostCutoverValidatorEventUnion(_SandboxedValidatorTest):
             findings,
         )
 
+    def test_boundary_hex_lengths_around_both_governed_shapes_are_still_pollution(self):
+        """f0159e830d57-adjacent negative control (Argus's standing ask):
+        `check_pipeline_event_fixture_pollution` is an INVERTED-POLARITY
+        site -- match means legitimate, no-match means pollution. The
+        accepts-both widening (8-or-12-hex) correctly stopped flagging real
+        12-hex composite activations as pollution; it must not ALSO stop
+        flagging the shapes just outside that window. One off by one on
+        each side of each governed length is the case a regex boundary bug
+        would actually produce."""
+        boundary_uids = {
+            "7-hex-short-of-legacy": "a" * 7,
+            "9-hex-over-legacy": "a" * 9,
+            "11-hex-short-of-composite": "a" * 11,
+            "13-hex-over-composite": "a" * 13,
+            "8-hex-not-actually-hex": "g" * 8,
+        }
+        for label, bad_uid in boundary_uids.items():
+            with self.subTest(case=label, uid=bad_uid):
+                # _write_stream_event overwrites the same fixed event_uid/
+                # file each call, so no state carries between iterations.
+                event_uid = "evt_1111111111111111_00000001"
+                self._write_stream_event({
+                    "id": event_uid,
+                    "event_uid": event_uid,
+                    "type": "tropo.pipeline.activated",
+                    "source": "/pipeline-runtime",
+                    "source_uid": "9e7003b1",
+                    "data": {"activation_uid": bad_uid},
+                })
+                findings, checked, defects = val.check_pipeline_event_fixture_pollution(
+                    self.vault
+                )
+                self.assertEqual(checked, 1, findings)
+                self.assertEqual(defects, 1, findings)
+
+    def test_a_real_12_hex_composite_activation_is_not_flagged_as_pollution(self):
+        """Positive control: proves accepts-both is real for this detector,
+        not that it flags everything with the wrong length. Pre-widening,
+        every genesis-Stage-B activation_uid would have been misreported as
+        fixture pollution in production."""
+        event_uid = "evt_1111111111111111_00000001"
+        composite_uid = "a1b2c3d4e5f6"
+        self.assertEqual(len(composite_uid), 12)
+        self._write_stream_event({
+            "id": event_uid,
+            "event_uid": event_uid,
+            "type": "tropo.pipeline.activated",
+            "source": "/pipeline-runtime",
+            "source_uid": "9e7003b1",
+            "data": {"activation_uid": composite_uid},
+        })
+        findings, checked, defects = val.check_pipeline_event_fixture_pollution(
+            self.vault
+        )
+        self.assertEqual(checked, 0, findings)
+        self.assertEqual(defects, 0, findings)
+
 
 if __name__ == "__main__":
     unittest.main()

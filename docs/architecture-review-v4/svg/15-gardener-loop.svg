@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 870" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .panel-title { font-size: 15px; font-weight: bold; fill: #1a2332; }
+      .node { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .node-sub { font-size: 11px; fill: #5a6a7a; }
+      .node-sub-explicit { font-size: 11px; }
+      .node-sub-light { font-size: 11px; fill: #cfe0ee; }
+      .label { font-size: 12px; fill: #44525f; }
+      .small { font-size: 10.5px; fill: #5a6a7a; }
+      .mono { font-family: Menlo, Consolas, monospace; font-size: 11px; fill: #2c4a6e; }
+      .tag { font-size: 11px; font-weight: bold; fill: #ffffff; }
+      .lever { font-size: 12.5px; font-weight: bold; fill: #ffffff; }
+      .edge { stroke: #8aa0b5; stroke-width: 1.8; fill: none; }
+      .edge-r { stroke: #9c2b2b; stroke-width: 1.8; fill: none; }
+      .caption { font-size: 12px; fill: #5a6a7a; font-style: italic; }
+    </style>
+    <marker id="arr15" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8aa0b5"/>
+    </marker>
+    <marker id="arr15r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9c2b2b"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="870" fill="#fafbfc"/>
+  <text x="40" y="48" class="title">The Gardener — the Vault's First Production Pruning Cycle</text>
+  <text x="40" y="72" class="subtitle">§19 (extends §3.2 + §11): a caged proposal-only judge under governed identity · a human-reviewed sitting · evidence-bound stamps · archive with receipts. First complete cycle 2026-08-11.</text>
+
+  <!-- Governed policy -->
+  <rect x="40" y="100" width="370" height="180" rx="10" fill="#2c4a6e"/>
+  <text x="64" y="130" class="panel-title" fill="#ffffff">Governed policy = judge identity</text>
+  <text x="64" y="154" class="node-sub-light">the pinned judge-prompt SHA-256 + the policy version</text>
+  <text x="64" y="170" class="node-sub-light">IS the judge's identity — edit one character and</text>
+  <text x="64" y="186" class="node-sub-light">stamping authority lapses until re-qualification</text>
+  <text x="64" y="216" class="node-sub-light">authority earned blind: 18/18 against the principal's</text>
+  <text x="64" y="232" class="node-sub-light">hand-marked fixture cases; the worse earlier prompt was</text>
+  <text x="64" y="248" class="node-sub-light">rejected, its failing scorecard preserved as the reason</text>
+  <text x="64" y="264" class="node-sub-light">the current wording exists</text>
+
+  <path class="edge" d="M 410 190 L 448 190" marker-end="url(#arr15)"/>
+
+  <!-- Caged judge -->
+  <rect x="450" y="100" width="370" height="180" rx="10" fill="#3a6b8a"/>
+  <rect x="656" y="112" width="150" height="20" rx="10" fill="#9c2b2b"/>
+  <text x="731" y="126" class="tag" text-anchor="middle">CAGED · $0 CEILING</text>
+  <text x="474" y="130" class="panel-title" fill="#ffffff">The judge</text>
+  <text x="474" y="154" class="node-sub-explicit" fill="#d6e6ef">a Cursor cloud sub-agent runs one pass under a</text>
+  <text x="474" y="170" class="node-sub-explicit" fill="#d6e6ef">$0 enforceable spend ceiling — no provider API</text>
+  <text x="474" y="186" class="node-sub-explicit" fill="#d6e6ef">path exists in its envelope</text>
+  <text x="474" y="212" class="node-sub-explicit" fill="#ffffff" font-weight="bold">proposal-only: it writes no governed content</text>
+  <text x="474" y="240" class="node-sub-explicit" fill="#d6e6ef">judging runs on schedule — weekly, via fleet-ops;</text>
+  <text x="474" y="256" class="node-sub-explicit" fill="#d6e6ef">stamping is a separate gesture entirely</text>
+
+  <path class="edge" d="M 820 190 L 858 190" marker-end="url(#arr15)"/>
+
+  <!-- Proposals -->
+  <rect x="860" y="100" width="380" height="180" rx="10" fill="#eef2f6" stroke="#9db4c8"/>
+  <text x="884" y="130" class="panel-title">281 proposals (cycle 2)</text>
+  <text x="884" y="154" class="node-sub">one verdict per entry: finished / superseded /</text>
+  <text x="884" y="170" class="node-sub">abandoned — proposals only; nothing in the vault</text>
+  <text x="884" y="186" class="node-sub">changes until a human stamps</text>
+  <text x="884" y="216" class="node-sub">queued for the sitting — the judge cannot</text>
+  <text x="884" y="232" class="node-sub">dispose of its own proposals</text>
+
+  <path class="edge" d="M 1050 280 L 1050 306 L 950 306 L 950 328" marker-end="url(#arr15)"/>
+
+  <!-- Human sitting -->
+  <rect x="250" y="330" width="780" height="150" rx="10" fill="#ffffff" stroke="#b25c2e" stroke-width="2"/>
+  <rect x="270" y="346" width="344" height="24" rx="12" fill="#b25c2e"/>
+  <text x="442" y="363" class="lever" text-anchor="middle">HUMAN-REVIEWED SITTING — the human is the lever</text>
+  <text x="270" y="394" class="label">stamping is a separate human-reviewed gesture — unattended auto-stamp is prohibited by standing rule</text>
+  <text x="270" y="414" class="label">cycle 2: 14 proposals walked individually by the principal (every OS-segment item, every "abandoned" verdict);</text>
+  <text x="270" y="430" class="label">the rest executive-reviewed span by span under a ruled policy</text>
+  <text x="270" y="456" class="label" font-weight="bold">279 stamped · 2 held honestly on prospective-tense evidence · zero wrong verdicts found in ~280 spans read</text>
+
+  <path class="edge" d="M 330 480 L 330 508" marker-end="url(#arr15)"/>
+
+  <!-- Evidence-bound stamps -->
+  <rect x="40" y="510" width="580" height="160" rx="10" fill="#4a8a6b"/>
+  <text x="64" y="540" class="panel-title" fill="#ffffff">Evidence-bound stamps</text>
+  <text x="64" y="564" class="node-sub-explicit" fill="#dcefe4">a stamp binds: the exact quoted span · its byte offsets · the body's</text>
+  <text x="64" y="580" class="node-sub-explicit" fill="#dcefe4">hash at judgment time · the judge's identity · the approving actor</text>
+  <text x="64" y="608" class="node-sub-explicit" fill="#ffffff" font-weight="bold">edit a stamped body → the stamp is visibly stale and re-queues</text>
+  <text x="64" y="636" class="node-sub-explicit" fill="#dcefe4">a stamp can always prove — or lose — its own currency</text>
+
+  <path class="edge" d="M 620 590 L 658 590" marker-end="url(#arr15)"/>
+
+  <!-- Archive -->
+  <rect x="660" y="510" width="580" height="160" rx="10" fill="#2c4a6e"/>
+  <text x="684" y="540" class="panel-title" fill="#ffffff">Archive with receipts</text>
+  <text x="684" y="564" class="node-sub-light">75 entries archived with receipts · live working set: 3,297 active records</text>
+  <text x="684" y="592" class="node-sub-light">every failure in the cycle was a tooling seam, each now a filed, tracked</text>
+  <text x="684" y="608" class="node-sub-light">finding: a render-state-dependent content hash; two tools blind outside</text>
+  <text x="684" y="624" class="node-sub-light">the main store; a lock tool that corrupted its own record on an</text>
+  <text x="684" y="640" class="node-sub-light">apostrophe while printing success</text>
+
+  <!-- content-gate return -->
+  <path class="edge" d="M 1150 510 L 1150 288" marker-end="url(#arr15)"/>
+  <text x="1162" y="372" class="small">content gate —</text>
+  <text x="1162" y="386" class="small">steady-state</text>
+  <text x="1162" y="400" class="small">cycles re-judge</text>
+  <text x="1162" y="414" class="small">only what</text>
+  <text x="1162" y="428" class="small">changed</text>
+
+  <!-- Honest gap -->
+  <rect x="40" y="700" width="1200" height="104" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <rect x="40" y="700" width="6" height="104" fill="#9c2b2b"/>
+  <text x="64" y="726" font-size="13" font-weight="bold" fill="#1a2332">The honest gap — the loop was wired for launching, not landing</text>
+  <text x="64" y="748" class="node-sub-explicit" fill="#44525f">the judge ran on schedule, and its 281 proposals sat unnoticed for</text>
+  <text x="64" y="764" class="node-sub-explicit" fill="#44525f">three days behind a status field written mid-run</text>
+
+  <path class="edge-r" d="M 600 752 L 646 752" marker-end="url(#arr15r)"/>
+
+  <rect x="650" y="714" width="572" height="76" rx="6" fill="#eef2f6" stroke="#9db4c8"/>
+  <text x="666" y="736" class="node">Gardener v2 — design brief in the graph, superseding-in-design the v1 spec</text>
+  <text x="666" y="756" class="node-sub">closes the consumption loop: a pending-disposition marker + one boot-signal line ·</text>
+  <text x="666" y="772" class="node-sub">the disposition steps named in the loop's own procedure · confidence triage to shrink the sitting</text>
+
+  <text x="40" y="844" class="caption">Authority is a hash: the pinned prompt + policy version is the judge; the human sitting is the lever; every stamp carries the evidence to prove itself stale — and the gap between launching and landing is named, with its cure in design.</text>
+</svg>

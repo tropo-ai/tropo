@@ -69,6 +69,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.governed_path import UID_HEX_PATTERN, is_governed_uid_shape  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 GEN_RE = re.compile(r"^([A-Za-z.\-_]*?)(\d+)$")
 
@@ -129,6 +132,48 @@ def append(path, record):
         os.close(fd)
 
 
+def _retirement_body(root, agent, record, headline):
+    """Build the retirement notice body playbook e2c7d185 step 7 specifies.
+
+    Two to four sentences, and pointers to the letter and (if written) the
+    reflection. Every lookup here is a plain existence check on a path this
+    tool already knows, because announce() runs AFTER the lineage line is on
+    disk and nothing in it may turn a completed close into a failure.
+
+    The letter is resolved two ways on purpose. `--letter` records its
+    destination on the record, but an agent who authors the letter directly at
+    its canonical home closes WITHOUT that flag (the tool refuses to place over
+    an existing slot), which is the documented path and is how metis-g115
+    closed. So a missing `letter` key is not evidence of a missing letter:
+    fall back to the canonical `transfers/<GEN>.md` home and check the disk.
+    """
+    gen = str(record.get("gen") or "")
+    sentences = [f"{headline}."]
+
+    note = str(record.get("note") or "").strip()
+    if note:
+        # The retiring agent's own one-line summary of the generation. This is
+        # the substance the crew actually wants in a drain, and it is already
+        # on the record; the old body threw it away.
+        sentences.append(note if note.endswith(".") else note + ".")
+
+    letter_rel = record.get("letter")
+    if not letter_rel and gen:
+        candidate = root / "agents" / agent / "transfers" / f"{gen}.md"
+        if candidate.is_file():
+            letter_rel = f"agents/{agent}/transfers/{gen}.md"
+    if letter_rel:
+        sentences.append(f"Letter: {letter_rel}")
+
+    if gen:
+        reflection_rel = f"agents/{agent}/reflections/{gen.lower()}-reflection.md"
+        if (root / reflection_rel).is_file():
+            sentences.append(f"Reflection: {reflection_rel}")
+
+    sentences.append(f"Lineage: agents/{agent}/lineage.jsonl")
+    return " ".join(sentences)
+
+
 def announce(root, agent, record):
     """Tell the crew. AFTER the line is on disk, and it can never affect the birth.
 
@@ -162,15 +207,46 @@ def announce(root, agent, record):
     # authority); this is the writer half landing behind that reconciliation, never ahead
     # of it. Birth keeps crew-state: the playbook mandates nothing for a birth.
     category = "retirement" if record["t"] == "retired" else "crew-state"
+    # metis-g116, 2026-09-01. The `category` half of this payload was cured by
+    # argus-a154 above; the BODY one line below it was not, and it is the half
+    # playbook e2c7d185 step 7 actually specifies: "body 2-4 sentences, pointers
+    # to the letter (and reflection if you wrote one)". The hard-coded body
+    # pointed at the lineage file and named neither. Measured across the whole
+    # event log at G116's boot: of 101 retirement broadcasts ever emitted, 37
+    # carried a pointer to the letter; seven of the last ten named retirements
+    # (A164, O36, T55, O37, T56, A165, G115) shipped this boilerplate alone.
+    # The two that met the step (T54, T57) did it by hand-emitting a SECOND
+    # broadcast beside the tool's. So the tool and the playbook were two writers
+    # of one fact, the tool made the step LOOK done (right type, right category,
+    # legal headline), and the letter — the artifact the playbook says to spend
+    # most of retirement on — was the one thing the announcement never linked.
+    # Same defect family, same function, one line apart, sixteen days later.
+    body = f"{headline}. Lineage: agents/{agent}/lineage.jsonl"
+    if record["t"] == "retired":
+        body = _retirement_body(root, agent, record, headline)
     payload = {"category": category, "agent": agent, "gen": record["gen"],
                "t": record["t"], "headline": headline,
-               "body": f"{headline}. Lineage: agents/{agent}/lineage.jsonl",
+               "body": body,
                "lineage": f"agents/{agent}/lineage.jsonl"}
+    # A11 (00d776ae W1): birth/retirement broadcasts rendered as BLANK rows in
+    # every drain — the emit carried no --subject, so the crew's list surfaces
+    # showed `subj=` with nothing anchoring the row. The subject is the
+    # announcing agent's OWN party UID (the retire-tool's own broadcast already
+    # carries it; announce() is the straggler). Unresolvable party → emit as
+    # before (subject-less): the broadcast itself must never fail on this.
+    subject_args = []
+    entry = resolve_entry(root, agent)
+    if entry:
+        pm = re.search(r"^party_uid:\s*(%s)\s*$" % UID_HEX_PATTERN,
+                       entry.read_text(encoding="utf-8"), re.MULTILINE)
+        if pm:
+            subject_args = ["--subject", pm.group(1)]
     try:
         r = subprocess.run(
             [sys.executable, str(tool), "--type", "tropo.broadcast.crew",
              "--source", f"/agents/{agent}", "--as", agent,
-             "--lifecycle", "evergreen", "--data", json.dumps(payload)],
+             "--lifecycle", "evergreen"] + subject_args +
+            ["--data", json.dumps(payload)],
             capture_output=True, text=True, timeout=30, cwd=str(root))
         return None if r.returncode == 0 else "crew broadcast failed; lineage is unaffected"
     except Exception:
@@ -225,9 +301,19 @@ def resolve_entry(root, agent):
     pointer = root / "agents" / agent / f"{agent}-activation.md"
     if not pointer.is_file():
         return None
-    m = re.search(r"^agent_uid:\s*([0-9a-fA-F]{8})\s*$",
+    # THE SHAPE COMES FROM THE AUTHORITY, never a literal. This read
+    # ``[0-9a-fA-F]{8}`` until 2026-09-01, so resolve_entry() returned None for
+    # ANY agent minted after the Stage B flip -- the lineage tool could not find
+    # that agent's own identity entry. Cal and Darin are minted composite at
+    # genesis, so this would have bitten the companions on their first boot.
+    m = re.search(r"^agent_uid:\s*(%s)\s*$" % UID_HEX_PATTERN,
                   pointer.read_text(encoding="utf-8"), re.MULTILINE)
-    if not m:
+    # UID_HEX_PATTERN's [0-9a-fA-F] accepts uppercase; is_governed_uid_shape
+    # (the predicate, not the embedded regex) is lowercase-only. A case-
+    # mismatched agent_uid must not resolve at all -- on a case-insensitive
+    # filesystem it could otherwise open a DIFFERENT-cased path that happens
+    # to be the same file, reading real content under an unverified name.
+    if not m or not is_governed_uid_shape(m.group(1)):
         return None
     entry = root / "vault" / "agents" / f"{m.group(1)}.md"
     return entry if entry.is_file() else None
@@ -259,12 +345,17 @@ def sync_entry(root, agent, fields):
         for line in fm.group(1).split("\n"):
             key = line.split(":", 1)[0].strip() if ":" in line else None
             if key in fields:
-                out.append(f"{key}: {fields[key]}")
+                # A None value REMOVES the field (S3 f0153e0eb53e, 2026-09-05):
+                # born clears the predecessor's retired_at, so an active entry
+                # never reads retired-before-born — one fact, two fields, both
+                # updated.
+                if fields[key] is not None:
+                    out.append(f"{key}: {fields[key]}")
                 seen.add(key)
             else:
                 out.append(line)
         for key, val in fields.items():
-            if key not in seen:
+            if key not in seen and val is not None:
                 out.append(f"{key}: {val}")
         new_text = "---\n" + "\n".join(out) + "\n---\n" + text[fm.end():]
         tmp = entry.with_suffix(".md.tmp")
@@ -306,7 +397,10 @@ def cmd_born(args):
     born_fields = {"status": "active", "generation": gen,
                    "last_session": f"'{today()}'",
                    "last_updated": f"'{today()}'",
-                   "born_at": f"'{record['at']}'"}
+                   "born_at": f"'{record['at']}'",
+                   # S3 (f0153e0eb53e): retire wrote retired_at; a birth must clear
+                   # it or the active entry reads retired-before-born forever.
+                   "retired_at": None}
     if prev:
         born_fields["predecessor"] = prev
     if args.model:

@@ -26,6 +26,8 @@ import re
 from dataclasses import dataclass
 from typing import Iterable, Optional
 
+from lib.governed_path import is_governed_uid_shape
+
 #: The fixed four. Not configurable: AC7 counts instruments, and a vocabulary
 #: a caller can extend is a vocabulary that cannot be counted against.
 INSTRUMENTS = ("full-validator", "release-harness", "external-test", "cold-walk")
@@ -77,7 +79,6 @@ RECEIPT_FIELDS = (
 EXECUTION_MODES = ("machine", "human", "agent")
 VERDICTS = ("pass", "fail")
 
-_UID = re.compile(r"^[0-9a-f]{8}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -164,7 +165,11 @@ def validate_receipt(raw: dict) -> Receipt:
         )
 
     run_uid = str(raw["release_run_uid"])
-    if not _UID.match(run_uid):
+    # accepts-both (UID_SHAPES): legacy 8-hex uids stay first-class forever;
+    # every new governed mint is 12-hex composite since the Stage B flip
+    # (2026-08-31). The literal 8-only regex this replaced refused a
+    # freshly-minted composite release_run_uid as "not a governed uid".
+    if not is_governed_uid_shape(run_uid):
         raise VerifyRefusal(f"release_run_uid {run_uid!r} is not a governed uid")
 
     digest = str(raw["candidate_sha256"])

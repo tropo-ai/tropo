@@ -271,6 +271,13 @@ def _copy_cli_fixture(
         "event_identity.py",
         "release_receipt.py",
         "tropo_roots.py",
+        # accepts-both (UID_SHAPES): release_receipt.py and
+        # mounted_projection_trust.py (loaded transitively via
+        # tropo-validate.py in some of these tests) both import this now;
+        # the fixture allowlist was never updated when that dependency
+        # landed, so every CLI-subprocess test here failed on
+        # ModuleNotFoundError for lib.governed_path.
+        "governed_path.py",
     ):
         shutil.copy2(TOOLS / "lib" / name, lib / name)
     _write_agent(root)
@@ -1133,6 +1140,9 @@ class ReceiptAndOverrideTests(unittest.TestCase):
             "wildcard-field": lambda item: item["selection"].update(
                 {"fields": ["*"]}
             ),
+            "uppercase-override-id": lambda item: item.update(
+                {"override_id": item["override_id"].upper()}
+            ),
         }
         for label, mutate in mutations.items():
             candidate = copy.deepcopy(descriptor)
@@ -1165,6 +1175,75 @@ class ReceiptAndOverrideTests(unittest.TestCase):
             public_snapshot.SnapshotContractError, "cannot consume overrides"
         ):
             public_snapshot.validate_bundle_bytes(files)
+
+
+class UidShapeCaseSensitivityTests(unittest.TestCase):
+    """Argus's release-gate negative-control ask, narrowed: UID_HEX_PATTERN
+    (used to build the module-local UID8_RE this file no longer has) accepts
+    uppercase hex, unlike the tight is_governed_uid_shape predicate this file
+    now routes through instead. party_uid keys the identities dict returned
+    by load_agent_identities; override_id and a bare-uid override source are
+    both consumer-facing identity claims in a public, published artifact. A
+    case-mismatched uid must be refused outright, not silently accepted as a
+    different (and here, non-existent) identity."""
+
+    def test_uppercase_party_uid_refuses(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            agents = root / "vault" / "agents"
+            agents.mkdir(parents=True)
+            (agents / "talos.md").write_text(
+                "---\n"
+                "type: agent\n"
+                "agent: talos\n"
+                f"party_uid: {PARTY_UID.upper()}\n"
+                "generation: T1\n"
+                "name: Talos\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                public_snapshot.SnapshotContractError, "malformed party_uid"
+            ):
+                public_snapshot.load_agent_identities(root)
+
+    def test_lowercase_party_uid_still_resolves(self) -> None:
+        """Positive control: proves the refusal above is about case, not
+        that load_agent_identities refuses every agent record."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            agents = root / "vault" / "agents"
+            agents.mkdir(parents=True)
+            (agents / "talos.md").write_text(
+                "---\n"
+                "type: agent\n"
+                "agent: talos\n"
+                f"party_uid: {PARTY_UID}\n"
+                "generation: T1\n"
+                "title: Talos\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            identities = public_snapshot.load_agent_identities(root)
+            self.assertIn(PARTY_UID, identities)
+
+    def test_uppercase_bare_uid_override_source_is_not_treated_as_the_uid(self) -> None:
+        """_validate_exact_source accepts EITHER a bare governed uid OR a
+        plain repository-relative path -- an uppercase-hex value fails the
+        uid-shape branch and falls through to the path branch, where a
+        single path segment with no `/`, `.` or `..` parts is syntactically
+        a valid (if unusual) path. That fallthrough is correct: the point of
+        the fix is that "1234ABCD" is never treated as the SAME identity as
+        the real uid "1234abcd" -- it is accepted, but as unrelated path
+        text, not as a case-insensitive alias for the governed uid."""
+        accepted = public_snapshot._validate_exact_source("1234ABCD")
+        self.assertEqual(accepted, "1234ABCD")
+        # And the real governed uid form is still recognized as a uid, not
+        # merely tolerated as a path -- distinguishable via the wildcard/
+        # traversal guards a uid never has to pass.
+        self.assertEqual(
+            public_snapshot._validate_exact_source("1234abcd"), "1234abcd"
+        )
 
 
 class CliFilesystemAndBindingTests(unittest.TestCase):

@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 950" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .panel-title { font-size: 15px; font-weight: bold; fill: #1a2332; }
+      .node { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .node-sub { font-size: 11px; fill: #5a6a7a; }
+      .label { font-size: 12px; fill: #44525f; }
+      .mono { font-family: Menlo, Consolas, monospace; font-size: 11px; fill: #2c4a6e; }
+      .gate { font-size: 12px; font-weight: bold; fill: #9c2b2b; }
+      .enforce { font-size: 12px; font-weight: bold; fill: #2c4a6e; }
+      .edge { stroke: #8aa0b5; stroke-width: 1.8; fill: none; }
+      .caption { font-size: 12px; fill: #5a6a7a; font-style: italic; }
+      .gnum { font-size: 12px; font-weight: bold; fill: #ffffff; }
+      .tag { font-size: 11px; font-weight: bold; fill: #ffffff; }
+    </style>
+    <marker id="arr4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8aa0b5"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="950" fill="#fafbfc"/>
+  <text x="40" y="48" class="title">Agent Lifecycle — Boot, Session, Retirement, Succession</text>
+  <text x="40" y="72" class="subtitle">An agent is the stack, not the model: soul + memory + vault + crew + model sleeve. Boot is gated and budgeted; generations die, the agent persists in files.</text>
+
+  <!-- Three-tier config -->
+  <rect x="40" y="100" width="380" height="210" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="60" y="130" class="panel-title">Three-tier boot configuration (ADR-032)</text>
+  <rect x="60" y="146" width="340" height="44" rx="6" fill="#2c4a6e"/>
+  <text x="74" y="165" class="node" fill="#ffffff">Tier 1 — OS floor</text>
+  <text x="74" y="181" class="node-sub" fill="#cfe0ee">.tropo/boot-config.md — universal gates + groups</text>
+  <rect x="60" y="198" width="340" height="44" rx="6" fill="#3a6b8a"/>
+  <text x="74" y="217" class="node" fill="#ffffff">Tier 2 — Studio extension</text>
+  <text x="74" y="233" class="node-sub" fill="#d6e6ef">.tropo-studio/ — Studio-wide reads, event drain</text>
+  <rect x="60" y="250" width="340" height="44" rx="6" fill="#4a8a6b"/>
+  <text x="74" y="269" class="node" fill="#ffffff">Tier 3 — Agent extension</text>
+  <text x="74" y="285" class="node-sub" fill="#dcefe4">per-agent: soul path, board filter, skip declarations</text>
+
+  <!-- Six groups -->
+  <rect x="450" y="100" width="790" height="210" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="470" y="126" class="panel-title">Activation playbook — six gated groups</text>
+  <text x="470" y="143" class="node-sub">each group writes a milestone event to a per-run log; a group whose predecessor milestone is absent from disk stops</text>
+
+  <g>
+    <rect x="470" y="152" width="116" height="62" rx="6" fill="#eef2f6" stroke="#9db4c8"/>
+    <circle cx="486" cy="168" r="9" fill="#2c4a6e"/><text x="486" y="172" class="gnum" text-anchor="middle">0</text>
+    <text x="502" y="172" class="node">Boot config</text>
+    <text x="478" y="192" class="node-sub">resolve root, read</text>
+    <text x="478" y="206" class="node-sub">3 tiers, plan</text>
+
+    <rect x="598" y="152" width="116" height="62" rx="6" fill="#fbeeee" stroke="#cf9d9d"/>
+    <circle cx="614" cy="168" r="9" fill="#9c2b2b"/><text x="614" y="172" class="gnum" text-anchor="middle">1</text>
+    <text x="630" y="172" class="node">Identity</text>
+    <text x="606" y="192" class="node-sub">HARD GATES</text>
+    <text x="606" y="206" class="node-sub">ADR-016 / ADR-028</text>
+
+    <rect x="726" y="152" width="116" height="62" rx="6" fill="#eef2f6" stroke="#9db4c8"/>
+    <circle cx="742" cy="168" r="9" fill="#2c4a6e"/><text x="742" y="172" class="gnum" text-anchor="middle">2</text>
+    <text x="758" y="172" class="node">Context</text>
+    <text x="734" y="192" class="node-sub">soul FIRST, then</text>
+    <text x="734" y="206" class="node-sub">memory + transfer</text>
+
+    <rect x="854" y="152" width="116" height="62" rx="6" fill="#eef2f6" stroke="#9db4c8"/>
+    <circle cx="870" cy="168" r="9" fill="#2c4a6e"/><text x="870" y="172" class="gnum" text-anchor="middle">3</text>
+    <text x="886" y="172" class="node">Grounding</text>
+    <text x="862" y="192" class="node-sub">crew brief, status</text>
+    <text x="862" y="206" class="node-sub">card, scanners</text>
+
+    <rect x="982" y="152" width="116" height="62" rx="6" fill="#eef2f6" stroke="#9db4c8"/>
+    <circle cx="998" cy="168" r="9" fill="#2c4a6e"/><text x="998" y="172" class="gnum" text-anchor="middle">4</text>
+    <text x="1014" y="172" class="node">Diagnostic</text>
+    <text x="990" y="192" class="node-sub">critique the boot,</text>
+    <text x="990" y="206" class="node-sub">verify transfer fresh</text>
+
+    <rect x="1110" y="152" width="116" height="62" rx="6" fill="#eef2f6" stroke="#9db4c8"/>
+    <circle cx="1126" cy="168" r="9" fill="#2c4a6e"/><text x="1126" y="172" class="gnum" text-anchor="middle">5</text>
+    <text x="1142" y="172" class="node">Signal</text>
+    <text x="1118" y="192" class="node-sub">startup signal to</text>
+    <text x="1118" y="206" class="node-sub">the principal; begin</text>
+  </g>
+  <path class="edge" d="M 586 183 L 598 183" marker-end="url(#arr4)"/>
+  <path class="edge" d="M 714 183 L 726 183" marker-end="url(#arr4)"/>
+  <path class="edge" d="M 842 183 L 854 183" marker-end="url(#arr4)"/>
+  <path class="edge" d="M 970 183 L 982 183" marker-end="url(#arr4)"/>
+  <path class="edge" d="M 1098 183 L 1110 183" marker-end="url(#arr4)"/>
+
+  <text x="470" y="238" class="gate">ADR-016: predecessor still ACTIVE → HALT. Two live generations of one agent is a governance violation.</text>
+  <text x="470" y="256" class="gate">ADR-028: generation ≠ predecessor + 1 → HALT. Lineage integrity requires human resolution.</text>
+  <text x="470" y="276" class="enforce">Enforced twice: at boot, and again at write-time by the tool that creates the activation record.</text>
+  <text x="470" y="296" class="label">Identity files resolve by UID from the activation thin-pointer; the activation registry is the lineage of record.</text>
+
+  <!-- Boot cost layer (new since v1) -->
+  <rect x="40" y="340" width="1200" height="210" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="60" y="368" class="panel-title">Boot cost — a governed budget, not a cultural norm (v1.79 Boot Contract)</text>
+  <rect x="1128" y="350" width="92" height="20" rx="10" fill="#b08a4a"/>
+  <text x="1174" y="364" class="tag" text-anchor="middle">new since v1</text>
+
+  <rect x="60" y="384" width="278" height="100" rx="6" fill="#eef2f6" stroke="#9db4c8"/>
+  <text x="74" y="406" class="node">Fast-path (~3–4K tokens)</text>
+  <text x="74" y="426" class="node-sub">replaces the ~15K canonical</text>
+  <text x="74" y="441" class="node-sub">activation-playbook read for</text>
+  <text x="74" y="456" class="node-sub">established agents</text>
+
+  <rect x="354" y="384" width="278" height="100" rx="6" fill="#eef2f6" stroke="#9db4c8"/>
+  <text x="368" y="406" class="node">Doctrine digest</text>
+  <text x="368" y="426" class="node-sub">replaces ~16K of verbatim doctrine</text>
+  <text x="368" y="441" class="node-sub">re-reads; adversarially gauntleted —</text>
+  <text x="368" y="456" class="node-sub">v1 verdict GAPS-FOUND, 10 rules</text>
+  <text x="368" y="471" class="node-sub">restored before cutover</text>
+
+  <rect x="648" y="384" width="278" height="100" rx="6" fill="#fbeeee" stroke="#cf9d9d"/>
+  <text x="662" y="406" class="node">Drift gate — fails closed</text>
+  <text x="662" y="426" class="node-sub">both artifacts declare SHA-256 of</text>
+  <text x="662" y="441" class="node-sub">every source + themselves;</text>
+  <text x="662" y="458" class="mono">check_boot_derivation_fresh</text>
+  <text x="662" y="474" class="node-sub">recomputes all of them on every run</text>
+
+  <rect x="942" y="384" width="278" height="100" rx="6" fill="#f7f0e2" stroke="#c9ac76"/>
+  <text x="956" y="406" class="node">Boot-budget tally</text>
+  <text x="956" y="426" class="node-sub">boot events carry ISO-8601</text>
+  <text x="956" y="441" class="node-sub">timestamps; over 10 min or never</text>
+  <text x="956" y="456" class="node-sub">completed → WARN</text>
+  <text x="956" y="471" class="node-sub">measured boots: 1.4–4.5 min</text>
+
+  <text x="60" y="512" class="label">Trigger incident: one boot ran 30 minutes / 172K tokens against a 7–8 minute bar — the v1.79 Boot Contract made cost structural. A compacted read can never silently drift.</text>
+  <text x="60" y="532" class="label"><tspan font-weight="bold">Boot duties ride activation</tspan> — 5.1.6 update discovery: first agent of day fetches the manifest (offline-safe) · 5.1.7 maintenance-loop dispatch: owner consent, metered cost</text>
+
+  <!-- Generational loop -->
+  <rect x="40" y="580" width="1200" height="310" rx="10" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="60" y="610" class="panel-title">The generational loop — institutional knowledge survives through files, not model memory</text>
+
+  <rect x="80" y="640" width="200" height="110" rx="8" fill="#2c4a6e"/>
+  <text x="180" y="668" class="node" fill="#ffffff" text-anchor="middle">BOOT (A·N)</text>
+  <text x="180" y="690" class="node-sub" fill="#cfe0ee" text-anchor="middle">reads soul letter,</text>
+  <text x="180" y="706" class="node-sub" fill="#cfe0ee" text-anchor="middle">curated memory,</text>
+  <text x="180" y="722" class="node-sub" fill="#cfe0ee" text-anchor="middle">predecessor's transfer —</text>
+  <text x="180" y="738" class="node-sub" fill="#cfe0ee" text-anchor="middle">arrives already itself</text>
+
+  <rect x="370" y="640" width="200" height="110" rx="8" fill="#3a6b8a"/>
+  <text x="470" y="668" class="node" fill="#ffffff" text-anchor="middle">SESSION</text>
+  <text x="470" y="690" class="node-sub" fill="#d6e6ef" text-anchor="middle">governed work in the vault;</text>
+  <text x="470" y="706" class="node-sub" fill="#d6e6ef" text-anchor="middle">events emitted; memories</text>
+  <text x="470" y="722" class="node-sub" fill="#d6e6ef" text-anchor="middle">appended to episodic log;</text>
+  <text x="470" y="738" class="node-sub" fill="#d6e6ef" text-anchor="middle">principal directs at the gates</text>
+
+  <rect x="660" y="640" width="200" height="110" rx="8" fill="#b08a4a"/>
+  <text x="760" y="668" class="node" fill="#ffffff" text-anchor="middle">RETIRE</text>
+  <text x="760" y="690" class="node-sub" fill="#f3e8d2" text-anchor="middle">living transfer (FINAL),</text>
+  <text x="760" y="706" class="node-sub" fill="#f3e8d2" text-anchor="middle">reflection, memory fold by</text>
+  <text x="760" y="722" class="node-sub" fill="#f3e8d2" text-anchor="middle">curator, status → RETIRED,</text>
+  <text x="760" y="738" class="node-sub" fill="#f3e8d2" text-anchor="middle">activation entry closed</text>
+
+  <rect x="950" y="640" width="200" height="110" rx="8" fill="#4a8a6b"/>
+  <text x="1050" y="668" class="node" fill="#ffffff" text-anchor="middle">SUCCESSOR (A·N+1)</text>
+  <text x="1050" y="690" class="node-sub" fill="#dcefe4" text-anchor="middle">boots through the same</text>
+  <text x="1050" y="706" class="node-sub" fill="#dcefe4" text-anchor="middle">gates; verifies transfer</text>
+  <text x="1050" y="722" class="node-sub" fill="#dcefe4" text-anchor="middle">claims against current</text>
+  <text x="1050" y="738" class="node-sub" fill="#dcefe4" text-anchor="middle">substrate before trusting</text>
+
+  <path class="edge" d="M 280 695 L 370 695" marker-end="url(#arr4)"/>
+  <path class="edge" d="M 570 695 L 660 695" marker-end="url(#arr4)"/>
+  <path class="edge" d="M 860 695 L 950 695" marker-end="url(#arr4)"/>
+  <path class="edge" d="M 1050 750 C 1050 824, 180 824, 180 750" marker-end="url(#arr4)"/>
+  <text x="615" y="826" class="label" text-anchor="middle">continuity artifacts: soul letter (stable) · curated memory + append-only episodic log · living transfer · reflection · activation registry row</text>
+
+  <text x="80" y="852" class="label">Worked proof at scale: Chief Architect A129 · Chief of Staff V64 · engineering lead T28 · strategist G88 — the crew turns over continuously; open work survives every handoff.</text>
+  <text x="80" y="870" class="label">This window: a release mid-flight across three generations of two agents shipped correctly. Sleeve changes are recorded; the agent is the composite, the model a component.</text>
+
+  <text x="40" y="922" class="caption">Boot is gated, budgeted, and self-diagnosing — compacted reads cannot silently drift from source. Retirement is a governed fold, not an exit; the handoff is the product.</text>
+</svg>

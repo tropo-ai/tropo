@@ -214,7 +214,25 @@ class ChangesetPlan:
 
 
 def _mint_uid() -> str:
-    return uuid.uuid4().hex[:8]
+    # 3d430852 (publish_service row): the rogue uuid4 minter is cured — route
+    # through the collision-checked chokepoint (the widened recursive scan
+    # keeps it cured; this uid lands in governed publish records).
+    import importlib.util as _ilu
+    from pathlib import Path as _P
+    _spec = _ilu.spec_from_file_location(
+        "_ps_mint_chokepoint",
+        _P(__file__).resolve().parents[1] / "tropo-mint-id.py")
+    _mod = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    # parents[3], not [2]. This file is vault/tools/lib/publish_service.py, so
+    # parents[2] is `vault/` and parents[3] is the Studio root. Passing vault/ as
+    # studio_root made every plan_changeset call raise StudioIdentityError, taking
+    # 29 tests across test_l1v3_writepath_service and test_d5_atomic_promotion with
+    # it. Note the line above correctly uses parents[1] for the tool path — the two
+    # depths sit two lines apart and only one of them was right.
+    # Found independently by two of metis-g117's suite-health agents (records
+    # 012, 013) and routed to this lane as the write path.
+    return _mod.mint(1, kind="file", studio_root=_P(__file__).resolve().parents[3])[0]
 
 
 def _changeset_path(vault_root: Path, changeset_uid: str) -> Path:

@@ -167,6 +167,11 @@ _PLACEHOLDER_RE = re.compile(r"<!--\s*(?:REQUIRED|OPTIONAL)\s*:")
 _LOOKS_LIKE_ACTIVATION_RE = re.compile(r"""^type:\s*["']?activation["']?\s*$""", re.MULTILINE)
 _DECLARES_AGENT_SLUG_RE = re.compile(r"^agent_slug:", re.MULTILINE)
 _HEX8_RE = re.compile(r"^[0-9a-f]{8}$")
+#: 3d430852 step 7: the known-uids stem scan is shape-aware. Activation uids
+#: keep minting through the chokepoint (12-hex post-flip), so the collision
+#: scan must SEE composite-stemmed records in vault/files/ — an 8-hex-only
+#: scan is blind to exactly the uids the flip starts minting.
+_HEX_BOTH_RE = re.compile(r"^[0-9a-f]{8}(?:[0-9a-f]{4})?$")
 _FRESHEN_TIMEOUT_SECONDS = 120
 # A full --apply over ~4,900 records is ~30-50s on this studio; give it real headroom.
 _RECONCILE_TIMEOUT_SECONDS = 600
@@ -333,7 +338,7 @@ def read_history(vault_root: Path, slug: str, findings: Findings) -> History:
 
     if files_dir.is_dir():
         for path in sorted(files_dir.glob("*.md")):
-            if _HEX8_RE.match(path.stem):
+            if _HEX_BOTH_RE.match(path.stem):
                 history.known_uids.add(path.stem)
             raw = _raw_frontmatter(path, findings)
             if raw is None:

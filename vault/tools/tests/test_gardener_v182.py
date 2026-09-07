@@ -85,10 +85,16 @@ class TestGardenerS1SegmentLocal(unittest.TestCase):
         self.assertIsNone(signal_machine_aged(rec, as_of))
 
     def test_cross_segment_lint_surfaced(self):
+        # Relative, not a literal: a fixed '2026-06-01' crossed the 90-day
+        # unshared-draft staleness threshold on the wall clock between the
+        # 2026-08-28 board (88d) and 2026-09-03 (93d), so the private source was
+        # skipped as stale before the cross-segment lint ever ran. Thirty days
+        # old is always inside the threshold. (suite-health 2026-09-03)
+        recent = (date.today() - timedelta(days=30)).isoformat()
         os_node = _rec('os000001', extraction_scope='ship', path='vault/files/os000001.md',
-                       modified='2026-06-01', created='2026-06-01')
+                       modified=recent, created=recent)
         private = _rec('priv0001', refs=['os000001'], path='agents/talos/x.md',
-                       extraction_scope='argo-private', modified='2026-06-01', created='2026-06-01')
+                       extraction_scope='argo-private', modified=recent, created=recent)
         with tempfile.TemporaryDirectory() as tmp:
             vault = Path(tmp)
             (vault / '.tropo-studio').mkdir()

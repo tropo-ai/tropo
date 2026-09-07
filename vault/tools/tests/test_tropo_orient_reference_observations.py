@@ -89,7 +89,18 @@ class ArchivedUnionMetadataTests(unittest.TestCase):
         with mock.patch.object(cli, "INDEX_JSONL", self.current), mock.patch.object(
             cli, "ARCHIVE_INDEX_JSONL", self.archive
         ), mock.patch.object(
-            cli.vp.ViewerProjection, "from_repo_root", return_value=object()
+            # orient() now calls visibility_report(), which invokes
+            # live_projection.filter_visible_uids(uids, viewer) and reads
+            # .ok / .value on the result. A bare object() placeholder raised
+            # AttributeError; this stand-in makes every uid visible, which is
+            # what the archived-member rendering under test assumes.
+            # (suite-health 2026-09-03)
+            cli.vp.ViewerProjection, "from_repo_root",
+            return_value=SimpleNamespace(
+                filter_visible_uids=lambda uids, viewer: SimpleNamespace(
+                    ok=True, value=list(uids)
+                )
+            ),
         ), mock.patch.object(
             cli, "SqliteStructuralIndex", return_value=object()
         ), mock.patch.object(

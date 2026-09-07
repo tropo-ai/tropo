@@ -294,11 +294,17 @@ class FeatureFlagTests(unittest.TestCase):
     def test_only_a_real_boolean_true_enables(self) -> None:
         self.assertTrue(self._flag('{"enabled": true, "schema_version": 1}'))
 
-    def test_the_live_studio_flag_is_false_in_phase_one(self) -> None:
+    def test_the_live_studio_flag_matches_the_ruled_flip(self) -> None:
+        # Enabled TRUE since the 3d430852 row's flip (T54 step 13,
+        # 2026-08-31). This test asserted Phase-1 false until that ruling
+        # retired the premise — one fact, two readers, one updated: the flag
+        # flipped while this assertion was left behind (found red at the T55
+        # Stage B part-2 baseline, pre-existing at T54's close).
         root = TOOLS.parents[1]
-        self.assertFalse(
+        self.assertTrue(
             gp.readable_minting_enabled(root),
-            "Phase 1 must ship with minting disabled; Phase 2 is the isolated flip")
+            "the live studio flag must be TRUE — flipped per the 3d430852 row "
+            "(T54 step 13); false here means the flag artifact regressed")
 
 
 class ResolveVectorTests(unittest.TestCase):
@@ -679,6 +685,108 @@ def _phase(name: str) -> int:
         return 0
     print(f"FAIL: unknown phase {name!r}")
     return 1
+
+
+
+
+class ShapeAuthorityTests(unittest.TestCase):
+    """3d430852 Stage A step 1: the shape authority. Both flat-hex shapes are
+    first-class forever; ONE generation constant (still 8 — Stage A changes no
+    observable output); anchored-suffix parsing with the frontmatter-decides
+    contract. Vector-driven so the TS adapter proves parity against the same
+    cases when step 2 lands."""
+
+    @classmethod
+    def setUpClass(cls):
+        vectors = json.loads(
+            (Path(__file__).parent / "fixtures" / "governed-path-vectors.json")
+            .read_text(encoding="utf-8"))
+        cls.v = vectors["shape_authority"]
+
+    def test_the_generation_constant_matches_the_shared_vector(self):
+        self.assertEqual(gp.MINT_HEX_LEN, self.v["mint_hex_len"])
+
+    def test_uid_shape_accepts_both_shapes_and_refuses_the_rest(self):
+        for case in self.v["uid_shape"]:
+            self.assertEqual(gp.uid_shape(case["uid"]), case["shape"], case)
+
+    def test_is_governed_uid_shape_is_membership(self):
+        for case in self.v["uid_shape"]:
+            self.assertEqual(gp.is_governed_uid_shape(case["uid"]),
+                             case["shape"] is not None, case)
+
+    def test_is_legacy_uid(self):
+        for case in self.v["is_legacy_uid"]:
+            self.assertEqual(gp.is_legacy_uid(case["uid"]), case["legacy"], case)
+
+    def test_new_uids_must_match_the_generation_constant(self):
+        for case in self.v["new_uid_is_valid_shape"]:
+            self.assertEqual(gp.new_uid_is_valid_shape(case["uid"]),
+                             case["valid"], case)
+
+    def test_parse_anchored_uid(self):
+        for case in self.v["parse_anchored_uid"]:
+            expect = None
+            if case["uid"] is not None:
+                expect = (case["slug"], case["uid"])
+            self.assertEqual(gp.parse_anchored_uid(case["filename"]), expect,
+                             case)
+
+    def test_both_shapes_resolve_unchanged(self):
+        """The authority adds shapes without touching resolution: a planted
+        12-hex slug-named record resolves exactly like an 8-hex one, with the
+        frontmatter deciding in both cases."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "vault" / "files"
+            home.mkdir(parents=True)
+            uid12 = "1a2b3c4d5e6f"
+            p12 = home / f"example-record-{uid12}.md"
+            p12.write_text(
+                f"---\nuid: {uid12}\ntitle: Example Record\n---\n\nbody\n",
+                encoding="utf-8")
+            resolved = gp.resolve_governed_path(uid12, root)
+            self.assertEqual(resolved, p12.resolve())
+            self.assertIsNone(gp.resolve_governed_path("ffffffffffff", root))
+            # A slug that LIES about the uid is refused by the frontmatter gate.
+            p_lie = home / f"other-record-{uid12}.md"
+            p_lie.write_text(
+                "---\nuid: 99999999\n---\n\nbody\n", encoding="utf-8")
+            resolved = gp.resolve_governed_path(uid12, root)
+            self.assertEqual(resolved, p12.resolve())
+
+    def test_stage_b_composite_matches_the_shared_vectors(self):
+        """3d430852 Stage B (dormant): prefix predicate, composite arithmetic,
+        and the LOUD guard — proven without activating generation. At the flip
+        this same test proves the guard opens, because MINT_HEX_LEN then
+        equals the vector block's mint_hex_len."""
+        v = self.v["stage_b_composite"]
+        self.assertEqual(gp.COMPOSITE_PREFIX_HEX_LEN,
+                         v["composite_prefix_hex_len"])
+        for p in v["prefix_valid"]:
+            self.assertTrue(gp.is_composite_mint_prefix(p), p)
+        for p in v["prefix_invalid"]:
+            self.assertFalse(gp.is_composite_mint_prefix(p), p)
+        for c in v["composite_examples"]:
+            self.assertEqual(c["prefix"] + c["local"], c["uid"], c)
+            self.assertEqual(len(c["uid"]), v["mint_hex_len"], c)
+        # The guard, with a deterministic token_hex so the refusal is the only
+        # thing under test.
+        sentinel = lambda n: "3c4d5e6f"
+        if gp.MINT_HEX_LEN != v["mint_hex_len"]:
+            with self.assertRaises(RuntimeError):
+                gp.composite_uid(v["prefix_valid"][0], token_hex=sentinel)
+        else:
+            got = gp.composite_uid(v["prefix_valid"][0], token_hex=sentinel)
+            self.assertEqual(got, v["prefix_valid"][0] + "3c4d5e6f")
+        # A bad prefix is refused at EVERY stage — at Stage A by the dormancy
+        # guard (which fires first), at Stage B by the prefix predicate.
+        if gp.MINT_HEX_LEN != v["mint_hex_len"]:
+            with self.assertRaises(RuntimeError):
+                gp.composite_uid(v["prefix_invalid"][0], token_hex=sentinel)
+        else:
+            with self.assertRaises(ValueError):
+                gp.composite_uid(v["prefix_invalid"][0], token_hex=sentinel)
 
 
 if __name__ == "__main__":

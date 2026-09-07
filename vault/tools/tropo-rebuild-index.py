@@ -126,6 +126,35 @@ import importlib.util
 import json
 import os
 import re
+
+from lib.governed_path import (
+    is_governed_uid_shape,
+    parse_anchored_uid,
+    resolve_governed_path,
+)
+
+def _governed_fp(uid: str, files_dir: Path) -> Path:
+    """The file carrying `uid`, whatever it is named today.
+
+    Bare-name fast path, then the slug-anchored resolver: a post-D7
+    readable-named file (slug-<uid>.md) must register through --only without
+    a full 51-second rebuild, and the answer to a correctly-named file may
+    never read as an empty result when it is actually blindness (A165's
+    first-real-file finding at the Stage B flip). Falls back to the bare
+    path so a genuinely missing file reports the honest location.
+    """
+    bare = files_dir / f'{uid}.md'
+    if bare.exists():
+        return bare
+    try:
+        resolved = resolve_governed_path(uid, files_dir.parent.parent)
+    except Exception:
+        return bare
+    if resolved is not None:
+        return Path(resolved)
+    return bare
+
+
 import sqlite3
 import stat
 import subprocess
@@ -335,6 +364,13 @@ def _is_canonical_index_source(relative: Path) -> bool:
         return relative.suffix.lower() == '.md'
     if len(parts) == 3 and parts[:2] == ('vault', 'files'):
         return relative.suffix.lower() == '.md'
+    if parts[0] == 'docs' and relative.suffix.lower() == '.md':
+        # docs/ became an indexed governed family (87788ed2's named build,
+        # 00d776ae W1): the two canonical documents - the Studio Map and the
+        # Architecture Review - carry uid frontmatter and must resolve in the
+        # index, FTS, orient() and validation. Nested .md included: the Review
+        # lives one directory down (architecture-review-v4/).
+        return True
     if len(parts) == 3 and parts[:2] == ('vault', 'capsules'):
         return (
             relative.name.endswith('.capsule.md')
@@ -392,7 +428,7 @@ def _allowed_ignored_canonical_source(relative: Path) -> bool:
     )
 
 
-_KERNEL_UID_RE = re.compile(r"^uid:\s*[\"\']?([0-9a-f]{8})[\"\']?\s*$", re.M)
+_KERNEL_UID_RE = re.compile(r"^uid:\s*[\"\']?([0-9a-f]{8}|[0-9a-f]{12})[\"\']?\s*$", re.M)
 _KERNEL_ADMITTED_MEMO: dict = {}
 
 
@@ -437,6 +473,7 @@ def _tropo_kernel_admitted(vault_root=None) -> frozenset:
 def _canonical_source_paths_on_disk(vault_root: Path) -> list[Path]:
     candidates: set[Path] = set()
     candidates.update(vault_root.glob('*.md'))
+    candidates.update((vault_root / 'docs').rglob('*.md'))  # 87788ed2: docs family, both enumerations
     candidates.update((vault_root / 'vault' / 'files').glob('*.md'))
     candidates.update((vault_root / 'vault' / 'capsules').glob('*.md'))
     for family in (
@@ -1323,6 +1360,56 @@ def _capture_exact_derivation_snapshot(
     }, 'complete'
 
 
+def _derivation_snapshots_match(
+    before: dict[str, Any],
+    after: dict[str, Any],
+    *,
+    allowed_added_paths: Optional[set[str]] = None,
+) -> bool:
+    """True if `after` equals `before`, or differs from it only by paths in
+    `allowed_added_paths` that are genuinely new (absent from `before` under
+    any content, not merely changed).
+
+    f0159e830d57: the completeness proof's before/after comparison is correct
+    to refuse when a source moves under it, but had no way to know a write
+    was its own — so it refused on the genesis bootstrap's first-pass mint of
+    the Studio's vault-entity pair, a write the rebuild itself performed.
+    `allowed_deleted_paths` already carries the symmetric case for expected
+    sources that vanish; this is the ADDED-path counterpart, scoped by the
+    caller to exactly the paths it just wrote. Only paths named here AND
+    absent from `before` are stripped before the exact-equality check — any
+    other new path, named or not, still fails the comparison: a foreign
+    source planted mid-pass is exactly the class this proof exists to catch.
+    """
+    if before == after:
+        return True
+    if not allowed_added_paths:
+        return False
+    before_paths = {relative for _kind, relative, _mode, _sha in before['manifest']}
+    exempt = {
+        relative
+        for _kind, relative, _mode, _sha in after['manifest']
+        if relative in allowed_added_paths and relative not in before_paths
+    }
+    if not exempt:
+        return False
+    uncommitted_inputs = tuple(
+        entry for entry in after['uncommitted_inputs'] if entry[0] not in exempt
+    )
+    normalized_after = {
+        **after,
+        'manifest': tuple(
+            entry for entry in after['manifest'] if entry[1] not in exempt
+        ),
+        'source_paths': tuple(
+            path for path in after['source_paths'] if path not in exempt
+        ),
+        'uncommitted_inputs': uncommitted_inputs,
+        'derived_from_uncommitted': bool(uncommitted_inputs),
+    }
+    return before == normalized_after
+
+
 def _finalize_derivation_manifest(
     snapshot: dict[str, Any],
     records: list[dict[str, Any]],
@@ -1879,14 +1966,18 @@ def _skip_cached_archive_source(
 # ---------------------------------------------------------------------------
 # Mentions Parser (v1.71 Edge-Substrate; 55c33476)
 # ---------------------------------------------------------------------------
+# 3d430852 Stage A: slug-aware + both lengths. A markdown link may target the
+# slug-named file (weekly-status-<uid>.md); the captured group stays the uid.
+_UID_TAIL = r'(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{12})'
+_SLUGED = r'(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-)?'
 _MENTIONS_RE = re.compile(
-    r'\[.*?\]\((?:(?:\.\./files/)|(?:vault/files/))?([0-9a-fA-F]{8})\.md\)'
-    r'|(?<![a-zA-Z0-9_-])([0-9a-fA-F]{8})\.md(?![a-zA-Z0-9_-])'
-    r'|\[\[([0-9a-fA-F]{8})\]\]'
+    r'\[.*?\]\((?:(?:\.\./files/)|(?:vault/files/))?' + _SLUGED + r'(' + _UID_TAIL + r')\.md\)'
+    r'|(?<![a-zA-Z0-9_-])' + _SLUGED + r'(' + _UID_TAIL + r')\.md(?![a-zA-Z0-9_-])'
+    r'|\[\[(' + _UID_TAIL + r')\]\]'
 )
 _MOUNTED_MARKDOWN_MENTIONS_RE = re.compile(
-    r'\[.*?\]\((?:(?:\.\./files/)|(?:vault/files/))?([0-9a-fA-F]{8})\.md\)'
-    r'|(?<![a-zA-Z0-9_-])([0-9a-fA-F]{8})\.md(?![a-zA-Z0-9_-])'
+    r'\[.*?\]\((?:(?:\.\./files/)|(?:vault/files/))?' + _SLUGED + r'(' + _UID_TAIL + r')\.md\)'
+    r'|(?<![a-zA-Z0-9_-])' + _SLUGED + r'(' + _UID_TAIL + r')\.md(?![a-zA-Z0-9_-])'
 )
 
 _B8E4F1A3_MOD = None
@@ -2201,7 +2292,9 @@ def _derive_state(fm: str) -> str:
 # File processing — reflection-augmented per Stream C
 # ---------------------------------------------------------------------------
 
-UID_RE = re.compile(r'^[0-9a-f]{8}$')
+# 3d430852 Stage A: accepts-both. The 8-hex corpus keeps matching; 12-hex
+# rows (post-flip) match too. Anchored full-string, so .match keeps its meaning.
+UID_RE = re.compile(r'^(?:[0-9a-f]{8}|[0-9a-f]{12})$')
 
 
 def _derived_row_title(fm: str, filepath: Path) -> str:
@@ -2276,15 +2369,26 @@ def process_file(filepath: Path, uid_override: Optional[str] = None) -> Optional
     if fm is None:
         return None
 
+    fm_uid = get_scalar(fm, 'uid')
     if uid_override:
         uid = uid_override
+        if fm_uid != uid:
+            return None
+    elif fm_uid:
+        # Mike-ruled 2026-08-30 (Argus A163 Finding A, amended): the FRONTMATTER
+        # uid is the identity, always and everywhere; the filename suffix is a
+        # display hint and never an identity source. The name proposes; the
+        # frontmatter decides -- including when they differ (a drifted slug is
+        # tolerable BY DESIGN and must not fork identity).
+        uid = fm_uid
     else:
-        uid = filepath.stem
+        # No frontmatter uid: the anchored suffix admits the file as
+        # governed-shaped, but it is FINDING, not NAMING -- rows without a
+        # declared identity fall through to the shape gate below exactly as
+        # they always have.
+        _parsed = parse_anchored_uid(filepath.name)
+        uid = _parsed[1] if _parsed else filepath.stem
     if not UID_RE.match(uid):
-        return None
-
-    fm_uid = get_scalar(fm, 'uid')
-    if uid_override is not None and fm_uid != uid:
         return None
 
     state = _derive_state(fm)
@@ -2644,7 +2748,7 @@ def collect_vault_session_agents_records(
     for f in sorted(sa_dir.iterdir()):
         if f.suffix.lower() not in ('.md', '.json'):
             continue
-        if not UID_RE.match(f.stem):
+        if parse_anchored_uid(f.name) is None:
             continue
         if _skip_cached_archive_source(f, vault_root, skip_paths):
             continue
@@ -2673,7 +2777,7 @@ def collect_vault_agents_records(
     for f in sorted(agents_dir.iterdir()):
         if f.suffix.lower() != '.md':
             continue
-        if not UID_RE.match(f.stem):
+        if parse_anchored_uid(f.name) is None:
             continue
         if _skip_cached_archive_source(f, vault_root, skip_paths):
             continue
@@ -2702,7 +2806,7 @@ def collect_vault_playbooks_records(
     for f in sorted(playbooks_dir.iterdir()):
         if f.suffix.lower() != '.md':
             continue
-        if not UID_RE.match(f.stem):
+        if parse_anchored_uid(f.name) is None:
             continue
         if _skip_cached_archive_source(f, vault_root, skip_paths):
             continue
@@ -2768,7 +2872,11 @@ def collect_studio_memory_records(
     if not memory_dir.is_dir():
         return out
     for f in sorted(memory_dir.glob('*.md')):
-        if not UID_RE.match(f.stem):
+        # Finding B (argus-a163) + the re-ruled composite shape: memory
+        # entries are slug-named once the flag ships; a bare-stem gate
+        # silently dropped every one. parse_anchored_uid admits (finds);
+        # process_file's frontmatter uid names.
+        if parse_anchored_uid(f.name) is None:
             continue
         if _skip_cached_archive_source(f, vault_root, skip_paths):
             continue
@@ -2803,7 +2911,11 @@ def collect_agent_memory_records(
         if not memory_dir.is_dir():
             continue
         for f in sorted(memory_dir.glob('*.md')):
-            if not UID_RE.match(f.stem):
+            # Finding B (argus-a163) + the re-ruled composite shape: memory
+            # entries are slug-named once the flag ships; a bare-stem gate
+            # silently dropped every one. parse_anchored_uid admits (finds);
+            # process_file's frontmatter uid names.
+            if parse_anchored_uid(f.name) is None:
                 continue
             if _skip_cached_archive_source(f, vault_root, skip_paths):
                 continue
@@ -2879,6 +2991,45 @@ def collect_studio_root_records(
         rec = process_file(f, uid_override=uid)
         if rec is not None:
             rec['path'] = str(f.relative_to(vault_root))  # v1.69 path-provenance
+            out.append(rec)
+    return out
+
+
+def collect_docs_records(
+    vault_root: Path,
+    skip_paths: Optional[set[str]] = None,
+) -> list[dict[str, Any]]:
+    """Scan docs/**/*.md; return index records for any with uid: frontmatter.
+
+    87788ed2's named build (00d776ae W1): docs/ is an indexed governed family
+    since the 2026-08-27 consolidation — the Studio Map and the Architecture
+    Review are the Studio's two canonical documents and both carry uid
+    frontmatter. Without this collector they were invisible to index, FTS,
+    orient() and validation — the boot digest fingerprint-gates the Map by
+    PATH while the index denied it existed. Recursive: the Review lives one
+    directory down. Internal chrome (.tropo-folder.md, *.tropo.md) is
+    skipped by the uid requirement — it carries no uid frontmatter.
+    """
+    out: list[dict[str, Any]] = []
+    docs_dir = vault_root / 'docs'
+    if not docs_dir.is_dir():
+        return out
+    for f in sorted(docs_dir.rglob('*.md')):
+        if _skip_cached_archive_source(f, vault_root, skip_paths):
+            continue
+        try:
+            text = f.read_text(errors='replace')
+        except Exception:
+            continue
+        fm = split_frontmatter(text)
+        if fm is None:
+            continue
+        uid = get_scalar(fm, 'uid')
+        if not uid or not UID_RE.match(uid):
+            continue
+        rec = process_file(f, uid_override=uid)
+        if rec is not None:
+            rec['path'] = str(f.relative_to(vault_root))
             out.append(rec)
     return out
 
@@ -4113,7 +4264,7 @@ def _record_to_index_rows(
     uid = rec.get('uid', '')
     raw_fm: Optional[str] = None
     body = ''
-    fp = files_dir / f'{uid}.md'
+    fp = _governed_fp(uid, files_dir)
     if source_raw is not None or fp.exists():
         try:
             file_text = _parser_canonical_derivation_bytes(
@@ -4612,7 +4763,7 @@ def _mounted_batch_dependency_uids(
     files_dir = vault_root / 'vault' / 'files'
     incoming: dict[str, dict[str, Any]] = {}
     for uid in uids:
-        path = (files_dir / f'{uid}.md').resolve()
+        path = _governed_fp(uid, files_dir).resolve()
         record = _projection_record_from_bytes(uid, path, staged.get(path))
         if record is None:
             continue
@@ -4688,7 +4839,6 @@ def _freshen_many_locked(
         )
         return 2
     files_dir = vault_root / 'vault' / 'files'
-    requested_paths = {uid: files_dir / f'{uid}.md' for uid in uids}
     staged = {
         Path(path).resolve(): raw
         for path, raw in (source_replacements or {}).items()
@@ -4697,6 +4847,28 @@ def _freshen_many_locked(
         Path(path).resolve()
         for path in (require_absent_sources or ())
     }
+    # A titled mint's writer (lib.governed_path.mint_basename) knows the real
+    # destination for a brand-new uid (a slug-<uid>.md name); _governed_fp has
+    # nothing to resolve a title against for a uid with no file yet and can only
+    # answer the bare `<uid>.md` fallback -- the two readers disagreeing is what
+    # refused every titled mint (agents/argus/.tropo-capsule/workspace/
+    # a167-evidence-layer/mint-chokepoint-refuses-titled-mints.md). Pair a new
+    # uid (no file at its derived path) to its declared create-only staged path
+    # so both readers agree on where a not-yet-created file lives. Narrow by
+    # construction: fires only when exactly one uid in THIS request has no file
+    # yet and exactly one staged path is both create-only and otherwise
+    # unclaimed -- so it can never repoint an existing file, and the collision
+    # check below still refuses if that path already exists.
+    new_uids = [uid for uid in uids if not _governed_fp(uid, files_dir).exists()]
+    unclaimed_create_only = create_only & set(staged)
+    new_uid_paths: dict[str, Path] = {}
+    if len(new_uids) == 1 and len(unclaimed_create_only) == 1:
+        new_uid_paths[new_uids[0]] = next(iter(unclaimed_create_only))
+
+    def _effective_fp(uid: str) -> Path:
+        return new_uid_paths.get(uid) or _governed_fp(uid, files_dir)
+
+    requested_paths = {uid: _effective_fp(uid) for uid in uids}
     if set(staged) - {path.resolve() for path in requested_paths.values()}:
         print(
             '[rebuild --batch] staged source set exceeds requested UIDs',
@@ -4742,7 +4914,7 @@ def _freshen_many_locked(
         print(f'[rebuild --batch] {exc}; no derived rows written', file=sys.stderr)
         return 1
     paths = {
-        uid: (files_dir / f'{uid}.md').resolve()
+        uid: _effective_fp(uid).resolve()
         for uid in uids
     }
     missing = [
@@ -4814,7 +4986,7 @@ def _freshen_many_locked(
     if source_snapshot_before is None:
         print(
             '[rebuild --batch] REFUSAL: source inventory incomplete; '
-            f'{source_scope_reason}. Run a full --apply; no derived rows written.',
+            f'{source_scope_reason}. Commit or revert your edited inputs, then run --reconcile --apply; no derived rows written.',
             file=sys.stderr,
         )
         return 1
@@ -5271,7 +5443,7 @@ def _freshen_one_locked(uid: str, vault_root: Path) -> int:
         # Locked friendly-path tools derive identity from embedded frontmatter,
         # so an exact UID filename is not sufficient for first registration.
         candidates = [
-            files_dir / f'{uid}.md',
+            _governed_fp(uid, files_dir),
             vault_root / 'vault' / 'tools' / f'{uid}.py',
             vault_root / 'vault' / 'tools' / f'{uid}.md',
             vault_root / 'vault' / 'tools' / f'{uid}.json',
@@ -5309,7 +5481,8 @@ def _freshen_one_locked(uid: str, vault_root: Path) -> int:
                 return 1
             fp = friendly_matches[0] if friendly_matches else candidates[0]
     if not fp.exists():
-        print(f'[rebuild --only] no governed file at {fp} — nothing to freshen '
+        print(f'[rebuild --only] no governed file for {uid} — the bare name and '
+              f'the slug-anchored resolver were both searched under {files_dir} '
               f'(a full rebuild reconciles deletions)', file=sys.stderr)
         return 1
     try:
@@ -5383,7 +5556,7 @@ def _freshen_one_locked(uid: str, vault_root: Path) -> int:
     if source_snapshot_before is None:
         print(
             f'[rebuild --only] {uid}: REFUSAL: source inventory incomplete; '
-            f'{source_scope_reason}. Run a full --apply so every named '
+            f'{source_scope_reason}. Commit or revert your edited inputs, then run --reconcile --apply so every named '
             'derivation input and row advances together; '
             'no derived rows written.',
             file=sys.stderr,
@@ -5535,7 +5708,7 @@ def _freshen_one_locked(uid: str, vault_root: Path) -> int:
             f'[rebuild --only] {uid}: REFUSAL: semantic derivation inputs '
             'changed outside the owned target: '
             + ', '.join(manifest_blockers)
-            + '. Run a full --apply; no derived rows written.',
+            + '. Commit or revert your edited inputs, then run --reconcile --apply; no derived rows written.',
             file=sys.stderr,
         )
         return 1
@@ -6637,7 +6810,10 @@ def build_sqlite_index(
                           THEN 'standing'
                      END,
                      ms.bucket,
-                     st.bucket,
+                     -- the joinless st-alias bucket reference removed (be9abd46 S7,
+                     -- 00d776ae W1): the v1.89 stage eradication deleted the st join but
+                     -- left its alias here — SQLite accepted the CREATE and failed EVERY
+                     -- query on the view. Cure verified by delete-and-restore.
                      'lifecycle-N/A'
                    ) AS meta_status,
                    e.status, e.state, e.created, e.modified
@@ -6922,14 +7098,34 @@ def _replacement_drops_only_mounted_rows(
     return True
 
 
-GENESIS_VAULT_ENTITY_UID = '7c3a8e91'
-GENESIS_INBOX_PROJECT_UID = '2d5f9b04'
 # entity.capsule Rule 1 REQUIRES a principal, and Rule 2 requires it to resolve to a
 # subtype: person entity. 4b6e2c8a ("Vault Owner") is extraction_scope: ship, so it is
 # present in every box — a genesis entity naming a principal the Studio does not have
 # would fail validation on the customer's first run. Found by the build's own in-box
 # self-test refusing my first genesis pair: 102 passed / 2 failed, 'principal is missing'.
+# This is a REAL shipped principal record (unlike the pair below) — untouched by the
+# 5854773a founder-principal amendment, which mints a SEPARATE, composite-uid principal
+# for the actual human founder; GENESIS_PRINCIPAL_UID stays the default owner/principal
+# until that leg runs.
 GENESIS_PRINCIPAL_UID = '4b6e2c8a'
+
+
+def _mint_module():
+    """Load tropo-mint-id.py by path (sibling script, not a package import) —
+    the studio-identity manifest + composite-mint authority this bootstrap
+    now depends on."""
+    import importlib.util as _ilu
+    name = 'tropo_rebuild_index_mint_id'
+    existing = sys.modules.get(name)
+    if existing is not None:
+        return existing
+    spec = _ilu.spec_from_file_location(
+        name, Path(__file__).resolve().with_name('tropo-mint-id.py')
+    )
+    module = _ilu.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _mint_genesis_pair(vault_root: Path) -> list[dict[str, Any]]:
@@ -6944,27 +7140,45 @@ def _mint_genesis_pair(vault_root: Path) -> list[dict[str, Any]]:
     lands in. Unscoped, both halves land 'private' natively and anchor their
     own Studio. This is the one place where writing less is the fix.
 
-    Never overwrites: any half already on disk is left exactly as it is, so a
-    Studio that has edited or deliberately removed one is not second-guessed.
+    5854773a (08-31 bounded amendment): mints COMPOSITE uids from THIS
+    Studio's own studio-identity manifest, never the fixed constants this
+    function used to write. Two customers federating must not share one
+    vault-entity anchor. The manifest is minted first if absent (genesis is
+    ONE gesture across both artifacts); the pair's uids are then minted
+    through the same collision-checked authority every other governed file
+    uses (`tropo-mint-id.py`'s `mint()`), never a locally-reinvented
+    generator. tropo-build-release.py's SHIP_EXCLUDED_MINTED_LOCALLY is why
+    this never collides with argo's own shipped copies: those two specific
+    uids are withheld from the customer box entirely, so a fresh studio's
+    vault/files/ never contains a pre-existing pair to disagree with.
+
+    Called only when the OUTER gate (rebuild_index) has already confirmed no
+    vault-entity record exists in this pass — so, unlike the old fixed-path
+    version, there is no per-half "already on disk" idempotency to check
+    here: a partial prior mint would already have satisfied that gate and
+    this function would not have been called at all.
     """
     files_dir = vault_root / 'vault' / 'files'
     today = _dt.date.today().isoformat()
     made: list[dict[str, Any]] = []
 
-    entity_path = files_dir / f'{GENESIS_VAULT_ENTITY_UID}.md'
-    inbox_path = files_dir / f'{GENESIS_INBOX_PROJECT_UID}.md'
+    mint_id = _mint_module()
+    mint_id.mint_studio_identity(root=vault_root)
+    entity_uid, inbox_uid = mint_id.mint(count=2, kind='file', studio_root=vault_root)
 
-    if not inbox_path.exists():
-        inbox_path.write_text(
-            f"""---
-uid: {GENESIS_INBOX_PROJECT_UID}
+    entity_path = files_dir / f'{entity_uid}.md'
+    inbox_path = files_dir / f'{inbox_uid}.md'
+
+    inbox_path.write_text(
+        f"""---
+uid: {inbox_uid}
 type: project
 title: 01-studio-inbox
 description: >-
   Catch-all project for captured-but-unfiled work in this Studio. Every
   work-item without an explicit project routes here; refile to real projects as
   context emerges. Created automatically at this Studio's first index build.
-owner: {GENESIS_VAULT_ENTITY_UID}
+owner: {entity_uid}
 state: active
 status: active
 lifecycle: standing
@@ -6987,17 +7201,16 @@ no `extraction_scope:` on purpose — that absence is what makes it belong to
 YOUR vault rather than to the OS layer, which is what lets your own work ground
 against it.*
 """,
-            encoding='utf-8',
-        )
-        rec = process_file(inbox_path)
-        if rec is not None:
-            rec['path'] = str(inbox_path.relative_to(vault_root))
-            made.append(rec)
+        encoding='utf-8',
+    )
+    rec = process_file(inbox_path)
+    if rec is not None:
+        rec['path'] = str(inbox_path.relative_to(vault_root))
+        made.append(rec)
 
-    if not entity_path.exists():
-        entity_path.write_text(
-            f"""---
-uid: {GENESIS_VAULT_ENTITY_UID}
+    entity_path.write_text(
+        f"""---
+uid: {entity_uid}
 type: entity
 subtype: vault-entity
 title: Your Tropo Vault
@@ -7006,7 +7219,7 @@ state: active
 status: active
 principal: {GENESIS_PRINCIPAL_UID}
 owner: {GENESIS_PRINCIPAL_UID}
-inbox_project: {GENESIS_INBOX_PROJECT_UID}
+inbox_project: {inbox_uid}
 created: '{today}'
 created_by: genesis-bootstrap
 modified: '{today}'
@@ -7028,12 +7241,12 @@ exists to remove. Minted here, it belongs to you.*
 *`inbox_project:` is read by the mint tool to ground new work. If you repoint
 it, point it at a LIVE `type: project` in this Studio.*
 """,
-            encoding='utf-8',
-        )
-        rec = process_file(entity_path)
-        if rec is not None:
-            rec['path'] = str(entity_path.relative_to(vault_root))
-            made.append(rec)
+        encoding='utf-8',
+    )
+    rec = process_file(entity_path)
+    if rec is not None:
+        rec['path'] = str(entity_path.relative_to(vault_root))
+        made.append(rec)
 
     if made:
         print(
@@ -7047,6 +7260,7 @@ def rebuild_index(
     vault_root: Path,
     apply_writes: bool,
     *,
+    no_genesis: bool = False,
     allow_index_shrink: bool = False,
     reconcile: bool = False,
     governed_floor_recovery: Optional[
@@ -7073,6 +7287,7 @@ def rebuild_index(
                 return rebuild_index(
                     vault_root,
                     apply_writes,
+                    no_genesis=no_genesis,
                     allow_index_shrink=allow_index_shrink,
                     reconcile=reconcile,
                     governed_floor_recovery=governed_floor_recovery,
@@ -7195,25 +7410,49 @@ def rebuild_index(
     # IDEMPOTENT ON RECORD PRESENCE, never on a flag or an index file: a Studio
     # that already has a vault-entity is left completely alone, and deleting
     # the index does not resurrect a pair the user deliberately removed.
-    # CANONICAL UIDs, metis-g114-ruled under Mike's D1 lock (existing IDs
-    # untouched; cross-studio references qualify at compose, so the same local
-    # uid in two Studios is the same-role-different-studio pattern, not a
-    # collision). Canonical reuse also keeps every shipped prose reference to
-    # these two UIDs true, which matters because this became the
-    # samples-and-examples release: a box teaching by broken references is the
-    # one outcome that cannot ship.
-    if apply_writes and not any(
+    #
+    # 5854773a (08-31 bounded amendment) SUPERSEDES the prior canonical-fixed-
+    # uid reasoning that lived in this comment: two customers federating must
+    # not share one vault-entity anchor, so the pair below now mints
+    # COMPOSITE per-Studio uids (see _mint_genesis_pair) instead of reusing a
+    # constant. Genesis is per-artifact idempotent across TWO independent
+    # legs, not one: the manifest (studio-identity.md) gates on its own
+    # presence, and the pair gates on vault-entity presence, exactly as
+    # before. An existing Studio with a vault-entity but no manifest (every
+    # pre-5854773a Studio, this one included) gains exactly the missing
+    # artifact on its next rebuild — never a second pair.
+    genesis_minted_paths: set[str] = set()
+    # v1.95 Spine A AC1 (f015de6b3a18), Mike's 2026-09-05 ruling (f015e5ee0ede
+    # §RULED): --no-genesis suppresses BOTH legs. The release build runs this
+    # rebuild INSIDE the assembled box (build-release Step 9b) to regenerate
+    # 00-tropo-nav/, and until now that gesture minted a manifest and a starter
+    # pair into the box itself — which is why every v1.94 zip shipped the same
+    # studio_id b4e250caf19a. Genesis is unchanged; only when it runs changed:
+    # it belongs on the customer's machine at first boot, never in the box.
+    if apply_writes and not no_genesis and not (vault_root / '.tropo' / 'studio-identity.md').exists():
+        _mint_module().mint_studio_identity(root=vault_root)
+        # Not a vault/files/*.md path -- .tropo/studio-identity.md carries no
+        # uid: frontmatter, so it is not a derivation input at all
+        # (_is_derivation_input) and needs no allowed_added_paths entry.
+    if apply_writes and not no_genesis and not any(
         r.get('type') == 'entity' and r.get('subtype') == 'vault-entity'
         for r in records
     ):
         for genesis_rec in _mint_genesis_pair(vault_root):
             records.append(genesis_rec)
+            genesis_path = genesis_rec.get('path')
+            if isinstance(genesis_path, str):
+                genesis_minted_paths.add(genesis_path)
 
     # Source 2: Studio-root *.md with uid: frontmatter (v1.15.1 Stream G)
     studio_root_records = collect_studio_root_records(
         vault_root, cached_archive_paths,
     )
     records.extend(studio_root_records)
+
+    # Source 2d: docs/**/*.md with uid: frontmatter (87788ed2, 00d776ae W1)
+    docs_records = collect_docs_records(vault_root, cached_archive_paths)
+    records.extend(docs_records)
 
     # Source 3: vault/capsules/*.capsule.md with uid: frontmatter (v1.51 Argus A80 2026-05-23; ADR-045 One Home v1.76 e8d49d3a)
     # First-class capsule UID queryability per Mike-A80 "fix it right" doctrine.
@@ -7309,6 +7548,7 @@ def rebuild_index(
         return rebuild_index(
             vault_root,
             apply_writes,
+            no_genesis=no_genesis,
             allow_index_shrink=allow_index_shrink,
             reconcile=True,
             governed_floor_recovery=governed_floor_recovery,
@@ -7599,7 +7839,11 @@ def rebuild_index(
         source_inventory_reason = derivation_snapshot_before_reason
     elif derivation_snapshot_after is None:
         pass
-    elif derivation_snapshot_before != derivation_snapshot_after:
+    elif not _derivation_snapshots_match(
+        derivation_snapshot_before,
+        derivation_snapshot_after,
+        allowed_added_paths=genesis_minted_paths,
+    ):
         source_inventory_reason = (
             'exact derivation bytes/modes changed during the collection pass'
         )
@@ -7712,7 +7956,19 @@ def rebuild_index(
         derivation_provenance
         and derivation_provenance.uncommitted_inputs
     )
-    if derived_from_uncommitted and (
+    # f015708c04f8 (argus-a166, 2026-09-01): this rule asks "is this content
+    # reviewed" -- a question git authority can discriminate (uncommitted vs
+    # committed) and a no-git vault cannot (uncommitted is the ONLY possible
+    # state there, so the rule was a gate that could never change verdict,
+    # permanently refusing reconcile/shrink/recovery in any vault without
+    # git). Condition the refusal on git_authority_available: WITH authority
+    # the rule is unchanged and in full force; WITHOUT it, the rule cannot
+    # apply and must say so out loud rather than silently pass.
+    git_authority_available = bool(
+        stable_derivation_snapshot
+        and stable_derivation_snapshot.get('git_authority_available')
+    )
+    if derived_from_uncommitted and git_authority_available and (
         reconcile
         or allow_index_shrink
         or governed_floor_recovery is not None
@@ -7723,15 +7979,54 @@ def rebuild_index(
                 derivation_provenance.uncommitted_inputs
             )
         ]
+        # argus-a167, 2026-09-02. The paths THIS pass's genesis bootstrap
+        # minted are authoritative here; every other uncommitted input still
+        # refuses. Ruled after talos-t59 measured the refusal firing on a
+        # rebuild's own genesis mint, and after argus-a166 deliberately left
+        # the policy question open at f015708c04f8 ("a second design call, not
+        # a mechanical symmetric add").
+        #
+        # The rule this gate enforces is unchanged: reconcile, shrink and
+        # floor-recovery must never be founded on bytes nobody reviewed,
+        # because those are the operations that can LOWER index state. Genesis
+        # bytes are not those bytes. The rebuild wrote them itself, this pass,
+        # from its own template, and already tracks exactly which paths in
+        # genesis_minted_paths -- they are uncommitted BY CONSTRUCTION, not
+        # because someone left work in the tree.
+        #
+        # And without this, a fresh vault whose first rebuild carries a
+        # reconcile/shrink/recovery flag can never rebuild at all: the only
+        # sanctioned repair path is gated behind the check the repair exists to
+        # clear. That deadlock is the same shape already documented one suite
+        # over in test_a_meta_sealed_in_the_previous_digest_format_bootstraps_
+        # forward. The sibling gate (f0159e830d57) took this same exemption via
+        # allowed_added_paths; the two now agree instead of disagreeing, which
+        # is the one-fact-two-readers defect that produced this in the first
+        # place.
+        foreign_uncommitted = [
+            path for path in uncommitted_paths
+            if path not in genesis_minted_paths
+        ]
+        if foreign_uncommitted:
+            print(
+                'REFUSAL: uncommitted derivation inputs are non-authoritative '
+                'for reconcile, ratchet recovery, or shrink authority; Land, '
+                'revert, or isolate the recorded paths first: '
+                + ', '.join(foreign_uncommitted)
+                + '. No index participant was written.',
+                file=sys.stderr,
+            )
+            return 1
+    if derived_from_uncommitted and not git_authority_available and (
+        reconcile
+        or allow_index_shrink
+        or governed_floor_recovery is not None
+    ):
         print(
-            'REFUSAL: uncommitted derivation inputs are non-authoritative for '
-            'reconcile, ratchet recovery, or shrink authority; Land, revert, '
-            'or isolate the recorded paths first: '
-            + ', '.join(uncommitted_paths)
-            + '. No index participant was written.',
-            file=sys.stderr,
+            'git authority unavailable; the uncommitted-inputs rule cannot '
+            'apply in this vault -- shrink safety rests on the surface '
+            'ratchet alone.'
         )
-        return 1
     if derived_from_uncommitted:
         uncommitted_paths = [
             path
@@ -8079,6 +8374,18 @@ def main() -> int:
         help='8-hex authorization/evidence UID governing '
              '--recover-index-floors.',
     )
+    parser.add_argument(
+        '--no-genesis',
+        action='store_true',
+        help='Suppress BOTH genesis legs: do not mint .tropo/studio-identity.md '
+             '(the Studio manifest) and do not mint the starter vault-entity + '
+             '01-studio-inbox pair. For the release build, which runs this rebuild '
+             'INSIDE the assembled box to regenerate 00-tropo-nav/: the box must ship '
+             'with NO identity and NO starter pair so every customer genesises their '
+             'own on first boot (Mike ruled 2026-09-05, f015e5ee0ede §RULED; '
+             'v1.95 Spine A AC1 f015de6b3a18). Everything else in the rebuild is '
+             'unchanged. Never pass this on a customer or working Studio.',
+    )
     parser.add_argument('--vault-path', metavar='PATH',
                         help='Explicit vault root (must contain vault/ + .tropo/).')
     parser.add_argument('--skip-rehydrate', action='store_true',
@@ -8128,11 +8435,11 @@ def main() -> int:
             ("--shrink-authorization-uid", args.shrink_authorization_uid),
             ("--shrink-evidence-uid", args.shrink_evidence_uid),
         ):
-            if (
-                len(uid) != 8
-                or any(char not in "0123456789abcdef" for char in uid)
-            ):
-                parser.error(f"{flag} must be 8 lowercase hex")
+            # accepts-both (UID_SHAPES): this literal-8 check rejected a valid
+            # 12-hex Stage B authorization/evidence uid before it ever reached
+            # the correct downstream check in lib/index_surfaces.py.
+            if not is_governed_uid_shape(uid):
+                parser.error(f"{flag} must be 8 or 12 lowercase hex")
         governed_shrink_authorization = (
             index_surfaces.GovernedShrinkAuthorization(
                 authorization_uid=args.shrink_authorization_uid,
@@ -8164,11 +8471,11 @@ def main() -> int:
     governed_floor_recovery = None
     if recovery_requested:
         evidence_uid = args.floor_recovery_evidence_uid
-        if (
-            len(evidence_uid) != 8
-            or any(char not in "0123456789abcdef" for char in evidence_uid)
-        ):
-            parser.error("--floor-recovery-evidence-uid must be 8 lowercase hex")
+        # accepts-both (UID_SHAPES): this literal-8 check rejected a valid
+        # 12-hex Stage B evidence uid before it ever reached the correct
+        # downstream check in lib/index_surfaces.py.
+        if not is_governed_uid_shape(evidence_uid):
+            parser.error("--floor-recovery-evidence-uid must be 8 or 12 lowercase hex")
         current_floor, archive_floor = args.recover_index_floors
         governed_floor_recovery = index_surfaces.GovernedFloorRecovery(
             current_protected_record_count=current_floor,
@@ -8206,6 +8513,7 @@ def main() -> int:
     rebuild_rc = rebuild_index(
         vault,
         args.apply,
+        no_genesis=args.no_genesis,
         allow_index_shrink=args.allow_index_shrink,
         reconcile=args.reconcile,
         governed_floor_recovery=governed_floor_recovery,
@@ -8269,6 +8577,28 @@ def main() -> int:
     return 0
 
 
+
+def _preflight_warn(caller_name: str) -> None:
+    """59c61b0e (folded into 00d776ae W1): preflight's first real caller.
+
+    Loads tropo-preflight.py beside this file and asks it to warn — one
+    line, naming the pip remedy, never a refusal (deb77758). Everything is
+    swallowed twice over: a missing preflight, a broken import, any failure
+    inside it — none may block this tool's own work.
+    """
+    try:
+        import importlib.util as _ilu
+        _path = Path(__file__).resolve().with_name("tropo-preflight.py")
+        _spec = _ilu.spec_from_file_location("_tropo_preflight_warn", _path)
+        if _spec is None or _spec.loader is None:
+            return
+        _mod = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        _mod.warn_from_caller(caller_name)
+    except Exception:
+        return
+
 if __name__ == '__main__':
+    _preflight_warn('tropo-rebuild-index')
     sys.exit(main())
 

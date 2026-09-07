@@ -1,5 +1,6 @@
 ---
 uid: 3a207ed3
+subsystem_home: vault/events/   # v1.95 A5: the folder this subsystem lives in; the shipped map places it in the layer that folder belongs to
 type: project
 status: evergreen
 state: active

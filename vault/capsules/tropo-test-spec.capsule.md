@@ -8,6 +8,7 @@ extends: core
 version: '1.4'
 lifecycle_pairing_amendment_2026_08_16: "v1.3 -> v1.4 bounded lock-break 2026-08-16 by talos-t44 under Mike-locked v1.89 dev-spec 271d28d7 (activation 7a47c089), whose committed_substrate assigns this amendment to the pairing package. Two changes. (1) Adds the OPTIONAL lifecycle_pairing declaration. (2) Mike-approved Q1 ruling (verbatim 'approved', evt_105e33c3ce6bb22f_00000229): removes 'archived' from the enforced status enum and from the prose state machine, because archived is a visibility state and never an intrinsic status. Retirement is state: archived at the status actually reached, which preserves honest history instead of inventing completion. Zero instances carried status: archived at the time of the change (measured), so no entry is invalidated. meta_status_rollup is deliberately untouched per comprehensive-rollup doctrine: enforced_enums narrows, the rollup stays total over observed values. Version bumped 2026-08-16 on Argus A150's ruling (evt_dd132e700471fc5e_00000014, verbatim: 'semantic capsule changes bump all six'), after T44 measured the effect and asked rather than deciding. For dev-spec specifically A150 held template_enforced_from_version at 1.8 in the same ruling, so v1.8+ stable-AC-ID behaviour is unchanged by the bump. Mint registry regenerated in the same commit."
 template_enforced_from: '2026-07-17'
+two_producer_paths_note_2026_08_31: "Argus A165, routed by metis-g115 after her measurement of the general case. The trigger-provenance row said THE ENGINE WRITES THESE, which became true for declared pre-lock pairs the moment talos-t55 built 308bb12e and false for every other spec — 31 of 174 dev-specs (18%) declare triggered_test_spec_uids, so ~4 in 5 test-specs are born on the hand-written path. A capsule asserting coverage the engine does not have is the same one-fact-two-readers family the cure itself was built against, one level up in the documentation. New section names both paths and where Path B's value is read from (dev_spec_activation_uid on the locked dev-spec). NO VERSION BUMP: no schema, enum, state-machine or template change — text correction only, per the template_enforced_from_note / extraction_scope-sweep precedent. Metis's count was 32 and mine is 31, a one-spec delta that moves nothing. A companion CHECK was considered and DECLINED on the record; the reasoning is in the section."
 template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
 v1_3_amendment_note: "v1.2 → v1.3 amendment 2026-07-17 by Argus A133 under Mike's 'proceed with the build plan' authorization and Governed Autonomy S2 Template-Leg Contract b933eafb. Adds only the §Template mint scaffold; no bespoke v1.2 schema/check-family or state-machine change. The new leg activates the existing generic template-verifier tier (placeholder, section, enum-hint, capsule-version checks). Birth defaults are draft/active + substrate/smoke with one structural-check behavior; required placeholders force the author to supply real pairing, target, coverage, and acceptance content before verification."
 v1_2_amendment_note: "v1.1 → v1.2 amendment 2026-07-17 by Argus A133 under Mike's explicit A133 'proceed with the build plan' authorization and the Mike-locked Gardener Pruning cycle a286c210. Reconciles substrate identifiers with dev-spec reality through the shared spec-family substrate-ref syntax: UID, canonical safe path, or exact opaque planned identifier. Pairing remains strict by identity (exact path/opaque match or index-backed UID↔path equivalence). triggered_by_dev_cycle resolves activation→dev_spec_uid. Legacy compatibility is a frozen UID cohort captured at the v1.2 cutover—never a self-declared date/version predicate; the cohort retains its historical field meanings (including generic capsule_version values). Every UID outside that cohort is strict v1.2+ and must carry a valid current capsule_version. coverage_class formally accepts one enum or a non-empty unique enum list. Schema semantics only; state machine unchanged; §Template arrives separately in v1.3 per Template-Leg Contract rule 4. Strict entries enforce invalid substrate refs, Rule 3.a/3.b pairing defects, invalid coverage lists, and missing class minima at ERROR; the frozen legacy cohort retains WARN-grade debt."
@@ -95,10 +96,49 @@ The test-pipeline engine refuses to activate without a compliant test-spec entry
 | `capsule_version` | semver string | Required for every UID outside the frozen pre-v1.2 legacy cohort; mint stamps it. Cohort membership is an immutable validator constant captured from the 46 test-spec UIDs present at cutover—not inferred from user-authored dates or version fields. Historical cohort fields named `capsule_version` retain their original meaning and do not opt an old entry into v1.2. |
 | `target_substrate` | substrate-ref array | Substrate the test coverage exercises, using the ordered/disjoint syntax in [dev-spec §Substrate Reference Syntax](tropo-dev-spec.capsule.md#substrate-reference-syntax-v15-shared-by-the-spec-family). Typically includes every `change_class: NEW` target; additional resolvable scope identifiers are legal. Cross-validates under Rule 3. |
 | `target_subsystem` | UID OR null | The subsystem the substrate composes with (subsystem hub UID), OR null for cross-subsystem. |
-| trigger provenance | UID fields | Exactly one source: `triggered_by_dev_cycle` for a dev activation, OR the complete release triplet `triggered_by_release_pipeline` + `release_plan_uid` + `release_pipeline_run_uid`. The engine writes these; release-triggered specs never fabricate a dev cycle. |
+| trigger provenance | UID fields | Exactly one source: `triggered_by_dev_cycle` for a dev activation, OR the complete release triplet `triggered_by_release_pipeline` + `release_plan_uid` + `release_pipeline_run_uid`. Release-triggered specs never fabricate a dev cycle. **`triggered_by_dev_cycle` has TWO producer paths and you must know which one you are on — see §Trigger Provenance: Two Paths below.** |
 | `behaviors_covered` | list of objects | **Anti-box-checking gate.** **(v1.89, 271d28d7 AC8)** `verifies_acceptance_criterion` pairs by **stable AC ID** (`AC1`, `AC2`, …) whenever the dev-spec is v1.8 or later — the shape those specs actually declare. A bare integer is a positional pointer into a list, and a list that is reordered or has a criterion inserted silently re-points every test that cited it; the stable ID cannot be re-seated by an edit elsewhere in the file. Integers remain legal ONLY for the frozen pre-v1.8 legacy cohort, which is closed and never grows. Enforced by `check_test_spec_cross_validation_against_dev_spec`: an integer, a missing pointer, or an ID the dev-spec does not declare is a finding. Each object has: `behavior_description` (≤200 chars; what the behavior is), `test_substrate_path` (string; vault-relative path to the test substrate that exercises this behavior — must exist OR be authored as part of cycle), `verification_method` (enum; see below), `target_substrate_refs` (substrate-ref array using the same UID/path/exact-planned-identifier union as `target_substrate`; which dev-spec NEW targets this behavior covers), `dispatch_target` (string; REQUIRED when `verification_method: agentic_review` — names the sa.* class to dispatch, e.g., `sa.skeptic` / `sa.cold-boot`), `verifies_acceptance_criterion` (integer; OPTIONAL per-entry but REQUIRED-via-aggregate per Rule 3 v1.1 extension — every dev-spec.acceptance_criteria entry MUST have at least one paired behaviors_covered entry pointing at it; 1-based positional index into triggering dev-spec.acceptance_criteria list). |
 | `coverage_class` | enum OR non-empty unique enum array | One or more of `regression` / `smoke` / `cold-boot` / `gauntlet` / `property`. A scalar remains valid for compatibility; new multi-lens specs use an array. Semantics + verification_method defaults per §Coverage Class Semantics below. |
 | `acceptance_criteria` | string | Non-empty; Mike-walkable verification that test coverage is real not box-checking; per Captain's Briefing v3.0 Requirement 2 framing. |
+
+## Trigger Provenance: Two Paths *(added 2026-08-31)*
+
+**This row read "the engine writes these" and that was true of one path and false of the
+other.** Both are legitimate; the defect was a capsule promising coverage the engine did not
+have, which sent authors looking for a writer that would never run on their spec.
+
+**Path A — the pair is DECLARED BEFORE THE LOCK.** The dev-spec names it in
+`triggered_test_spec_uids:`. `tropo-lock-dev-spec.py` then writes
+`triggered_by_dev_cycle: <activation-uid>` into every named pair, inside the same all-or-none
+transaction as the status flip. Genuinely engine-written; nothing to do by hand. *(Built
+2026-08-31 under `308bb12e` by talos-t55; independently verified non-author by argus-a165 —
+suite run verbatim, mutation-proven, and the real runtime reader confirmed to discover the
+stamped pair through its own string-match.)*
+
+**Path B — the pair is AUTHORED AT BUILD ACTIVATION, after the lock.** The lock has already
+fired, so Path A's stamp had nothing to reach. **The value is still available and is not
+guesswork:** the lock writes `dev_spec_activation_uid:` onto the dev-spec, and the test-spec's
+author reads it there at authoring time and writes it in. **Hand-written, and correct — not a
+gap.**
+
+**Path B is the majority pattern.** Measured at HEAD on 2026-08-31: **31 of 174 dev-specs
+(18%) declare `triggered_test_spec_uids`**, so roughly four in five test-specs are born on
+Path B. An author who reads only the row above concludes the engine will fill the field, sees
+it stay empty, and either waits for a producer that will never run or fabricates a UID.
+
+**Before the lock, on either path, the field is legitimately ABSENT.** A pre-lock test-spec
+cannot carry an activation UID that does not exist. Say so in a `trigger_provenance_note:`
+rather than inventing one — provenance for a run that has not happened is the one thing this
+field must never hold.
+
+**No check was added for this, deliberately.** A gate requiring the field on a test-spec that
+names a locked dev-spec would be well-founded (both producers exist and run first), but the
+harm it prevents — a test-spec whose close gates fail later — is visible and recoverable, and
+this Studio has 2,033 open warnings because unactionable warnings accumulate faster than
+anyone closes them. Documentation was the proportionate cure. *(Declined on the record so the
+absence reads as a decision, not an oversight.)*
+
+---
 
 ## Optional Frontmatter
 

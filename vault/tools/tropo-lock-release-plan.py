@@ -92,17 +92,47 @@ except Exception:  # pragma: no cover - fallback for a stripped environment
         return yaml.safe_load(text)
 
 RELEASE_PIPELINE_UID = "634913c2"
-LOCKABLE_STATUSES = {"design", "specify"}
-UID_RE = re.compile(r"^[0-9a-f]{8}$")
+# ONE declared set, shared with the preflight's lock-plan-record gate
+# (f015ef8ff398 step 2, talos-t63 2026-09-06): the lock's pre-lock states and
+# the preflight's "is a plan state" used to be two hand lists that disagreed,
+# and the disagreement refused Mike's v1.95 ignition. The set lives in
+# lib/release_capsule_contract beside the capsule's enum; this name is kept so
+# every reader in this file and its tests stays valid.
+from lib.release_capsule_contract import LOCKABLE_STATUSES  # noqa: E402
+UID_RE = re.compile(r"^[0-9a-f]{8}(?:[0-9a-f]{4})?$")  # accepts-both (3d430852)
 
 
 class LockRefused(Exception):
     pass
 
 
+def _resolve_path(uid: str, files_dir: Path) -> Optional[Path]:
+    """The file a governed uid lives in: `<uid>.md`, or the slug-named
+    `<slug>-<uid>.md` canonical since the 2026-08-31 filename ruling.
+
+    Every fan-in binding resolved `files_dir / f"{uid}.md"` and nothing else,
+    so the first slug-named test-spec cited as acceptance_evidence was refused
+    as "does not resolve" while check-one resolved it fine. Third reader of
+    the same convention change (after tropo-recycle.py and tropo-close-dev.py).
+    The name proposes; the frontmatter decides — a slug match is confirmed by
+    the file's own `uid:` before it is trusted. (metis-g117, 2026-09-03)
+    """
+    bare = files_dir / f"{uid}.md"
+    if bare.is_file():
+        return bare
+    for cand in sorted(files_dir.glob(f"*-{uid}.md")):
+        try:
+            head = cand.read_text(encoding="utf-8", errors="replace")[:65536]
+        except OSError:
+            continue
+        if re.search(rf"^uid:\s*['\"]?{re.escape(uid)}['\"]?\s*$", head, flags=re.MULTILINE):
+            return cand
+    return None
+
+
 def read_entry(uid: str, files_dir: Path = VAULT_FILES) -> Optional[dict]:
-    path = files_dir / f"{uid}.md"
-    if not path.is_file():
+    path = _resolve_path(uid, files_dir)
+    if path is None or not path.is_file():
         return None
     raw = path.read_text(encoding="utf-8")
     parts = raw.split("---", 2)
@@ -156,8 +186,8 @@ def _acceptance_evidence_digest(uids: list, files_dir: Path) -> str:
     """
     digest = hashlib.sha256()
     for uid in sorted(str(u) for u in uids):
-        path = files_dir / f"{uid}.md"
-        if not path.is_file():
+        path = _resolve_path(uid, files_dir)
+        if path is None or not path.is_file():
             raise LockRefused(
                 f"acceptance_evidence names {uid}, which does not resolve. A "
                 "release cannot bind to evidence that is not there."
@@ -361,8 +391,8 @@ def _assert_typed_passing_evidence(dev_spec_uid: str, receipt_uid: str,
     typed_passing = []
     problems = []
     for uid in [str(u) for u in evidence]:
-        path = files_dir / f"{uid}.md"
-        if not path.is_file():
+        path = _resolve_path(uid, files_dir)
+        if path is None or not path.is_file():
             raise LockRefused(
                 f"dev-spec {dev_spec_uid}: acceptance_evidence names {uid}, which "
                 "does not resolve. A release cannot bind to evidence that is not "
@@ -434,8 +464,8 @@ def gather_row(dev_spec_uid: str, files_dir: Path = VAULT_FILES) -> dict:
             f"dev-spec {dev_spec_uid} names no completion report; the row cannot "
             "bind a completion receipt hash"
         )
-    receipt_path = files_dir / f"{receipt_uid}.md"
-    if not receipt_path.is_file():
+    receipt_path = _resolve_path(str(receipt_uid), files_dir)
+    if receipt_path is None or not receipt_path.is_file():
         raise LockRefused(
             f"completion report {receipt_uid} for dev-spec {dev_spec_uid} does not resolve"
         )
@@ -700,6 +730,88 @@ def _load_preflight(studio_root: Path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def check_release_lock(
+    release_plan_uid: str,
+    locked_by: str,
+    files_dir: Path = VAULT_FILES,
+    runs_dir: Path = PIPELINE_RUNS,
+) -> list:
+    """--check (f015ef8ff398, Mike's word at the fifth v1.95 refusal): EVERY unmet
+    precondition at once, nothing written, no uid consumed.
+
+    The pure phase refuses at the first unmet precondition by design (AC4: zero
+    partial state). That is right for the lock and wrong for the operator, who
+    was handed five refusals in sequence on 2026-09-06 -- each correct, none
+    knowable before the run. This runs the same preconditions as independent
+    probes, records each refusal instead of raising it, and finishes with the
+    full pure phase under a stub mint so anything the probes do not cover is
+    still named. Returns the list of problems; empty means the lock would pass.
+    """
+    problems: list = []
+    entry = read_entry(release_plan_uid, files_dir)
+    if entry is None:
+        return [f"release-plan {release_plan_uid} does not resolve"]
+    fm = entry["frontmatter"]
+    if fm.get("type") != "release-plan":
+        return [f"{release_plan_uid} is type {fm.get('type')!r}, not a release-plan"]
+    status = str(fm.get("status") or "").strip().lower()
+    if status == "locked":
+        problems.append(f"release-plan {release_plan_uid} is already locked")
+    elif status not in LOCKABLE_STATUSES:
+        problems.append(f"release-plan {release_plan_uid} is status {status!r}; lockable from "
+                        f"{sorted(LOCKABLE_STATUSES)} (cure: set status to one of them)")
+    ordered = [str(u) for u in (fm.get("dev_spec_uids") or [])]
+    if not ordered:
+        problems.append(f"release-plan {release_plan_uid} lists no dev_spec_uids "
+                        "(cure: lock each member dev-spec; the lock appends it)")
+    try:
+        _refuse_on_unmet_preconditions(release_plan_uid, fm, files_dir)
+    except LockRefused as exc:
+        problems.append(str(exc))
+    # The lock-time fields the release entry is born from (2fae6312): each one
+    # named on its own, not the first missing one.
+    for field in ("release_version", "capabilities_touched", "kernel_substrate_touched",
+                  "foundation", "ratchet_targets", "hub_summaries"):
+        try:
+            _require_lock_time_field(fm, field, release_plan_uid)
+        except LockRefused as exc:
+            problems.append(str(exc))
+    for uid in ordered:
+        spec = read_entry(uid, files_dir)
+        if spec is None:
+            problems.append(f"member dev-spec {uid} does not resolve")
+            continue
+        sfm = spec["frontmatter"]
+        evidence = sfm.get("acceptance_evidence") or []
+        if not evidence:
+            problems.append(f"dev-spec {uid} has empty acceptance_evidence")
+            continue
+        try:
+            _assert_typed_passing_evidence(uid, str(sfm.get("completion_report_uid") or ""),
+                                           evidence, files_dir)
+        except LockRefused as exc:
+            problems.append(str(exc))
+    # Everything the probes above do not cover (release-entry fields such as
+    # foundation, the declaration snapshot, receipt binding) still refuses one
+    # at a time inside the pure phase; run it once under a stub mint so the
+    # first of those is named too, without consuming a uid or writing a byte.
+    import itertools as _it
+    _counter = _it.count(1)
+
+    def _stub_mint(*_a, **_k):
+        return f"f015chk{next(_counter):05x}"
+
+    try:
+        plan_release_lock(release_plan_uid, locked_by, files_dir, runs_dir, mint=_stub_mint)
+    except LockRefused as exc:
+        msg = str(exc)
+        if not any(msg.split("\n")[0] in p or p.split("\n")[0] in msg for p in problems):
+            problems.append(msg)
+    except Exception as exc:  # noqa: BLE001 -- operational, still named
+        problems.append(f"pure phase could not complete: {type(exc).__name__}: {exc}")
+    return problems
 
 
 def plan_release_lock(
@@ -1040,10 +1152,48 @@ def abandon_release_plan(release_plan_uid: str, abandoned_by: str, reason: str,
         return {"applied": True, "no_op": False, "journal": str(journal), **plan.notes}
 
 
-def _mint_uid(files_dir: Path, exclude: Optional[set] = None) -> str:
-    import uuid
+_MINT_TOOL_MODULE = None
 
+
+def _mint_tool():
+    """Load tropo-mint-id.py lazily (its filename is not importable) for the
+    studio-identity manifest read composite minting requires."""
+    global _MINT_TOOL_MODULE
+    if _MINT_TOOL_MODULE is None:
+        import importlib.util as _ilu
+        _spec = _ilu.spec_from_file_location(
+            "mint_id_module_for_release_lock", Path(__file__).resolve().parent / "tropo-mint-id.py")
+        _MINT_TOOL_MODULE = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_MINT_TOOL_MODULE)
+    return _MINT_TOOL_MODULE
+
+
+def _mint_uid(files_dir: Path, exclude: Optional[set] = None) -> str:
+    """Route through the AUTHORITY mint shape (3d430852): composite when the
+    generation constant says 12, reading the studio-identity manifest
+    (refuse-if-absent); the legacy flat 8-hex before that. Same cure as the
+    dev-spec lock's twin — this uuid4 literal was the flip census's second
+    missed site (found by test_release_plan_lock_end_to_end at the flip)."""
+    import sys as _sys
+    import uuid
+    _here = Path(__file__).resolve().parent
+    if str(_here) not in _sys.path:
+        _sys.path.insert(0, str(_here))
+    from lib import governed_path as _gp
     taken = {p.stem for p in files_dir.glob("*.md")} | (exclude or set())
+    if _gp.MINT_HEX_LEN == 12:
+        _mintmod = _mint_tool()
+        identity = _mintmod.read_studio_identity(root=files_dir.parent.parent)
+        prefix = str(identity["mint_prefix"])
+        if not _gp.is_composite_mint_prefix(prefix):
+            raise _mintmod.StudioIdentityError(
+                f"studio-identity manifest mint_prefix {prefix!r} is not the "
+                "4-hex composite shape — the release lock cannot mint "
+                "composite identities against it; re-issue per 3d430852")
+        while True:
+            candidate = _gp.composite_uid(prefix)
+            if candidate not in taken and UID_RE.match(candidate):
+                return candidate
     while True:
         candidate = uuid.uuid4().hex[:8]
         if candidate not in taken and UID_RE.match(candidate):
@@ -1223,6 +1373,8 @@ def lock_release_plan(release_plan_uid: str, locked_by: str,
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--release-plan-uid", required=True)
+    parser.add_argument("--check", action="store_true",
+                        help="report EVERY unmet lock precondition at once; writes nothing, mints nothing")
     parser.add_argument("--locked-by")
     # Abandonment is a flag on the same tool rather than a separate script: it
     # is the inverse of this transaction and has to know exactly what the lock
@@ -1241,6 +1393,15 @@ def main() -> int:
               file=sys.stderr)
         return 3
 
+    if args.check:
+        problems = check_release_lock(args.release_plan_uid, args.locked_by or "check")
+        if not problems:
+            print(f"CHECK PASS: release-plan {args.release_plan_uid} meets every lock precondition; nothing written")
+            return 0
+        print(f"CHECK: release-plan {args.release_plan_uid} has {len(problems)} unmet precondition(s); nothing written:")
+        for n, p in enumerate(problems, 1):
+            print(f"  {n}. {p}")
+        return 1
     if args.abandon:
         principal = args.abandoned_by or args.locked_by
         if not principal:

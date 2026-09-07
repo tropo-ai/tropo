@@ -3,19 +3,20 @@ uid: eeb59ddf
 name: ship-artifact
 type: capsule-definition
 extends: core
-version: '1.4'
-supersedes_version: '1.3'
+version: '1.5'
+supersedes_version: '1.4'
 tier: os
 author: argus
 created: 2026-04-25
 created_by: argus-a34
-modified: 2026-06-09
-modified_by: argus-a105
+modified: 2026-09-02
+modified_by: talos-t60
 meta_status_rollup_added: argus-a104 2026-06-08 — new meta_status_rollup per 4acf3f2d v0.4 DERIVE (Mike-signed 7-capsule lock-break batch); additive (type had no rollup); prior modified argus-a77 2026-05-20
 status: draft
 last_body_refactor: 2026-05-20
 v1_4_amendment_note: 'v1.3 → v1.4 amendment authored 2026-05-20 by argus-a77 under v1.48.0 cycle [c184b781] Stream A per design-spec [6a8d3f17] v0.3 LOCKED. Four substrate-load-bearing additions: (1) Article subtype + editorial state machine — `subtype: article` extension to document type with 4-state editorial enum (draft → reviewed → locked → archived); ship-artifact wrappers inherit the source article''s editorial state implicitly. (2) Publish-act semantics — pipeline-written `publication_state:` per-target frontmatter map on ship-artifact wrappers, keyed by target slug, values `live | retracted`; canonical source-of-truth = pipeline §5 sub-gate artifacts; frontmatter = queryable cache (same pattern as existing pipeline-written fields `locked_by` / `locked_at`). (3) External-work/ staging architecture — per-target editorial staging at `argo-os/external-work/<target>/`; gitignored at Studio level; non-destructive invariants protect manually-composed assets from re-extract clobber. (4)
   L1/L2 composition pattern — markdown-native L1 substrate composes with future real-code L2 apps via the external-work/ staging surface; pipeline accepts binary outputs from anywhere without coupling to how they were produced. Five new validator checks (25-29; WARN at v1.4 / ERROR at v1.5 ratchet except Check 28+29 which stay WARN). New Rule 13 (article-wrapper composition). Entry-level backward-compat 100% (existing v1.3-shape entries continue valid; absent `subtype:` field is the v1.3 default; absent `publication_state:` map is the not-yet-published default). Body-replacement pattern per Mike-A75 lock: UID preserved; v1.3 body content where structurally equivalent preserved verbatim; v1.0/v1.1/v1.2/v1.3 amendment-block prose previously extracted to ship-artifact.history.md remains there; v1.4 amendment narrative landed in this frontmatter field + a new entry in ship-artifact.history.md.'
+v1_5_amendment_note: 'v1.4 -> v1.5 amendment authored 2026-09-02 by talos-t60 under Mike-locked dev-spec 91d951f4 (B-1, The Ship Manifest), locked 2026-09-02 with all seven AC6 rows ratified at Mike''s walk. ONE substrate-load-bearing addition: the REQUIRED `ship_verdict` field (DENY | SHIP-AS-IS | SHADOW) on every ship-artifact, with `shadow_of:` required when the verdict is SHADOW; plus Governance Rule 14, Validation Check 30, and the ROOT MANIFEST section on b2e7d4a9 for paths no ship-artifact owns. The box stops being everything-minus-an-exclusion-list and becomes exactly-what-was-ruled. RATIFIED POSTURE FOR AN UNRULED PATH (AC6 row 6, Mike: "I go with your lean"): silent-DENY, NAMED in the build census -- nothing ships unruled and nothing drops unseen. ENFORCEMENT IS WARN, DELIBERATELY, and the warn-safe default (deb77758) is why: under silent-DENY an unruled path does not ship, so the harm a refusal would prevent is a NEGATIVE census (content the owner meant to ship quietly not shipping), which AC5''s completeness floor catches loudly at build time. The naming earns its existence; the refusal does not. A NOTE FOR WHOEVER READS THIS VERSION NUMBER NEXT: the v1.4 body declares that Checks 25-27 ratchet WARN->ERROR "at v1.5". This bump does NOT activate them. Their severity is hardcoded inside each check in tropo-validate.py and nothing anywhere reads this capsule''s version: field to decide it -- measured before bumping, precisely so the bump could not trip three ratchets silently. That declared-but-unwired ratchet is itself an instance of this release''s dominant defect family and is left as found, named rather than quietly fixed under an unrelated spec.'
 history_file: 437e8944
 enforced_enums:
   status:
@@ -95,6 +96,7 @@ Failure mode prevented: silent ship drift between argo and recipient vaults — 
 | `parent` | UID OR `null` | UID of parent folder ship-artifact, OR explicit `null` for the root entry (the manifest-root project). The root is the only entry with `parent: null`; every other entry's `parent:` chain MUST terminate at it. |
 | `member_of` | UID array | MUST include the `manifest_root_uid:` capsule-frontmatter value. May include additional projects. |
 | `description` | string | ≤280 chars. One-line scannable summary for the vault index. Substantive prose lives in `## Purpose` body section. |
+| `ship_verdict` | enum | **REQUIRED (v1.5).** Exactly one of `DENY`, `SHIP-AS-IS`, `SHADOW`. The ruled answer to "does what this entry addresses go in the box, and in what form?" `DENY` = never ships, and the build names the prune in its census. `SHIP-AS-IS` = ships verbatim. `SHADOW` = does NOT ship; the twin named by `shadow_of:` ships in its place, at this entry's logical box path. **This field OVERRIDES record `extraction_scope`** (see §Verdict Algebra) — `DENY` beats `extraction_scope: ship`, which is the whole D3 mechanism. Enforcement WARN at v1.5; the build's census is the loud instrument, per the amendment note. |
 
 ### Optional Frontmatter
 
@@ -105,6 +107,7 @@ Failure mode prevented: silent ship drift between argo and recipient vaults — 
 | `cleanup_rules` | object | File-only (mostly). Keys: `strip_markers`, `broken_link_policy`, `rewrite_uid_refs`, `uid_rewrite_template`. Defaults diverge per target — see Cleanup Rules §Per-target defaults. |
 | `governed_folder_capsule` | UID | Optional pointer to folder's CAPSULE.md if it has one. Informational. |
 | `notes` | string | Free-form note for non-obvious decisions. |
+| `shadow_of` | UID or path | **REQUIRED when `ship_verdict: SHADOW`; illegal otherwise (v1.5).** Names the public twin's SOURCE — a uid when the source is governed, a vault-root-relative path when it has none. Core capsule v2.2 §Shadow Edition Contract carries the pairing's full semantics. |
 | `supersedes` / `superseded_by` | UID | Standard supersession pattern for reauthored entries. Bidirectional pair set atomically. |
 | `archived_by` / `archived_at` | string / ISO date | Required when direct-retirement archival (not supersession-driven) per Rule 11. |
 | `locked_by` / `locked_at` | string / ISO date | Required when `status: locked`. |
@@ -592,6 +595,65 @@ As L2 capabilities ship in later cycles (image-gen app, MindBridge brand-system 
 
 ---
 
+## Verdict Algebra (v1.5 — the single home for this rule)
+
+*Every path in the release box resolves to exactly ONE effective verdict. This section is where that
+resolution is defined; no tool, spec, or test may state a second version of it. The shared
+implementation is `vault/tools/lib/ship_verdict.py`.*
+
+### Precedence, in order
+
+1. **A `ship_verdict:` on a ship-artifact, or a row in the ROOT MANIFEST, beats record scope —
+   but the precedence is ASYMMETRIC, and the asymmetry is load-bearing.**
+   A manifest **`DENY` overrides `extraction_scope: ship`**: that is the D3 mechanism, and the
+   reason a positive census is possible at all.
+   A manifest **`SHIP-AS-IS` does NOT override a record that declares itself non-ship**
+   (`argo-private` / `argo-reference`). It yields `DENY`, and the collision is NAMED.
+   **And the asymmetry itself is scoped to FOLDER grain: a FILE row MAY override a withholding.**
+   Specificity carries intent. A file row is a human naming one exact path; a record's
+   `extraction_scope` is very often the Gardener's path-based backfill rather than anyone's
+   decision. So a broad folder row may not override a withholding, and a deliberate file row may —
+   which is how `vault/tools/` ships wholesale under Argus A92's atomic-infrastructure ruling
+   (`fdef56ea`) while six individually-scoped tools inside it still ship by name.
+   *Why the two directions differ: only one of them has a ruled purpose, and only one of them
+   leaks. Denying something that claimed to ship is the whole point. Shipping something that
+   explicitly asked to be withheld has no use case and one very sharp edge — a convenient folder
+   row like `agents/tropo/: SHIP-AS-IS` silently overriding the `argo-private` on a status card
+   inside it. That is not hypothetical: the first symmetric cut of this algebra did exactly that on
+   its first census run against the real vault. The asymmetry makes the leak class unrepresentable
+   rather than adding an exception row a human has to remember to keep correct.*
+2. **File-grain beats folder-grain. Longest matching path prefix wins.** Without this rule a `DENY`
+   plant inside a wholesale-copied folder such as `vault/tools/` has no mechanism by which it can
+   carry a verdict, and the headline arm of AC1 is unsatisfiable. A file row at
+   `vault/tools/x.py` overrides a folder row at `vault/tools/`, which overrides one at `vault/`.
+3. **Record scope is the fallback channel, not a verdict.** With no manifest verdict covering it, a
+   path owned by a vault record carrying `extraction_scope: ship` maps to `SHIP-AS-IS`. This is a
+   RESOLUTION, and the census is keyed on the **field**, not the resolution — see §Census below.
+4. **Unruled is `DENY`, and it is NAMED** (AC6 row 6, ratified by Mike 2026-09-02). A path no
+   channel covers does not ship, and the build's census names it as unruled-pruned. Nothing ships
+   unseen; nothing drops unseen.
+5. **Build-GENERATED paths are a named class, never silent.** Indexes, catalogs, `version.md`,
+   manifests, the genesis placeholder pair, and nav blocks until their retirement sweep are written
+   by the build rather than copied from a source, so no source-side verdict can exist for them.
+   They resolve to `GENERATED` and are reported under that name.
+
+### Census
+
+The census reports what shipped, under which verdict, through which channel. **It is keyed on the
+FIELD, not on the resolved verdict**, and the difference is the whole point: an artifact that is
+missing `ship_verdict` but whose path carries `extraction_scope: ship` resolves to `SHIP-AS-IS`
+under rule 3, so a resolution-keyed census reads 100% ruled while the backfill is half-finished.
+Field-keyed, it reads 0 of 92 before the sweep and 92 of 92 after, and it can fail.
+
+### The four channels this binds
+
+The verdict is applied at ONE chokepoint — the build's `copy_file` — rather than at four separate
+hooks, so no channel can be added later that bypasses it. The channels the chokepoint covers:
+(1) the manifest walk, (2) the scope copy, (3) the six wholesale emitters, and (4) every bare
+`copy_file` call in `main()`, **stated by rule and never as a list**, because a list is what failed
+twice during this spec's own review. A file that reaches the box without passing the chokepoint is
+a defect in the build, not a gap in this algebra, and one gate asserts exactly that.
+
 ## 3. State Machine
 
 ```
@@ -644,7 +706,9 @@ draft → reviewed → locked → archived (supersession or retirement)
 12. **(v1.1) Atomic-commit for cross-referenced new entries.** New ship-artifact entries that cross-reference each other (parent + its `children:` UIDs newly authored in same session) are authored as atomic commit. Partial commits leave manifest broken; validation fails. For mass-authoring sprints, `draft-ship-manifest.py` emits all entries to workspace + commits as one atomic batch.
 13. **(v1.4) Wrapper-article editorial-lock composition.** When a ship-artifact wrapper's `canonical_source:` points at an article entry (`subtype: article`), the wrapper inherits the article's editorial state implicitly: (a) wrapper does NOT extract until article `status: locked`; (b) wrapper at `target:` declaring any published target requires source article `status: locked` (Check 26 enforces; WARN at v1.4 / ERROR at v1.5); (c) article `status: locked → archived` cascades to pipeline-fired retract-act on any wrapper with `publication_state.<target>: live` for the archived article. See §Article Subtype + Editorial State Machine + §Publish-Act Semantics.
 
-### Validation Checks (29, version-gated where noted)
+14. **(v1.5) Every ship-artifact carries a ruled verdict, and the manifest beats record scope.** `ship_verdict:` is REQUIRED on every ship-artifact; `shadow_of:` is required when and only when the verdict is `SHADOW`. Paths that no ship-artifact owns are ruled by rows in the ROOT MANIFEST section of the release manifest root ([b2e7d4a9](../files/b2e7d4a9.md)). Resolution follows §Verdict Algebra and nothing may state a second version of it. An unruled path is silently DENIED and NAMED in the build census (AC6 row 6, Mike-ratified 2026-09-02) — never silently included, never silently dropped.
+
+### Validation Checks (30, version-gated where noted)
 
 Each labeled **[enforced]** (mechanically checked by validator + build-release.py) or **[honor-system]** (reader-verified; mechanically enforced later).
 
@@ -677,6 +741,8 @@ Each labeled **[enforced]** (mechanically checked by validator + build-release.p
 27. **[enforced]** **(v1.4 NEW)** **`check_publication_state_pipeline_write_only`.** **v1.4 enforces** — field-shape audit on the `publication_state:` map: top-level shape is a block-form YAML map (scalar/array REJECTED); keys are valid target slugs (subset of `{release, web}`); values are in `{live, retracted}`; empty map REJECTED (omit field for "never published" semantic). **v1.5 ratchet adds** — git-blame hand-edit-drift detection on the `publication_state:` field's commit history (pipeline commits use a sentinel author; author commits use human/agent identity; mismatch flags substrate-discipline drift). The v1.5 activation depends on the pipeline-write sentinel author convention being established at Stream B engineering (Cycle B / v1.48.0); at v1.4 ship the pipeline-write convention is not yet active. Severity: **WARN at v1.4 / ERROR ratchet at v1.5.**
 28. **[enforced]** **(v1.4 NEW)** **`check_publication_state_target_coherence`.** Verify `publication_state:` keys are a subset of `target:` array values (absent `target:` field treated as implicit `[release]` per v1.3 backward-compat default). Cannot be `live` on a target the wrapper doesn't declare. **WARN at v1.4** (no ratchet planned — coherence violations should not occur if pipeline is well-behaved; WARN as audit signal).
 29. **[enforced]** **(v1.4 NEW)** **`check_external_work_gitignore`.** Verify `argo-os/external-work/` is gitignored at Studio root OR via parent-folder coverage (e.g., if a parent directory like `/argo-os/` is wholesale gitignored at the platform-repo level, the staging surface is covered transitively). Check accepts either a specific `external-work/` line OR parent-folder coverage. **Downstream Studio caveat:** standalone Studio installs (where the Studio IS its own git repo without a parent-folder wholesale-ignore) need an explicit `external-work/` line in their `.gitignore`. If neither specific nor parent coverage is found, surface as substrate-discipline drift. **WARN at v1.4** (audit signal; failure to gitignore creates the three-way drift failure mode this capsule was designed to prevent).
+
+30. **[enforced]** **(v1.5 NEW)** **`check_ship_verdict_coherence`.** Every `type: ship-artifact` entry declares `ship_verdict:` ∈ {`DENY`, `SHIP-AS-IS`, `SHADOW`}; `shadow_of:` present if and only if the verdict is `SHADOW`; a `SHADOW` entry's `shadow_of:` target resolves (uid in the index, or path on disk). One shared implementation resolves this and the ROOT MANIFEST rows through `vault/tools/lib/ship_verdict.py` — the same module the build uses, so the validator and the build cannot disagree about what a path's verdict is. **WARN at v1.5.** The loud instrument is the build census, which names every unruled path on every build; a second refusal here would prevent a negative census the census already catches, and warn-safe (deb77758) says that refusal has not earned its existence.
 
 Core checks inherited: UID uniqueness + immutability, type immutability, owner / created / modified invariants.
 

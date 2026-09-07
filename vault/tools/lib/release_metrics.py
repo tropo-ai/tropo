@@ -35,6 +35,9 @@ __all__ = [
     "PRINCIPAL_GESTURES",
     "EXTRA_INPUTS",
     "GESTURE_TARGET",
+    "GESTURE_TARGETS_V2",
+    "resolve_principal_uids",
+    "derive_real_fire_verdict",
     "REHEARSAL",
     "REAL_FIRE",
     "ReleaseMetricsError",
@@ -207,6 +210,210 @@ def count_gestures(inputs: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
     }
 
 
+
+
+# ── 3d8d4351 §4: the v2 verdict contract ────────────────────────────────── #
+#
+# REAL_FIRE verdict is one of fired-one-gesture / refused-then-attested /
+# failed, derived from journal rows ONLY, ACTOR-AWARE: a principal gesture is
+# a journal row whose `actor` resolves to a human principal in the principal
+# registry (names never appear in actor — the carrier's shape guard sees to
+# that); machine-authored rows (the engine's stamp included, marked by
+# invoked_via) never count. all_targets_live_at leaves the predicate —
+# completion facts remain the completion verifier's.
+
+#: Per-mode gesture targets (schema v2). REAL_FIRE's ratchet is <= 2 human
+#: gestures (the lock and the go/no-go); REHEARSAL keeps the classic three.
+GESTURE_TARGETS_V2: Dict[str, int] = {REAL_FIRE: 2, REHEARSAL: 3}
+
+#: The journal event classes that evidence each REAL_FIRE verdict shape.
+FIRE_AUTHORIZED_EVENT = "tropo.release.fire_authorized"
+ATTESTED_PATH_EVENT = "tropo.release.verify_only_invoked"
+PUBLISHED_EVENT = "tropo.release.published"
+
+#: The gesture CLASSES (the ratchet's "the lock and the go/no-go" — plus the
+#: legacy orchestrator invocation, which a principal may still run bare).
+#: Completion facts (published) and measurements are NOT gestures: counting
+#: them would charge the human for the machine's own success.
+GESTURE_EVENT_CLASSES: Tuple[str, ...] = (
+    "tropo.release.scope_locked",
+    "tropo.release.orchestrator_invoked",
+    FIRE_AUTHORIZED_EVENT,
+)
+
+
+def resolve_principal_uids(registry_path: Path) -> set:
+    """Human principals from the agent registry (stdlib-only block parse).
+
+    A row is a principal when its block carries `type: human`; its identity
+    is the block's `party_uid`. Deliberately minimal: the registry is
+    hand-maintained YAML with one nested agents map, and importing a YAML
+    implementation to read eight blocks would make the metrics module depend
+    on a parser it does not otherwise need. Unreadable registry -> empty set:
+    the verdict then sees zero principal gestures and fails honestly rather
+    than crashing mid-release.
+    """
+    try:
+        text = registry_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return set()
+    principals: set = set()
+    current: Dict[str, str] = {}
+    for raw in text.splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        stripped = raw.strip()
+        if not raw.startswith(("    ", "	")) and stripped.endswith(":") and current:
+            # a new top-level-ish block begins; flush
+            if current.get("type") == "human" and current.get("party_uid"):
+                principals.add(current["party_uid"])
+            current = {}
+        for key in ("type", "party_uid"):
+            prefix = key + ":"
+            if stripped.startswith(prefix):
+                current[key] = stripped[len(prefix):].strip().split("#", 1)[0].strip()
+    if current.get("type") == "human" and current.get("party_uid"):
+        principals.add(current["party_uid"])
+    return principals
+
+
+def _is_machine_row(row: Mapping[str, Any]) -> bool:
+    invoked_via = row.get("invoked_via")
+    return bool(invoked_via) and invoked_via != ""
+
+
+def derive_real_fire_verdict(
+    journal_rows: Sequence[Mapping[str, Any]],
+    principal_uids: set,
+) -> Dict[str, Any]:
+    """The triple, from rows. Never reads the world — rows only.
+
+    Returns the verdict plus its DERIVATION (the span_ids that produced it),
+    because a verdict a human cannot audit against its rows is exactly the
+    opacity this schema exists to remove.
+    """
+    principal_rows = [
+        r for r in journal_rows
+        if r.get("event") in GESTURE_EVENT_CLASSES
+        and r.get("actor") in principal_uids and not _is_machine_row(r)
+    ]
+    fire_by_principal = any(
+        r.get("event") == FIRE_AUTHORIZED_EVENT for r in principal_rows)
+    attested_path = any(
+        r.get("event") == ATTESTED_PATH_EVENT for r in journal_rows)
+    published = any(r.get("event") == PUBLISHED_EVENT for r in journal_rows)
+
+    if fire_by_principal and published and len(principal_rows) <= GESTURE_TARGETS_V2[REAL_FIRE]:
+        verdict = "fired-one-gesture"
+    elif (not fire_by_principal) and attested_path and published:
+        verdict = "refused-then-attested"
+    else:
+        verdict = "failed"
+
+    return {
+        "verdict": verdict,
+        "principal_gesture_rows": [
+            {"span_id": r.get("span_id"), "event": r.get("event")} for r in principal_rows
+        ],
+        "derivation": {
+            "fire_authorized_by_principal": fire_by_principal,
+            "attested_path_row": attested_path,
+            "published_row": published,
+            "principal_gesture_count": len(principal_rows),
+            "target": GESTURE_TARGETS_V2[REAL_FIRE],
+        },
+    }
+
+
+def count_gestures_v2(
+    journal_rows: Sequence[Mapping[str, Any]],
+    principal_uids: set,
+    mode: str,
+) -> Dict[str, Any]:
+    """Actor-aware gesture tally over journal rows (schema v2).
+
+    v1's count_gestures trusted the caller to pre-filter principal inputs;
+    v2 derives the same question from rows the journal actually holds.
+    """
+    target = GESTURE_TARGETS_V2[mode]
+    principal_rows = [
+        r for r in journal_rows
+        if r.get("event") in GESTURE_EVENT_CLASSES
+        and r.get("actor") in principal_uids and not _is_machine_row(r)
+    ]
+    met = len(principal_rows) <= target if mode == REAL_FIRE else len(principal_rows) == target
+    return {
+        "principal_inputs": [
+            {"event": r.get("event"), "at": r.get("ts")} for r in principal_rows
+        ],
+        "target": target,
+        "met": met,
+        "detail": "%d principal gesture(s) against a target of %d%s" % (
+            len(principal_rows), target,
+            " (machine rows never count)" if principal_rows else ""),
+    }
+
+
+def build_scorecard_v2(
+    *,
+    mode: str,
+    saga_id: str,
+    pipeline_run_uid: str,
+    release_version: str,
+    journal_rows: Sequence[Mapping[str, Any]],
+    principal_registry_path: Path,
+    timestamps: Mapping[str, Optional[str]],
+    active_machine_seconds: Optional[float],
+    observed_refusals: Optional[Sequence[str]],
+    baseline: Mapping[str, Any],
+    refusal_coverage: Optional[Sequence[str]] = None,
+    checkpoints_performed: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Schema v2: the verdict is derived, actor-aware, and auditable.
+
+    REAL_FIRE verdict comes from derive_real_fire_verdict; REHEARSAL keeps
+    the pass/fail domain and gains checkpoints_performed.
+    all_targets_live_at is RECORDED when present and never verdict-bearing —
+    completion facts belong to the completion verifier.
+    """
+    principal_uids = resolve_principal_uids(principal_registry_path)
+    refusals = classify_refusals(
+        observed_refusals, baseline, coverage=refusal_coverage)
+
+    card: Dict[str, Any] = {
+        "schema_version": 2,
+        "mode": mode,
+        "saga_id": saga_id,
+        "pipeline_run_uid": pipeline_run_uid,
+        "release_version": release_version,
+        "gestures": count_gestures_v2(journal_rows, principal_uids, mode),
+        "timestamps": {k: timestamps.get(k) for k in (
+            "scope_locked_at", "orchestrator_started_at", "primary_live_at",
+            "all_targets_live_at")},
+        "elapsed": {
+            "lock_to_primary_live_seconds": _elapsed_seconds(
+                timestamps.get("scope_locked_at"),
+                timestamps.get("primary_live_at")),
+            "active_machine_seconds": active_machine_seconds,
+        },
+        "refusals": refusals,
+    }
+
+    if mode == REAL_FIRE:
+        derived = derive_real_fire_verdict(journal_rows, principal_uids)
+        card["verdict"] = derived["verdict"]
+        card["verdict_derivation"] = derived["derivation"]
+        card["principal_gesture_rows"] = derived["principal_gesture_rows"]
+    else:
+        gestures_met = card["gestures"]["met"]
+        stamps_ok = all(timestamps.get(k) is not None for k in (
+            "scope_locked_at", "orchestrator_started_at", "primary_live_at"))
+        refusals_ok = refusals.get("recorded", True) and not refusals.get("unknown")
+        card["verdict"] = "pass" if (gestures_met and stamps_ok and refusals_ok) else "fail"
+        card["checkpoints_performed"] = checkpoints_performed
+
+    return card
+
 def scorecard_path(run_folder: Path, mode: str) -> Path:
     if mode not in SCORECARD_FILENAMES:
         # refusal: misuse — the scorecard mode argument is not one of the two
@@ -308,16 +515,45 @@ def validate_scorecard(scorecard: Mapping[str, Any], schema_path: Path) -> List[
     calling that validation.
     """
     schema = json.loads(Path(schema_path).read_text(encoding="utf-8"))
+    # 3d8d4351 §4: the v2 bindings a closed declarative schema cannot say —
+    # verdict DOMAIN follows mode, gesture TARGET follows mode. Runs on both
+    # validator paths (jsonschema and the structural fallback).
+    findings_v2: List[str] = []
+    if scorecard.get("schema_version") == 2:
+        mode = scorecard.get("mode")
+        verdict = scorecard.get("verdict")
+        if mode == REAL_FIRE and verdict not in (
+                "fired-one-gesture", "refused-then-attested", "failed"):
+            findings_v2.append(
+                "verdict: real-fire verdict must be the journal-derived triple, "
+                "got %r" % (verdict,))
+        if mode == REHEARSAL and verdict not in ("pass", "fail"):
+            findings_v2.append(
+                "verdict: rehearsal keeps the pass/fail domain, got %r" % (verdict,))
+        elapsed = scorecard.get("elapsed") or {}
+        anchors = [k for k in ("lock_to_primary_live_seconds",
+                               "lock_to_all_targets_live_seconds")
+                   if elapsed.get(k) is not None]
+        if len(anchors) != 1:
+            findings_v2.append(
+                "elapsed: exactly one lock anchor expected (v2 = primary_live), "
+                "found %s" % (anchors or "none"))
+        target = (scorecard.get("gestures") or {}).get("target")
+        expected_target = GESTURE_TARGETS_V2.get(mode)
+        if expected_target is not None and target != expected_target:
+            findings_v2.append(
+                "gestures.target: expected %d for mode %r, got %r"
+                % (expected_target, mode, target))
     try:
         import jsonschema  # type: ignore
     except ImportError:
-        return _structural_check(scorecard, schema)
+        return _structural_check(scorecard, schema) + findings_v2
 
     validator = jsonschema.Draft202012Validator(schema)
     return [
         "%s: %s" % ("/".join(str(p) for p in e.path) or "<root>", e.message)
         for e in sorted(validator.iter_errors(scorecard), key=lambda e: list(e.path))
-    ]
+    ] + findings_v2
 
 
 _JSON_TYPES = {

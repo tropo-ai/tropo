@@ -35,7 +35,12 @@ SEMANTIC_KEYS = (
     "version",
 )
 
-UID_RE = re.compile(r"^[0-9a-f]{8}$")
+# Accepts-both (3d430852 Stage B, 2026-08-31): legacy 8-hex group uids stay
+# first-class forever; every NEW governed mint — a successor generation's
+# uid included, minted through the join ceremony's identity seam — is
+# 12-hex composite. The literal 8 here refused the first composite group
+# uid the join ever minted (found by the W4 gauntlet on first run).
+UID_RE = re.compile(r"^[0-9a-f]{8}(?:[0-9a-f]{4})?$")
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 PRINCIPAL_CLASS_RE = re.compile(r"^(?:human|agent-[a-z0-9]+(?:-[a-z0-9]+)*)$")
@@ -208,7 +213,7 @@ def _require_uid(value: str, *, group_uid: str | None, field: str) -> str:
     if not UID_RE.fullmatch(value):
         _raise(
             GroupErrorCode.GROUP_SCHEMA_INVALID,
-            f"group field {field!r} must be an 8-character lowercase hexadecimal UID",
+            f"group field {field!r} must be a governed UID (legacy 8-hex or composite 12-hex)",
             group_uid=group_uid,
             field=field,
             reference_uid=value,

@@ -43,6 +43,7 @@ from lib.release_profile import (  # noqa: E402
     iter_release_profile_uids,
     load_profile,
 )
+from lib import release_gates  # noqa: E402  (v1.95 Spine B AC3)
 from lib import release_bindings  # noqa: E402
 
 __all__ = [
@@ -407,6 +408,75 @@ def _exit_code_failure(result: Any) -> Optional[str]:
     return None
 
 
+LOCK_STATIC_OK_VERDICTS = ("pass", "skipped-inputs-absent")
+
+
+def _tree_head(root: Path) -> str:
+    import subprocess
+    try:
+        out = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
+                             capture_output=True, text=True, timeout=10)
+    except Exception:  # noqa: BLE001
+        return ""
+    return (out.stdout or "").strip() if out.returncode == 0 else ""
+
+
+def require_clean_lock_static(run_dir: Path, tree_commit: str) -> None:
+    """v1.95 Spine B AC3 (f015997f8d8e): the runner refuses a real build without
+    a clean lock-static preflight FOR THIS TREE.
+
+    Reads <run_dir>/preflight.jsonl (written by the release preflight CLI with
+    --run-dir, one row per gate per phase). Requires lock-static rows whose
+    tree_commit equals HEAD, and for each gate takes its LATEST such row: every
+    verdict must be pass or skipped-inputs-absent (skipped is honest at
+    lock-static — the box does not exist yet; it is a refusal at candidate).
+    Absent, stale, or refusing: raise, naming the missing or refusing gate ids
+    and both commits. There is no waiver argument — a gate a caller can decline
+    is not a gate. The build's own bypasses (--force on the overwrite guard,
+    the Step 1 enforcement-gate skip variable, DRY_RUN) are unchanged and named in
+    the spec so nobody reads 'no waiver' as 'no bypass anywhere'. Eight v1.94
+    attempts stopped one guard at a time; this is the rule that the driver ran
+    the preflight that reports them all, and cured them, before the build.
+    """
+    import json
+    path = Path(run_dir) / release_gates.PREFLIGHT_EVIDENCE_FILENAME
+    if not path.is_file():
+        raise ValueError(
+            "no lock-static preflight for this run: %s is absent. Run the release "
+            "preflight CLI at --phase lock-static with --run-dir %s and --plan-uid "
+            "<plan> until it is clean, then build." % (path, run_dir))
+    latest: Dict[str, dict] = {}
+    seen_commits = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if row.get("phase") != "lock-static":
+            continue
+        seen_commits.add(str(row.get("tree_commit") or ""))
+        if str(row.get("tree_commit") or "") != tree_commit:
+            continue
+        latest[str(row.get("gate_id"))] = row
+    if not latest:
+        raise ValueError(
+            "no lock-static rows for the tree about to be built (HEAD %s); the "
+            "preflight evidence names %s. Re-run the lock-static preflight on this "
+            "tree, cure what it names, then build." % (
+                tree_commit[:12] or "?",
+                ", ".join(sorted(c[:12] or "(no tree_commit)" for c in seen_commits)) or "no lock-static rows"))
+    refusing = sorted(g for g, r in latest.items() if r.get("verdict") not in LOCK_STATIC_OK_VERDICTS)
+    if refusing:
+        raise ValueError(
+            "lock-static preflight is not clean for HEAD %s: %s. Cure every named "
+            "gate and re-run the preflight; the build is not attempted on a tree "
+            "the gates refused." % (tree_commit[:12], ", ".join(
+                "%s [%s]" % (g, latest[g].get("verdict")) for g in refusing)))
+
+
 def _adapt_build_release(fn, ctx: RunContext):
     """The build step's `main()` takes no argv parameter and parses sys.argv
     itself, so the invocation is supplied the only way it accepts one.
@@ -414,6 +484,8 @@ def _adapt_build_release(fn, ctx: RunContext):
     the next one."""
     if not ctx.version:
         raise ValueError("step 8654900a needs --version (the release being cut)")
+    # v1.95 Spine B AC3: no clean lock-static row for this tree, no build.
+    require_clean_lock_static(ctx.run_dir, _tree_head(ctx.vault_root))
     saved = sys.argv
     try:
         # --activation-uid is REQUIRED, not optional. stage6_package_authority
@@ -570,7 +642,31 @@ def _requires_orchestrator_invoked(ctx: RunContext) -> Optional[str]:
         return ("could not read this run's moments (%s: %s) — refusing rather "
                 "than assuming the orchestrator ran"
                 % (type(exc).__name__, exc))
+    # 3d8d4351 §2: a stamp only counts on a BOOTSTRAPPED run. The abandoned
+    # run that became d9025a97 carried a pre-bootstrap orchestrator_invoked
+    # row while every step read never-done — the stamp opened the fire gate
+    # on a run with no steps to fire. Both ends of the class are cured now:
+    # the writer refuses unbootstrapped runs (the orchestrator tool's
+    # shared guard), and this reader discounts any stamp that predates the state
+    # file's activation — the row may be historical; the gate answers the run
+    # as it stands.
     if stamps.get("orchestrator_started_at"):
+        state_path = ctx.run_dir / "run.state.json"
+        bootstrapped = False
+        if state_path.is_file():
+            try:
+                bootstrapped = bool(str((json.loads(
+                    state_path.read_text(encoding="utf-8")) or {}
+                ).get("activation_uid") or ""))
+            except (OSError, ValueError):
+                bootstrapped = False
+        if not bootstrapped:
+            return ("an orchestrator stamp exists but this run never bootstrapped "
+                    "(no activation in run.state.json), so the stamp is pre-bootstrap "
+                    "residue, not evidence — the d9025a97 class.\n"
+                    "           Bootstrap the run, then run the orchestrator:\n"
+                    "               %s"
+                    % (release_bindings.OPERATOR_TOOLING["orchestrator_command"] % ctx.release_plan_uid,))
         return None
     return (
         "the orchestrator has not been run for this release, so the release "
@@ -665,8 +761,15 @@ def _drive_runtime(ctx: RunContext, subcommand: str, step_uid: str,
     runtime = TOOLS_DIR / "9e7003b1.py"
     if not runtime.is_file() or not ctx.activation_uid:
         return "cannot reach the pipeline runtime to record %s" % subcommand
+    # The runtime stamps every event it writes with its global --actor, default
+    # "user". Until 2026-09-04 this walk never forwarded ctx.actor, so a run driven
+    # with --actor metis-g119 journaled f9365ede and 2e9b1db7 as actor=user — and
+    # the scorecard counts principal gestures BY ACTOR, so an agent's mechanical
+    # step read as a human gesture. Measured on the v1.94 run by metis-g119; the
+    # steps argus-a169 fired directly carried his actor because he ran the
+    # runtime himself. One fact (who acted), two writers, one forwarded.
     cmd = [sys.executable, str(runtime), "--activation-uid", ctx.activation_uid,
-           subcommand, step_uid] + list(extra or [])
+           "--actor", ctx.actor, subcommand, step_uid] + list(extra or [])
     result = subprocess.run(cmd, capture_output=True, text=True,
                             cwd=str(ctx.vault_root))
     if result.returncode != 0:

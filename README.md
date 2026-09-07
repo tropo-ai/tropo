@@ -10,29 +10,25 @@ You need a folder-aware AI tool — one that can read and write files on your co
 
 1. Download and unpack this vault
 
-2. **Build your local index — run this once, from the unpacked folder:**
+2. **Open your AI tool in the unpacked folder and say hello.** Po, the concierge, sets the Studio up
+   at her first greeting: she builds your local index and mints this Studio's own identity on your
+   machine, in about a minute. There is nothing to run by hand. *(Until v1.95 this step asked you to
+   run `tropo-rebuild-index.py` yourself; Po runs it now.)*
 
-   ```bash
-   python3 vault/tools/tropo-rebuild-index.py --apply --vault-path .
-   ```
+   Release packages leave out machine-local derived indexes and carry no Studio identity, so the
+   same zip works on macOS, Linux and Windows and two people who unzip it become two different
+   Studios. Po derives your index from the shipped files and mints your identity on your machine;
+   you may see her mention a large block of `[WARN] ... dead link` lines while she does — that is
+   expected on a fresh box and means nothing failed (`START-TROPO.md` explains why).
 
-   Release packages leave out machine-local derived indexes so the same zip works on macOS, Linux,
-   and Windows. This command derives yours from the shipped files. It is normal first-time setup,
-   not a repair — but it is not optional, and nothing else will do it for you.
-
-   It prints roughly 1,200 `[WARN] ... dead link` lines. That is expected on a fresh box and does
-   not mean anything failed; `START-TROPO.md` explains why.
-
-3. Open your AI tool and point it at this folder
-
-4. Say: **"read START-TROPO.md"**
+3. Say: **"read START-TROPO.md"**
 
 Your Studio concierge will greet you and walk you through setting up your first agent.
 
 If you ever want to check your Studio's structural health, run
 `python3 vault/tools/tropo-validate.py --customer`. **Pass `--customer`** — without it the
-validator also runs vendor-development checks that do not apply to your Studio and reports around
-30 failures on a perfectly healthy box.
+validator also runs vendor-development checks that do not apply to your Studio and reports
+failures on a perfectly healthy box, every one of them about files that were never shipped to you.
 
 ## What You'll Get
 
@@ -46,7 +42,7 @@ validator also runs vendor-development checks that do not apply to your Studio a
 
 **When Tropo updates itself, here is our guarantee:**
 
-1. **We only replace what we shipped.** Every Tropo studio carries a packing slip — the complete list of files we put in the box, each with a fingerprint. An update may only touch files on that list. Everything else is yours, and updates cannot reach it.
+1. **We only replace what we shipped.** Every Tropo studio carries a packing slip — the list of files we put in the box, each with a fingerprint; the slip cannot list itself or the image manifest that fingerprints it. An update may only touch files on that list. Everything else is yours, and updates cannot reach it.
 
 2. **We never change what you wrote.** Your words, your data, your decisions — byte for byte. The one thing your studio adds to files it governs is navigation (the small "you are here" panel that makes every file findable). That is your studio working for you, not an update changing your work — and the receipt discloses exactly where it happened.
 
@@ -86,4 +82,4 @@ Apache License 2.0 — see [LICENSE](LICENSE) for the full text. See [ADR 4a4a12
 
 ---
 
-*Tropo-OS v1.93.0 | The file is the agent. The folder is the workspace. The vault is the OS.*
+*Tropo-OS | The file is the agent. The folder is the workspace. The vault is the OS.*

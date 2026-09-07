@@ -57,6 +57,17 @@ STATE_DIR_PREFIXES: tuple[str, ...] = (
     # has no REGENERATED class today (confirmed in e843dedf) — when one exists,
     # these move to it. A prefix, not 198 entries: the nature is uniform.
     "00-tropo-nav/",
+    # a6d2accf Stream 1 step 1 (D6 delivery channel, Mike-locked 2026-08-29):
+    # vendor QA residue, real vector — the in-box self-test plants this
+    # directory under the studio root; a customer's apply must not treat the
+    # vendor's test scratch as state to preserve or as content to merge.
+    ".tmp-studio-identity-tests/",
+    # a6d2accf, prophylactic (labeled per the spec's census): no shipping
+    # vector for these exists at HEAD — they enter so a future build-side
+    # change that starts writing them cannot silently carry vendor run
+    # journals or rendered boards into a customer's apply surface.
+    "playbook-runs/",
+    "boards/suite-health/",
 )
 
 #: Path SEGMENTS that are machine-local build artifacts wherever they appear.
@@ -94,6 +105,19 @@ ARTIFACT_SEGMENTS: frozenset[str] = frozenset({"__pycache__", ".pytest_cache"})
 #: list of the same paths is the defect this cycle exists to remove, and the
 #: suite requires every excluded path to explain itself anyway.
 F7_STATE_REASONS: dict[str, str] = {
+    "test-report.md":
+        "a6d2accf Stream 1 step 1: vendor QA residue, REAL vector — the release "
+        "harness writes this into build_dir before the image-manifest freeze, "
+        "so it can ride the box; it is the vendor's test output, never "
+        "customer state, and apply must not treat it as content to merge "
+        "(Mike-locked 2026-08-29)",
+    "vault/updates/update-history.jsonl":
+        "the customer's record of what they have already applied; its sibling "
+        "updates-manifest.json is protected and this is the mutable half of "
+        "the same pair — letting image-apply carry ours over it destroys "
+        "their applied-update history on every apply and re-offers updates "
+        "they have already taken (original gap, found by argus-a163, "
+        "Mike-ruled fix-now 2026-08-29)",
     ".tropo-studio/CAPSULE.md":
         "per-studio governance: the customer's real owner, real write-access "
         "list and own uid — ours would overwrite who is allowed to write",
@@ -151,6 +175,59 @@ F7_STATE_REASONS: dict[str, str] = {
 }
 
 
+#: The customer's four root identity files, in two classes (4e9ce4cc step 1,
+#: the A1 cure). The dict is the membership list, same as F7_STATE_REASONS.
+#:
+#: PROVEN, not hypothesised: the A163 fleet built a v1.86 studio from the live
+#: box and ran the real apply — `grep -c "CUSTOM ORG DEFAULTS" STUDIO.md → 0`.
+#: The customer's edit to their own identity file was destroyed, against the
+#: shipped template's own promise ("Tropo never modifies this file through the
+#: update pipeline"). Box-as-update replaces all four; the exclusion is what
+#: makes that safe.
+#:
+#: TWO CLASSES, because the two halves are protected by different contracts:
+#:   - STUDIO.md and operating-agreement.md are excluded per their OWN
+#:     documented text (quoted in the reasons below) — the vendor promise and
+#:     the customer's authorship meet in the same file.
+#:   - CLAUDE.md and AGENTS.md are excluded as a DECLARED root-level freeze:
+#:     they carry vendor protocol a customer also customizes, so neither the
+#:     vendor's bytes nor the customer's can win a replace. The vendor-
+#:     evolution channel is the shipped templates under
+#:     vault/templates/root-docs/ (which keep updating in every box),
+#:     surfaced by the steward for owner-merge.
+#:
+#: THE FREEZE IS ROOT-EXACT. Every folder-tier `*/AGENTS.md` mirror (and any
+#: nested CLAUDE.md, e.g. tropo-app/CLAUDE.md) is genuine vendor OS content
+#: and KEEPS receiving updates. STATE_FILES matches whole normalised paths,
+#: which is what makes root-exactness hold; do not widen these to basenames.
+A163_IDENTITY_REASONS: dict[str, str] = {
+    "STUDIO.md":
+        "the customer's organization-level configuration, protected by the "
+        "shipped template's own promise: 'Tropo never modifies this file "
+        "through the update pipeline' — a real apply destroyed a customer "
+        "edit here (A163 fleet, v1.86 box, Mike-ruled cure 2026-08-30)",
+    "operating-agreement.md":
+        "the customer's team agreement; the shipped template's own line 63 "
+        "says 'The structure is the framework. The content is yours.' — the "
+        "content half makes it customer state, not OS (A163 fleet, "
+        "Mike-ruled cure 2026-08-30)",
+    "CLAUDE.md":
+        "root-level DECLARED FREEZE: carries vendor protocol a customer also "
+        "customizes, so replace can never be safe in either direction; the "
+        "vendor-evolution channel is vault/templates/root-docs/CLAUDE.md, "
+        "surfaced by the steward for owner-merge. Root-exact: nested "
+        "CLAUDE.md files are vendor OS and keep updating (A163 fleet, "
+        "Mike-ruled cure 2026-08-30)",
+    "AGENTS.md":
+        "root-level DECLARED FREEZE, same contract as CLAUDE.md: vendor "
+        "protocol, customer customization, no safe winner in a replace; "
+        "vendor evolution flows from vault/templates/root-docs/AGENTS.md. "
+        "ROOT-EXACT — every folder-tier */AGENTS.md mirror is vendor OS "
+        "content and KEEPS receiving updates (A163 fleet, Mike-ruled cure "
+        "2026-08-30)",
+}
+
+
 STATE_FILES: frozenset[str] = frozenset(
     {
         # Discovery manifest: a dev copy that names its own version current, so
@@ -174,7 +251,7 @@ STATE_FILES: frozenset[str] = frozenset(
         ".gemini/settings.json",
         ".cursorrules",
     }
-) | frozenset(F7_STATE_REASONS)
+) | frozenset(F7_STATE_REASONS) | frozenset(A163_IDENTITY_REASONS)
 
 
 def _normalise(relative_path: str) -> str:
@@ -212,6 +289,9 @@ def is_studio_state(relative_path: str) -> bool:
 def why_excluded(relative_path: str) -> str:
     """A reason a human can act on, for the manifest and for build output."""
     normalised = _normalise(relative_path)
+    identity = A163_IDENTITY_REASONS.get(normalised)
+    if identity:
+        return "customer identity (A163 fleet, run-proven on a real apply): %s" % identity
     f7 = F7_STATE_REASONS.get(normalised)
     if f7:
         return "customer state (F7, vela-v73 verified against shipped bytes): %s" % f7
@@ -259,3 +339,17 @@ def why_excluded(relative_path: str) -> str:
             "contain"
         )
     return "per-studio state"
+
+
+#: The two boot derivations a studio renders for ITSELF and a box therefore
+#: never carries (v1.74: "per-studio derivation only"). ONE home, read by the
+#: release build (which excludes them) AND by tropo-check-doc-currency (which
+#: must not call a shipped instruction's link to them dead): until 2026-09-06
+#: the build declared this tuple privately and the tool's own skip list never
+#: learned it, so v1.95 candidate #1 was refused on vault/playbooks/99341618.md:58
+#: while every rehearsal box, built without the exclusion, read green
+#: (talos-t63, G122 ruling for candidate #2).
+PER_STUDIO_BOOT_DERIVATIONS = (
+    ".tropo/boot-digest.md",
+    ".tropo/boot-fast-path.md",
+)

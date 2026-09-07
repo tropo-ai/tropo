@@ -74,6 +74,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable, Optional
 
+from lib.governed_path import is_governed_uid_shape
+
 #: The six bindings AC5 requires, in the order the spec names them.
 REQUIRED_ROW_FIELDS = (
     "dev_spec_uid",
@@ -107,7 +109,6 @@ RESERVATION_RELEASING_STATUSES = frozenset(
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
-UID_RE = re.compile(r"^[0-9a-f]{8}$")
 
 
 class FanInRefusal(Exception):
@@ -146,9 +147,13 @@ def validate_row(row: dict) -> FanInRow:
         )
 
     for field_name in ("dev_spec_uid", "activation_uid", "pipeline_run_uid"):
-        if not UID_RE.match(str(row[field_name])):
+        # accepts-both (UID_SHAPES): legacy 8-hex uids stay first-class
+        # forever; every new governed mint is 12-hex composite since the
+        # Stage B flip (2026-08-31). The literal 8-only regex this replaced
+        # refused a freshly-minted composite uid in any of these three fields.
+        if not is_governed_uid_shape(str(row[field_name])):
             raise FanInRefusal(
-                f"{field_name}={row[field_name]!r} is not an 8-hex UID"
+                f"{field_name}={row[field_name]!r} is not a governed UID"
             )
     if not COMMIT_RE.match(str(row["tested_final_commit"])):
         raise FanInRefusal(

@@ -29,6 +29,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Optional
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 MOUNT_PATH = ROOT / "vault" / "tools" / "tropo-mount.py"
@@ -60,13 +61,18 @@ def _init_fixture_vault_root(tmp: Path, name: str) -> Path:
     return root
 
 
-def _write_manifest(root: Path, uid: str, version: str = "1.0.0",
+def _write_manifest(root: Path, uid: Optional[str], version: str = "1.0.0",
                      registered_types=("task",), capsule_versions=None,
                      capabilities=(), kind: str = "knowledgebase",
-                     status: str = "active") -> None:
+                     status: str = "active",
+                     vault_uid: Optional[str] = "testv") -> None:
     capsule_versions = capsule_versions if capsule_versions is not None else {"core": "1.0"}
-    manifest = {
-        "uid": uid,
+    manifest = {}
+    if uid is not None:
+        manifest["uid"] = uid
+    if vault_uid is not None:
+        manifest["vault_uid"] = vault_uid
+    manifest.update({
         "type": "vault",
         "kind": kind,
         "owner": "mike",
@@ -84,7 +90,7 @@ def _write_manifest(root: Path, uid: str, version: str = "1.0.0",
             "capabilities": list(capabilities),
         },
         "regulated_acceptance": {"accepted": False},
-    }
+    })
     import yaml
     fm_text = yaml.safe_dump(manifest, sort_keys=False, default_flow_style=False)
     (root / ".tropo" / "vault-manifest.md").write_text(f"---\n{fm_text}---\n\n# Fixture vault\n", encoding="utf-8")
@@ -120,7 +126,7 @@ class TestMountGate409ef1cc(unittest.TestCase):
             mount_path=root, consent=False, force_remount=False,
             compose_lock_path=self.compose_lock, mounted_by="test",
         )
-        self.assertEqual(record["vault_uid"], "aaaa1111")
+        self.assertEqual(record["vault_uid"], "testv")
 
         # The gate-written compose.lock passes governed-write validation clean.
         findings, checked, violations = check_governed_write_gate(self.tmp, compose_lock_path=self.compose_lock)
@@ -131,7 +137,7 @@ class TestMountGate409ef1cc(unittest.TestCase):
         # contract WITHOUT going through tropo-mount.py (direct frontmatter-
         # mutation-equivalent for the lockfile — a hand-edit bypassing the gate).
         lock_data = json.loads(self.compose_lock.read_text())
-        lock_data["vaults"]["aaaa1111"]["contract"]["registered_types"].append("SNUCK_IN_OFF_GATE")
+        lock_data["vaults"]["testv"]["contract"]["registered_types"].append("SNUCK_IN_OFF_GATE")
         self.compose_lock.write_text(json.dumps(lock_data, indent=2))
 
         findings2, checked2, violations2 = check_governed_write_gate(self.tmp, compose_lock_path=self.compose_lock)
@@ -229,15 +235,15 @@ class TestMountGate409ef1cc(unittest.TestCase):
 
     def test_ac2_qualified_name_mounts_clean(self) -> None:
         root = _init_fixture_vault_root(self.tmp, "vroot_ac2_good")
-        _write_manifest(root, "dddd4444", capabilities=["dddd4444:mint-id"])
+        _write_manifest(root, "dddd4444", capabilities=["testv:mint-id"])
         _commit_all(root)
 
         record = tropo_mount.run_mount(
             mount_path=root, consent=True, force_remount=False,
             compose_lock_path=self.compose_lock, mounted_by="test",
         )
-        self.assertEqual(record["vault_uid"], "dddd4444")
-        self.assertIn("dddd4444:mint-id", record["contract"]["capabilities"])
+        self.assertEqual(record["vault_uid"], "testv")
+        self.assertIn("testv:mint-id", record["contract"]["capabilities"])
 
 
     # -----------------------------------------------------------------
@@ -303,7 +309,7 @@ class TestMountGate409ef1cc(unittest.TestCase):
         BEFORE the reserved-name comparison, so a qualified fullwidth name
         is never even compared against the reserved set."""
         root = _init_fixture_vault_root(self.tmp, "vroot_normvariant_qualified")
-        qualified_fullwidth = "abcd1234:Ｍｉｎｔ－ｉｄ"
+        qualified_fullwidth = "testv:Ｍｉｎｔ－ｉｄ"
         _write_manifest(root, "abcd1234", capabilities=[qualified_fullwidth])
         _commit_all(root)
 
@@ -320,7 +326,7 @@ class TestMountGate409ef1cc(unittest.TestCase):
     # -----------------------------------------------------------------
     def test_ac3_executable_mount_without_consent_refused(self) -> None:
         root = _init_fixture_vault_root(self.tmp, "vroot_ac3")
-        _write_manifest(root, "eeee5555", capabilities=["eeee5555:some-tool"])
+        _write_manifest(root, "eeee5555", capabilities=["testv:some-tool"])
         _commit_all(root)
 
         with self.assertRaises(tropo_mount.MountRefused) as ctx:
@@ -333,7 +339,7 @@ class TestMountGate409ef1cc(unittest.TestCase):
 
     def test_ac3_consent_admits_and_survives_fresh_read(self) -> None:
         root = _init_fixture_vault_root(self.tmp, "vroot_ac3b")
-        _write_manifest(root, "ffff6666", capabilities=["ffff6666:some-tool"])
+        _write_manifest(root, "ffff6666", capabilities=["testv:some-tool"])
         _commit_all(root)
 
         record = tropo_mount.run_mount(
@@ -349,7 +355,7 @@ class TestMountGate409ef1cc(unittest.TestCase):
         result = subprocess.run(
             ["python3", "-c",
              f"import json; d = json.load(open('{self.compose_lock}')); "
-             f"print(d['vaults']['ffff6666']['consent']['consented'])"],
+             f"print(d['vaults']['testv']['consent']['consented'])"],
             capture_output=True, text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -368,7 +374,7 @@ class TestMountGate409ef1cc(unittest.TestCase):
         """
         root = _init_fixture_vault_root(self.tmp, "vroot_ac3ac4_dirty")
         # Commit a manifest WITH an executable capability.
-        _write_manifest(root, "d17d17d1", capabilities=["d17d17d1:tool-x"])
+        _write_manifest(root, "d17d17d1", capabilities=["testv:tool-x"])
         _commit_all(root)
 
         # Now, WITHOUT committing, overwrite the working tree to show no
@@ -392,7 +398,7 @@ class TestMountGate409ef1cc(unittest.TestCase):
         root2 = _init_fixture_vault_root(self.tmp, "vroot_ac3ac4_dirty_add")
         _write_manifest(root2, "d17d17d2", capabilities=[])
         _commit_all(root2)
-        _write_manifest(root2, "d17d17d2", capabilities=["d17d17d2:tool-y"])
+        _write_manifest(root2, "d17d17d2", capabilities=["testv:tool-y"])
         with self.assertRaises(tropo_mount.MountRefused) as ctx2:
             tropo_mount.run_mount(
                 mount_path=root2, consent=True, force_remount=False,
@@ -418,8 +424,8 @@ class TestMountGate409ef1cc(unittest.TestCase):
                                       compose_lock_path=lock2, mounted_by="t")
         self.assertEqual(rec1["resolved_commit"], rec2["resolved_commit"])
         self.assertEqual(
-            json.loads(lock1.read_text())["vaults"]["11112222"]["resolved_commit"],
-            json.loads(lock2.read_text())["vaults"]["11112222"]["resolved_commit"],
+            json.loads(lock1.read_text())["vaults"]["testv"]["resolved_commit"],
+            json.loads(lock2.read_text())["vaults"]["testv"]["resolved_commit"],
         )
 
         # Unpinned: a mount-path with no .git at all is refused.
@@ -451,7 +457,7 @@ class TestMountGate409ef1cc(unittest.TestCase):
 
         # Exactly one record for this UID, never duplicated.
         lock_data = json.loads(self.compose_lock.read_text())
-        self.assertEqual(list(lock_data["vaults"].keys()), ["55556666"])
+        self.assertEqual(list(lock_data["vaults"].keys()), ["testv"])
 
     # -----------------------------------------------------------------
     # AC-6: manifest+contract validated at mount (invalid manifest
@@ -479,7 +485,85 @@ class TestMountGate409ef1cc(unittest.TestCase):
         _commit_all(root)
         record = tropo_mount.run_mount(mount_path=root, consent=False, force_remount=False,
                                         compose_lock_path=self.compose_lock, mounted_by="t")
-        self.assertEqual(record["vault_uid"], "99990000")
+        self.assertEqual(record["vault_uid"], "testv")
+
+    def test_manifest_separates_governed_uid_from_vault_code(self) -> None:
+        """The mount gate validates both identity domains independently.
+
+        Legacy and composite governed manifest UIDs remain mountable, while
+        compose.lock is keyed only by the distinct ADR-050 vault code.
+        """
+        for label, uid, vault_uid in (
+            ("legacy", "aaaabbbb", "leg8"),
+            ("composite", "f015aaaabbbb", "cmp12"),
+        ):
+            with self.subTest(label=label):
+                root = _init_fixture_vault_root(self.tmp, f"vroot_uid_{label}")
+                _write_manifest(root, uid, vault_uid=vault_uid)
+                _commit_all(root)
+                lock = self.tmp / f"compose_{label}.lock"
+                record = tropo_mount.run_mount(
+                    mount_path=root,
+                    consent=False,
+                    force_remount=False,
+                    compose_lock_path=lock,
+                    mounted_by="t",
+                )
+                self.assertEqual(record["vault_uid"], vault_uid)
+                self.assertIn(vault_uid, json.loads(lock.read_text())["vaults"])
+                self.assertNotIn(uid, json.loads(lock.read_text())["vaults"])
+
+        undeclared = _init_fixture_vault_root(self.tmp, "vroot_uid_undeclared")
+        _write_manifest(undeclared, "aaaabbbbbb")
+        _commit_all(undeclared)
+        with self.assertRaises(tropo_mount.MountRefused) as ctx:
+            tropo_mount.run_mount(
+                mount_path=undeclared,
+                consent=False,
+                force_remount=False,
+                compose_lock_path=self.tmp / "compose_undeclared.lock",
+                mounted_by="t",
+            )
+        self.assertIn("governed record UID", str(ctx.exception))
+
+        for label, uid, vault_uid, expected in (
+            ("missing_uid", None, "testv", "governed record UID"),
+            ("missing_vault_code", "aaaabbbb", None, "ADR-050 vault code"),
+            ("malformed_vault_code", "aaaabbbb", "toolong", "ADR-050 vault code"),
+        ):
+            with self.subTest(label=label):
+                root = _init_fixture_vault_root(self.tmp, f"vroot_{label}")
+                _write_manifest(root, uid, vault_uid=vault_uid)
+                _commit_all(root)
+                with self.assertRaises(tropo_mount.MountRefused) as missing_ctx:
+                    tropo_mount.run_mount(
+                        mount_path=root,
+                        consent=False,
+                        force_remount=False,
+                        compose_lock_path=self.tmp / f"compose_{label}.lock",
+                        mounted_by="t",
+                    )
+                self.assertIn(expected, str(missing_ctx.exception))
+
+    def test_governed_manifest_uid_routes_through_shape_authority(self) -> None:
+        """Mutation control: an 8-only authority must re-break 12-hex mount."""
+        root = _init_fixture_vault_root(self.tmp, "vroot_uid_authority_control")
+        _write_manifest(root, "f015aaaabbbb", vault_uid="cmp12")
+        _commit_all(root)
+
+        with mock.patch.object(
+            tropo_mount,
+            "is_governed_uid_shape",
+            side_effect=lambda uid: len(uid) == 8 and all(c in "0123456789abcdef" for c in uid),
+        ):
+            with self.assertRaises(tropo_mount.MountRefused):
+                tropo_mount.run_mount(
+                    mount_path=root,
+                    consent=False,
+                    force_remount=False,
+                    compose_lock_path=self.tmp / "compose_authority_control.lock",
+                    mounted_by="t",
+                )
 
     def test_ac6_contract_narrowing_without_version_bump_refused(self) -> None:
         root = _init_fixture_vault_root(self.tmp, "vroot_ac6_narrow")
@@ -500,7 +584,7 @@ class TestMountGate409ef1cc(unittest.TestCase):
 
         # compose.lock UNCHANGED — still has the original wider contract.
         lock_data = json.loads(self.compose_lock.read_text())
-        self.assertIn("decision", lock_data["vaults"]["aabbccdd"]["contract"]["registered_types"])
+        self.assertIn("decision", lock_data["vaults"]["testv"]["contract"]["registered_types"])
 
     def test_ac6_contract_narrowing_with_bump_no_consent_refused(self) -> None:
         root = _init_fixture_vault_root(self.tmp, "vroot_ac6_narrow_bump_noconsent")

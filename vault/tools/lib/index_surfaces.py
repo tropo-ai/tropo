@@ -19,6 +19,29 @@ import json
 import os
 import sqlite3
 import tempfile
+
+# 3d430852 step 3 routes the shape gates through the authority — but this
+# module is deliberately path-loaded by consumers that do NOT put vault/tools
+# on sys.path (tropo-validate.py's own loader comment documents exactly this
+# coupling class). So the import degrades to a file-relative load rather than
+# demanding a package context; either path yields the same authority.
+try:
+    from lib.governed_path import is_governed_uid_shape, parse_anchored_uid
+except ImportError:  # pragma: no cover - exercised by path-loading consumers
+    import importlib.util as _ilu
+
+    _gp_spec = _ilu.spec_from_file_location(
+        "governed_path_for_index_surfaces",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                     "governed_path.py"),
+    )
+    if _gp_spec is None or _gp_spec.loader is None:  # pragma: no cover
+        raise ImportError("governed_path authority could not be path-loaded")
+    _gp = _ilu.module_from_spec(_gp_spec)
+    _gp_spec.loader.exec_module(_gp)
+    is_governed_uid_shape = _gp.is_governed_uid_shape
+    parse_anchored_uid = _gp.parse_anchored_uid
+
 import threading
 import time
 import uuid
@@ -2355,8 +2378,7 @@ def _recover_pending_pair_transaction(vault_root: Path) -> None:
             kind == "source"
             and path.parent == vault_root / "vault" / "files"
             and path.suffix == ".md"
-            and len(path.stem) == 8
-            and all(char in "0123456789abcdef" for char in path.stem)
+            and is_governed_uid_shape(path.stem)
         ):
             pass
         else:
@@ -2558,12 +2580,19 @@ def write_jsonl_pair_atomic(
         source_inputs,
         source_list,
     ):
+        # Bare `<uid>.md` OR a readable `<slug>-<uid>.md` -- this check predates
+        # readable minting (612dcfea) and required a literal bare-uid stem, so
+        # every staged write for a titled mint's declared slug path refused
+        # here even after the staged-set guard in tropo-rebuild-index.py's
+        # _freshen_many_locked agrees on it. Same class as that fix, one layer
+        # deeper: parse_anchored_uid accepts both shapes the same way
+        # _governed_fp's own resolver does; is_governed_uid_shape alone never
+        # matched a slug-prefixed stem.
         if (
             lexical != path
             or path.parent != vault_root / "vault" / "files"
             or path.suffix != ".md"
-            or len(path.stem) != 8
-            or any(char not in "0123456789abcdef" for char in path.stem)
+            or parse_anchored_uid(path.name) is None
         ):
             raise IndexSurfaceRefusal(
                 f"REFUSAL: invalid governed source transaction path {path}"
@@ -2827,13 +2856,12 @@ def write_jsonl_pair_atomic(
                 )
                 or governed_floor_recovery.current_protected_record_count < 0
                 or governed_floor_recovery.archive_protected_record_count < 0
-                or len(recovery_uid) != 8
-                or any(char not in "0123456789abcdef" for char in recovery_uid)
+                or not is_governed_uid_shape(recovery_uid)
             ):
                 raise IndexSurfaceRefusal(
                     "REFUSAL: governed floor recovery requires a matching "
                     "source-complete reconcile proof, nonnegative current and "
-                    "archive floors, and an 8-hex authorization/evidence UID"
+                    "archive floors, and a governed flat-hex (8 or 12) authorization/evidence UID"
                 )
             supplied_floors = {
                 CURRENT_INDEX_NAME: (
@@ -2918,13 +2946,12 @@ def write_jsonl_pair_atomic(
             owned_route_uids.add(incremental_owned_route_uid)
         if owned_route_uids:
             if any(
-                len(uid) != 8
-                or any(char not in "0123456789abcdef" for char in uid)
+                not is_governed_uid_shape(uid)
                 for uid in owned_route_uids
             ):
                 raise IndexSurfaceRefusal(
                     "REFUSAL: incremental route ownership requires only "
-                    "8-hex target UIDs"
+                    "governed flat-hex (8 or 12) target UIDs"
                 )
 
             before_union = union_by_uid(existing_rows_by_path.values())
@@ -2943,13 +2970,12 @@ def write_jsonl_pair_atomic(
                 )
         owned_removal_uids = set(incremental_owned_removal_uids or ())
         if any(
-            len(uid) != 8
-            or any(char not in "0123456789abcdef" for char in uid)
+            not is_governed_uid_shape(uid)
             for uid in owned_removal_uids
         ):
             raise IndexSurfaceRefusal(
                 "REFUSAL: incremental removal ownership requires only "
-                "8-hex target UIDs"
+                "governed flat-hex (8 or 12) target UIDs"
             )
         lossless_owned_removal = False
         if owned_removal_uids:
@@ -3007,23 +3033,15 @@ def write_jsonl_pair_atomic(
             authorization = governed_shrink_authorization
             if (
                 authorization is None
-                or len(authorization.authorization_uid) != 8
-                or any(
-                    char not in "0123456789abcdef"
-                    for char in authorization.authorization_uid
-                )
-                or len(authorization.evidence_uid) != 8
-                or any(
-                    char not in "0123456789abcdef"
-                    for char in authorization.evidence_uid
-                )
+                or not is_governed_uid_shape(authorization.authorization_uid)
+                or not is_governed_uid_shape(authorization.evidence_uid)
             ):
                 raise IndexSurfaceRefusal(
                     "REFUSAL: lowering a protected index floor requires "
                     "--allow-index-shrink with "
                     "--shrink-authorization-uid <UID> and "
                     "--shrink-evidence-uid <UID> "
-                    "(8 lowercase hex each)"
+                    "(governed flat-hex, 8 or 12 lowercase, each)"
                 )
 
         metadata_recovery = None

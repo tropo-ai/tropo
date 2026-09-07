@@ -143,6 +143,7 @@ def _load_import_walker():
 IW = _load_import_walker()
 
 from lib import index_surfaces  # noqa: E402
+from lib import governed_path as gp  # noqa: E402
 
 
 # ==========================================================================
@@ -1089,8 +1090,12 @@ def main():
                 f.write(archived_content)
                 f.flush()
                 os.fsync(f.fileno())
-            # Extract the archived working-copy's UID for index correction
-            m = re.search(r'^uid:\s*([a-f0-9]{8})', existing_content, re.MULTILINE)
+            # Extract the archived working-copy's UID for index correction.
+            # accepts-both (UID_SHAPES): an unanchored 8-only capture would
+            # truncate a composite 12-hex uid and flip the wrong index row.
+            m = re.search(
+                r'^uid:\s*(%s)' % gp.UID_HEX_PATTERN, existing_content, re.MULTILINE
+            )
             if m:
                 existing_archived_uid = m.group(1)
                 _flip_index_row_state(studio_root, existing_archived_uid, 'archived')
@@ -1154,7 +1159,9 @@ def main():
         if isinstance(proj_member_of, list) and proj_member_of:
             member_of_uid = proj_member_of[0]
         elif isinstance(proj_member_of, str):
-            match = re.search(r'([a-f0-9]{8})', proj_member_of)
+            # accepts-both (UID_SHAPES): an 8-only search would grab a
+            # truncated substring of a composite 12-hex parent uid.
+            match = re.search(gp.UID_HEX_PATTERN, proj_member_of)
             if match:
                 member_of_uid = match.group(1)
 

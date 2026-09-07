@@ -130,6 +130,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from lib.governed_path import UID_HEX_PATTERN
 
 # v1.56 Lane S: script relocated to vault/tools/; sibling scripts resolved by UID
 _TOOLS = Path(__file__).resolve().parent
@@ -159,7 +160,10 @@ def find_stale_cascades(ledger_dir: Path, valid_uids: set[str]) -> list[Path]:
     """Find `00-cascade-<uid>.jsonl` files whose root UID is no longer in the index."""
     stale: list[Path] = []
     for f in ledger_dir.glob('00-cascade-*.jsonl'):
-        m = re.match(r'^00-cascade-([0-9a-f]{8})\.jsonl$', f.name)
+        # accepts-both (UID_SHAPES): was 8-hex-only, so a cascade file rooted at
+        # a 12-hex (Stage B composite) uid was never recognized as a cascade
+        # file at all and could never be flagged stale.
+        m = re.match(r'^00-cascade-(%s)\.jsonl$' % UID_HEX_PATTERN, f.name)
         if not m:
             continue
         cascade_uid = m.group(1)
@@ -247,6 +251,16 @@ def main() -> int:
                              'one authoritative post-rebuild validation.')
     parser.add_argument('--validator-run-id', metavar='ID',
                         help='32-hex build-attempt id required with --skip-validator.')
+    parser.add_argument(
+        '--no-genesis',
+        action='store_true',
+        help='Forwarded verbatim to tropo-rebuild-index.py on BOTH argv builds below '
+             '(the --only passthrough and the full pipeline). Suppresses both genesis '
+             'legs — no .tropo/studio-identity.md manifest, no starter vault-entity + '
+             'inbox pair. The release build runs this wrapper INSIDE the assembled box '
+             'to regenerate 00-tropo-nav/; the box must ship no identity and no starter '
+             'pair (Mike ruled 2026-09-05, f015e5ee0ede §RULED; v1.95 Spine A AC1).',
+    )
     args = parser.parse_args()
 
     # v1.62 default-flip (Vela V55 2026-05-29): APPLY is now the default; --dry-run for preview.
@@ -277,6 +291,8 @@ def main() -> int:
     # those would defeat the fast cockpit-reflect purpose). Argus A106 2026-06-09 (brief d7b3f1a9 §4).
     if args.only:
         only_cmd = [sys.executable, str(REBUILD_INDEX), '--vault-path', str(vault), '--only', args.only]
+        if args.no_genesis:
+            only_cmd.append('--no-genesis')
         return subprocess.run(only_cmd, stdin=subprocess.DEVNULL, timeout=60).returncode
 
     print('=' * 70)
@@ -354,6 +370,8 @@ def main() -> int:
                          '--skip-rehydrate']
     if args.apply:
         rebuild_index_cmd.append('--apply')
+    if args.no_genesis:
+        rebuild_index_cmd.append('--no-genesis')
     # S1 AC2 (0a0e94d1, metis-g111 2026-08-23): rebuild-index refuses, correctly, when the
     # source bytes move between its before/after snapshots of one collection pass
     # ("exact derivation bytes/modes changed during the collection pass"). In a live

@@ -12,19 +12,19 @@ owner: talos
 domain: "Gardener Pruning governed frontmatter writes"
 transport: cli
 implementation_kind: python-script
-cli_command: "python3 vault/tools/tropo-gardener-verdict.py {stamp|override} <uid> ..."
+cli_command: "python3 vault/tools/tropo-gardener-verdict.py {stamp|override|backfill-content-class} ..."
 script_path: vault/tools/tropo-gardener-verdict.py
 input:
   type: object
   required:
     - operation
-    - uid
   properties:
     operation:
       type: string
       enum:
         - stamp
         - override
+        - backfill-content-class
     uid:
       type: string
       pattern: "^[0-9a-f]{8}$"
@@ -79,6 +79,7 @@ input:
             const: stamp
       then:
         required:
+          - uid
           - verdict
           - evidence-span
           - start-byte
@@ -95,6 +96,7 @@ input:
             const: override
       then:
         required:
+          - uid
           - action
           - by
           - reason
@@ -117,6 +119,7 @@ output:
       type: string
       enum:
         - verified
+        - not-applied
 destructive: false
 audit_required: false
 writes_scope:
@@ -135,8 +138,8 @@ spawnable_by:
   - all-executives
 created: '2026-07-17'
 created_by: talos-t33
-modified: '2026-07-17'
-modified_by: talos-t33
+modified: '2026-08-31'
+modified_by: talos-t56
 schema_version: 2
 extraction_scope: ship
 governed_by: d5e1b4a3
@@ -147,8 +150,9 @@ member_of:
 ## Intent
 
 Write or repair the core v1.7 `pruning` frontmatter contract for one governed
-Markdown UID. Invoke it for an evidence-bound machine verdict or an interactive
-human `keep` override; do not use it as a judge, sweep engine, or validator.
+Markdown UID. W5 also makes this canonical frontmatter writer the
+`content_class` origin/backfill seam: every verdict write stamps a class, and
+`backfill-content-class` chooses honest `unclassified` where origin is unknown.
 
 ## Invocation Protocol
 
@@ -215,14 +219,14 @@ TOOLS_DIR = Path(__file__).resolve().parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from lib import index_surfaces, pruning_contract  # noqa: E402
+from lib import content_class as content_class_policy  # noqa: E402
+from lib import governed_path, index_surfaces, pruning_contract  # noqa: E402
 from lib.normalized_body_hash import (  # noqa: E402
     normalized_body_sha256,
     raw_body_sha256,
 )
 
 
-UID_RE = pruning_contract.UID_RE
 TOP_LEVEL_KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):")
 VERDICTS = pruning_contract.VERDICTS
 LOCK_TIMEOUT_SECONDS = 60.0
@@ -234,6 +238,15 @@ EXACT_RETRY_KEYS = (
     "judge_version",
     "confidence",
     "normalized_body_hash_judged",
+)
+
+CONTENT_CLASSES = content_class_policy.CONTENT_CLASSES
+_ORIGIN_FIELDS = (
+    "source_hash",
+    "source_path",
+    "mount_uid",
+    "origin_studio",
+    "source_studio_uid",
 )
 
 
@@ -312,6 +325,69 @@ def _resolve_judge_prompt_sha256(vault_root, judge_policy_uid: str):
 _read_snapshot = pruning_contract.read_markdown_snapshot
 
 
+def _studio_uid(vault_root: Path) -> Optional[str]:
+    try:
+        text = (Path(vault_root) / "STUDIO.md").read_text(errors="replace")
+        front = pruning_contract.parse_markdown_bytes(
+            text.encode("utf-8"), "STUDIO.md"
+        ).frontmatter
+    except (OSError, pruning_contract.PruningContractError):
+        return None
+    uid = front.get("uid")
+    return uid if isinstance(uid, str) and governed_path.is_governed_uid_shape(uid) else None
+
+
+def infer_content_class(
+    frontmatter: dict,
+    source_path: Path,
+    vault_root: Path,
+) -> str:
+    """Compatibility seam over the shared admission/backfill classifier."""
+
+    try:
+        return content_class_policy.infer_content_class(
+            frontmatter,
+            source_path,
+            vault_root,
+            local_studio_uid=_studio_uid(vault_root),
+        )
+    except ValueError as error:
+        raise GardenerVerdictError(str(error)) from error
+
+
+def _render_content_class_candidate(
+    snapshot: SourceSnapshot,
+    content_class: str,
+    modified_by: str,
+    now: datetime,
+) -> bytes:
+    lines = snapshot.frontmatter_text.split("\n")
+    lines = _replace_scalar(lines, "content_class", content_class)
+    lines = _replace_scalar(lines, "modified", f"'{now.date().isoformat()}'")
+    lines = _replace_scalar(lines, "modified_by", json.dumps(modified_by))
+    candidate = (
+        b"---\n"
+        + "\n".join(lines).encode("utf-8")
+        + b"\n---\n"
+        + snapshot.body
+    )
+    end = candidate.find(b"\n---\n", 4)
+    try:
+        reparsed_front = yaml.safe_load(candidate[4:end].decode("utf-8"))
+    except (UnicodeDecodeError, yaml.YAMLError) as exc:
+        raise GardenerVerdictError(
+            "content-class candidate frontmatter is unreadable"
+        ) from exc
+    reparsed_body = candidate[end + len(b"\n---\n") :]
+    if reparsed_body != snapshot.body:
+        raise GardenerVerdictError("content-class candidate changed body bytes")
+    if not isinstance(reparsed_front, dict) or reparsed_front.get(
+        "content_class"
+    ) != content_class:
+        raise GardenerVerdictError("content-class candidate did not stamp the class")
+    return candidate
+
+
 def _surface_rows(vault_root: Path, *, include_archive: bool) -> list[dict]:
     names = [index_surfaces.CURRENT_INDEX_NAME]
     if include_archive:
@@ -327,8 +403,8 @@ _is_declared_pruning_home = pruning_contract.is_declared_pruning_home
 
 
 def _resolve_target(uid: str, vault_root: Path) -> tuple[Path, dict]:
-    if not UID_RE.fullmatch(uid):
-        raise GardenerVerdictError(f"UID {uid!r} must be 8 lowercase hex")
+    if not governed_path.is_governed_uid_shape(uid):
+        raise GardenerVerdictError(f"UID {uid!r} is not a governed UID shape")
     matches = [
         row for row in _surface_rows(vault_root, include_archive=True)
         if row.get("uid") == uid
@@ -421,10 +497,17 @@ def _render_candidate(
     pruning: dict,
     modified_by: str,
     now: datetime,
+    source_path: Path,
+    vault_root: Path,
 ) -> bytes:
     lines = snapshot.frontmatter_text.split("\n")
     lines = _replace_scalar(lines, "modified", f"'{now.date().isoformat()}'")
     lines = _replace_scalar(lines, "modified_by", json.dumps(modified_by))
+    lines = _replace_scalar(
+        lines,
+        "content_class",
+        infer_content_class(snapshot.frontmatter, source_path, vault_root),
+    )
 
     pruning_indices = _top_level_indices(lines, "pruning")
     if len(pruning_indices) > 1:
@@ -554,6 +637,15 @@ def _verify_projection(uid: str, pruning: dict, vault_root: Path) -> None:
             f"incremental projection verification failed for {uid}: "
             "JSONL pruning block is missing or differs"
         )
+    source_path = pruning_contract.resolve_indexed_pruning_source(
+        uid, rows[0], vault_root
+    )
+    source_class = _read_snapshot(source_path).frontmatter.get("content_class")
+    if source_class not in CONTENT_CLASSES or rows[0].get("content_class") != source_class:
+        raise GardenerVerdictError(
+            f"incremental projection verification failed for {uid}: "
+            "content_class is missing or differs"
+        )
     sqlite_path = vault_root / "vault" / "00-index.sqlite"
     if not sqlite_path.is_file():
         raise GardenerVerdictError(
@@ -578,6 +670,11 @@ def _verify_projection(uid: str, pruning: dict, vault_root: Path) -> None:
         raise GardenerVerdictError(
             f"incremental projection verification failed for {uid}: "
             "SQLite pruning block differs"
+        )
+    if sqlite_record.get("content_class") != source_class:
+        raise GardenerVerdictError(
+            f"incremental projection verification failed for {uid}: "
+            "SQLite content_class differs"
         )
 
 
@@ -776,8 +873,18 @@ def stamp_verdict(
             t2,
         )
         candidate = None
-        if operation != "exact-retry":
-            candidate = _render_candidate(snapshot, effective, request.actor, timestamp)
+        if (
+            operation != "exact-retry"
+            or snapshot.frontmatter.get("content_class") not in CONTENT_CLASSES
+        ):
+            candidate = _render_candidate(
+                snapshot,
+                effective,
+                request.actor,
+                timestamp,
+                path,
+                vault_root,
+            )
         return _apply_under_lock(
             uid=request.uid,
             path=path,
@@ -862,7 +969,14 @@ def add_keep_override(
             "reason": reason,
         }
         _validate_pruning_block(updated)
-        candidate = _render_candidate(snapshot, updated, by, timestamp)
+        candidate = _render_candidate(
+            snapshot,
+            updated,
+            by,
+            timestamp,
+            path,
+            vault_root,
+        )
         return _apply_under_lock(
             uid=uid,
             path=path,
@@ -875,6 +989,147 @@ def add_keep_override(
             atomic_write=atomic_write,
             before_compare_and_swap=before_compare_and_swap,
         )
+
+
+def _verify_content_class_projection(
+    uid: str, content_class: str, vault_root: Path
+) -> None:
+    rows = [
+        row
+        for row in _surface_rows(vault_root, include_archive=True)
+        if row.get("uid") == uid
+    ]
+    if len(rows) != 1 or rows[0].get("content_class") != content_class:
+        raise GardenerVerdictError(
+            f"content_class projection verification failed for {uid}"
+        )
+    sqlite_path = vault_root / "vault" / "00-index.sqlite"
+    if not sqlite_path.is_file():
+        raise GardenerVerdictError(
+            f"content_class projection verification failed: {sqlite_path} is absent"
+        )
+    with sqlite3.connect(sqlite_path) as connection:
+        row = connection.execute(
+            "SELECT fm_json FROM entries WHERE uid=?", (uid,)
+        ).fetchone()
+    try:
+        projected = json.loads(row[0]) if row else {}
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise GardenerVerdictError(
+            f"content_class projection verification failed for {uid}: invalid fm_json"
+        ) from exc
+    if projected.get("content_class") != content_class:
+        raise GardenerVerdictError(
+            f"content_class SQLite projection differs for {uid}"
+        )
+
+
+def _read_backfill_snapshot(path: Path) -> SourceSnapshot:
+    """Parse legacy corpus frontmatter without normalizing unrelated defects.
+
+    The verdict writer remains duplicate-key strict. The corpus backfill has a
+    narrower job: add one top-level scalar while preserving every existing byte
+    outside that scalar. Historical duplicate keys in unrelated fields are
+    therefore reported by their own validator rather than blocking W5's field.
+    """
+
+    raw = path.read_bytes()
+    if not raw.startswith(b"---\n"):
+        raise GardenerVerdictError(f"{path.name}: frontmatter start is missing")
+    end = raw.find(b"\n---\n", 4)
+    if end < 0:
+        raise GardenerVerdictError(f"{path.name}: frontmatter end is missing")
+    try:
+        frontmatter_text = raw[4:end].decode("utf-8")
+        frontmatter = yaml.safe_load(frontmatter_text)
+    except (UnicodeDecodeError, yaml.YAMLError) as exc:
+        raise GardenerVerdictError(f"{path.name}: frontmatter is unreadable") from exc
+    if not isinstance(frontmatter, dict):
+        raise GardenerVerdictError(f"{path.name}: frontmatter is not a mapping")
+    return SourceSnapshot(
+        raw=raw,
+        frontmatter_text=frontmatter_text,
+        frontmatter=frontmatter,
+        body=raw[end + len(b"\n---\n") :],
+    )
+
+
+def backfill_content_classes(
+    *,
+    vault_root: Path = VAULT_ROOT,
+    apply: bool = False,
+    actor: str = "gardener-content-class-backfill",
+    freshen: FreshenCallback = _freshen,
+    atomic_write: AtomicWriteCallback = _atomic_write_bytes,
+    now: NowCallback = _utc_now,
+) -> dict:
+    """Classify every vault entry, choosing ``unclassified`` over a guess."""
+
+    root = Path(vault_root)
+    files = root / "vault" / "files"
+    counts: dict[str, int] = {value: 0 for value in sorted(CONTENT_CLASSES)}
+    changed: list[str] = []
+    errors: list[str] = []
+    if not files.is_dir():
+        raise GardenerVerdictError(f"vault files directory is missing: {files}")
+    for path in sorted(files.glob("*.md")):
+        try:
+            snapshot = _read_backfill_snapshot(path)
+            anchored = governed_path.parse_anchored_uid(path.name)
+            declared_uid = snapshot.frontmatter.get("uid")
+            uid = (
+                declared_uid
+                if isinstance(declared_uid, str)
+                and governed_path.is_governed_uid_shape(declared_uid)
+                else anchored[1] if anchored is not None else ""
+            )
+            if not governed_path.is_governed_uid_shape(uid):
+                raise GardenerVerdictError(
+                    f"{path.name}: missing or malformed governed UID"
+                )
+            if isinstance(declared_uid, str) and declared_uid != uid:
+                raise GardenerVerdictError(
+                    f"{path.name}: frontmatter UID {declared_uid!r} differs from filename"
+                )
+            content_class = infer_content_class(
+                snapshot.frontmatter, path, root
+            )
+            counts[content_class] += 1
+            if snapshot.frontmatter.get("content_class") == content_class:
+                continue
+            changed.append(uid)
+            if not apply:
+                continue
+            with _uid_lock(root, uid):
+                locked = _read_backfill_snapshot(path)
+                if locked.raw != snapshot.raw:
+                    raise GardenerVerdictError(
+                        f"{uid}: source changed during content-class backfill"
+                    )
+                candidate = _render_content_class_candidate(
+                    locked, content_class, actor, now()
+                )
+                atomic_write(path, candidate)
+                return_code = freshen(uid, root)
+                if return_code != 0:
+                    raise GardenerVerdictError(
+                        f"{uid}: index freshen failed with exit {return_code}"
+                    )
+                _verify_content_class_projection(uid, content_class, root)
+        except (OSError, GardenerVerdictError) as exc:
+            errors.append(str(exc))
+    return {
+        "uid": "corpus",
+        "operation": "backfill-content-class",
+        "source_changed": bool(apply and changed),
+        "projection": "verified" if apply and not errors else "not-applied",
+        "scanned": sum(counts.values()),
+        "changed": len(changed),
+        "applied": apply,
+        "counts": counts,
+        "errors": errors,
+        "complete": not errors,
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -904,12 +1159,36 @@ def build_parser() -> argparse.ArgumentParser:
     override.add_argument("--action", required=True, choices=("keep",))
     override.add_argument("--by", required=True, help="human principal UID")
     override.add_argument("--reason", required=True)
+
+    backfill = subparsers.add_parser(
+        "backfill-content-class",
+        help="classify the corpus; dry-run unless --apply is supplied",
+    )
+    backfill.add_argument("--apply", action="store_true")
+    backfill.add_argument("--actor", default="gardener-content-class-backfill")
+    backfill.add_argument("--json", action="store_true")
     return parser
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.operation == "backfill-content-class":
+            report = backfill_content_classes(
+                apply=args.apply,
+                actor=args.actor,
+            )
+            if args.json:
+                print(json.dumps(report, sort_keys=True))
+            else:
+                print(
+                    f"[DONE] content_class scanned={report['scanned']} "
+                    f"changed={report['changed']} applied={str(report['applied']).lower()} "
+                    f"counts={json.dumps(report['counts'], sort_keys=True)}"
+                )
+                for error in report["errors"]:
+                    print(f"[WARN] {error}", file=sys.stderr)
+            return 0 if report["complete"] else 1
         if args.operation == "stamp":
             result = stamp_verdict(
                 StampRequest(

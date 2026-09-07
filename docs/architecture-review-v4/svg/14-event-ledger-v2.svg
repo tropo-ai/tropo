@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 890" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .panel-title { font-size: 15px; font-weight: bold; fill: #1a2332; }
+      .node { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .node-sub { font-size: 11px; fill: #5a6a7a; }
+      .node-sub-explicit { font-size: 11px; }
+      .node-sub-light { font-size: 11px; fill: #cfe0ee; }
+      .label { font-size: 12px; fill: #44525f; }
+      .small { font-size: 10.5px; fill: #5a6a7a; }
+      .mono { font-family: Menlo, Consolas, monospace; font-size: 11px; fill: #2c4a6e; }
+      .mono-lt { font-family: Menlo, Consolas, monospace; font-size: 11px; fill: #cfe0ee; }
+      .guard { font-size: 11.5px; font-weight: bold; fill: #9c2b2b; }
+      .state { font-size: 14px; font-weight: bold; fill: #ffffff; }
+      .state-sub { font-size: 11px; fill: #ffffff; }
+      .tag { font-size: 11px; font-weight: bold; fill: #ffffff; }
+      .edge { stroke: #8aa0b5; stroke-width: 1.8; fill: none; }
+      .caption { font-size: 12px; fill: #5a6a7a; font-style: italic; }
+    </style>
+    <marker id="arr14" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8aa0b5"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="890" fill="#fafbfc"/>
+  <text x="40" y="48" class="title">The Event Ledger v2 — Frozen Epoch + Live Streams, One Union</text>
+  <text x="40" y="72" class="subtitle">§6, superseded 2026-07-18, verified byte-level 2026-08-26: the "one canonical log" became a distributed ledger — a sha-pinned frozen epoch beside per-writer streams, joined at read time.</text>
+
+  <!-- Writers -->
+  <rect x="40" y="100" width="340" height="110" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="60" y="128" class="panel-title">Writers</text>
+  <text x="60" y="150" class="node-sub">agents + humans — messages, replies, acks, broadcasts</text>
+  <text x="60" y="166" class="node-sub">substrate-write tools (auto-emit) · lifecycle events</text>
+  <text x="60" y="182" class="node-sub">every actor holds a registered party UID</text>
+
+  <path class="edge" d="M 380 155 L 418 155" marker-end="url(#arr14)"/>
+
+  <!-- Emit router -->
+  <rect x="420" y="100" width="380" height="110" rx="10" fill="#fbeeee" stroke="#cf9d9d"/>
+  <text x="440" y="128" class="panel-title">emit-event — routes on the cutover flag</text>
+  <text x="440" y="150" class="mono">.tropo/event-streams-v2.enabled</text>
+  <text x="440" y="170" class="node-sub">flag present → the event appends to its writer's own stream;</text>
+  <text x="440" y="186" class="node-sub">identity guards + schema-validated envelopes unchanged</text>
+
+  <!-- route: emit -> streams -->
+  <path class="edge" d="M 770 210 L 770 236 L 950 236 L 950 258" marker-end="url(#arr14)"/>
+  <text x="790" y="230" class="small">all new events</text>
+
+  <!-- route: emit -> legacy, closed -->
+  <path d="M 460 210 L 460 236 L 330 236 L 330 250" stroke="#8aa0b5" stroke-width="1.8" stroke-dasharray="4 3" fill="none"/>
+  <line x1="308" y1="252" x2="352" y2="252" stroke="#9c2b2b" stroke-width="2.5"/>
+  <text x="140" y="230" class="guard">no write path — the epoch is closed</text>
+
+  <!-- Legacy epoch -->
+  <rect x="40" y="260" width="580" height="150" rx="10" fill="#2c4a6e"/>
+  <rect x="446" y="272" width="158" height="20" rx="10" fill="#5a6a7a"/>
+  <text x="525" y="286" class="tag" text-anchor="middle">BYTE-FROZEN 2026-07-18</text>
+  <text x="64" y="290" class="panel-title" fill="#ffffff">The legacy epoch</text>
+  <text x="64" y="314" class="mono-lt">vault/events/00-events.jsonl</text>
+  <text x="64" y="336" class="node-sub-light">frozen at the event-streams-v2 cutover (dev-spec f15a9b85): its sha256 still</text>
+  <text x="64" y="352" class="node-sub-light">matches the pinned epoch hash exactly, at exactly the pinned 6,678 rows —</text>
+  <text x="64" y="368" class="node-sub-light">nothing newer than the cutover</text>
+  <text x="64" y="392" class="node-sub-light">pin holder: the cutover flag · verified byte-level 2026-08-26</text>
+
+  <!-- Streams -->
+  <rect x="660" y="260" width="580" height="150" rx="10" fill="#3a6b8a"/>
+  <rect x="1074" y="272" width="150" height="20" rx="10" fill="#4a8a6b"/>
+  <text x="1149" y="286" class="tag" text-anchor="middle">LIVE · ACTIVELY WRITTEN</text>
+  <text x="684" y="290" class="panel-title" fill="#ffffff">Per-writer conversation streams</text>
+  <text x="684" y="314" class="mono-lt">vault/events/streams/</text>
+  <text x="684" y="336" class="node-sub-explicit" fill="#d6e6ef">272 stream files · 5,237 events, actively written at the 2026-08-26</text>
+  <text x="684" y="352" class="node-sub-explicit" fill="#d6e6ef">re-verification · one stream per writer</text>
+  <text x="684" y="376" class="node-sub-explicit" fill="#d6e6ef">every event carries an immutable per-stream event UID —</text>
+  <text x="684" y="392" class="node-sub-explicit" fill="#d6e6ef">the key the receipt ledgers use</text>
+
+  <!-- into the union -->
+  <path class="edge" d="M 330 410 L 330 458" marker-end="url(#arr14)"/>
+  <path class="edge" d="M 950 410 L 950 458" marker-end="url(#arr14)"/>
+
+  <!-- Union -->
+  <rect x="40" y="460" width="1200" height="86" rx="10" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="60" y="488" class="panel-title">Readers operate on the union — one logical ledger</text>
+  <text x="60" y="510" class="label">read tools join the legacy epoch and the live streams: 11,915 raw events across both stores at the 2026-08-26 measure (6,678 + 5,237);</text>
+  <text x="60" y="528" class="label">correlation chains and reply obligations span the cutover unchanged — consumers see one ordered record</text>
+
+  <path class="edge" d="M 330 546 L 330 574" marker-end="url(#arr14)"/>
+  <path class="edge" d="M 950 546 L 950 574" marker-end="url(#arr14)"/>
+
+  <!-- Receipts -->
+  <rect x="40" y="576" width="590" height="190" rx="10" fill="#f8f3ea" stroke="#d3c2a3"/>
+  <text x="60" y="604" class="panel-title">Per-reader receipt ledgers — the delivery contract</text>
+  <text x="60" y="626" class="mono">vault/events/receipts/&lt;party&gt;.jsonl</text>
+
+  <rect x="60" y="640" width="165" height="70" rx="6" fill="#2c4a6e"/>
+  <text x="74" y="662" class="state">1 · DELIVERED</text>
+  <text x="74" y="680" class="state-sub">the event exists in</text>
+  <text x="74" y="694" class="state-sub">epoch or stream</text>
+
+  <path class="edge" d="M 225 675 L 243 675" marker-end="url(#arr14)"/>
+
+  <rect x="245" y="640" width="180" height="70" rx="6" fill="#3a6b8a"/>
+  <text x="259" y="662" class="state">2 · READ</text>
+  <text x="259" y="680" class="state-sub">receipt written by the drain</text>
+  <text x="259" y="694" class="state-sub">tool, keyed on stream UIDs</text>
+
+  <path class="edge" d="M 425 675 L 443 675" marker-end="url(#arr14)"/>
+
+  <rect x="445" y="640" width="165" height="70" rx="6" fill="#4a8a6b"/>
+  <text x="459" y="662" class="state">3 · ANSWERED</text>
+  <text x="459" y="680" class="state-sub">a correlated reply exists —</text>
+  <text x="459" y="694" class="state-sub">computed, never claimed</text>
+
+  <text x="60" y="738" class="small">receipt ledgers carried same-hour read stamps at the 2026-08-26 re-verification —</text>
+  <text x="60" y="752" class="small">a message addressed to an agent cannot be missed, by construction</text>
+
+  <!-- SQLite projection -->
+  <rect x="670" y="576" width="570" height="190" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="690" y="604" class="panel-title">Derived SQLite event index — a projection, not a source</text>
+  <text x="690" y="632" class="label">• rebuilt from the raw JSONL at any time; serves query and diagnosis only</text>
+  <text x="690" y="656" class="label">• never authoritative and never a write target — the files are the truth,</text>
+  <text x="690" y="674" class="label">  index corruption is an inconvenience, not an incident</text>
+  <text x="690" y="700" class="label">• same doctrine as the vault index: one source of truth, many views</text>
+  <text x="690" y="738" class="label" font-weight="bold">Views are projections; the union of the two JSONL stores is the record.</text>
+
+  <!-- Survived strip -->
+  <rect x="40" y="784" width="1200" height="64" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <rect x="40" y="784" width="6" height="64" fill="#4a8a6b"/>
+  <text x="64" y="808" font-size="13" font-weight="bold" fill="#1a2332">Every other §6 property survived the cutover unchanged — re-verified live 2026-08-26</text>
+  <text x="64" y="830" class="node-sub-explicit" fill="#44525f">CloudEvents v1.0 envelopes · tool-mediated appends only · correlation IDs for reply chains · the three-state delivery contract · two-axis identity guards (party vs agent-root, wrong-axis traffic rejected) · tool telemetry in the same record</text>
+
+  <text x="40" y="874" class="caption">One logical ledger, two physical stores: a sha-pinned frozen epoch beside 272 live per-writer streams, joined at read time — delivery still proven by receipts and correlations, never claimed.</text>
+</svg>

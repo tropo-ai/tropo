@@ -87,15 +87,37 @@ FEATURE_NAMES = dr.FEATURE_NAMES
 
 
 # --------------------------------------------------------------------------- #
-# Principals + segment UIDs (all 8-hex; segment UIDs double as manifest UIDs).  #
+# TWO COLLISION DOMAINS, and one team needs an identifier in EACH.              #
+# ADR-050, ruled by argus-a168 2026-09-03 (f0151314da71).                        #
+#                                                                               #
+#   governed-record UID : 8-hex (or composite 12-hex). Principals, groups,      #
+#                         graph keys. Enforced by lib/group_contract.           #
+#   ADR-050 vault code  : ^[a-z0-9]{4,6}$. SEGMENT IDENTITY, and the            #
+#                         compose.lock key. Declared once in                    #
+#                         lib/audience_context.VAULT_UID_RE, imported by        #
+#                         lib/segment.py:53.                                    #
+#                                                                               #
+# This block used to hold ONE 8-hex value per team and spend it as both, and    #
+# the header said so as if it were a convenience: "segment UIDs double as       #
+# manifest UIDs." That doubling is the defect. read_vault_manifest_uid rejected  #
+# the 8-hex value, returned None, the root stopped being a vault-node, every    #
+# node fell through to the FALLBACK segment, and segment-local authority then   #
+# counted voters from every segment at once -- 5 where this fixture means 1,    #
+# and cross-segment dead edges silently scoring as live same-segment ones.      #
+#                                                                               #
+# Note what a plain rename would have done here: TEAM is ALSO the group uid at  #
+# base_resolver(), where group_contract requires a governed UID. Renaming the   #
+# single constant to a vault code took this suite from 2 failures to 25. The    #
+# conflation is the work; the rename is not.                                    #
 # --------------------------------------------------------------------------- #
-ALICE = "a1a1a1a1"
-BOB = "b2b2b2b2"
+ALICE = "a1a1a1a1"       # principal — governed-record UID
+BOB = "b2b2b2b2"         # principal — governed-record UID
 
-TEAM = "7ea70001"        # the shared team/vault segment (alice + bob)
-OTHER = "7ea70002"       # a DIFFERENT team segment (cross-segment dead edges)
-PRIV_ALICE = "b1a70001"  # alice's own private segment
-PRIV_BOB = "b1a70002"    # bob's own private segment
+TEAM_GROUP = "7ea70001"  # the team's GOVERNED GROUP record (group_contract UID)
+TEAM = "team1"           # the same team's VAULT CODE — its segment identity
+OTHER = "team2"          # a DIFFERENT team's segment (cross-segment dead edges)
+PRIV_ALICE = "palice"    # alice's own private segment
+PRIV_BOB = "pbob"        # bob's own private segment
 OS = vp.OS_SEGMENT       # "os" — the reserved always-readable top constant
 
 REVISION = "sha256:" + ("a" * 64)
@@ -133,7 +155,9 @@ def base_resolver() -> GroupResolver:
     """TEAM with alice + bob as DIRECT members (peers of each other)."""
 
     corpus = build_group_corpus(
-        {TEAM: _group(TEAM, "team", members=[ALICE, BOB])},
+        # The GROUP uid here, not the vault code: this is the governed group
+        # record, and group_contract refuses anything that is not a governed UID.
+        {TEAM_GROUP: _group(TEAM_GROUP, "team", members=[ALICE, BOB])},
         {ALICE: _principal(ALICE), BOB: _principal(BOB)},
     )
     projection = project_registry(
@@ -142,7 +166,7 @@ def base_resolver() -> GroupResolver:
             source_authority_uid="a1b2c3d4",
             source_revision=REVISION,
             principal_directory_revision="1",
-            source_paths={TEAM: f"vault/groups/{TEAM}.md"},
+            source_paths={TEAM_GROUP: f"vault/groups/{TEAM_GROUP}.md"},
         ),
     )
     return GroupResolver.from_projection(projection)
@@ -168,7 +192,9 @@ class _RootFactory:
             root = self.base / segment_uid
             (root / ".tropo").mkdir(parents=True, exist_ok=True)
             (root / ".tropo" / "vault-manifest.md").write_text(
-                f"---\nuid: {segment_uid}\n---\n", encoding="utf-8"
+                # vault_uid:, not uid: — lib/segment.py reads only vault_uid:
+                # since 52d7a9b71 (ADR-050). (suite-health 2026-09-03)
+                f"---\nvault_uid: {segment_uid}\n---\n", encoding="utf-8"
             )
             self._roots[segment_uid] = root
         return root

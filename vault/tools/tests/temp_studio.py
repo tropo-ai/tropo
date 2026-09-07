@@ -53,6 +53,21 @@ TOOL_SCRIPTS = (
     "9e7003b1.py",                # pipeline runtime
 )
 
+#: NOT in TOOL_SCRIPTS, deliberately. tropo-lock-release-plan._load_preflight
+#: loads this from its own studio root to run the lock-static governance
+#: preconditions; absent, the load raises and the lock takes its warn-safe
+#: branch with ZERO gates evaluated. talos-t61 added it to TOOL_SCRIPTS on
+#: 2026-09-03 so a precondition test could assert something real, and it broke
+#: test_release_plan_lock_end_to_end in five places -- that suite's fixture
+#: plans were authored while these gates silently evaluated nothing, so turning
+#: them on surfaced plans that had never actually been lockable (no
+#: acceptance_criteria on the members; plan status 'specify'). Whether those
+#: fixtures should satisfy the real preconditions is a live question filed for
+#: the events-subsystem owner, NOT something to settle by flipping a shared
+#: fixture default. A test that wants the gates live copies it explicitly:
+#:     shutil.copy2(temp_studio.REAL_TOOLS / PREFLIGHT_TOOL, studio.tools / PREFLIGHT_TOOL)
+PREFLIGHT_TOOL = "tropo-release-preflight.py"
+
 #: Every surface a gesture can write to. Enumerating SURFACES rather than
 #: artifacts is deliberate: a new artifact lands in one of these and is caught,
 #: where a new artifact never appears in a hand-kept list.

@@ -14,7 +14,7 @@ agent_class: executive # executive | task
 status: active # active | pending | retiring | retired
 governor: "operating-agreement" # Who governs: OA, human name, or parent agent
 purpose: "One-line role description"
-uid: "a1b2c3d4" # 8-char random hex — unique file identity
+uid: "f015a1b2c3d4" # the uid as minted by vault/tools/tropo-mint-id.py (12-hex composite; 8-hex only on legacy records) — unique file identity
 owner: "founder's name" # The human owner — written into every charter
 
 scope:

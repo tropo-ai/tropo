@@ -105,6 +105,22 @@ class LifecycleEndToEnd(unittest.TestCase):
         self.addCleanup(self._temp.cleanup)
 
         (self.root / ".tropo").mkdir()
+        # A scratch studio needs a genesis manifest since the Stage-B flip:
+        # tropo-mint-id.py requires .tropo/studio-identity.md on every
+        # file/agent mint (StudioIdentityError otherwise). Same shape as
+        # test_index_lifecycle._seed_genesis_artifacts. (suite-health 2026-09-03)
+        (self.root / ".tropo" / "studio-identity.md").write_text(
+            "---\n"
+            "studio_id: aaaa0000\n"
+            "mint_prefix: aaaa\n"
+            "created: '2026-07-26'\n"
+            "minted_by: fixture\n"
+            "hq_registered: false\n"
+            "schema_version: 1\n"
+            "entity_name: fixture-studio\n"
+            "---\n",
+            encoding="utf-8",
+        )
         (self.root / "vault" / "files").mkdir(parents=True)
         (self.root / "agents" / self.AGENT).mkdir(parents=True)
         # The mint only accepts this exact scratch root. Getting it wrong made
