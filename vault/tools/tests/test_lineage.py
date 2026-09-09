@@ -233,6 +233,40 @@ class BirthClearsThePredecessorsRetiredAt(Lineage):
             f"---\nagent_uid: {uid}\n---\n", encoding="utf-8")
         return entry
 
+    def test_first_live_birth_claims_only_the_unlived_genesis_placeholder(self):
+        entry = self._entry_with_pointer()
+        self.assertEqual(self.born(by="studio-genesis")["generation"], "G1")
+        seed = self.file().read_bytes()
+        first = self.born(by="mike")
+        self.assertEqual(first["generation"], "G1")
+        self.assertIn("claimed unlived genesis placeholder", " ".join(first["notes"]))
+        fm = entry.read_text().split("---")[1]
+        self.assertNotIn("predecessor:", fm)
+        self.assertTrue(self.file().read_bytes().startswith(seed))
+        third = self.born(by="mike")
+        self.assertEqual(third["generation"], "G2")
+        self.assertIn("predecessor: G1", entry.read_text().split("---")[1])
+        self.assertEqual([json.loads(line)["gen"] for line in self.file().read_text().splitlines()],
+                         ["G1", "G1", "G2"])
+
+    def test_malformed_genesis_placeholder_keeps_normal_numbering_fallback(self):
+        self.file().parent.mkdir(parents=True)
+        # A malformed label keeps the existing next_generation fallback;
+        # it must never be claimed as the literal generation "unknown".
+        self.file().write_text(json.dumps({"t": "born", "by": "studio-genesis", "gen": "unknown"}) + "\n")
+        self.assertEqual(self.born()["generation"], "G1")
+
+    def test_retired_genesis_is_not_claimable(self):
+        self.born(by="studio-genesis")
+        code, _, err = self.run_tool("retire", "--agent", "metis")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.born()["generation"], "G2")
+
+    def test_a_second_genesis_call_is_not_a_human_claim(self):
+        self.born(by="studio-genesis")
+        self.assertEqual(self.born(by="studio-genesis")["generation"], "G2")
+        self.assertEqual(self.born()["generation"], "G3")
+
     def test_born_clears_retired_at_and_stamps_born_at(self):
         entry = self._entry_with_pointer()
         out = self.born()

@@ -55,9 +55,11 @@ Key locations in this vault:
 
 ### Required Frontmatter
 - All files with YAML frontmatter must include: `uid`, `status`, `owner`, `created`
-- UIDs are 8-character lowercase hex, minted through the governed tool:
-  `python3 vault/tools/tropo-mint-id.py --kind file`. The tool records every mint, so two
-  files can never be given the same identifier; a raw random generator cannot promise that.
+- UIDs are the composite the governed tool prints, 12 lowercase hex characters carrying this
+  Studio's own prefix (records that predate the composite flip keep the legacy 8-hex shape;
+  both resolve): `python3 vault/tools/tropo-mint-id.py --kind file`. The tool records every
+  mint, so two files can never be given the same identifier; a raw random generator cannot
+  promise that.
 
 ### Default Lifecycle
 - `permanent` -- files persist until explicitly archived. No automatic expiration.

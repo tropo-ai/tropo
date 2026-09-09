@@ -309,7 +309,7 @@ def cmd_status(args) -> int:
         print("next checkpoint : none — every checkpoint is verified")
 
     verdict = completion.verify_completion(
-        _completion_observers(run_dir),
+        _completion_observers(run_dir, Path(args.vault)),
         saga_id=identity["saga_id"],
         pipeline_run_uid=identity["pipeline_run_uid"],
     )
@@ -320,16 +320,41 @@ def cmd_status(args) -> int:
     return EXIT_OK if verdict.complete else EXIT_REFUSED
 
 
-def _completion_observers(run_dir: Path):
-    """Reuse the live verifier's production observers rather than re-deriving."""
+def _load_verify_live_module():
+    """Dynamically load tropo-verify-release-live.py for its production
+    functions. A hyphenated filename cannot be `import`ed, so every caller in
+    this facade that needs `_release_version_for` / `load_bus_rows` /
+    `build_observers` goes through here — one loader, so a second copy of the
+    same importlib boilerplate never drifts from the first."""
     import importlib.util
 
+    name = "tropo_verify_release_live_for_facade"
+    cached = sys.modules.get(name)
+    if cached is not None:
+        return cached
     spec = importlib.util.spec_from_file_location(
-        "tropo_verify_release_live_for_facade", TOOLS / "tropo-verify-release-live.py"
+        name, TOOLS / "tropo-verify-release-live.py"
     )
     module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
+    sys.modules[name] = module
     spec.loader.exec_module(module)
+    return module
+
+
+def _completion_observers(run_dir: Path, studio_root: Path):
+    """Reuse the live verifier's production observers rather than re-deriving.
+
+    `studio_root` is the operator's own `--vault`, not `TOOLS.parent.parent`
+    (this script's own install location). Those two coincide for every real
+    invocation (nobody points `--vault` anywhere but the repo it runs in), so
+    the hardcoded path never showed a wrong answer in the field -- but it is
+    still a second, silent opinion about which vault is under test, and any
+    caller running against an isolated fixture vault gets the WRONG one back.
+    Found reproducing 2026-09-07's rehearsal-version fixture: the derivation
+    it shares with `_derive_rehearsal_version` returned '' because it was
+    reading the real repo's run.jsonl-less vault, not the fixture's.
+    """
+    module = _load_verify_live_module()
     # THE BUS COMES FROM THE VERIFIER'S OWN LOADER, never a path typed here.
     # This read `run_dir / "bus-events.jsonl"` until 2026-09-01 -- a literal that
     # occurred exactly ONCE in the entire tree, at this line, written by nothing.
@@ -337,7 +362,6 @@ def _completion_observers(run_dir: Path):
     # bound fact, and `status` could return only REFUSED, for every release,
     # with no flag to override it. The verifier cured this same conflation in
     # its own main() on 2026-08-25; the facade never routed through main().
-    studio_root = TOOLS.parent.parent
     bus = module.load_bus_rows(studio_root)
     # AND THE VERSION, WHICH SCOPES THE BUS CHECK. Curing the phantom path alone
     # turned "found 0" into "found 7" -- the observer expects exactly ONE
@@ -350,6 +374,30 @@ def _completion_observers(run_dir: Path):
     return module.build_observers(run_dir, bus, version, studio_root)
 
 
+#: Loud on purpose. G123's third fire paste (2026-09-07): `cmd_rehearse`'s
+#: `--version` defaulted to the hard-coded literal `"v1.89.0"`, so an omitted
+#: flag wrote that stale version into a 1.95.0 run's rehearsal scorecard, and
+#: the real fire later refused comparing it against the run's true version.
+#: A default that LOOKS like a real release is the dangerous shape — it reads
+#: as a plausible answer instead of an obviously wrong one. This string
+#: cannot be mistaken for a shipped version if it leaks anywhere downstream.
+_UNBOUND_REHEARSAL_VERSION = "v0.0.0-rehearsal-unbound"
+
+
+def _derive_rehearsal_version(run_dir: Path, studio_root: Path) -> str:
+    """What `--version` defaults to when the operator omits it: the run's OWN
+    version, not a typed-in guess. Same derivation `status` already uses
+    (`_release_version_for`, which reads the publication receipt, then the
+    journal, then the release entry's frontmatter — never invented). A
+    rehearsal runs before any of those exist, so this ordinarily falls
+    through to the release entry; if even that names nothing, the loud
+    placeholder above ships rather than a number that could pass for real.
+    `studio_root` is the caller's own `--vault` -- see `_completion_observers`
+    for why that must never be re-derived from this script's install path."""
+    module = _load_verify_live_module()
+    return module._release_version_for(run_dir, studio_root) or _UNBOUND_REHEARSAL_VERSION
+
+
 def cmd_rehearse(args) -> int:
     """Drive every checkpoint against local fakes and score the run.
 
@@ -360,10 +408,11 @@ def cmd_rehearse(args) -> int:
     run_dir = Path(args.run_dir)
     identity = _identity(run_dir)
     journal = _journal(run_dir)
+    version = args.version or _derive_rehearsal_version(run_dir, Path(args.vault))
 
     context = {
-        "parent": "rehearsal-parent", "version": args.version, "size": "1",
-        "staged_sha": "0" * 40, "tag": "v" + args.version.lstrip("v"),
+        "parent": "rehearsal-parent", "version": version, "size": "1",
+        "staged_sha": "0" * 40, "tag": "v" + version.lstrip("v"),
         "package_sha": "rehearsal-package", "release_uid": "00000000",
         "site_commit": "1" * 40, "run_uid": identity["pipeline_run_uid"],
         "receipt_sha": "rehearsal-receipt", "mode": metrics.REHEARSAL,
@@ -412,7 +461,7 @@ def cmd_rehearse(args) -> int:
         mode=metrics.REHEARSAL,
         saga_id=identity["saga_id"],
         pipeline_run_uid=identity["pipeline_run_uid"],
-        release_version=args.version,
+        release_version=version,
         principal_inputs=[
             {"input": "release_scope_locked", "at": args.scope_locked_at},
             {"input": "release_orchestrator_invoked", "at": args.started_at},
@@ -428,6 +477,16 @@ def cmd_rehearse(args) -> int:
         observed_refusals=[],
         baseline=baseline,
     )
+    # v1.95 (metis-g123, 2026-09-07). The fire's rehearsal gate reads
+    # card["checkpoints_performed"], and the scorecard SCHEMA declares that
+    # property -- so a reader and a contract both existed, and nothing ever
+    # wrote it. Every fire therefore refused with "rehearsal performed None of
+    # 15 declared checkpoints" no matter how complete the rehearsal was; the
+    # count was printed to the operator's terminal one line below and thrown
+    # away. Declared, read, unwritten: the sixth instance in this release of the
+    # family the Architecture Review names at section 30, and the reason Mike
+    # pasted a correct fire command three times and was refused three times.
+    scorecard["checkpoints_performed"] = len(performed)
     target = metrics.scorecard_path(run_dir, metrics.REHEARSAL)
     target.write_text(json.dumps(scorecard, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -886,8 +945,47 @@ def _write_real_fire_scorecard(
               % exc, file=sys.stderr)
 
 
+def real_fire_scorecard_producer(run_dir: Path, vault: Path):
+    """Bind the existing real-fire writer to one named run; invoke after publication."""
+    run_dir, vault = Path(run_dir), Path(vault)
+    identity = _identity(run_dir)
+    def _produce_scorecard(fired_version: str) -> None:
+        """Score the REAL fire, at the moment the measurement becomes true.
+
+        Stream 1 AC4: REAL_FIRE had no caller in the entire tool corpus until
+        this line existed, so no release was ever measured.
+
+        THIS IS AN INJECTED PRODUCER, NOT A POST-RETURN CALL, and the difference
+        is the whole defect. This function used to run AFTER wired.cmd_fire()
+        returned and only `if code == 0`. But cmd_fire returns 15 when its
+        journal has no observation for completion_verification, and that
+        observation is made only when the scorecard already exists — of which
+        this is the sole producer. First fire: no card, unobserved, exit 15,
+        producer never runs, re-fire identical, forever.
+
+        The layering was never the problem and is unchanged: the publisher still
+        does not have the measurement inputs (orchestrator start stamp, observed
+        refusals, baseline) and still does not build the card. It just calls the
+        producer the orchestrator handed it, at the point in its own sequence
+        where every input has become true. The ORDER was the defect.
+
+        The fired version is a PARAMETER rather than read from args: the
+        publisher requires the named version and activation and
+        passes what it actually fired. Reading it here instead produced `""` on
+        every real run, because the `fire` subparser never declared --version —
+        a card that named no release, failing schema minLength, in a world where
+        nothing validated strictly enough to say so.
+        (argus-a158, 2026-08-25, Mike-directed root-cause pass.)
+        """
+        _write_real_fire_scorecard(
+            identity, run_dir, vault, fired_version or "",
+        )
+
+    return _produce_scorecard
+
+
 def _fire_sequence_gate(run_dir: Path, vault: Path,
-                        identity: Dict[str, str]) -> Optional[Tuple[int, str]]:
+                        identity: Dict[str, str], version: Optional[str] = None) -> Optional[Tuple[int, str]]:
     """3d8d4351 §3: the macro-sequence walked as machine-checked preconditions.
 
     Each stage's evidence is answered by the DECLARED READER named in
@@ -962,15 +1060,62 @@ def _fire_sequence_gate(run_dir: Path, vault: Path,
                         "frozen package for this run) — %s"
                         % _stage_commands("BUILD"))
         elif stage == "STAGE":
+            # v1.95 (metis-g123, 2026-09-07). This gate asked a VERIFY-LIVE tool
+            # whether a release was STAGED, and handed it a pipeline_run_uid where
+            # that tool expects a version. tropo-check-publish-state.py's own
+            # --expect help says "verify-live mode"; it never reads local publish
+            # state; and its whole vocabulary is verified / not_verified /
+            # unreachable / unknown_version. It cannot return "staged" at all, so
+            # the accepted set below was unreachable before a fire and this path
+            # was unusable by construction -- which is why every prior release
+            # fired through tropo-publish-release.py directly. Found live on the
+            # v1.95 fire: "[REFUSED:2] sequence gate: STAGE has no evidence
+            # (publish state is 'not_verified')", the checker having looked for a
+            # remote tag named "vf015af4a6a0a": the run uid wearing a v.
+            #
+            # The cure asks that tool the question it can answer, about the thing
+            # that IS the stage's evidence. The stage writes publish-state.json
+            # (version, tag, staged_sha, activation_uid, clone_dir) and leaves the
+            # staged clone carrying the version tag at that sha. So: --expect the
+            # VERSION, --sha the staged sha, --clone the staged clone. "verified"
+            # then means "the stage produced this tag on these bytes", which is
+            # exactly what STAGE-has-evidence means. A stage that never ran still
+            # refuses, now on the honest fact of its own absence, and a stage
+            # belonging to a DIFFERENT release refuses on the activation mismatch
+            # rather than being silently accepted.
             wired = _load_wired_publisher()
-            state = wired._run_publish_state("--expect", identity.get(
-                "pipeline_run_uid", "")) if wired else {}
+            state, staged, mismatch = {}, None, None
+            if wired:
+                if not version:
+                    return (2, "STAGE requires --version X.Y.Z from the named run's publish-state; no staged version is inferred")
+                _version = version
+                staged = wired._read_state(str(_version)) if _version else None
+                _want = str(identity.get("activation_uid") or "")
+                _got = str((staged or {}).get("activation_uid") or "")
+                if staged and _want and _got and _want != _got:
+                    mismatch = (_got, _want)
+                elif staged and staged.get("staged_sha"):
+                    probe = ["--expect", str(staged.get("version") or _version),
+                             "--sha", str(staged["staged_sha"])]
+                    if staged.get("clone_dir"):
+                        probe += ["--clone", str(staged["clone_dir"])]
+                    state = wired._run_publish_state(*probe)
             if not state or state.get("status") not in ("staged", "verified", "live"):
+                if mismatch:
+                    _why = ("the staged release belongs to activation %s, not %s"
+                            % mismatch)
+                elif not staged:
+                    _why = "nothing is staged"
+                elif not staged.get("staged_sha"):
+                    _why = "the stage recorded no staged_sha"
+                else:
+                    _why = ("the staged clone does not carry tag %s at %s (checker "
+                            "said %r)"
+                            % (staged.get("tag"), str(staged["staged_sha"])[:12],
+                               state.get("status") if state else None))
                 return (EXIT_REFUSED,
-                        "sequence gate: STAGE has no evidence (publish state "
-                        "is %r) — %s"
-                        % (state.get("status") if state else None,
-                           _stage_commands("STAGE")))
+                        "sequence gate: STAGE has no evidence (%s) — %s"
+                        % (_why, _stage_commands("STAGE")))
         elif stage == "PREFLIGHT":
             # The roster's own runner is the declared reader; its absence or a
             # missing preflight journal is the refusal.
@@ -984,6 +1129,55 @@ def _fire_sequence_gate(run_dir: Path, vault: Path,
                         "sequence gate: PREFLIGHT has no evidence (no "
                         "preflight journal in the run folder) — %s"
                         % _stage_commands("PREFLIGHT"))
+            # A RECORD EXISTS IS NOT A RECORD SAYS PASS (metis-g124, 2026-09-07).
+            #
+            # Until here this gate asked only whether the file exists, and the
+            # file exists for OTHER reasons: measured on the live v1.95 run, its
+            # 143 rows are ALL `lock-static` and not one is `pre-outward-fire`.
+            # The fire preconditions of that release were written somewhere else
+            # entirely (the releases folder, by `tropo-publish-release.py
+            # preflight`), so this stage reported PREFLIGHT satisfied having seen
+            # no fire precondition at all. Six of the seven defects of the v1.95
+            # cycle were this one shape; this is the seventh place it lives.
+            #
+            # WHY THIS WARNS AND DOES NOT REFUSE, deliberately. Making it strict
+            # would demand pre-outward-fire rows in a file that, on every real
+            # run to date, nothing writes them to — an unsatisfiable gate, which
+            # is precisely the STAGE-gate defect that refused Mike's first fire
+            # paste on 2026-09-06. Mike's warn-safe ruling (deb77758) decides it:
+            # a refusal earns its existence by naming irreversible harm in one
+            # sentence, or it is a warning that proceeds and records. The harm is
+            # covered downstream — `cmd_fire` runs `run_fire_preflight` itself
+            # and refuses there — so the honest defect here is that the gate
+            # MISREPORTS, not that it lets a bad release through. It now says
+            # what it actually saw.
+            try:
+                _pf_rows = [json.loads(_l) for _l in
+                            pf_path.read_text(encoding="utf-8").splitlines() if _l.strip()]
+            except Exception as _pf_exc:            # unreadable evidence is unknown, never green
+                print("  [WARN] PREFLIGHT evidence unreadable (%s) — treat as unverified"
+                      % type(_pf_exc).__name__)
+                _pf_rows = []
+            _fire_rows = [r for r in _pf_rows if r.get("phase") == "pre-outward-fire"]
+            if not _fire_rows:
+                print("  [WARN] PREFLIGHT: %d evidence row(s) present but NONE from "
+                      "pre-outward-fire — this stage has seen no fire precondition. "
+                      "Run: python3 vault/tools/tropo-release-preflight.py "
+                      "--phase pre-outward-fire --run-dir %s"
+                      % (len(_pf_rows), run_dir))
+            else:
+                # Later governs earlier, per gate — the same rule tropo-ship.py
+                # applies to instrument receipts. A cured gate's newer PASS must
+                # overrule its older refusal, or every fix is invisible.
+                _latest = {}
+                for _r in sorted(_fire_rows, key=lambda r: str(r.get("ts") or "")):
+                    _latest[_r.get("gate_id")] = _r
+                _still = sorted(g for g, r in _latest.items()
+                                if r.get("verdict") == "refused")
+                if _still:
+                    print("  [WARN] PREFLIGHT: %d fire precondition(s) REFUSED on the "
+                          "latest evidence — %s. The fire will refuse on these; cure "
+                          "them before it asks." % (len(_still), ", ".join(_still)))
         elif stage == "ORCHESTRATOR":
             stamps = _journal_timestamps(run_dir, identity, vault)
             if not stamps.get("orchestrator_started_at"):
@@ -1073,6 +1267,42 @@ def _rehearsal_gate(run_dir: Path, fired_version: str) -> Optional[Tuple[int, st
     return None
 
 
+def _rows_seen(rows) -> int:
+    """How many journal rows this artifact could see, whatever shape it got.
+
+    _journal() returns a SagaJournal; earlier code assumed a list and called
+    len() on it, which crashed the fire at the outward edge (v1.95, 2026-09-07).
+    A count on a state artifact is decoration: it must degrade to zero, never
+    raise. Sized objects answer directly; iterables are counted; anything else
+    is an honest zero.
+    """
+    try:
+        return len(rows)
+    except TypeError:
+        pass
+    # A SagaJournal knows its own file. Count the rows there rather than
+    # reporting a comfortable zero: a state artifact that says "0 rows seen"
+    # about a 115-row journal is worse than one that says nothing.
+    path = getattr(rows, "path", None)
+    if path is not None:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                return sum(1 for line in fh if line.strip())
+        except OSError:
+            pass
+    for attr in ("rows", "events", "entries"):
+        inner = getattr(rows, attr, None)
+        if inner is not None:
+            try:
+                return len(inner)
+            except TypeError:
+                pass
+    try:
+        return sum(1 for _ in rows)
+    except Exception:
+        return 0
+
+
 def _write_scorecard_so_far(run_dir: Path, identity: Dict[str, str],
                             vault: Path) -> Optional[Path]:
     """3d8d4351 §1: the scorecard-so-far artifact, in the run folder, BEFORE
@@ -1095,7 +1325,15 @@ def _write_scorecard_so_far(run_dir: Path, identity: Dict[str, str],
         "kind": "scorecard-so-far",
         "saga_id": identity.get("saga_id"),
         "pipeline_run_uid": identity.get("pipeline_run_uid"),
-        "journal_rows_seen": len(rows),
+        # v1.95 (metis-g123, 2026-09-07): _journal() returns a SagaJournal, not
+        # a list, so len(rows) raised TypeError and CRASHED the fire — after
+        # every gate had passed, on Mike's fourth correct paste. The except
+        # above sets rows = [] only on failure, so the success path was the one
+        # nobody had run: this artifact is written once, at the outward edge,
+        # and no test reached it. Counted defensively here because the count is
+        # decoration on a state artifact and must never be the thing that stops
+        # a release.
+        "journal_rows_seen": _rows_seen(rows),
         "written_at": __import__("datetime").datetime.now(
             __import__("datetime").timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "note": "pre-handoff state; the REAL_FIRE card is produced at the "
@@ -1130,6 +1368,11 @@ def cmd_fire(args) -> int:
 
     run_dir = Path(args.run_dir)
     identity = _identity(run_dir)
+    try:
+        run_state = json.loads((run_dir / "run.state.json").read_text())
+    except (OSError, ValueError):
+        run_state = {}  # The sequence gate reports missing/invalid bootstrap evidence.
+    identity["activation_uid"] = str(run_state.get("activation_uid") or "")
 
     refusal = fire_refusal(environ=os.environ, authorized=bool(args.authorize))
     if refusal is not None:
@@ -1139,7 +1382,7 @@ def cmd_fire(args) -> int:
         return EXIT_REFUSED
 
     # 3d8d4351 §3 — the macro-sequence walked as machine-checked preconditions.
-    sequence_refusal = _fire_sequence_gate(run_dir, Path(args.vault), identity)
+    sequence_refusal = _fire_sequence_gate(run_dir, Path(args.vault), identity, getattr(args, "version", None))
     if sequence_refusal is not None:
         code, message = sequence_refusal
         print("[REFUSED:%s] %s" % (code, message), file=sys.stderr)
@@ -1167,49 +1410,12 @@ def cmd_fire(args) -> int:
     # Its own TTY confirmation stands DELIBERATELY and is not bypassed here.
     # Two gates on the one irreversible public act is correct, and a non-TTY
     # run refuses rather than silently auto-confirming.
-    import importlib.util
-
-    wired_path = Path(__file__).resolve().parent / "tropo-publish-release.py"
-    spec = importlib.util.spec_from_file_location("tropo_publish_release", wired_path)
-    wired = importlib.util.module_from_spec(spec)
-    sys.modules["tropo_publish_release"] = wired
-    spec.loader.exec_module(wired)
-
-    def _produce_scorecard(fired_version: str) -> None:
-        """Score the REAL fire, at the moment the measurement becomes true.
-
-        Stream 1 AC4: REAL_FIRE had no caller in the entire tool corpus until
-        this line existed, so no release was ever measured.
-
-        THIS IS AN INJECTED PRODUCER, NOT A POST-RETURN CALL, and the difference
-        is the whole defect. This function used to run AFTER wired.cmd_fire()
-        returned and only `if code == 0`. But cmd_fire returns 15 when its
-        journal has no observation for completion_verification, and that
-        observation is made only when the scorecard already exists — of which
-        this is the sole producer. First fire: no card, unobserved, exit 15,
-        producer never runs, re-fire identical, forever.
-
-        The layering was never the problem and is unchanged: the publisher still
-        does not have the measurement inputs (orchestrator start stamp, observed
-        refusals, baseline) and still does not build the card. It just calls the
-        producer the orchestrator handed it, at the point in its own sequence
-        where every input has become true. The ORDER was the defect.
-
-        The fired version is a PARAMETER rather than read from args: the
-        publisher resolves it (`args.version or _latest_staged_version()`) and
-        passes what it actually fired. Reading it here instead produced `""` on
-        every real run, because the `fire` subparser never declared --version —
-        a card that named no release, failing schema minLength, in a world where
-        nothing validated strictly enough to say so.
-        (argus-a158, 2026-08-25, Mike-directed root-cause pass.)
-        """
-        _write_real_fire_scorecard(
-            identity, run_dir, Path(args.vault), fired_version or "",
-        )
+    wired = _load_wired_publisher()
 
     class _FireArgs:
         version = getattr(args, "version", None)
-        scorecard_producer = staticmethod(_produce_scorecard)
+        activation_uid = identity["activation_uid"]
+        scorecard_producer = staticmethod(real_fire_scorecard_producer(run_dir, Path(args.vault)))
 
     return wired.cmd_fire(_FireArgs())
 
@@ -1230,7 +1436,10 @@ def main(argv=None) -> int:
 
     rehearse = sub.add_parser("rehearse", help="full progression against local fakes")
     rehearse.add_argument("--run-dir", required=True)
-    rehearse.add_argument("--version", default="v1.89.0")
+    rehearse.add_argument("--version", default=None,
+                          help="release version under rehearsal; default: derived from "
+                               "the run (publication receipt, then journal, then the "
+                               "release entry), never a typed-in guess")
     rehearse.add_argument("--scope-locked-at", default="2026-08-16T20:00:00Z")
     rehearse.add_argument("--started-at", default="2026-08-16T20:05:00Z")
     rehearse.add_argument("--active-seconds", type=float, default=1.0)
@@ -1239,12 +1448,8 @@ def main(argv=None) -> int:
     fire = sub.add_parser("fire", help="perform the outward release")
     fire.add_argument("--run-dir", required=True)
     fire.add_argument("--authorize", action="store_true")
-    # Declared so an operator CAN pin the version; omitted is the normal case and
-    # the publisher resolves it from staged state, then hands the resolved value
-    # to the scorecard producer. Before this existed, `getattr(args, "version")`
-    # in cmd_fire could only ever be None on a real run.
-    fire.add_argument("--version", default=None,
-                      help="version to fire; default: the most recently staged")
+    fire.add_argument("--version", required=True,
+                      help="explicit staged version belonging to the named run")
     fire.set_defaults(func=cmd_fire)
 
     args = parser.parse_args(argv)

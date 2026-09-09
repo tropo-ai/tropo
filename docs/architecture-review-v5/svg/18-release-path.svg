@@ -1,0 +1,312 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 980" font-family="Helvetica, Arial, sans-serif" role="img">
+<title>The release path as it runs: eight authorization stages from LOCK to FIRE, the guard registry above, the pipeline activation key below, the external candidate lane feeding in, the unbuilt promotion lane, and the four live defects at the exact points they sit.</title>
+<defs>
+  <style>
+    .title    { font-size: 20px; font-weight: bold; fill: #1a2332; }
+    .subtitle { font-size: 11.5px; fill: #5a6a7a; }
+    .stamp    { font-size: 10px; fill: #5a6a7a; }
+    .panel-title { font-size: 11px; font-weight: bold; fill: #2c4a6e; }
+    .panel-body  { font-size: 8.5px; fill: #2c3742; }
+    .box-title { font-size: 12px; font-weight: bold; fill: #ffffff; }
+    .box-sub   { font-size: 8px; fill: #5a6a7a; }
+    .box-mod   { font-size: 7.8px; fill: #3a6b8a; }
+    .box-fn    { font-size: 7.4px; fill: #3a6b8a; }
+    .chip-title { font-size: 10px; font-weight: bold; fill: #2c4a6e; }
+    .chip-line  { font-size: 8.5px; fill: #2c3742; }
+    .chip-good  { font-size: 8.5px; fill: #4a8a6b; }
+    .chip-bad   { font-size: 8.5px; fill: #9c2b2b; }
+    .auth-title { font-size: 9.5px; font-weight: bold; fill: #2c4a6e; }
+    .auth-line  { font-size: 7.6px; fill: #2c3742; }
+    .auth-muted { font-size: 7.6px; fill: #5a6a7a; }
+    .auth-bad   { font-size: 7.6px; fill: #9c2b2b; }
+    .amber-title { font-size: 11px; font-weight: bold; fill: #b08a4a; }
+    .amber-line  { font-size: 8.5px; fill: #b08a4a; }
+    .red-title  { font-size: 12px; font-weight: bold; fill: #9c2b2b; }
+    .col-title  { font-size: 10px; font-weight: bold; fill: #9c2b2b; }
+    .col-line   { font-size: 8.5px; fill: #2c3742; }
+    .note-good  { font-size: 9.5px; fill: #4a8a6b; }
+    .note-warn  { font-size: 9.5px; fill: #b08a4a; }
+    .arrow-lbl  { font-size: 8px; fill: #5a6a7a; }
+    .badge-num  { font-size: 9px; font-weight: bold; fill: #ffffff; }
+    .legend-txt { font-size: 9px; fill: #2c3742; }
+    .conn  { stroke: #5a6a7a; stroke-width: 1.4; fill: none; }
+    .conn-dash { stroke: #5a6a7a; stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+    .stage { fill: #2c4a6e; stroke: #1a2332; stroke-width: 1; }
+    .stage-inner { fill: #ffffff; stroke: #c5d0da; stroke-width: 1; }
+  </style>
+  <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a6a7a"/>
+  </marker>
+</defs>
+
+<rect x="0" y="0" width="1280" height="980" fill="#ffffff"/>
+
+<!-- ── HEADER ───────────────────────────────────────────────────────────── -->
+<text class="title" x="47" y="32">The release path as it runs</text>
+<text class="subtitle" x="47" y="54">Eight stages declared as data in vault/tools/lib/release_bindings.py:93 (MACRO_SEQUENCE): each names the evidence store that answers “did this happen” and the module that owns its reader.</text>
+<text class="subtitle" x="47" y="70">MACRO_SEQUENCE declares no step order of its own; the runner (tropo-release-run.py, 1,196 lines, execute=False by default) stays the authority on micro-order.</text>
+<text class="subtitle" x="47" y="86">FIRE is the one stage whose gate is authorization plus completion rather than mere occurrence. Every path, line number and count below re-verified at HEAD b7555b5b5 on 2026-09-08.</text>
+
+<!-- ── BAND 1: candidate lane + guard registry ──────────────────────────── -->
+
+<!-- external candidate lane -->
+<rect x="47" y="104" width="280" height="118" rx="4" fill="#ffffff" stroke="#b08a4a" stroke-width="1.4"/>
+<text class="amber-title" x="61" y="124">.github/workflows/candidate.yml</text>
+<text class="panel-body" x="61" y="139">landed 2026-09-07 (3cfe12f01) · 07:00 UTC cron</text>
+<text class="panel-body" x="61" y="152">a candidate box from HEAD → tropo-preflight.py →</text>
+<text class="panel-body" x="61" y="165">tropo-release-preflight.py --phase lock-static →</text>
+<text class="panel-body" x="61" y="178">digest written into the job summary</text>
+<text class="amber-line" x="61" y="192">3 hand-dispatched runs; 1st scheduled run 2026-09-08.</text>
+<text class="amber-line" x="61" y="204">12 candidate gates not wired: the builder omits</text>
+<text class="amber-line" x="61" y="216">10 files the shipped v1.95.0 zip carries.</text>
+
+<!-- candidate lane feeds the same gate phase -->
+<line class="conn-dash" x1="327" y1="163" x2="394" y2="163" marker-end="url(#ah)"/>
+<text class="arrow-lbl" x="361" y="157" text-anchor="middle">lock-static</text>
+
+<!-- guard registry panel -->
+<rect x="400" y="104" width="833" height="118" rx="4" fill="#eef2f6" stroke="#2c4a6e" stroke-width="1.4"/>
+<text class="panel-title" x="414" y="124">release_gates.GateRegistry — each gate's decision lives once</text>
+<text class="panel-body" x="414" y="138">vault/tools/lib/build_guards.py (573 lines), read by both the build's wrapper and the preflight's verifier. An AST test refuses any direct call.</text>
+
+<rect x="414" y="146" width="255" height="66" rx="4" fill="#ffffff" stroke="#4a8a6b" stroke-width="1.2"/>
+<text class="chip-title" x="426" y="162">run point one · lock-static</text>
+<text class="chip-line" x="426" y="177">11 gates over the source tree, run</text>
+<text class="chip-line" x="426" y="189">before the word “build”. No waiver argument.</text>
+<text class="chip-good" x="426" y="201">PROVEN: refused 5 of 143 rows on the live run</text>
+
+<rect x="689" y="146" width="255" height="66" rx="4" fill="#ffffff" stroke="#4a8a6b" stroke-width="1.2"/>
+<text class="chip-title" x="701" y="162">run point two · candidate</text>
+<text class="chip-line" x="701" y="177">12 gates over the assembled box, run</text>
+<text class="chip-line" x="701" y="189">as the zip closes. skipped = a refusal here.</text>
+<text class="chip-good" x="701" y="201">PROVEN: refused candidate #1 pre-seal, 2 gates</text>
+
+<rect x="964" y="146" width="255" height="66" rx="4" fill="#ffffff" stroke="#2c4a6e" stroke-width="1.2"/>
+<text class="chip-title" x="976" y="162">pre-outward-fire</text>
+<text class="chip-line" x="976" y="177">11 gates, PRE_OUTWARD_FIRE_ROSTER</text>
+<text class="chip-line" x="976" y="189">tropo-release-preflight.py:143</text>
+<text class="chip-bad" x="976" y="201">skipped tallies as PASS — defect 4</text>
+<circle cx="1209" cy="157" r="8" fill="#9c2b2b"/>
+<text class="badge-num" x="1209" y="160" text-anchor="middle">4</text>
+
+<!-- registry → spine -->
+<line class="conn" x1="541" y1="222" x2="541" y2="262" marker-end="url(#ah)"/>
+<path class="conn" d="M 816 222 L 816 234 L 590 234 L 590 262" marker-end="url(#ah)"/>
+<path class="conn" d="M 1091 222 L 1091 248 L 865 248 L 865 262" marker-end="url(#ah)"/>
+
+<!-- ── THE EIGHT-STAGE SPINE ────────────────────────────────────────────── -->
+
+<!-- LOCK -->
+<rect x="47" y="266" width="136" height="78" rx="4" class="stage"/>
+<rect x="50" y="290" width="130" height="48" rx="2" class="stage-inner"/>
+<text class="box-title" x="115" y="284" text-anchor="middle">LOCK</text>
+<text class="box-sub" x="115" y="304" text-anchor="middle">canonical event bus</text>
+<text class="box-mod" x="115" y="320" text-anchor="middle">tropo-release.py</text>
+<text class="box-fn" x="115" y="332" text-anchor="middle">_journal_timestamps</text>
+
+<!-- BOOTSTRAP -->
+<rect x="197" y="266" width="136" height="78" rx="4" class="stage"/>
+<rect x="200" y="290" width="130" height="48" rx="2" class="stage-inner"/>
+<text class="box-title" x="265" y="284" text-anchor="middle">BOOTSTRAP</text>
+<text class="box-sub" x="265" y="304" text-anchor="middle">run.state.json · activation</text>
+<text class="box-mod" x="265" y="320" text-anchor="middle">tropo-release-run.py</text>
+<text class="box-fn" x="265" y="332" text-anchor="middle">run_is_walkable</text>
+
+<!-- STEPS -->
+<rect x="347" y="266" width="136" height="78" rx="4" class="stage"/>
+<rect x="350" y="290" width="130" height="48" rx="2" class="stage-inner"/>
+<text class="box-title" x="415" y="284" text-anchor="middle">STEPS</text>
+<text class="box-sub" x="415" y="304" text-anchor="middle">run.state.json step status</text>
+<text class="box-mod" x="415" y="320" text-anchor="middle">tropo-release-run.py</text>
+<text class="box-fn" x="415" y="332" text-anchor="middle">step_status</text>
+
+<!-- BUILD -->
+<rect x="497" y="266" width="136" height="78" rx="4" class="stage"/>
+<rect x="500" y="290" width="130" height="48" rx="2" class="stage-inner"/>
+<text class="box-title" x="565" y="284" text-anchor="middle">BUILD</text>
+<text class="box-sub" x="565" y="304" text-anchor="middle">package_frozen + digest</text>
+<text class="box-mod" x="565" y="320" text-anchor="middle">release_package.py</text>
+<text class="box-fn" x="565" y="332" text-anchor="middle">active_frozen_payload</text>
+
+<!-- STAGE -->
+<rect x="647" y="266" width="136" height="78" rx="4" class="stage"/>
+<rect x="650" y="290" width="130" height="48" rx="2" class="stage-inner"/>
+<text class="box-title" x="715" y="284" text-anchor="middle">STAGE</text>
+<text class="box-sub" x="715" y="304" text-anchor="middle">publish-pending.json</text>
+<text class="box-mod" x="715" y="320" text-anchor="middle">tropo-publish-release.py</text>
+<text class="box-fn" x="715" y="332" text-anchor="middle">_run_publish_state</text>
+<circle cx="771" cy="278" r="8" fill="#9c2b2b"/>
+<text class="badge-num" x="771" y="281" text-anchor="middle">3</text>
+
+<!-- PREFLIGHT -->
+<rect x="797" y="266" width="136" height="78" rx="4" class="stage"/>
+<rect x="800" y="290" width="130" height="48" rx="2" class="stage-inner"/>
+<text class="box-title" x="865" y="284" text-anchor="middle">PREFLIGHT</text>
+<text class="box-sub" x="865" y="304" text-anchor="middle">preflight journal verdicts</text>
+<text class="box-mod" x="865" y="320" text-anchor="middle">tropo-release-preflight.py</text>
+<text class="box-fn" x="865" y="332" text-anchor="middle">PRE_OUTWARD_FIRE_ROSTER</text>
+
+<!-- ORCHESTRATOR -->
+<rect x="947" y="266" width="136" height="78" rx="4" class="stage"/>
+<rect x="950" y="290" width="130" height="48" rx="2" class="stage-inner"/>
+<text class="box-title" x="1015" y="284" text-anchor="middle">ORCHESTRATOR</text>
+<text class="box-sub" x="1015" y="304" text-anchor="middle">run journal + bus, joined</text>
+<text class="box-mod" x="1015" y="320" text-anchor="middle">tropo-release-run.py</text>
+<text class="box-fn" x="1015" y="332" text-anchor="middle">_requires_orchestrator_invoked</text>
+
+<!-- FIRE -->
+<rect x="1097" y="266" width="136" height="78" rx="4" class="stage"/>
+<rect x="1100" y="290" width="130" height="48" rx="2" class="stage-inner"/>
+<text class="box-title" x="1165" y="284" text-anchor="middle">FIRE</text>
+<text class="box-sub" x="1165" y="304" text-anchor="middle">publish_state live + remote</text>
+<text class="box-mod" x="1165" y="320" text-anchor="middle">tropo-verify-release-live.py</text>
+<text class="box-fn" x="1165" y="332" text-anchor="middle">clear_publish_pending</text>
+
+<!-- spine connectors -->
+<line class="conn" x1="184" y1="305" x2="195" y2="305" marker-end="url(#ah)"/>
+<line class="conn" x1="334" y1="305" x2="345" y2="305" marker-end="url(#ah)"/>
+<line class="conn" x1="484" y1="305" x2="495" y2="305" marker-end="url(#ah)"/>
+<line class="conn" x1="634" y1="305" x2="645" y2="305" marker-end="url(#ah)"/>
+<line class="conn" x1="784" y1="305" x2="795" y2="305" marker-end="url(#ah)"/>
+<line class="conn" x1="934" y1="305" x2="945" y2="305" marker-end="url(#ah)"/>
+<line class="conn" x1="1084" y1="305" x2="1095" y2="305" marker-end="url(#ah)"/>
+
+<!-- what the path has actually done -->
+<text class="note-good" x="47" y="364">v1.95.0 shipped public 2026-09-07T11:32:58Z — the whole</text>
+<text class="note-good" x="47" y="377">eight-stage path has run end to end, fired by Mike.</text>
+<text class="note-warn" x="47" y="394">Ratchets missed and disclosed, not softened: 33h 22m</text>
+<text class="note-warn" x="47" y="407">against ≤30 min · 28 founder gestures against ≤3 ·</text>
+<text class="note-warn" x="47" y="420">four fire pastes against 1, each stopped by a defect.</text>
+
+<!-- ── AUTHORIZATION STACK ──────────────────────────────────────────────── -->
+<rect x="47" y="440" width="1186" height="126" rx="4" fill="#eef2f6" stroke="#3a6b8a" stroke-width="1.4"/>
+
+<text class="panel-title" x="63" y="462" font-size="12">require_release_authorization() — the pipeline activation key</text>
+<text class="panel-body" x="63" y="478">.tropo/scripts/lib/release_authorization.py — refuses a build or a public</text>
+<text class="panel-body" x="63" y="491">upload without a runtime-minted fingerprint proving a real pipeline run</text>
+<text class="panel-body" x="63" y="504">occurred. Tamper-evidence, not cryptography — the module says so in its</text>
+<text class="panel-body" x="63" y="517">own words (:621-626). _has_human_signoff (:325-392) trusts only the</text>
+<text class="panel-body" x="63" y="530">engine-stamped actor, requires a registered principal, and excludes</text>
+<text class="panel-body" x="63" y="543">anyone who executed a step in the run — but nothing is signed. The</text>
+<text class="panel-body" x="63" y="556">un-forgeable control is the outward act.</text>
+<circle cx="452" cy="474" r="8" fill="#9c2b2b"/>
+<text class="badge-num" x="452" y="477" text-anchor="middle">1</text>
+
+<text class="arrow-lbl" x="550" y="434" text-anchor="end">called at four points on the path ↑</text>
+
+<!-- call-site chips -->
+<rect x="497" y="448" width="136" height="76" rx="4" fill="#ffffff" stroke="#3a6b8a" stroke-width="1.2"/>
+<text class="auth-title" x="565" y="464" text-anchor="middle">wrapper :421</text>
+<text class="auth-line" x="565" y="479" text-anchor="middle">build_guards.py:421</text>
+<text class="auth-line" x="565" y="490" text-anchor="middle">the build's guard wrapper</text>
+<text class="auth-line" x="565" y="501" text-anchor="middle">gate produce-release-folder</text>
+<text class="auth-muted" x="565" y="514" text-anchor="middle">no human signoff here</text>
+
+<rect x="647" y="448" width="136" height="76" rx="4" fill="#ffffff" stroke="#3a6b8a" stroke-width="1.2"/>
+<text class="auth-title" x="715" y="464" text-anchor="middle">cmd_stage :2131</text>
+<text class="auth-line" x="715" y="479" text-anchor="middle">tropo-publish-release.py</text>
+<text class="auth-line" x="715" y="490" text-anchor="middle">require_human_signoff=True</text>
+<text class="auth-muted" x="715" y="503" text-anchor="middle">refuses the staging act</text>
+
+<rect x="797" y="448" width="136" height="76" rx="4" fill="#ffffff" stroke="#3a6b8a" stroke-width="1.2"/>
+<text class="auth-title" x="865" y="464" text-anchor="middle">verifier :2545</text>
+<text class="auth-line" x="865" y="479" text-anchor="middle">tropo-publish-release.py</text>
+<text class="auth-line" x="865" y="490" text-anchor="middle">the fire-authorization gate</text>
+<text class="auth-muted" x="865" y="503" text-anchor="middle">1 of the 11 roster gates</text>
+
+<rect x="1097" y="448" width="136" height="76" rx="4" fill="#ffffff" stroke="#9c2b2b" stroke-width="1.4"/>
+<text class="auth-title" x="1165" y="464" text-anchor="middle">cmd_fire :2791</text>
+<text class="auth-line" x="1165" y="479" text-anchor="middle">tropo-publish-release.py</text>
+<text class="auth-line" x="1165" y="490" text-anchor="middle">require_human_signoff=True</text>
+<text class="auth-bad" x="1165" y="503" text-anchor="middle">refuses every published run</text>
+<text class="auth-bad" x="1165" y="514" text-anchor="middle">once it has published once</text>
+<circle cx="1223" cy="456" r="8" fill="#9c2b2b"/>
+<text class="badge-num" x="1223" y="459" text-anchor="middle">2</text>
+
+<!-- chips → spine -->
+<line class="conn" x1="565" y1="448" x2="565" y2="348" marker-end="url(#ah)"/>
+<line class="conn" x1="715" y1="448" x2="715" y2="348" marker-end="url(#ah)"/>
+<line class="conn" x1="865" y1="448" x2="865" y2="348" marker-end="url(#ah)"/>
+<line class="conn" x1="1165" y1="448" x2="1165" y2="348" marker-end="url(#ah)"/>
+
+<!-- ── FOUR LIVE DEFECTS ────────────────────────────────────────────────── -->
+<rect x="47" y="590" width="1186" height="200" rx="4" fill="#ffffff" stroke="#9c2b2b" stroke-width="1.4"/>
+<text class="red-title" x="63" y="612">Four live defects on this path — each verified in the tree 2026-09-07 and re-verified at HEAD b7555b5b5, 2026-09-08</text>
+
+<text class="col-title" x="63" y="634">1 · The step-uid gate is 8-hex only</text>
+<text class="col-line" x="63" y="650">.tropo/scripts/lib/release_authorization.py:440 reads</text>
+<text class="col-line" x="63" y="662">_STEP_UID_RE = re.compile(r"^[0-9a-f]{8}$"), and :503</text>
+<text class="col-line" x="63" y="674">refuses any post-mint event whose step reference fails.</text>
+<text class="col-line" x="63" y="686">Governed identifiers have been 12-hex composites since</text>
+<text class="col-line" x="63" y="698">the 2026-08-31 width flip: governed_path.py:89-90 reads</text>
+<text class="col-line" x="63" y="710">MINT_HEX_HISTORY = (8, 12). The gate has not fired only</text>
+<text class="col-line" x="63" y="722">because the pipeline's step uids are inherited from a</text>
+<text class="col-line" x="63" y="734">definition that predates the flip — tropo-lock-release-</text>
+<text class="col-line" x="63" y="746">plan.py:94, RELEASE_PIPELINE_UID = "634913c2". It arms</text>
+<text class="col-line" x="63" y="758">the moment that definition is re-minted. Same assumption</text>
+<text class="col-line" x="63" y="770">at release_bindings.py:198: len(step_uid) == 8.</text>
+
+<text class="col-title" x="356" y="634">2 · Fire-auth refuses every published run</text>
+<text class="col-line" x="356" y="650">tropo-publish-release.py:1412 mirrors the publication</text>
+<text class="col-line" x="356" y="662">event into the run journal as a dict keyed "type", the</text>
+<text class="col-line" x="356" y="674">bus's CloudEvent shape. Every other producer keys</text>
+<text class="col-line" x="356" y="686">"event". release_authorization.py:493 reads ev.get(</text>
+<text class="col-line" x="356" y="698">"event") only, so the row resolves to None, falls</text>
+<text class="col-line" x="356" y="710">through every allowlist, and the gate raises "possible</text>
+<text class="col-line" x="356" y="722">tampering after the key was minted; refused." In the</text>
+<text class="col-line" x="356" y="734">shipped run.jsonl, line 116 of 117 is the only "type"</text>
+<text class="col-line" x="356" y="746">row — and it is the publication event.</text>
+<text class="col-line" x="356" y="758">The cure exists and is not landed: a 14-file patch with a</text>
+<text class="col-line" x="356" y="770">non-author PASS_WITH_FINDINGS verdict sits preserved</text>
+<text class="col-line" x="356" y="782">at agents/argus/.tropo-capsule/workspace/fire-auth-build/</text>
+
+<text class="col-title" x="649" y="634">3 · The fire selects its artifact by mtime</text>
+<text class="col-line" x="649" y="650">tropo-publish-release.py:2217-2234,</text>
+<text class="col-line" x="649" y="662">_latest_staged_version() sorts staged records by</text>
+<text class="col-line" x="649" y="674">sp.stat().st_mtime and returns the newest. It is the</text>
+<text class="col-line" x="649" y="686">default resolution at three call sites (:2730, :2745,</text>
+<text class="col-line" x="649" y="698">:3159). Nothing refuses a stage belonging to a different</text>
+<text class="col-line" x="649" y="710">release — the release tool never tells the publisher</text>
+<text class="col-line" x="649" y="722">which run is firing, so every downstream check reads its</text>
+<text class="col-line" x="649" y="734">facts out of the same selected record and they agree by</text>
+<text class="col-line" x="649" y="746">construction. All of it is live at HEAD.</text>
+<text class="col-line" x="649" y="758">Mike held the cure on 2026-09-07 and released the hold</text>
+<text class="col-line" x="649" y="770">at 23:51Z ("I choose 1"): the function is deleted rather</text>
+<text class="col-line" x="649" y="782">than repaired, inside the promotion-lane spec below.</text>
+
+<text class="col-title" x="942" y="634">4 · Skipped gates print green at the fire</text>
+<text class="col-line" x="942" y="650">tropo-publish-release.py:2690-2723, run_fire_preflight,</text>
+<text class="col-line" x="942" y="662">tallies only refused and errored outcomes. A gate that</text>
+<text class="col-line" x="942" y="674">reported skipped-inputs-absent — one that never ran —</text>
+<text class="col-line" x="942" y="686">falls through to "PREFLIGHT GREEN — {n} gate(s) passed;</text>
+<text class="col-line" x="942" y="698">the fire cannot refuse on a precondition." The shape</text>
+<text class="col-line" x="942" y="710">underneath is one line: release_gates.py:262 counts</text>
+<text class="col-line" x="942" y="722">VERDICT_SKIPPED as ok. The candidate phase treats</text>
+<text class="col-line" x="942" y="734">skipped as a refusal for exactly this reason; the</text>
+<text class="col-line" x="942" y="746">pre-outward-fire phase does not.</text>
+<text class="col-line" x="942" y="758">Open at HEAD; the tally fix is routed to Argus as a task</text>
+<text class="col-line" x="942" y="770">(vault/files/v196-design-brief-f0155c4aa2c7.md:145).</text>
+
+<!-- ── PROMOTION LANE (unbuilt) ─────────────────────────────────────────── -->
+<rect x="47" y="812" width="1186" height="104" rx="4" fill="#ffffff" stroke="#b08a4a" stroke-width="1.6" stroke-dasharray="7 5"/>
+<text class="amber-title" x="63" y="834" font-size="12">The promotion lane — RULED, SPEC LOCKED, UNBUILT (dashed: does not exist yet)</text>
+<text class="panel-body" x="63" y="850">ls vault/tools | grep -i promot → empty. The design-spec f015ee0c7ea5 is status: locked (Mike, 2026-09-07), assigned to Argus, target_release 1.96.0.</text>
+<text class="panel-body" x="63" y="864">About +230 lines including tests, two files shrinking, zero new tools, one `promote` subcommand — and _latest_staged_version() deleted rather than guarded.</text>
+<text class="panel-body" x="63" y="878">What it converts is the four fire pastes: shipping becomes promotion of a candidate already built and already green, not a founder-triggered construction that decides at the outward edge whether construction succeeded.</text>
+<text class="panel-body" x="63" y="892">Its two constraints, from the released hold note f0154d94f0ea — C1: a fire refuses when the record it selected is already published. C2: the artifact is bound by name to the run shipping it, never inferred from disk recency.</text>
+<text class="panel-body" x="63" y="906">The apparatus it would allow deleting measures 3,513 lines at HEAD (tropo-release.py, release_authorization.py, release_saga.py, release_legs.py, tropo-freeze-release-candidate.py).</text>
+
+<!-- ── LEGEND ───────────────────────────────────────────────────────────── -->
+<rect x="47" y="936" width="14" height="10" rx="2" fill="#4a8a6b"/>
+<text class="legend-txt" x="67" y="945">PROVEN — has run against the world and could have failed</text>
+<rect x="354" y="936" width="14" height="10" rx="2" fill="#2c4a6e"/>
+<text class="legend-txt" x="374" y="945">BUILT and in routine use</text>
+<rect x="511" y="936" width="14" height="10" rx="2" fill="#b08a4a"/>
+<text class="legend-txt" x="531" y="945">BUILT BUT UNPROVEN, ruled-and-unbuilt, or deliberately held</text>
+<rect x="832" y="936" width="14" height="10" rx="2" fill="#9c2b2b"/>
+<text class="legend-txt" x="852" y="945">KNOWN BROKEN — a live defect at HEAD</text>
+<line x1="1045" y1="941" x2="1059" y2="941" stroke="#5a6a7a" stroke-width="2" stroke-dasharray="4 3"/>
+<text class="legend-txt" x="1065" y="945">dashed = does not exist yet</text>
+
+<text class="stamp" x="1233" y="972" text-anchor="end">measured 2026-09-08 · v1.95.0</text>
+</svg>

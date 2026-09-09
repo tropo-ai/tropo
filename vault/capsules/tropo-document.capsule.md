@@ -6,6 +6,12 @@ name: document
 type: capsule-definition
 extends: core
 version: 3.3
+mint_mode: human
+mint_template: vault/capsules/templates/document.template.md
+mint_template_version: '1.0'
+mint_template_sha256: 123f8be65d88558cad9260248a62ccf385de1bd96465f518756c71dbbadbb8f9
+mint_output_home: vault/files
+mint_binding_lock_break: 'mint_mode + the four binding fields ADDED 2026-09-07 by vela-v80 per Mike verbatim ("yes, you shouldn''t even need to ask me. it''s in your mandate"), closing task f0156b507f7f. This capsule never declared mint_mode, so template_leg.py:420 applied its `disabled` DEFAULT and the registry read as a ruling that nobody made — the ambiguity between "not allowed" and "not finished" that cost 68 hand-named files. No schema, enum, state-machine, validation-check or §Template change; the §Template leg at §Template is unchanged and remains the authored source. The companion at vault/capsules/templates/document.template.md is that leg extracted, plus the two additions the generator mechanically requires and the leg lacked: `created_by_activation_uid: <<MINT:activation_uid>>` (MINT_TOKEN_NAMES requires all five tokens exactly; verbatim extraction raises TemplateLegError) and `<<MINT:title>>` (tropo-mint-id.py:1502 raises ValueError on --title for a template without the token, which the task''s own acceptance command passes). `uid:` is quoted to match the six shipped companions and the studio''s quoted-UID rule. Deviations disclosed rather than silent: the task said "DO NOT REDESIGN THE SCAFFOLDS", and verbatim extraction is mechanically impossible.'
 template_enforced_from: '2026-07-13'
 template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
 supersedes_version: '3.1'

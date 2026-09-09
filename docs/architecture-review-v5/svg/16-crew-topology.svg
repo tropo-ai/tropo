@@ -1,0 +1,189 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 962" font-family="Helvetica, Arial, sans-serif" role="img">
+  <title>Tropo crew topology — one agent, one clone, main is the bus. Seven working trees against one origin; reference clones borrow the primary's object store; .tropo/flags/resident.json decides which folder an agent boots in; the rule is Mike-locked provisionally and its review condition is unsatisfied.</title>
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .stamp { font-size: 13px; font-weight: bold; fill: #5a6a7a; }
+      .bus-title { font-size: 15px; font-weight: bold; fill: #ffffff; }
+      .bus-sub { font-size: 11.5px; fill: #d8e3ee; }
+      .rail-label { font-size: 11.5px; font-weight: bold; fill: #2c4a6e; }
+      .flow { font-size: 11.5px; fill: #2c3742; }
+      .flow-warn { font-size: 10.5px; font-weight: bold; fill: #b08a4a; }
+      .box-title { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .clone-title { font-size: 12px; font-weight: bold; fill: #2c4a6e; }
+      .clone-title-amber { font-size: 12px; font-weight: bold; fill: #b08a4a; }
+      .clone-sub { font-size: 9.5px; fill: #44525f; }
+      .box-sub { font-size: 10.5px; fill: #44525f; }
+      .panel-title { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .panel-title-amber { font-size: 13px; font-weight: bold; fill: #b08a4a; }
+      .panel-title-red { font-size: 13px; font-weight: bold; fill: #9c2b2b; }
+      .row { font-size: 11.5px; fill: #2c3742; }
+      .row-amber { font-size: 11.5px; fill: #8a6a35; }
+      .row-muted { font-size: 11.5px; fill: #5a6a7a; }
+      .note { font-size: 10.5px; fill: #5a6a7a; }
+      .strip { font-size: 11px; fill: #7a2222; }
+      .tag { font-size: 9.5px; font-weight: bold; fill: #ffffff; }
+      .legend { font-size: 11px; fill: #5a6a7a; }
+      .caption { font-size: 12px; fill: #5a6a7a; font-style: italic; }
+    </style>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="7.5" refY="3.2" orient="auto">
+      <path d="M0,0 L7.5,3.2 L0,6.4 z" fill="#2c4a6e"/>
+    </marker>
+    <marker id="ah-steel" markerWidth="9" markerHeight="9" refX="7.5" refY="3.2" orient="auto">
+      <path d="M0,0 L7.5,3.2 L0,6.4 z" fill="#3a6b8a"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="962" fill="#fafbfc"/>
+
+  <text x="40" y="46" class="title">Crew topology — one agent, one clone, main is the bus</text>
+  <text x="40" y="70" class="subtitle">Seven working trees on one laptop, one origin. `.tropo/WAKE-DISCIPLINE.md` (uid d2bb4dda), clone clause added v1.2.0 on 2026-09-03.</text>
+
+  <!-- ===== the bus ===== -->
+  <rect x="390" y="98" width="500" height="94" rx="4" fill="#2c4a6e"/>
+  <text x="410" y="125" class="bus-title">origin/main — the only meeting point</text>
+  <text x="410" y="146" class="bus-sub">origin = mike-tropo/argo-os.git · there is no per-agent branch</text>
+  <text x="410" y="162" class="bus-sub">All seven trees sit on main — git refuses two worktrees on one</text>
+  <text x="410" y="178" class="bus-sub">branch, so only a clone lets every agent sit literally on main.</text>
+
+  <!-- emit / drain -->
+  <line x1="555" y1="251" x2="555" y2="196" stroke="#2c4a6e" stroke-width="2" marker-end="url(#ah)"/>
+  <line x1="725" y1="192" x2="725" y2="248" stroke="#2c4a6e" stroke-width="2" marker-end="url(#ah)"/>
+  <text x="543" y="216" text-anchor="end" class="flow">emit — write event · commit vault/events/ · git push origin main</text>
+  <text x="543" y="233" text-anchor="end" class="flow-warn">BY HAND: the tool does not push — see below</text>
+  <text x="737" y="216" class="flow">drain — git fetch origin · integrate origin/main · then read</text>
+  <text x="737" y="233" class="flow-warn">BY HAND: the tool does not fetch — see below</text>
+
+  <!-- the rail -->
+  <line x1="100" y1="252" x2="1180" y2="252" stroke="#2c4a6e" stroke-width="3"/>
+  <text x="1240" y="248" text-anchor="end" class="rail-label">main is the bus</text>
+  <line x1="160" y1="252" x2="160" y2="290" stroke="#2c4a6e" stroke-width="1.5"/>
+  <line x1="386" y1="252" x2="386" y2="290" stroke="#2c4a6e" stroke-width="1.5"/>
+  <line x1="542" y1="252" x2="542" y2="290" stroke="#2c4a6e" stroke-width="1.5"/>
+  <line x1="698" y1="252" x2="698" y2="290" stroke="#2c4a6e" stroke-width="1.5"/>
+  <line x1="854" y1="252" x2="854" y2="290" stroke="#2c4a6e" stroke-width="1.5"/>
+  <line x1="1010" y1="252" x2="1010" y2="290" stroke="#2c4a6e" stroke-width="1.5"/>
+  <line x1="1166" y1="252" x2="1166" y2="290" stroke="#2c4a6e" stroke-width="1.5"/>
+
+  <!-- ===== the primary checkout ===== -->
+  <rect x="40" y="290" width="240" height="104" rx="4" fill="#ffffff" stroke="#2c4a6e" stroke-width="2"/>
+  <text x="52" y="313" class="box-title">argo-os/ — primary checkout</text>
+  <text x="52" y="332" class="box-sub">the one folder the founder opens</text>
+  <text x="52" y="347" class="box-sub">resident: talos · T65</text>
+  <text x="52" y="362" class="box-sub">.git/objects 560M — lends to clones</text>
+  <text x="52" y="377" class="box-sub">refreshes when its resident fetches</text>
+
+  <!-- ===== the hidden clones ===== -->
+  <rect x="312" y="290" width="148" height="104" rx="4" fill="#ffffff" stroke="#3a6b8a" stroke-width="1.5"/>
+  <text x="323" y="313" class="clone-title">.crew/argus/</text>
+  <text x="323" y="332" class="clone-sub">resident: argus · A175</text>
+  <text x="323" y="348" class="clone-sub">own .git/config + index</text>
+  <text x="323" y="364" class="clone-sub">.git 19M · borrows</text>
+
+  <rect x="468" y="290" width="148" height="104" rx="4" fill="#ffffff" stroke="#b08a4a" stroke-width="1.5"/>
+  <text x="479" y="313" class="clone-title-amber">.crew/argus-a174/</text>
+  <text x="479" y="332" class="clone-sub">resident: argus · A174</text>
+  <text x="479" y="348" class="clone-sub">own .git/config + index</text>
+  <text x="479" y="364" class="clone-sub">.git 525M · no borrow</text>
+
+  <rect x="624" y="290" width="148" height="104" rx="4" fill="#ffffff" stroke="#3a6b8a" stroke-width="1.5"/>
+  <text x="635" y="313" class="clone-title">.crew/metis/</text>
+  <text x="635" y="332" class="clone-sub">resident: metis · G126</text>
+  <text x="635" y="348" class="clone-sub">own .git/config + index</text>
+  <text x="635" y="364" class="clone-sub">.git 116M · borrows</text>
+
+  <rect x="780" y="290" width="148" height="104" rx="4" fill="#ffffff" stroke="#3a6b8a" stroke-width="1.5"/>
+  <text x="791" y="313" class="clone-title">.crew/orpheus/</text>
+  <text x="791" y="332" class="clone-sub">resident: orpheus · O39</text>
+  <text x="791" y="348" class="clone-sub">own .git/config + index</text>
+  <text x="791" y="364" class="clone-sub">.git 29M · borrows</text>
+
+  <rect x="936" y="290" width="148" height="104" rx="4" fill="#ffffff" stroke="#3a6b8a" stroke-width="1.5"/>
+  <text x="947" y="313" class="clone-title">.crew/talos/</text>
+  <text x="947" y="332" class="clone-sub">no resident marker</text>
+  <text x="947" y="348" class="clone-sub">own .git/config + index</text>
+  <text x="947" y="364" class="clone-sub">.git 22M · borrows</text>
+
+  <rect x="1092" y="290" width="148" height="104" rx="4" fill="#ffffff" stroke="#3a6b8a" stroke-width="1.5"/>
+  <text x="1103" y="313" class="clone-title">.crew/vela/</text>
+  <text x="1103" y="332" class="clone-sub">no resident marker</text>
+  <text x="1103" y="348" class="clone-sub">own .git/config + index</text>
+  <text x="1103" y="364" class="clone-sub">.git 42M · borrows</text>
+
+  <!-- ===== reference borrow rail ===== -->
+  <line x1="160" y1="394" x2="160" y2="424" stroke="#3a6b8a" stroke-width="1.5"/>
+  <line x1="160" y1="424" x2="1166" y2="424" stroke="#3a6b8a" stroke-width="1.5"/>
+  <line x1="386" y1="424" x2="386" y2="398" stroke="#3a6b8a" stroke-width="1.5" marker-end="url(#ah-steel)"/>
+  <line x1="698" y1="424" x2="698" y2="398" stroke="#3a6b8a" stroke-width="1.5" marker-end="url(#ah-steel)"/>
+  <line x1="854" y1="424" x2="854" y2="398" stroke="#3a6b8a" stroke-width="1.5" marker-end="url(#ah-steel)"/>
+  <line x1="1010" y1="424" x2="1010" y2="398" stroke="#3a6b8a" stroke-width="1.5" marker-end="url(#ah-steel)"/>
+  <line x1="1166" y1="424" x2="1166" y2="398" stroke="#3a6b8a" stroke-width="1.5" marker-end="url(#ah-steel)"/>
+  <text x="640" y="446" text-anchor="middle" class="flow">git clone --reference &lt;primary&gt; — the clone's .git/objects/info/alternates points at argo-os/.git/objects (playbook 99341618.md:180)</text>
+  <text x="640" y="463" text-anchor="middle" class="note">5 of 6 borrow and pay only a working tree (.git 19M–116M). .crew/argus-a174/ has no alternates file and pays the full 525M — the cost of independence, and the control on the claim.</text>
+
+  <!-- ===== residency predicate ===== -->
+  <rect x="40" y="486" width="590" height="176" rx="4" fill="#eef2f6" stroke="#b08a4a" stroke-width="1.5"/>
+  <text x="56" y="512" class="panel-title-amber">Which tree does an agent boot in? — .tropo/flags/resident.json</text>
+  <rect x="520" y="497" width="96" height="17" rx="3" fill="#b08a4a"/>
+  <text x="568" y="510" text-anchor="middle" class="tag">RULED · NO TOOL</text>
+  <rect x="56" y="532" width="4" height="13" fill="#3a6b8a"/>
+  <text x="70" y="543" class="row">absent · or names a generation with both born and retired  →  FREE: claim it, boot HERE</text>
+  <rect x="56" y="556" width="4" height="13" fill="#2c4a6e"/>
+  <text x="70" y="567" class="row">a born with NO retired for the NAMED generation  →  OCCUPIED: boot in .crew/&lt;slug&gt;/</text>
+  <rect x="56" y="580" width="4" height="13" fill="#b08a4a"/>
+  <text x="70" y="591" class="row-amber">lineage unreadable  →  OCCUPIED anyway: a wrong "free" puts two agents in one tree</text>
+  <text x="56" y="617" class="note">Reads the generation the marker NAMES, never the file's last line (playbook 99341618.md:178).</text>
+  <text x="56" y="635" class="note">Prose only — no tool writes this marker, and none evaluates the born/retired test.</text>
+  <text x="56" y="653" class="note">Also .tropo/boot-fast-path.md:67. Gitignored (.gitignore:181): a per-tree fact that never travels.</text>
+
+  <!-- ===== marker shape ===== -->
+  <rect x="650" y="486" width="590" height="176" rx="4" fill="#eef2f6" stroke="#b08a4a" stroke-width="1.5"/>
+  <text x="666" y="512" class="panel-title-amber">One declared shape. Nothing validates it. — measured 2026-09-08</text>
+  <rect x="666" y="532" width="4" height="13" fill="#2c4a6e"/>
+  <text x="680" y="543" class="row">{agent, generation, since} — argo-os/ · .crew/argus/ · .crew/metis/  (declared)</text>
+  <rect x="666" y="556" width="4" height="13" fill="#b08a4a"/>
+  <text x="680" y="567" class="row-amber">+ a reason field — .crew/argus-a174/</text>
+  <rect x="666" y="580" width="4" height="13" fill="#b08a4a"/>
+  <text x="680" y="591" class="row-amber">at / root instead of since — .crew/orpheus/</text>
+  <rect x="666" y="604" width="4" height="13" fill="#c5d0da"/>
+  <text x="680" y="615" class="row-muted">no marker at all — .crew/talos/ · .crew/vela/</text>
+  <text x="666" y="641" class="note">Five markers live across seven trees, in three shapes. The playbook declares one shape.</text>
+  <text x="666" y="656" class="note">The marker is what decides the folder, and nothing checks that it is well-formed.</text>
+
+  <!-- ===== falsification strip ===== -->
+  <rect x="40" y="674" width="1200" height="50" rx="4" fill="#ffffff" stroke="#9c2b2b" stroke-width="1.5"/>
+  <text x="52" y="695" class="strip">Once falsified — 2026-09-07: generations A173 and A174 both worked .crew/argus/, and one rebased and pushed the other's commit.</text>
+  <text x="52" y="712" class="strip">It keys on the AGENT, not the session — two generations of one agent still share a tree. The .crew/argus-a174/ clone is the local cure; task f0152d3d8326 closed same day, but the general boot-router fix is unbuilt.</text>
+
+  <!-- ===== the unbuilt half ===== -->
+  <rect x="40" y="744" width="590" height="140" rx="4" fill="#ffffff" stroke="#9c2b2b" stroke-width="1.5"/>
+  <text x="56" y="770" class="panel-title-red">Clause 4 says the tools carry the protocol. They do not.</text>
+  <text x="56" y="794" class="row">tropo-emit-event.py — 790 lines, zero occurrences of "git push"</text>
+  <text x="56" y="812" class="row">tropo-check-events.py — 829 lines, zero occurrences of "git fetch"</text>
+  <text x="56" y="830" class="row">subprocess is imported by the emit tool and never called</text>
+  <text x="56" y="848" class="row">task f0151812d521 · assigned to talos · status: new since 2026-09-03</text>
+  <text x="56" y="870" class="note">Until it lands, every agent does both halves of the bus by hand and the rule holds only as discipline.</text>
+
+  <!-- ===== provisional lock ===== -->
+  <rect x="650" y="744" width="590" height="140" rx="4" fill="#ffffff" stroke="#b08a4a" stroke-width="1.5"/>
+  <text x="666" y="770" class="panel-title-amber">PROVISIONAL LOCK — the review condition is unsatisfied</text>
+  <text x="666" y="794" class="row">Mike, 2026-09-03: "I will lock it, but on a provisional basis... I lock it."</text>
+  <text x="666" y="812" class="row">Condition: binding now, reviewed after v1.94 fires (WAKE-DISCIPLINE.md:17, :139)</text>
+  <text x="666" y="830" class="row-amber">v1.94 never fired — f015fd0f0dee: status pre-ship, publish_state deferred-by-mike</text>
+  <text x="666" y="848" class="row">v1.95.0 shipped instead, public 2026-09-07T11:32:58Z — the condition did not clear</text>
+  <text x="666" y="870" class="note">The lock has been binding, and unreviewed, since 2026-09-03.</text>
+
+  <!-- ===== legend ===== -->
+  <rect x="40" y="902" width="10" height="10" fill="#2c4a6e"/>
+  <text x="58" y="911" class="legend">navy / steel — BUILT and in routine use</text>
+  <rect x="300" y="902" width="10" height="10" fill="#b08a4a"/>
+  <text x="318" y="911" class="legend">amber — ruled but unbuilt, unproven, or held</text>
+  <rect x="588" y="902" width="10" height="10" fill="#9c2b2b"/>
+  <text x="606" y="911" class="legend">red — known broken, or an unlanded cure</text>
+  <rect x="876" y="902" width="10" height="10" fill="#4a8a6b"/>
+  <text x="894" y="911" class="legend">green (proven) — unused here: nothing has earned it</text>
+
+  <text x="40" y="940" class="caption">One agent, one clone; emit pushes, drain fetches. The layout is built and measured; the protocol that keeps it honest is still a habit.</text>
+  <text x="1240" y="940" text-anchor="end" class="stamp">measured 2026-09-08 · v1.95.0</text>
+</svg>

@@ -21,11 +21,11 @@ input:
     root: {type: string, description: "studio root; default is the current studio (own tests run isolated via --root)"}
 output:
   type: object
-  description: "JSON: per-step verdict (open/complete + evidence), overall verdict (complete only if every step is complete), never invents a pass"
+  description: "JSON: per-step verdict (complete/open/not applicable + evidence), overall verdict (complete only if no step is open), never invents a pass. 'not applicable' is reported, never folded into a pass: it means the furniture that step observes is absent from this Studio (no library/captains-log.md, no 00-crew-brief.md, not a git repository) so there was nothing to do and nothing was missed."
 created: '2026-08-24'
 created_by: talos-t50
-modified: '2026-08-24'
-modified_by: talos-t50
+modified: '2026-09-09'
+modified_by: metis-g128
 governed_by: 8dd772a0
 member_of:
   - "8dd772a0"
@@ -58,7 +58,10 @@ checked a subset of a changed playbook would be the exact defect it exists
 to cure.
 
 Each step is "observed on the world" — a file on disk, or an event on the
-bus. Absence of evidence is reported open, never as pass. Two of the eight
+bus. A missing ARTIFACT is reported open, never as pass. Missing FURNITURE —
+the surface a step writes to not existing in this Studio at all — is reported
+`not applicable`, which is its own third state and is also never a pass: it
+emits evidence naming what is absent (see STATUS_* below). Two of the eight
 steps are TOKEN-SHAPED and get known-negative-aware observers rather than a
 bare substring search: Captain's Log (a huge append-only file; matching the
 generation number anywhere in it is not an observer — it must appear in a
@@ -97,6 +100,45 @@ except ImportError:
 
 PLAYBOOK_RELATIVE_PATH = "vault/playbooks/e2c7d185.md"
 CREW_BRIEF_RENDERER_RELATIVE_PATH = "vault/tools/6510afc7.py"
+CAPTAINS_LOG_RELATIVE_PATH = "library/captains-log.md"
+
+#: THREE STATES, NOT TWO. An observer returns `True` (the step landed),
+#: `False` (a real gap — the furniture exists and the artifact is missing,
+#: wrong, or split), or `None` — NOT APPLICABLE: the furniture this step
+#: observes is absent from this Studio, so there was nothing to do and nothing
+#: was missed.
+#:
+#: `None` is NEVER a silent pass. Every not-applicable branch emits evidence
+#: that NAMES the absent furniture, so "nothing to do" can never be mistaken
+#: for "not checked", and the report prints it as its own marker.
+#:
+#: The pattern arrived with `perform_crew_brief_rerender` (f01503e540a2,
+#: vela-v80): measured on a built box, no shipped Studio carries
+#: `00-crew-brief.md`, so that leg returned False and a stranger's first
+#: retirement read `Crew surfaces: OPEN` with no action available to them that
+#: could ever clear it. v1.96 first-minute item 5 measured the same shape on
+#: two more steps — 2 of 8 steps completed on a real box — and this file now
+#: carries the pattern at step level, not just inside one leg:
+#:   * Captain's Log — no shipped box carries `library/captains-log.md`.
+#:   * One commit    — a shipped Studio is not a git repository.
+#: A required step that cannot pass in the shipped product is a defect in the
+#: step, not a finding about the agent.
+STATUS_COMPLETE = "complete"
+STATUS_OPEN = "open"
+STATUS_NOT_APPLICABLE = "not applicable"
+
+
+def _step_status(ok: Optional[bool]) -> str:
+    """Map an observer's tri-state verdict to the reported step status.
+
+    One place, so a new observer cannot invent a fourth spelling and so `None`
+    can never be quietly coerced to `open` by a `if ok else` at a call site —
+    which is exactly how the crew-brief leg's fix would have been lost had the
+    step composed it with `rerendered and status_ok`.
+    """
+    if ok is None:
+        return STATUS_NOT_APPLICABLE
+    return STATUS_COMPLETE if ok else STATUS_OPEN
 
 #: The eight bold step labels, in order, as e2c7d185 §Required Practice
 #: declares them TODAY. This IS a second copy of the list — the contract
@@ -197,10 +239,19 @@ def _memory_dir(root: Path, agent: str) -> Path:
     return root / "agents" / agent / ".tropo-capsule" / "memory"
 
 
+def _memory_surfaces():
+    """Phase-2 name resolution (f0153a6df07f), imported the way this tool
+    already imports event_identity."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from lib import memory_surfaces  # noqa: E402
+
+    return memory_surfaces
+
+
 # --- Step 1: session memories -----------------------------------------------
 
 def observe_session_memories(root: Path, agent: str, gen: str) -> tuple[bool, str]:
-    p = _memory_dir(root, agent) / "agent-memories.jsonl"
+    p = _memory_surfaces().agent_log(root, agent)
     if not p.is_file():
         return False, f"{p} does not exist"
     if p.stat().st_size == 0:
@@ -265,10 +316,32 @@ def observe_reflection(root: Path, agent: str, gen: str) -> tuple[bool, str]:
 
 # --- Step 5: Captain's Log (known-negative-aware) ----------------------------
 
-def observe_captains_log(root: Path, agent: str, gen: str) -> tuple[bool, str]:
-    p = root / "library" / "captains-log.md"
+def observe_captains_log(root: Path, agent: str, gen: str) -> tuple[Optional[bool], str]:
+    """Three states (see STATUS_* above). Returns None when this Studio keeps
+    no Captain's Log at all.
+
+    `None` means NOT APPLICABLE and is distinct from False: no shipped box
+    ships `library/captains-log.md`, so before this fix a stranger's first
+    retirement reported `Captain's Log: OPEN` permanently — no action available
+    to them could clear it, because appending to a log the product does not
+    ship is not an action. Measured on a real box, v1.96 first-minute item 5.
+
+    False is preserved for the case that actually matters: the log EXISTS and
+    carries no real entry for this generation. That is a missed step and stays
+    a missed step. A broken symlink is existence, not absence — it falls to
+    False with its own reason, the same way the crew-brief leg treats one.
+    """
+    p = root / CAPTAINS_LOG_RELATIVE_PATH
+    if not os.path.lexists(p):
+        return None, (
+            f"not applicable — this Studio keeps no {CAPTAINS_LOG_RELATIVE_PATH}; "
+            "there is no log to append to (normal for a freshly unzipped Studio)"
+        )
     if not p.is_file():
-        return False, f"{p} does not exist"
+        return False, (
+            f"{p} exists but is not a readable file (a broken link or a "
+            "directory) — cannot observe; this is a broken log, not an absent one"
+        )
     text = p.read_text(encoding="utf-8", errors="replace")
     # A real entry MARKER, not a bare token match anywhere in a huge file.
     # Two formats live in this file today (found live authoring this
@@ -338,7 +411,34 @@ def observe_event_drain(
 
 # --- Step 7: crew surfaces (driver ACTS: re-render; observes: §Status-Notes) --
 
-def perform_crew_brief_rerender(root: Path) -> tuple[bool, str]:
+#: The rendered surface itself. Its ABSENCE is the signal that this Studio keeps
+#: no crew brief — a single-agent Studio has no crew to brief — and the renderer
+#: at 6510afc7.py requires an existing file, exiting "ERROR: crew brief not found"
+#: without one. Every shipped box is in exactly that state.
+CREW_BRIEF_RELATIVE_PATH = "00-crew-brief.md"
+
+
+def perform_crew_brief_rerender(root: Path) -> tuple[Optional[bool], str]:
+    """Re-render the crew brief. Returns None when the Studio keeps none.
+
+    Three states, not two. `None` means NOT APPLICABLE and is distinct from
+    False: a Studio with no `00-crew-brief.md` has nothing to re-render and has
+    not failed to do anything. Measured 2026-09-08 on a built box (vela-v80):
+    the file is absent from every shipped box, so this leg returned False, the
+    step read `open`, and a stranger's first retirement reported
+    `Crew surfaces: OPEN` permanently — no action available to them could ever
+    clear it. A required step that cannot pass in the shipped product is a
+    defect in the step.
+
+    The not-applicable case EMITS rather than passing quietly: it names the
+    absent file, so "nothing to do" can never be confused with "not checked".
+    """
+    brief = root / CREW_BRIEF_RELATIVE_PATH
+    if not os.path.lexists(brief):
+        return None, (
+            f"not applicable — this Studio keeps no {CREW_BRIEF_RELATIVE_PATH}; "
+            "nothing to re-render (normal for a single-agent or freshly unzipped Studio)"
+        )
     renderer = root / CREW_BRIEF_RENDERER_RELATIVE_PATH
     if not renderer.is_file():
         return False, f"{renderer} not found — cannot re-render"
@@ -396,7 +496,10 @@ def observe_crew_surfaces(
         perform_crew_brief_rerender(root) if perform else (True, "skipped (--no-act)")
     )
     status_ok, status_evidence = observe_status_notes(root, agent, gen, unified_entry_uid)
-    ok = rerendered and status_ok
+    # `rerendered is None` is NOT APPLICABLE, not failure: this Studio keeps no
+    # crew brief. The step then rests on §Status-Notes alone, which every Studio
+    # has. `False` still fails — a renderer that exists and errored is a real gap.
+    ok = status_ok if rerendered is None else (rerendered and status_ok)
     evidence = f"re-render: {rerender_evidence} | status-notes: {status_evidence}"
     return ok, evidence
 
@@ -420,16 +523,64 @@ def _git(root: Path, *args: str) -> tuple[int, str]:
     return r.returncode, (r.stdout or "").strip()
 
 
+def _git_repository_state(root: Path) -> tuple[Optional[bool], str]:
+    """Is there a repository at `root` whose history can be observed?
+
+    Three states, the same three the step reports:
+
+    * True  — git reports a work tree at `root`. Commits are observable.
+    * None  — NOT APPLICABLE: git reports no work tree AND there is no `.git`
+              at the root. This Studio is not a git repository, so there is no
+              history in which artifacts could land together. Every shipped box
+              is in exactly this state.
+    * False — a `.git` EXISTS but git cannot read a repository through it.
+              Broken furniture, not absent furniture, and a real gap.
+
+    `rev-parse --is-inside-work-tree` is asked first because it is the only
+    robust answer: it covers a linked worktree (whose `.git` is a file, not a
+    directory) and a Studio nested inside a larger repository (whose root
+    carries no `.git` of its own, yet whose commits are real and readable).
+    The `.git` probe is only the tiebreak that separates "absent" from
+    "present but unreadable" once git has already declined.
+    """
+    code, out = _git(root, "rev-parse", "--is-inside-work-tree")
+    if code == 0 and out.strip() == "true":
+        return True, ""
+    if not os.path.lexists(root / ".git"):
+        return None, (
+            f"not applicable — this Studio is not a git repository (no .git at "
+            f"{root}, and git reports no work tree); there is no commit history "
+            "in which the artifacts could land together (normal for a freshly "
+            "unzipped Studio)"
+        )
+    return False, (
+        f"{root / '.git'} exists but git could not read a repository through it: "
+        f"{out.strip()[:160] or 'no output from git rev-parse'}"
+    )
+
+
 def observe_one_commit(
     root: Path, agent: str, gen: str, unified_entry_uid: Optional[str] = None,
-) -> tuple[bool, str]:
+) -> tuple[Optional[bool], str]:
     """The playbook's step 8: the retirement's artifacts land in ONE commit.
 
     Observed from `git log`, never from testimony. Reflection is OPTIONAL — an
     absent reflection is not an open step, because the playbook itself marks
     that step optional; a reflection that EXISTS but sits in a different commit
     is a real split and is reported.
+
+    Three states (see STATUS_* above). Returns None when this Studio is not a
+    git repository: "land the artifacts in one commit" is not an instruction a
+    stranger on a shipped, non-git box can follow, and reporting it open told
+    them to do something no action of theirs could satisfy (v1.96 first-minute
+    item 5, measured on a real box). A repository that DOES exist and carries
+    no commit for the letter, or carries the artifacts split across two, is
+    still False — that is the split this step exists to catch.
     """
+    repository, why = _git_repository_state(root)
+    if repository is not True:
+        return repository, why    # None = not applicable; False = broken .git
+
     letter_rel = f"agents/{agent}/transfers/{gen}.md"
     code, sha = _git(root, "log", "--format=%H", "-1", "--", letter_rel)
     if code != 0 or not sha:
@@ -530,36 +681,44 @@ def run_driver(
     steps: dict[str, dict] = {}
 
     ok, ev = observe_session_memories(root, agent, gen)
-    steps["Append session memories"] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["Append session memories"] = {"status": _step_status(ok), "evidence": ev}
 
     ok, ev = observe_letter(root, agent, gen, letter_source)
-    steps["Write the letter"] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["Write the letter"] = {"status": _step_status(ok), "evidence": ev}
 
     ok, ev = observe_reflection(root, agent, gen)
-    steps["Reflection"] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["Reflection"] = {"status": _step_status(ok), "evidence": ev}
 
     ok, ev = observe_captains_log(root, agent, gen)
-    steps["Captain's Log"] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["Captain's Log"] = {"status": _step_status(ok), "evidence": ev}
 
     ok, ev = observe_event_drain(root, agent, gen, party_uid, agent_root_uid, flagged_thread_ids)
-    steps["Drain events"] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["Drain events"] = {"status": _step_status(ok), "evidence": ev}
 
     ok, ev = observe_crew_surfaces(root, agent, gen, unified_entry_uid, perform=perform_acts)
-    steps["Crew surfaces"] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["Crew surfaces"] = {"status": _step_status(ok), "evidence": ev}
 
     ok, ev = observe_retirement_notice(root, agent, gen)
-    steps["Retirement broadcast"] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["Retirement broadcast"] = {"status": _step_status(ok), "evidence": ev}
 
     ok, ev = observe_one_commit(root, agent, gen, unified_entry_uid)
-    steps["One commit"] = {"status": "complete" if ok else "open", "evidence": ev}
+    steps["One commit"] = {"status": _step_status(ok), "evidence": ev}
 
-    open_steps = [label for label in REQUIRED_STEP_LABELS if steps[label]["status"] == "open"]
+    # A not-applicable step does not block completion — there was nothing to do
+    # — and it is NOT counted as complete either. It is listed on its own key so
+    # a reader of the JSON sees exactly which steps this Studio has no furniture
+    # for, and cannot mistake the silence for a pass.
+    open_steps = [label for label in REQUIRED_STEP_LABELS
+                  if steps[label]["status"] == STATUS_OPEN]
+    not_applicable = [label for label in REQUIRED_STEP_LABELS
+                      if steps[label]["status"] == STATUS_NOT_APPLICABLE]
     overall = "complete" if not open_steps else "incomplete"
     return {
         "agent": agent,
         "generation": gen,
         "steps": steps,
         "open_steps": open_steps,
+        "not_applicable_steps": not_applicable,
         "overall": overall,
     }
 
@@ -600,9 +759,17 @@ def main(argv=None) -> int:
         print(json.dumps(report, indent=2))
     else:
         print(f"{args.agent} {args.generation} — retirement practice: {report['overall'].upper()}")
+        markers = {
+            STATUS_COMPLETE: "✓",
+            STATUS_NOT_APPLICABLE: "· n/a",
+            STATUS_OPEN: "✗ OPEN",
+        }
         for label in REQUIRED_STEP_LABELS:
             step = report["steps"][label]
-            marker = "✓" if step["status"] == "complete" else "✗ OPEN"
+            # n/a prints as its own marker. It is neither a tick (nothing was
+            # verified) nor an OPEN (nothing was missed); collapsing it into
+            # either is the reporting half of the same defect.
+            marker = markers[step["status"]]
             print(f"  {marker}  {label}  ({step['evidence']})")
     return 0 if report["overall"] == "complete" else 1
 

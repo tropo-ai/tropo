@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 930" font-family="Helvetica, Arial, sans-serif" role="img">
+  <title>The defect-family map — seven families of Tropo failure, with measured instance counts and disposition; families A, C and F shown as one underlying condition seen from three angles.</title>
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .stamp { font-size: 13px; font-weight: bold; fill: #5a6a7a; }
+      .band-label { font-size: 14px; font-weight: bold; fill: #ffffff; }
+      .band-label-dark { font-size: 14px; font-weight: bold; fill: #2c4a6e; letter-spacing: 0.6px; }
+      .fam-title { font-size: 15px; font-weight: bold; fill: #1a2332; }
+      .fam-title-sm { font-size: 14px; font-weight: bold; fill: #1a2332; }
+      .count { font-size: 11.5px; fill: #5a6a7a; }
+      .badge-red { font-size: 12px; font-weight: bold; fill: #9c2b2b; }
+      .badge-amber { font-size: 12px; font-weight: bold; fill: #b08a4a; }
+      .line { font-size: 11.5px; fill: #2c3742; }
+      .line-green { font-size: 11.5px; font-weight: bold; fill: #4a8a6b; }
+      .line-red { font-size: 11.5px; font-weight: bold; fill: #9c2b2b; }
+      .reflex { font-size: 11px; fill: #5a6a7a; font-style: italic; }
+      .spine-hd { font-size: 14px; font-weight: bold; fill: #ffffff; }
+      .spine-sub { font-size: 12px; fill: #e6edf4; }
+      .legend { font-size: 11.5px; fill: #2c3742; }
+      .caption { font-size: 12px; fill: #5a6a7a; font-style: italic; }
+    </style>
+    <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2c4a6e"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="930" fill="#ffffff"/>
+
+  <text x="40" y="48" class="title">The defect-family map — seven families</text>
+  <text x="40" y="72" class="subtitle">Organised by the shape of the mistake, not the date of it. Colour is disposition, not severity. Every count below was checked against the tree, not the prose.</text>
+
+  <!-- ============ PANEL: the structural finding, A + C + F ============ -->
+  <rect x="40" y="100" width="1200" height="432" rx="6" fill="#eef2f6" stroke="#2c4a6e" stroke-width="1.5"/>
+  <rect x="40" y="100" width="1200" height="30" rx="6" fill="#2c4a6e"/>
+  <rect x="40" y="118" width="1200" height="12" fill="#2c4a6e"/>
+  <text x="56" y="121" class="band-label">THE STRUCTURAL FINDING — A, C and F are not three families. They are one condition seen from three angles.</text>
+
+  <!-- Family A -->
+  <rect x="56" y="146" width="376" height="252" rx="4" fill="#ffffff" stroke="#9c2b2b" stroke-width="2"/>
+  <text x="72" y="174" class="fam-title">A — One fact, two readers,</text>
+  <text x="72" y="192" class="fam-title">one of them updated</text>
+  <text x="72" y="213" class="count">~30 measured instances across six releases</text>
+  <text x="72" y="235" class="badge-red">LIVE · CURE VERIFIED, NOT ON MAIN</text>
+  <line x1="72" y1="245" x2="416" y2="245" stroke="#c5d0da" stroke-width="1"/>
+  <text x="72" y="264" class="line">release_authorization.py:493 reads ev.get("event")</text>
+  <text x="72" y="281" class="line">tropo-publish-release.py:1412 writes the key "type"</text>
+  <text x="72" y="298" class="line-red">→ a published run can never re-authorize again</text>
+  <text x="72" y="315" class="line">_STEP_UID_RE = ^[0-9a-f]{8}$ at :440 — 8-hex, armed</text>
+  <text x="72" y="332" class="line">release_events.py:337 — a 2nd reader, found later</text>
+  <text x="72" y="349" class="line">cure: 14 files, PASS_WITH_FINDINGS, not landed</text>
+  <text x="72" y="366" class="line">survives only via commit 161704beb (temp worktree)</text>
+  <text x="72" y="387" class="reflex">Reflex: when an output format changes, visit every reader.</text>
+
+  <!-- Family C -->
+  <rect x="452" y="146" width="376" height="252" rx="4" fill="#ffffff" stroke="#9c2b2b" stroke-width="2"/>
+  <text x="468" y="174" class="fam-title">C — The instrument that</text>
+  <text x="468" y="192" class="fam-title">cannot fail, or cannot pass</text>
+  <text x="468" y="213" class="count">4 named instances · 1 cured, 1 filed P0 and open</text>
+  <text x="468" y="235" class="badge-red">LIVE · GUARD BUILT, NOT WIRED</text>
+  <line x1="468" y1="245" x2="812" y2="245" stroke="#c5d0da" stroke-width="1"/>
+  <text x="468" y="264" class="line">a -k selector matching nothing prints Ran 0 tests /</text>
+  <text x="468" y="281" class="line">OK and exits clean</text>
+  <text x="468" y="298" class="line-red">41 of 92 acceptance criteria could go green blind</text>
+  <text x="468" y="315" class="line">tropo-check-spec-verifiability.py exists — no caller</text>
+  <text x="468" y="332" class="line">a scorecard that structurally could not pass — <tspan class="line-green">CURED</tspan></text>
+  <text x="468" y="349" class="line">derive_state() skips receipts on a first pass — P0</text>
+  <text x="468" y="366" class="line">a sweep closed 14 records not done; 3 checks agreed</text>
+  <text x="468" y="387" class="reflex">Reflex: ask what input makes this check skip.</text>
+
+  <!-- Family F -->
+  <rect x="848" y="146" width="376" height="252" rx="4" fill="#ffffff" stroke="#b08a4a" stroke-width="2"/>
+  <text x="864" y="174" class="fam-title">F — The machine was built</text>
+  <text x="864" y="192" class="fam-title">and never fired</text>
+  <text x="864" y="213" class="count">5 named instances across three releases</text>
+  <text x="864" y="235" class="badge-amber">BUILT BUT UNPROVEN · ONE LANE UNBUILT</text>
+  <line x1="864" y1="245" x2="1208" y2="245" stroke="#c5d0da" stroke-width="1"/>
+  <text x="864" y="264" class="line">v1.93.0 shipped attested-manual; the fire deadlocked</text>
+  <text x="864" y="281" class="line">v1.94's fire --authorize: unit-verified, never run</text>
+  <text x="864" y="298" class="line">v1.94.0: 14 dev-specs closed, then deferred forever</text>
+  <text x="864" y="315" class="line">its own record still reads status: pre-ship</text>
+  <text x="864" y="332" class="line">promotion lane ruled, unbuilt — grep promot → 0 hits</text>
+  <text x="864" y="349" class="line">first-boot walk, 14KB + 20KB of tests, never fired</text>
+  <text x="864" y="366" class="line-red">v1.95: 28 founder gestures vs ≤3 · 33h 22m vs 30m</text>
+  <text x="864" y="387" class="reflex">Response is a discipline, not a tool: publish the ratchet.</text>
+
+  <!-- connectors into the spine -->
+  <line x1="244" y1="398" x2="244" y2="426" stroke="#2c4a6e" stroke-width="1.5" marker-end="url(#arw)"/>
+  <line x1="640" y1="398" x2="640" y2="426" stroke="#2c4a6e" stroke-width="1.5" marker-end="url(#arw)"/>
+  <line x1="1036" y1="398" x2="1036" y2="426" stroke="#2c4a6e" stroke-width="1.5" marker-end="url(#arw)"/>
+
+  <!-- the spine -->
+  <rect x="56" y="430" width="1168" height="86" rx="4" fill="#2c4a6e"/>
+  <text x="76" y="458" class="spine-hd">One condition: a declared thing and a wired thing drift apart, and no instrument is sensitive to the gap.</text>
+  <text x="76" y="480" class="spine-sub">A is two writers of one fact diverging. C is the instrument that would have caught it, returning a verdict it could not have failed to return.</text>
+  <text x="76" y="500" class="spine-sub">F is a capability declared built that has never run. Curing an instance of any one of the three leaves the other two standing.</text>
+
+  <!-- ============ BAND: the other four families ============ -->
+  <text x="40" y="562" class="band-label-dark">THE OTHER FOUR FAMILIES</text>
+  <line x1="264" y1="557" x2="1240" y2="557" stroke="#c5d0da" stroke-width="1"/>
+
+  <!-- Family B -->
+  <rect x="40" y="576" width="288" height="230" rx="4" fill="#ffffff" stroke="#b08a4a" stroke-width="2"/>
+  <text x="56" y="602" class="fam-title-sm">B — "A record exists"</text>
+  <text x="56" y="620" class="fam-title-sm">read as "a record says pass"</text>
+  <text x="56" y="641" class="count">6 of v1.95.0's 7 defects</text>
+  <text x="56" y="663" class="badge-amber">FIX PROPOSED, NOT SHIPPED</text>
+  <line x1="56" y1="673" x2="312" y2="673" stroke="#c5d0da" stroke-width="1"/>
+  <text x="56" y="691" class="line">The same dead end three times</text>
+  <text x="56" y="707" class="line">in one day; named by the chief</text>
+  <text x="56" y="723" class="line">architect 2026-09-07. The 7th</text>
+  <text x="56" y="739" class="line">defect is Family A.</text>
+  <text x="56" y="755" class="line">Generalizing fix — every gate</text>
+  <text x="56" y="771" class="line">names the verdict it protects</text>
+  <text x="56" y="787" class="line">— ruled for the next release.</text>
+
+  <!-- Family D -->
+  <rect x="344" y="576" width="288" height="230" rx="4" fill="#ffffff" stroke="#9c2b2b" stroke-width="2"/>
+  <text x="360" y="602" class="fam-title-sm">D — The fix lands where</text>
+  <text x="360" y="620" class="fam-title-sm">the author was looking</text>
+  <text x="360" y="641" class="count">3 named · 2 cured, 1 still live</text>
+  <text x="360" y="663" class="badge-red">RESIDUE STILL SHIPPING</text>
+  <line x1="360" y1="673" x2="616" y2="673" stroke="#c5d0da" stroke-width="1"/>
+  <text x="360" y="691" class="line">39 channel instructions across 10</text>
+  <text x="360" y="707" class="line">shipped playbooks; 4 files cured,</text>
+  <text x="360" y="723" class="line-red">6 instructions still live today</text>
+  <text x="360" y="739" class="line">(57a87001:224, 4a2f6dbd:75,341-345)</text>
+  <text x="360" y="755" class="line">→ they name paths not on disk.</text>
+  <text x="360" y="771" class="line">STUDIO.md:118 uid width — <tspan class="line-green">CURED</tspan></text>
+  <text x="360" y="787" class="line">Retirement boundary gone 9 days.</text>
+
+  <!-- Family E -->
+  <rect x="648" y="576" width="288" height="230" rx="4" fill="#ffffff" stroke="#9c2b2b" stroke-width="2"/>
+  <text x="664" y="602" class="fam-title-sm">E — Prose to an agent is a</text>
+  <text x="664" y="620" class="fam-title-sm">request, not a wire</text>
+  <text x="664" y="641" class="count">2 agents, 2 tiers, 1 session</text>
+  <text x="664" y="663" class="badge-red">NO WIRE EXISTS · UNCURED</text>
+  <line x1="664" y1="673" x2="920" y2="673" stroke="#c5d0da" stroke-width="1"/>
+  <text x="664" y="691" class="line">The concierge skipped 3 of 9</text>
+  <text x="664" y="707" class="line">numbered boot steps and wrote</text>
+  <text x="664" y="723" class="line">that into her own report.</text>
+  <text x="664" y="739" class="line">A companion agent did 1 of 6</text>
+  <text x="664" y="755" class="line">declared reads, asserting six.</text>
+  <text x="664" y="771" class="line">Both sat inside a founder PASS.</text>
+  <text x="664" y="787" class="line">Family B at the human layer.</text>
+
+  <!-- Family G -->
+  <rect x="952" y="576" width="288" height="230" rx="4" fill="#ffffff" stroke="#b08a4a" stroke-width="2"/>
+  <text x="968" y="602" class="fam-title-sm">G — Near-misses inside the</text>
+  <text x="968" y="620" class="fam-title-sm">verification discipline</text>
+  <text x="968" y="641" class="count">3 named · each caught after the fact</text>
+  <text x="968" y="663" class="badge-amber">CAUGHT, NOT INSTRUMENTED</text>
+  <line x1="968" y1="673" x2="1224" y2="673" stroke="#c5d0da" stroke-width="1"/>
+  <text x="968" y="691" class="line">A self-authored suite passed 16 tests</text>
+  <text x="968" y="707" class="line">naming broken behaviour. A non-author</text>
+  <text x="968" y="723" class="line">rewrite (149 tests) found the runner</text>
+  <text x="968" y="739" class="line">never reached its build step at all.</text>
+  <text x="968" y="755" class="line">The v1.95 driver cured the live</text>
+  <text x="968" y="771" class="line">release before verification ran.</text>
+  <text x="968" y="787" class="line">Two duplications in 90 min: no claim.</text>
+
+  <!-- ============ LEGEND ============ -->
+  <line x1="40" y1="834" x2="1240" y2="834" stroke="#c5d0da" stroke-width="1"/>
+  <rect x="40" y="852" width="14" height="10" fill="#4a8a6b"/>
+  <text x="62" y="861" class="legend">CURED — an instance proven against the world</text>
+  <rect x="370" y="852" width="14" height="10" fill="#b08a4a"/>
+  <text x="392" y="861" class="legend">HELD, BUILT BUT UNPROVEN, or RULED AND UNBUILT</text>
+  <rect x="712" y="852" width="14" height="10" fill="#9c2b2b"/>
+  <text x="734" y="861" class="legend">LIVE DEFECT or UNLANDED CURE</text>
+  <text x="950" y="861" class="reflex">Border colour = the family's disposition today.</text>
+
+  <text x="40" y="890" class="caption">Verified against the tree at commit b7555b5b5. Where the written record and the tree disagreed, the tree won: the 8-hex landmine sits 53 lines above the</text>
+  <text x="40" y="906" class="caption">reader it endangers, not 49, and six stale channel instructions survive in shipped playbooks, not seven. No family on this page is closed by an instrument.</text>
+  <text x="1240" y="924" text-anchor="end" class="stamp">measured 2026-09-08 · v1.95.0</text>
+</svg>

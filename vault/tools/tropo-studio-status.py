@@ -321,7 +321,7 @@ GENESIS_CURE = 'python3 vault/tools/tropo-rebuild-index.py --apply --vault-path 
 
 def section_identity(root=None):
     """v1.95 Spine A AC2(b) (f015de6b3a18): ONE [WARN] line naming the cure when
-    the studio-identity manifest is absent or malformed; nothing when present.
+    the studio-identity manifest is absent or malformed; explicit OK when present.
     Mike's premise at the walk was that every boot already ran this script and
     would see the identity; neither boot path invoked it (activate.md: zero
     hits; the playbook: one prose mention). Both paths now carry a numbered
@@ -348,6 +348,8 @@ def section_identity(root=None):
                      % GENESIS_CURE)
     except Exception as exc:  # noqa: BLE001
         lines.append('  [WARN] studio identity: reader failed (%s: %s)' % (type(exc).__name__, exc))
+    else:
+        lines.append('  [OK] studio identity: present and valid')
     return ('studio identity', lines)
 
 
@@ -398,6 +400,167 @@ def section_meta():
         lines.append('  boot derivations: UNKNOWN (%s) -- treat as RED, do the full reads' % type(_e).__name__)
 
     return 'studio metadata', lines
+
+
+def section_nightly():
+    """The candidate lane's last result, in the surface Mike already reads.
+
+    Wired 2026-09-07 by metis-g124 at Mike's word: "wire it into my morning
+    signal". The lane (.github/workflows/candidate.yml, ruling record
+    f015e0581314) builds the box from HEAD every night and reports. Before this
+    row, its only surface was the GitHub Actions tab -- a developer page the
+    founder has no reason to open, which makes a failing nightly a check nobody
+    sees, which is worth nothing. That is risk 3 of the four named when the lane
+    shipped, and this closes it.
+
+    Offline-safe by the update-discovery pattern: any failure to reach GitHub is
+    reported as UNKNOWN, never as green. A nightly we could not read is not a
+    nightly that passed.
+    """
+    lines = []
+    _creds_ok = False
+
+    # DAILY GATE, not per-boot. metis-g124 measured the first version of this
+    # section at 1.6-2.5s on the happy path but up to ~37s worst case (a slow,
+    # not-dead network hitting both timeouts) -- imposed on EVERY agent boot,
+    # for two facts that change once a day. That is the boot-overhead waste
+    # OP-1's corollary names, added by the person who spent the day cutting it.
+    #
+    # Cached by the studio's own established pattern: the dated flag that
+    # update-discovery has used since v1.79. First agent of the day pays ~2s and
+    # writes the cache; every later boot reads it for nothing. .tropo/flags/ is
+    # gitignored (machine-local state, task f0155dd8ab09), so the cache never
+    # travels and never lies about another machine.
+    # A DATE-keyed cache has a hole: boot at 06:00Z, cache green, the nightly
+    # then fails at 07:00Z, and every boot that day reads green. So the cache
+    # carries its own timestamp and expires after three hours -- staleness is
+    # bounded to less than the gap between nightly runs, and a busy day pays a
+    # couple of extra seconds rather than showing a stale all-clear.
+    _cache = os.path.join(ROOT, '.tropo', 'flags', 'nightly-status.json')
+    _TTL_H = 3
+    # The live-channel verdict belongs to the installed version. Read it before
+    # cache admission so an upgrade cannot inherit the previous version's green.
+    try:
+        with open(os.path.join(ROOT, '.tropo', 'version.md')) as _fh:
+            _version = _fh.read()
+    except (OSError, UnicodeError):
+        _version = None
+    _v = _version.strip().lstrip('v') if _version is not None else ''
+    if os.path.exists(_cache):
+        try:
+            with open(_cache) as _fh:
+                _c = json.load(_fh)
+            _at, _ = parse_at(_c.get('at', ''))
+            if (_at and 0 <= (NOW - _at).total_seconds() < _TTL_H * 3600
+                    and 'version' in _c and _c['version'] == _version):
+                return 'nightly candidate lane', _c['lines'] + [
+                    '  (cached %s; refreshes after %dh)' % (since(_at, NOW), _TTL_H)]
+        except Exception:
+            pass  # an unreadable or expired cache is a miss, never a verdict
+
+    try:
+        import subprocess as _sp
+        out = _sp.run(
+            ['gh', 'run', 'list', '--workflow=candidate.yml', '--limit', '1',
+             '--json', 'conclusion,status,createdAt,headSha,url,event'],
+            cwd=ROOT, capture_output=True, text=True, timeout=8)
+        if out.returncode != 0:
+            raise RuntimeError((out.stderr or 'gh failed').strip().splitlines()[0][:80])
+        runs = json.loads(out.stdout or '[]')
+        if not runs:
+            lines.append('  candidate lane: NEVER RUN -- the nightly has no history yet')
+        else:
+            r = runs[0]
+            concl = r.get('conclusion') or r.get('status') or 'unknown'
+            # parse_at returns (datetime, kind); take the datetime, and keep '?'
+            # when it could not be parsed rather than inventing a time.
+            _t, _kind = parse_at(r.get('createdAt', ''))
+            when = since(_t, NOW) if _t else '?'
+            sha = (r.get('headSha') or '')[:9]
+            if concl == 'success':
+                lines.append('  candidate lane: ok -- last build green %s (commit %s)' % (when, sha))
+            elif concl in ('in_progress', 'queued', 'waiting'):
+                lines.append('  candidate lane: %s (started %s; commit %s)' % (concl, when, sha))
+            else:
+                # The loud warn line. Mike, 2026-08-29: "read what is past due and
+                # then warn me loudly."
+                lines.append('  candidate lane: !! %s %s on commit %s'
+                             % (str(concl).upper(), when, sha))
+                lines.append('     the box did not build clean from HEAD. %s' % (r.get('url') or ''))
+    except Exception as _e:
+        lines.append('  candidate lane: UNKNOWN (%s) -- could not reach GitHub; '
+                     'treat as unchecked, never as green' % type(_e).__name__)
+
+    # The credential half of the fire preconditions, checked HERE and not in CI.
+    #
+    # metis-g124, 2026-09-07: two of the eleven fire preconditions need secrets
+    # (the Supabase key, a token for the release org). Running them in the
+    # nightly would mean copying a production secret into GitHub Actions for a
+    # check whose answer is almost always yes. Declined: the value is knowing a
+    # key exists, the cost is a second system holding it. This machine already
+    # has them, so the same fact costs nothing here.
+    #
+    # Names only. No value, no length, no prefix is ever printed.
+    try:
+        env_file = os.path.join(ROOT, 'tropo-app', '.env.local')
+        need = ('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SECRET_KEY')
+        if not os.path.exists(env_file):
+            lines.append('  fire credentials: NOT FOUND at tropo-app/.env.local '
+                         '-- a fire would refuse on fire-supabase-credentials')
+        else:
+            present = set()
+            with open(env_file) as fh:
+                for ln in fh:
+                    k = ln.split('=', 1)[0].strip()
+                    if k in need and ln.split('=', 1)[-1].strip():
+                        present.add(k)
+            missing = [k for k in need if k not in present]
+            if missing:
+                lines.append('  fire credentials: !! MISSING %s -- a fire would refuse'
+                             % ', '.join(missing))
+            else:
+                lines.append('  fire credentials: ok -- both Supabase keys present (names only, never read)')
+                _creds_ok = True
+    except Exception as _e:
+        lines.append('  fire credentials: UNKNOWN (%s) -- unchecked, never assume present'
+                     % type(_e).__name__)
+
+    # Can a customer still fetch what we published?
+    #
+    # This ran in CI for one hour on 2026-09-07 before its first run proved it
+    # needs the Supabase key, which CI does not have and should not be given.
+    # It lives here instead, where the credentials already are. Guarded: no
+    # credentials means SKIPPED with the reason named, never a silent pass and
+    # never a red line on a machine that was never going to be able to check.
+    if _creds_ok:
+        try:
+            import subprocess as _sp2
+            if _v:
+                _o = _sp2.run(['python3', os.path.join(ROOT, 'vault', 'tools',
+                                                       'tropo-publish-release.py'),
+                               'verify-channel', '--version', _v],
+                              cwd=ROOT, capture_output=True, text=True, timeout=12)
+                if _o.returncode == 0:
+                    lines.append('  live channel: ok -- v%s named current, every customer-facing url resolves' % _v)
+                else:
+                    _why = ((_o.stderr or '') + '\n' + (_o.stdout or '')).strip().splitlines()
+                    _why = next((l.strip() for l in _why if 'RED' in l or 'error' in l.lower()), 'see verify-channel')
+                    lines.append('  live channel: !! RED for v%s -- %s' % (_v, _why[:110]))
+            else:
+                lines.append('  live channel: UNKNOWN (installed version unavailable) -- unchecked')
+        except Exception as _e:
+            lines.append('  live channel: UNKNOWN (%s) -- unchecked' % type(_e).__name__)
+    else:
+        lines.append('  live channel: skipped (no credentials on this machine to read the manifest)')
+
+    try:
+        os.makedirs(os.path.dirname(_cache), exist_ok=True)
+        with open(_cache, 'w') as _fh:
+            json.dump({'at': NOW.isoformat(), 'version': _version, 'lines': lines}, _fh)
+    except Exception:
+        pass  # an unwritable cache costs a repeat check, never a wrong answer
+
+    return 'nightly candidate lane', lines
 
 
 def section_bus():
@@ -475,6 +638,22 @@ def emit_broadcast(attention, key, new_ids=None):
     return ok, msg
 
 
+def signature_sections(sections):
+    """Drop nightly display ages without hiding verdicts, commits or errors."""
+    result = {}
+    for title, lines in sections:
+        if title == 'studio-ops schedule state':
+            continue
+        if title == 'nightly candidate lane':
+            lines = [
+                re.sub(r'\b\d+[hd] ago\b|today \(date precision\)', '<age>', line)
+                if line.startswith('  candidate lane:') and 'UNKNOWN' not in line else line
+                for line in lines if not line.startswith('  (cached ')
+            ]
+        result[title] = lines
+    return result
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--no-emit', action='store_true', help='dry run (no broadcast, no log write)')
@@ -513,37 +692,54 @@ def main():
             return 0
         print('FATAL: studio-ops substrate missing (%s)' % OPS)
         return 1
-    roster = json.load(open(ROSTER))
-    rows, bad_lines = read_jsonl(LOG)
-    if not roster.get('items'):
-        print('FATAL: studio-ops roster has no items — emptied or corrupted; refusing to report all-clear')
+    def identity_before_ops_error(message):
+        title, lines = section_identity()
+        print(title)
+        for line in lines:
+            print(line)
+        print(message)
         return 1
+
+    try:
+        with open(ROSTER) as roster_file:
+            roster = json.load(roster_file)
+        rows, bad_lines = read_jsonl(LOG)
+    except (OSError, ValueError) as exc:
+        return identity_before_ops_error('FATAL: studio-ops substrate unreadable (%s: %s)' %
+                                         (type(exc).__name__, exc))
+    if not isinstance(roster, dict) or not roster.get('items'):
+        return identity_before_ops_error(
+            'FATAL: studio-ops roster has no items — emptied or corrupted; refusing to report all-clear')
     if not rows:
-        print('FATAL: studio-ops log is empty — truncated or corrupted; refusing to report all-clear')
-        return 1
+        return identity_before_ops_error(
+            'FATAL: studio-ops log is empty — truncated or corrupted; refusing to report all-clear')
 
-    sla, ops_lines, attention, _ = section_ops(roster, rows, bad_lines)
-    sections = [
-        ('studio-ops schedule state', ops_lines),
-        section_crew(), section_git(), section_work(args.as_agent, args.board), section_meta(),
-        section_identity(), section_bus(),
-    ]
+    try:
+        sla, ops_lines, attention, _ = section_ops(roster, rows, bad_lines)
+        sections = [
+            ('studio-ops schedule state', ops_lines),
+            section_crew(), section_git(), section_work(args.as_agent, args.board), section_meta(),
+            section_nightly(), section_identity(), section_bus(),
+        ]
 
-    # F9: signature over SUBSTANCE with all growing quantities (ages, ago-text)
-    # stripped — buckets and content only; presentation never enters the hash
-    sig_core = {
-        'ops_buckets': sorted('%s:%s' % (i['runner'], bucket_for(i, last_event_per_runner(rows), NOW)[0]) for i in roster['items']),
-        'sections': {t: ls for t, ls in sections if t != 'studio-ops schedule state'},
-    }
-    sig = hashlib.sha256(json.dumps(sig_core, sort_keys=True).encode()).hexdigest()[:16]
-    checks = [e for e in rows if e.get('runner') == 'tropo-studio-status' and e.get('event') == 'status_check']
-    prev_sig = checks[-1].get('signature') if checks else None
-    prev_key = checks[-1].get('attention_key') if checks else None
-    prev_ids = checks[-1].get('attention_ids') if checks else None
+        # F9: signature over SUBSTANCE with all growing quantities (ages, ago-text)
+        # stripped — buckets and content only; presentation never enters the hash
+        sig_core = {
+            'ops_buckets': sorted('%s:%s' % (i['runner'], bucket_for(i, last_event_per_runner(rows), NOW)[0]) for i in roster['items']),
+            'sections': signature_sections(sections),
+        }
+        sig = hashlib.sha256(json.dumps(sig_core, sort_keys=True).encode()).hexdigest()[:16]
+        checks = [e for e in rows if e.get('runner') == 'tropo-studio-status' and e.get('event') == 'status_check']
+        prev_sig = checks[-1].get('signature') if checks else None
+        prev_key = checks[-1].get('attention_key') if checks else None
+        prev_ids = checks[-1].get('attention_ids') if checks else None
 
-    key = attention_key(attention)
-    ids = attention_ids(attention)
-    do_emit, why, new_ids = decide_emit(attention, prev_ids, prev_key)
+        key = attention_key(attention)
+        ids = attention_ids(attention)
+        do_emit, why, new_ids = decide_emit(attention, prev_ids, prev_key)
+    except Exception as exc:  # read-only report preparation; never turn corrupt ops into silent identity
+        return identity_before_ops_error('FATAL: studio-ops report failed (%s: %s)' %
+                                         (type(exc).__name__, exc))
     if args.no_emit:
         emit_ok, bcast = None, 'broadcast: suppressed (--no-emit)'
     elif not do_emit:

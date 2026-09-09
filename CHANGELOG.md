@@ -7,6 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.96.0] - 2026-09-09
+
+The first user's first two days, and the release that ships itself. A stranger unzips a Studio,
+boots the concierge, mints a companion, retires it, and gets back to it tomorrow; every one of those
+five acts was measured on a built box by a cold reader and fixed where the box told a different story
+than the prose. The one machinery item is the promotion lane: the release fires through one named
+command, told which run to ship, bound to the bytes that were judged. This release was scoped to what
+the machinery could survive after v1.95, and that scoping is itself a finding for the retrospective.
+
+### Added
+- **The promotion lane.** `tropo-publish-release.py promote --version X.Y.Z --activation-uid <uid>`
+  resolves the named run rather than the newest file on disk, runs the fire preflight once and the
+  ship shadow once, prints both verdicts in full, and asks once. A publication that already
+  completed is never re-fired silently and never denied outright: the guard warns, explains the
+  consequence, and lets the founder decide. The zip is hashed against its frozen receipt before
+  upload. The publisher's only inference, selection by newest file, is deleted, not guarded.
+- **A first boot that says what it actually read.** Every agent's activation begins a read window and
+  ends with a report of the files the harness observed it read, or an explicit "not observable in
+  this harness" instead of an invented count. The concierge's first message carries what the agent
+  can do, what it read, and how to come back tomorrow.
+- **Come back tomorrow works.** A companion's day-one learning, written through the shipped
+  memory skill, is read at its day-two boot; the minted activation pointer carries the one line to
+  type to reach the same agent again.
+- **The Architecture Review v5** ships as the one review in the box, with fifteen self-contained
+  figures and a diagram index the Studio Map renders from. v4 leaves the box and stays in the
+  repository as history.
+- **A candidate box every night.** The nightly lane keeps the box it builds past the runner, reports
+  its twelve gates on it, and proves the box against its own manifest.
+
+### Changed
+- **Identity first, then the first agent, in the founder's words.** Right after the greeting, Po asks
+  your name and the Studio's name and purpose, then suggests Darin first and Cal second in plain
+  language rather than role summaries. The earlier "value before setup" deferral put the name behind
+  a pause that never arrived on the founder's own dry run, and the offer never fired. (First-minute
+  fixes from the external test, 2026-09-09.) From his second round on the fixed box: the
+  orientation walk is sequenced after the identity beat instead of competing with it; the founder
+  is asked his own name first, as the words say; a fresh Studio's first document no longer fails
+  its own validator; the version-ahead-of-channel state is named; STUDIO.md states the uid rule
+  the mint actually follows; and KNOWN-LIMITATIONS lists what the two rounds found and left.
+- **The read report counts observed reads.** A file read whose content hash matches inside the
+  activation window is reported as observed, with line coverage marked unknown where the harness
+  gives none, instead of the `0/11` every agent on the tested box reported.
+- **The founder principal is minted complete.** Its accountability scope carries a default
+  sentence instead of a placeholder the validator flagged on the first health check.
+- **Two retirement steps read not-applicable on a plain-files Studio** (the captain's log and the
+  one-commit check) instead of open forever. Genesis seeds the memory `entries/` directory the
+  shipped memory skill writes to, and the skill names the 12-hex uid the mint actually prints.
+- **First setup is quiet.** The concierge's index build keeps its full output in a log, preserves
+  exit status, and shows the real error only on failure; a stranger no longer reads twelve hundred
+  lines of diagnostics before the greeting.
+- **`npm test` on a fresh box builds the index once, says so once, and then answers honestly**
+  instead of reporting failure on a perfect box that had not been initialized.
+- **Fire authorization** accepts the studio's own published runs: the published v1.95 run passes
+  preflight green across eleven gates.
+- **Gates on the founder's path warn, explain, and let him decide.** A machine refuses only the
+  structurally impossible; everything else is a loud warning plus an explicit confirm.
+
+### Fixed
+- The shipped retirement playbook named Tropo's founder as the customer's authority and required a
+  crew brief no box carries. It now speaks to "your principal", the crew-brief step is not applicable
+  in a Studio that keeps none, and the retirement driver reports that as complete rather than open
+  forever.
+- The concierge greeting template had no slot for three legs its own file mandated; a copying agent
+  dropped all three. The template now carries them.
+- Cal and Darin are named in the README and START-TROPO before the concierge offers them.
+- Numeric-folder scans are contained to the folders they name; the final preflight tells the truth
+  about skipped gates instead of reading them as green.
+
+### Not in this build, stated so nothing above reads as more than it is
+- The seven-beat first-day walk was scored on candidate #3 (one of seven passing) and the fixes
+  above landed after it; the walk of the shipped bytes runs after publication and its scores are
+  published with the retrospective, not claimed here.
+- The phase-2 memory surface rename is cut to v1.97 by decision.
+- The founder's gesture count from candidate-green to public is tallied at close and published;
+  this changelog does not claim a number.
+
 ## [1.95.0] - 2026-09-06
 
 The arrival release. v1.94 was closed deferred and will never be used: the box it built carried a
@@ -595,7 +671,9 @@ live dashboard: boards/v1.91-release-dashboard.html).
 
 Versions prior to 1.69.0 shipped before Tropo's public release; their detailed history is preserved in the project's internal records.
 
-[Unreleased]: https://github.com/tropo-ai/tropo/compare/v1.94.0...HEAD
+[Unreleased]: https://github.com/tropo-ai/tropo/compare/v1.96.0...HEAD
+[1.96.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.96.0
+[1.95.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.95.0
 [1.94.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.94.0
 [1.93.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.93.0
 [1.92.0]: https://github.com/tropo-ai/tropo/releases/tag/v1.92.0

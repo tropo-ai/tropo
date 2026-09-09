@@ -1,0 +1,201 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 910" font-family="Helvetica, Arial, sans-serif" role="img">
+  <title>The two-pipeline constitution: dev-pipeline closes at one tested SHA, release-pipeline is ignited only by a locked release-plan, and the lane between them is ruled but unbuilt</title>
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .stamp { font-size: 11px; fill: #5a6a7a; }
+      .panel-title { font-size: 15px; font-weight: bold; fill: #1a2332; }
+      .panel-sub { font-size: 11.5px; fill: #5a6a7a; }
+      .box-title { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .box-title-l { font-size: 13px; font-weight: bold; fill: #ffffff; }
+      .box-sub { font-size: 11px; fill: #5a6a7a; }
+      .box-sub-l { font-size: 11px; fill: #d6e6f2; }
+      .mono { font-family: Menlo, Consolas, monospace; font-size: 10.5px; fill: #2c4a6e; }
+      .mono-l { font-family: Menlo, Consolas, monospace; font-size: 10.5px; fill: #b9d2e4; }
+      .small { font-size: 10.5px; fill: #5a6a7a; }
+      .legend { font-size: 11px; fill: #2c3742; }
+      .band-title { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .band-body { font-size: 11px; fill: #2c3742; }
+      .caption { font-size: 11.5px; fill: #5a6a7a; font-style: italic; }
+      .edge { stroke: #5a6a7a; stroke-width: 1.8; fill: none; }
+      .edge-amber { stroke: #b08a4a; stroke-width: 2; fill: none; stroke-dasharray: 7 5; }
+      .edge-leg { stroke: #b08a4a; stroke-width: 1.8; fill: none; }
+    </style>
+    <marker id="a12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a6a7a"/>
+    </marker>
+    <marker id="a12amb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b08a4a"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="910" fill="#ffffff"/>
+
+  <!-- ============ header ============ -->
+  <text x="40" y="46" class="title">The Two-Pipeline Constitution</text>
+  <text x="40" y="70" class="subtitle">Two pipelines are started by a lock. The lane between them is ruled and unbuilt.</text>
+
+  <!-- legend -->
+  <rect x="810" y="22" width="430" height="58" rx="4" fill="#eef2f6" stroke="#c5d0da"/>
+  <rect x="822" y="35" width="13" height="13" rx="2" fill="#4a8a6b"/>
+  <text x="843" y="46" class="legend">PROVEN — has run for real</text>
+  <rect x="1024" y="35" width="13" height="13" rx="2" fill="#2c4a6e"/>
+  <text x="1045" y="46" class="legend">BUILT · in routine use</text>
+  <rect x="822" y="58" width="13" height="13" rx="2" fill="#ffffff" stroke="#b08a4a" stroke-width="1.6"/>
+  <text x="843" y="69" class="legend">AMBER — ruled, or unproven</text>
+  <path d="M 1024 64.5 L 1037 64.5" stroke="#b08a4a" stroke-width="2" stroke-dasharray="5 4"/>
+  <text x="1045" y="69" class="legend">dashed — no mechanism yet</text>
+
+  <!-- ============ lane 1: dev-pipeline ============ -->
+  <rect x="40" y="100" width="430" height="460" rx="4" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="58" y="128" class="panel-title">DEV-PIPELINE · cd1fcd25 · v2.0.0</text>
+  <text x="58" y="147" class="panel-sub">88 of 189 journaled runs · ignition: a locked dev-spec</text>
+
+  <rect x="58" y="162" width="394" height="60" rx="4" fill="#2c4a6e"/>
+  <text x="74" y="186" class="box-title-l">SPECIFY</text>
+  <text x="436" y="186" class="mono-l" text-anchor="end">03624b7a</text>
+  <text x="74" y="208" class="box-sub-l">the locked dev-spec is the plan of record</text>
+
+  <path class="edge" d="M 255 222 L 255 232" marker-end="url(#a12)"/>
+
+  <rect x="58" y="236" width="394" height="60" rx="4" fill="#2c4a6e"/>
+  <text x="74" y="260" class="box-title-l">BUILD</text>
+  <text x="436" y="260" class="mono-l" text-anchor="end">3bd8f5b6</text>
+  <text x="74" y="282" class="box-sub-l">builder implements against the frozen contract</text>
+
+  <path class="edge" d="M 255 296 L 255 306" marker-end="url(#a12)"/>
+
+  <rect x="58" y="310" width="394" height="60" rx="4" fill="#3a6b8a"/>
+  <text x="74" y="334" class="box-title-l">TEST</text>
+  <text x="436" y="334" class="mono-l" text-anchor="end">74945d48</text>
+  <text x="74" y="356" class="box-sub-l">a non-author re-runs each locked verify command</text>
+
+  <path class="edge" d="M 255 370 L 255 380" marker-end="url(#a12)"/>
+
+  <rect x="58" y="384" width="394" height="76" rx="4" fill="#ffffff" stroke="#4a8a6b" stroke-width="2"/>
+  <text x="74" y="408" class="box-title">DONE — one tested commit SHA</text>
+  <text x="436" y="408" class="mono" text-anchor="end" fill="#4a8a6b">88 runs</text>
+  <text x="74" y="428" class="box-sub">the run closes at one tested SHA and produces no</text>
+  <text x="74" y="444" class="box-sub">release artifact: v2.0.0 moved every release node out</text>
+
+  <text x="58" y="484" class="small">Root children are exactly these three. The deprecated Deploy stage</text>
+  <text x="58" y="500" class="small">3a7dbdda and its release-class nodes moved to release-pipeline</text>
+  <text x="58" y="516" class="small">at v2.0.0 under Mike-locked dev-spec 0a0a6777 (talos-t40).</text>
+
+  <!-- ============ lane 2: the promotion lane ============ -->
+  <rect x="490" y="100" width="270" height="460" rx="4" fill="#fdf9f1" stroke="#b08a4a" stroke-width="2" stroke-dasharray="7 5"/>
+  <text x="625" y="128" class="panel-title" text-anchor="middle" fill="#8a6a30">THE PROMOTION LANE</text>
+  <text x="625" y="146" class="panel-sub" text-anchor="middle" fill="#8a6a30">ruled · unbuilt</text>
+
+  <path class="edge-amber" d="M 452 422 L 516 422 L 516 196 L 778 196" marker-end="url(#a12amb)"/>
+
+  <text x="534" y="232" class="small">No park state. Nothing selects,</text>
+  <text x="534" y="247" class="small">queues or promotes a done dev-spec.</text>
+
+  <text x="534" y="272" class="small">The release-plan names its members</text>
+  <text x="534" y="287" class="small">by hand — dev_spec_uids:, ordered.</text>
+
+  <text x="534" y="312" class="small" fill="#2c4a6e">BUILT half: the lock then writes</text>
+  <text x="534" y="327" class="small">fan-in-manifest.json and a sha-256</text>
+  <text x="534" y="342" class="small">fan_in_digest over the ordered rows,</text>
+  <text x="534" y="357" class="small">and the lock refuses any member not</text>
+  <text x="534" y="372" class="small">done, or reserved by a rival plan.</text>
+
+  <text x="534" y="397" class="small" fill="#8a6a30">UNBUILT half: nothing produces</text>
+  <text x="534" y="412" class="small">the list. Seven files read and</text>
+  <text x="534" y="427" class="small">validate dev_spec_uids:; the lock</text>
+  <text x="534" y="442" class="small">reads it from frontmatter a</text>
+  <text x="534" y="457" class="small">human wrote.</text>
+
+  <text x="534" y="487" class="small">The two machines meet only here,</text>
+  <text x="534" y="502" class="small">and only by an explicit list.</text>
+
+  <!-- ============ lane 3: release-pipeline ============ -->
+  <rect x="780" y="100" width="460" height="460" rx="4" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="798" y="128" class="panel-title">RELEASE-PIPELINE · 634913c2 · v1.0.1</text>
+  <text x="798" y="147" class="panel-sub">15 journaled runs · one ignition only: a locked release-plan</text>
+
+  <rect x="798" y="160" width="424" height="72" rx="4" fill="#ffffff" stroke="#2c4a6e" stroke-width="1.6"/>
+  <text x="812" y="182" class="box-title">RELEASE-PLAN — locked</text>
+  <text x="812" y="200" class="box-sub">the ignition: dev_spec_uids ordered + fan_in_digest sha-256</text>
+  <text x="812" y="218" class="mono">tropo-lock-release-plan.py · 1,441 lines</text>
+
+  <path class="edge" d="M 931 232 L 931 242" marker-end="url(#a12)"/>
+
+  <rect x="798" y="244" width="266" height="78" rx="4" fill="#3a6b8a"/>
+  <text x="812" y="266" class="box-title-l">ASSEMBLE</text>
+  <text x="1050" y="266" class="mono-l" text-anchor="end">471dd767</text>
+  <text x="812" y="288" class="box-sub-l">validate the fan-in · build the box</text>
+  <text x="812" y="305" class="box-sub-l">fires 0cf86ea5 + 4f64ec3c as legs</text>
+
+  <path class="edge" d="M 931 322 L 931 332" marker-end="url(#a12)"/>
+
+  <rect x="798" y="334" width="266" height="64" rx="4" fill="#3a6b8a"/>
+  <text x="812" y="356" class="box-title-l">VERIFY</text>
+  <text x="1050" y="356" class="mono-l" text-anchor="end">8a4f802b</text>
+  <text x="812" y="378" class="box-sub-l">freeze sha-bound · independent harness</text>
+
+  <path class="edge" d="M 931 398 L 931 408" marker-end="url(#a12)"/>
+
+  <rect x="798" y="410" width="266" height="64" rx="4" fill="#3a6b8a"/>
+  <text x="812" y="432" class="box-title-l">PUBLISH</text>
+  <text x="1050" y="432" class="mono-l" text-anchor="end">8e03f8d6</text>
+  <text x="812" y="454" class="box-sub-l">one child only: publish-official-release</text>
+
+  <path class="edge" d="M 931 474 L 931 484" marker-end="url(#a12)"/>
+
+  <rect x="798" y="486" width="266" height="56" rx="4" fill="#4a8a6b"/>
+  <text x="812" y="508" class="box-title-l">v1.95.0 · public + receipt</text>
+  <text x="812" y="528" class="box-sub-l">closure is journaled, not a node</text>
+
+  <!-- triggered legs -->
+  <path class="edge-leg" d="M 1064 283 L 1074 283 L 1074 277 L 1080 277" marker-end="url(#a12amb)"/>
+  <path class="edge-leg" d="M 1064 283 L 1074 283 L 1074 343 L 1080 343" marker-end="url(#a12amb)"/>
+
+  <rect x="1084" y="250" width="138" height="54" rx="4" fill="#ffffff" stroke="#b08a4a" stroke-width="1.6"/>
+  <text x="1153" y="272" class="box-title" text-anchor="middle" fill="#8a6a30">doc-pipeline</text>
+  <text x="1153" y="290" class="mono" text-anchor="middle" fill="#8a6a30">5a4337ff</text>
+
+  <rect x="1084" y="316" width="138" height="54" rx="4" fill="#ffffff" stroke="#b08a4a" stroke-width="1.6"/>
+  <text x="1153" y="338" class="box-title" text-anchor="middle" fill="#8a6a30">test-pipeline</text>
+  <text x="1153" y="356" class="mono" text-anchor="middle" fill="#8a6a30">da3f50dc</text>
+
+  <text x="1080" y="392" class="small">both legs must settle</text>
+  <text x="1080" y="407" class="small">before the release closes</text>
+  <text x="1080" y="430" class="small">25 of 35 doc runs and</text>
+  <text x="1080" y="445" class="small">24 of 39 test runs hold</text>
+  <text x="1080" y="460" class="small">one run_created event</text>
+  <text x="1080" y="475" class="small">and nothing more</text>
+
+  <!-- ============ the runner ============ -->
+  <rect x="40" y="584" width="1200" height="132" rx="4" fill="#ffffff" stroke="#c5d0da"/>
+  <rect x="40" y="584" width="6" height="132" fill="#4a8a6b"/>
+  <text x="64" y="610" class="band-title">THE RUNNER — vault/tools/tropo-release-run.py, 1,196 lines. It executes now.</text>
+  <text x="1216" y="610" class="band-title" text-anchor="end" fill="#4a8a6b">PROVEN — it drove the v1.95.0 release run</text>
+  <text x="64" y="632" class="band-body">When this diagram was first drawn the runner was a 137-line stub (d0459b74a, 2026-08-24) that only reported what it would do. Today it walks the tropo-release</text>
+  <text x="64" y="650" class="band-body">profile (6bf18510) — the 12 declared leaves of release-pipeline, 7 kind: tool and 5 kind: playbook — reads each step's state from the run's own run.state.json rather</text>
+  <text x="64" y="668" class="band-body">than re-deriving it, skips what is already terminal so a re-run resumes instead of destroying, and invokes deterministic steps only under --execute. A cold walk with</text>
+  <text x="64" y="686" class="band-body">no flag invokes nothing. It halts permanently at the FIRST judgment step, so the one outward act (tropo-publish-release.py:cmd_fire) is unreachable from a cold walk:</text>
+  <text x="64" y="704" class="band-body">it sits behind two. In release-pipeline-f015af4a6a0a-2026-09-05 it refused on an unclean lock-static preflight and on a failed compare_current verdict. It could fail, and did.</text>
+
+  <!-- ============ the two closures ============ -->
+  <rect x="40" y="734" width="590" height="104" rx="4" fill="#eef2f6" stroke="#c5d0da"/>
+  <rect x="40" y="734" width="6" height="104" fill="#2c4a6e"/>
+  <text x="64" y="760" class="band-title">DEV CLOSURE — tropo-close-dev.py (41b7c9e2)</text>
+  <text x="64" y="780" class="small" fill="#2c3742">Records rather than gates, per Mike 2026-08-21: a dirty tree, a wedged ceremony state and a</text>
+  <text x="64" y="796" class="small" fill="#2c3742">superseded prior run each land on the receipt instead of blocking. It refuses in exactly one</text>
+  <text x="64" y="812" class="small" fill="#2c3742">case: the spec, its activation, its pipeline-run or that run's folder does not resolve —</text>
+  <text x="64" y="828" class="small" fill="#2c3742">“because a receipt needs a journal to live in.”</text>
+
+  <rect x="650" y="734" width="590" height="104" rx="4" fill="#eef2f6" stroke="#c5d0da"/>
+  <rect x="650" y="734" width="6" height="104" fill="#3a6b8a"/>
+  <text x="674" y="760" class="band-title">RELEASE CLOSURE — there is no close node</text>
+  <text x="674" y="780" class="small" fill="#2c3742">The symmetry breaks on purpose. The dev side closes with a tool; the release side has</text>
+  <text x="674" y="796" class="small" fill="#2c3742">no closure step in its graph at all — the Publish stage carries exactly one child,</text>
+  <text x="674" y="812" class="small" fill="#2c3742">publish-official-release (3dd817cb). Closure is a journaled side effect of terminal</text>
+  <text x="674" y="828" class="small" fill="#2c3742">verification or a public receipt: the run closes because something outward happened.</text>
+
+  <text x="40" y="866" class="caption">Nine root pipeline definitions carry role: root — eight at status: active, app-pipeline (2918e3b4) draft. Only these two are started by a lock.</text>
+  <text x="1240" y="890" class="stamp" text-anchor="end">measured 2026-09-08 · v1.95.0</text>
+</svg>

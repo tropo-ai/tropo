@@ -23,6 +23,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import git_env  # noqa: E402  (contained git for the one-commit fixture)
@@ -55,6 +56,50 @@ Unrelated content the section-boundary regex must stop before.
 
 AGENT = "fixture-agent"
 GEN = "F1"
+
+
+class OptionalCrewBrief(unittest.TestCase):
+    def test_absent_brief_does_not_run_renderer_or_create_a_brief(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(driver.subprocess, "run") as run:
+                ok, detail = driver.perform_crew_brief_rerender(root)
+            self.assertIsNone(ok)
+            self.assertIn("not applicable", detail)
+            run.assert_not_called()
+            self.assertFalse((root / "00-crew-brief.md").exists())
+            for notes_ok in (True, False):
+                with patch.object(driver, "observe_status_notes", return_value=(notes_ok, "fixture notes")):
+                    step_ok, evidence = driver.observe_crew_surfaces(root, "fixture", "F1", None)
+                    self.assertEqual(step_ok, notes_ok)
+                    self.assertIn("not applicable", evidence)
+
+    def test_existing_brief_retains_renderer_success_and_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "00-crew-brief.md").write_text("# Crew\n")
+            renderer = root / driver.CREW_BRIEF_RENDERER_RELATIVE_PATH
+            renderer.parent.mkdir(parents=True)
+            renderer.write_text("# fixture renderer\n")
+            for rc in (0, 1):
+                with self.subTest(returncode=rc), patch.object(
+                    driver.subprocess, "run",
+                    return_value=subprocess.CompletedProcess([], rc, "rendered", "fixture error"),
+                ) as run:
+                    ok, detail = driver.perform_crew_brief_rerender(root)
+                    self.assertEqual(ok, rc == 0)
+                    run.assert_called_once()
+                    self.assertEqual(run.call_args.kwargs["cwd"], str(root))
+                    if rc:
+                        self.assertIn("fixture error", detail)
+
+    def test_broken_brief_link_is_not_mistaken_for_absence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "00-crew-brief.md").symlink_to(root / "missing-target")
+            ok, detail = driver.perform_crew_brief_rerender(root)
+            self.assertFalse(ok)
+            self.assertIn("cannot re-render", detail)
 
 
 class RetireDriverFixture(unittest.TestCase):

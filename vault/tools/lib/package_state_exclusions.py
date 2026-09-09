@@ -139,16 +139,42 @@ F7_STATE_REASONS: dict[str, str] = {
         "and decay signals about entries the customer does not have",
     ".tropo-studio/memory/MEMORY.md":
         "ships as a one-entry index saying 'add your own memories below'; "
-        "replacing it deletes the crew memory index they built on it",
+        "replacing it deletes the crew memory index they built on it. "
+        "KEPT DELIBERATELY after 2026-09-07, when the skeleton stopped "
+        "shipping this file: every studio built before then HAS one and may "
+        "have written to it, so an update must still never touch it. The "
+        "entry protects history, not a current deliverable",
     ".tropo-studio/memory/entries/839a65f9.md":
         "an actual memory entry, not a template — a real pin the customer's "
         "agents read at boot",
     ".tropo-studio/memory/memory-current.md":
         "the customer's accumulated crew memory; overwriting it is the "
         "headline harm this boundary exists to prevent",
+    ".tropo-studio/memory/memory.md":
+        "the same crew memory under the Phase-2 name (f0153a6df07f). Added "
+        "BEFORE the file moves, deliberately: this list is the whole "
+        "protection for this path — no STATE_DIR_PREFIXES entry covers "
+        "`.tropo-studio/memory/` — so a rename that landed first would leave "
+        "the live file unprotected for exactly as long as the gap. Both names "
+        "are listed through the transition and memory-current.md stays "
+        "forever, like MEMORY.md above, for studios built before the cutover",
+    ".tropo-studio/memory/agent-memories.jsonl":
+        "the customer's append-only crew episodic log. NOT part of the rename "
+        "and not a new file: it is the name shipping TODAY, in the skeleton "
+        "and in every box, and it had no entry here at all — found by the "
+        "adversarial hunt in the Phase-2 survey by asking what is ABSENT from "
+        "this dict rather than what is in it. The box ships it as 0 bytes, so "
+        "an apply would replace a customer's whole appended log with an empty "
+        "file: the append-only harm short-term-memory.jsonl names, live, "
+        "under the current name",
+    ".tropo-studio/memory/memories.jsonl":
+        "the same episodic log under the Phase-2 name (f0153a6df07f); listed "
+        "ahead of the move for the reason memory.md above gives",
     ".tropo-studio/memory/short-term-memory.jsonl":
         "per-studio append-only memory log by nature; an append-only log that "
-        "gets replaced has lost history no rebuild can restore",
+        "gets replaced has lost history no rebuild can restore. Same as "
+        "MEMORY.md above: no longer shipped from 2026-09-07, kept here because "
+        "pre-existing studios have one",
     ".tropo-studio/mission-brief.md":
         "ships as `# Mission Brief — <FILL: Your Studio Name>`; a filled-in "
         "brief is the customer's own statement of what they are doing",

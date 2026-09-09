@@ -29,9 +29,14 @@ member_of:
   - aae9a37b
 lifecycle: standing
 created_by: argus-a23
-last_release_reflected: "1.93.0"
+last_release_reflected: "1.96.0"
 aligned_with: 8a4e21c5
 release_history:
+  - release_uid: f01576b6ade3
+    release_version: "1.96.0"
+    summary: 'Governance owns the rulings. v1.96 records Mike''s principle that gates on his path warn, explain and let him decide; the fire-path hold released for the promotion shape; the memory brief closed as shipped; four tasks cut to v1.97 by decision.'
+    registry_uid: 932251fb
+    derived_from: capabilities_touched
   - release_uid: 64b10a96
     release_version: "1.93.0"
     summary: 'v1.93 is the one-member release that answers one question: did releasing actually get cheaper. The release runner drives the real release for the first time — every deterministic step machine-executed, every halt a declared judgment or an unmet precondition with a paste-able command — and the machine scores its own fire for the first time (the card v1.92 could not produce). The target: Mike''s judgments unchanged, the mechanical tax (v1.92: ~20 CLI invocations, 4 live repairs, 6 hand-authored events) eliminated. Gesture count and scorecard publish beside the version, whatever they say.

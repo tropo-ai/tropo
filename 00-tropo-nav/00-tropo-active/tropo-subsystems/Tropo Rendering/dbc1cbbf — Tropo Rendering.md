@@ -29,9 +29,14 @@ primary_collection: a7a69fc1
 tasks_collection: c292cd97
 lifecycle: standing
 created_by: argus-a23
-last_release_reflected: 1.55.0
+last_release_reflected: "1.96.0"
 aligned_with: 8a4e21c5
 release_history:
+  - release_uid: f01576b6ade3
+    release_version: "1.96.0"
+    summary: 'Rendering owns the build and the lane. v1.96 keeps the nightly candidate box past the runner, reports the twelve gates on it, and adds one promote command that names its run, warns and explains rather than denies, hashes the zip against its receipt, and prints both verdicts above one yes. The recency selector is deleted, not guarded.'
+    registry_uid: 2766492a
+    derived_from: capabilities_touched
   - release_uid: 4920ce3a
     release_version: 1.20.0
     summary: v1.20.0 ship — minor touch. governance-contract instance for collections/ (folder_type:content; owner:vela; primary hub tropo-rendering). Collections are synthesized views grouping vault entries by reference — folder-level governance now typed.

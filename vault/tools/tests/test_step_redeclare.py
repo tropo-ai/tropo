@@ -450,16 +450,19 @@ class Guardrail1bBlockingEventsOverrideAnApparentStartedStatus(unittest.TestCase
 
     def test_the_reset_scoping_actually_changes_verdict_when_removed(self):
         """Mutation proof for the reset-scoping half specifically: neutralise
-        _redeclare_scan_active's reset tracking (both `reset_at = j`
-        assignments) so it degrades to the old, unscoped whole-history scan,
+        _redeclare_scan_active's reset tracking (every `reset_at = j`
+        assignment) so it degrades to the old, unscoped whole-history scan,
         and confirm the superseded-and-restarted case above -- which must be
         ALLOWED -- gets wrongly refused under the mutant. That is the exact
         re-wedge two verifiers reported against the un-reset-aware version."""
         source = (self.tmp / "vault" / "tools" / "9e7003b1.py").read_text(encoding="utf-8")
         needle = "reset_at = j"
-        self.assertEqual(source.count(needle), 2,
+        # three reset points since v1.95 candidate #3 (argus-a172, 2026-09-06):
+        # step_declared, the ruled re-opens (step_reverify_opened / step_reopened),
+        # and package_superseded.invalidated_steps -- the mutant neutralises all.
+        self.assertEqual(source.count(needle), 3,
                          "reset-tracking assignment count changed; update this mutation probe")
-        mutated = source.replace(needle, "pass", 2)
+        mutated = source.replace(needle, "pass", 3)
         mutant_path = self.tmp / "vault" / "tools" / "9e7003b1_mutant_1b_scope.py"
         mutant_path.write_text(mutated, encoding="utf-8")
         spec = importlib.util.spec_from_file_location(

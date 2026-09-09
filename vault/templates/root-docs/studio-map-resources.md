@@ -27,7 +27,7 @@ saying why a human would open it. Paths are box-relative (they resolve inside an
 Studio); URLs are public. The renderer rewrites every relative path for the render's own location —
 write them from the Studio root and nowhere else.*
 
-- [The Architecture Review](docs/architecture-review-v4/tropo-l1-architecture-review.html) — What the system is, why it is shaped this way, and its honest failure record; the Map's sibling canonical document.
+- [The Architecture Review](docs/architecture-review-v5/tropo-l1-architecture-review.html) — What the system is, why it is shaped this way, and its honest failure record; the Map's sibling canonical document.
 - [What is Tropo? — the L1 canonical entry](vault/files/eca73d77.md) — The single entry document: read this first when you are arriving cold and want the whole idea in one pass.
 - [The Tropo Handbook](vault/files/c92ae197.md) — The standing reference a human reads end to end: the method, the vocabulary, and how the pieces fit.
 - [START-TROPO.md](START-TROPO.md) — The first-run instructions for a freshly unzipped Studio: the one command to run before you open your AI tool.

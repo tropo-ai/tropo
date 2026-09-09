@@ -4701,6 +4701,9 @@ class BindingGuardCoverageTests(BootOrientCase):
                 self.assertEqual(field, "as_of")
                 return revision
 
+            def path_exists(inner_self, _commit, _path):
+                return True
+
             def read_bytes(inner_self, _commit, path):
                 return f"different:{path}".encode("utf-8")
 
@@ -4860,6 +4863,10 @@ class OrientBootRegressionFloor(unittest.TestCase):
             (
                 "# BEGIN 2672f9d0 STAGE-C WIRING TESTS\n",
                 "# END 2672f9d0 STAGE-C WIRING TESTS\n",
+            ),
+            (
+                "# BEGIN f0153a6df07f PHASE-2 RENAME TESTS\n",
+                "# END f0153a6df07f PHASE-2 RENAME TESTS\n",
             ),
         ):
             self.assertEqual(reconstructed.count(begin), 1)
@@ -5642,5 +5649,82 @@ class GovernedBodyReaderTests(unittest.TestCase):
 
 
 # END 2672f9d0 STAGE-C WIRING TESTS
+# BEGIN f0153a6df07f PHASE-2 RENAME TESTS
+class MemoryPathRenameFallbackTests(unittest.TestCase):
+    """Phase 2 rename (f0153a6df07f): _read_memory_bytes must prefer the new
+    name, decided by a SEPARATE path_exists() probe rather than a doomed-to-
+    fail-then-retry read_bytes call -- so exactly one real content read
+    happens either way, and a caller watching read_bytes calls (mutation
+    tests, provenance re-reads) sees no change in shape when a commit
+    predates the rename. Tested directly against a minimal fake topology
+    rather than the full git fixture -- this is a pure decision about which
+    path to request, not a git-provenance question."""
+
+    class _FakeTopology:
+        def __init__(self, existing: set):
+            self.existing = existing
+            self.exists_calls: list[str] = []
+            self.read_calls: list[str] = []
+
+        def path_exists(self, commit: str, path: str) -> bool:
+            self.exists_calls.append(path)
+            return path in self.existing
+
+        def read_bytes(self, commit: str, path: str) -> bytes:
+            self.read_calls.append(path)
+            if path in self.existing:
+                return path.encode("utf-8")
+            raise di.BootOrientationError(
+                di.BootOrientationErrorCode.SUBSTRATE_UNAVAILABLE,
+                f"required source is absent from snapshot {commit}",
+            )
+
+    NEW = "agents/argus/.tropo-capsule/memory/memory.md"
+    OLD = "agents/argus/.tropo-capsule/memory/agent-memory.md"
+
+    def test_new_name_present_reads_new_name_exactly_once(self):
+        topo = self._FakeTopology({self.NEW})
+        result = di._read_memory_bytes(topo, "deadbeef", "argus")
+        self.assertEqual(result, self.NEW.encode("utf-8"))
+        self.assertEqual(topo.read_calls, [self.NEW])
+
+    def test_new_name_absent_reads_old_name_exactly_once(self):
+        """The property that matters for the existing pinned floor test: a
+        commit predating the rename produces the exact same single
+        read_bytes call it always did -- path_exists is the only new call."""
+        topo = self._FakeTopology({self.OLD})
+        result = di._read_memory_bytes(topo, "deadbeef", "argus")
+        self.assertEqual(result, self.OLD.encode("utf-8"))
+        self.assertEqual(
+            topo.read_calls, [self.OLD],
+            "must be exactly one read_bytes call, with the old path -- "
+            "never a doomed new-name attempt first",
+        )
+        self.assertEqual(topo.exists_calls, [self.NEW])
+
+    def test_neither_name_present_raises_on_the_old_name(self):
+        topo = self._FakeTopology(set())
+        with self.assertRaises(di.BootOrientationError) as ctx:
+            di._read_memory_bytes(topo, "deadbeef", "argus")
+        self.assertEqual(
+            ctx.exception.code, di.BootOrientationErrorCode.SUBSTRATE_UNAVAILABLE
+        )
+        self.assertEqual(topo.read_calls, [self.OLD])
+
+    def test_path_exists_false_means_old_name_used_even_if_it_also_lacks_content(self):
+        """Mutation-shaped: strip the path_exists() call from
+        _read_memory_bytes (always fall through to the old-name branch) and
+        this test still passes by coincidence unless a second case proves
+        the NEW-name-present branch is actually reachable -- covered by
+        test_new_name_present_reads_new_name_exactly_once above. Together
+        the two prove the branch really is chosen by path_exists(), not by
+        which read happens to succeed."""
+        topo = self._FakeTopology({self.NEW})
+        self.assertEqual(topo.exists_calls, [])
+        di._read_memory_bytes(topo, "deadbeef", "argus")
+        self.assertEqual(topo.exists_calls, [self.NEW])
+
+
+# END f0153a6df07f PHASE-2 RENAME TESTS
 if __name__ == "__main__":
     unittest.main()

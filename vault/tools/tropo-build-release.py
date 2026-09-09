@@ -1801,6 +1801,178 @@ def step_3c_assert_forward_targets(build_dir):
     print(f'  Forward-target guard: {checked} shim→target pair(s) checked — all present')
 
 
+# ── The tree-resident files the manifest channel does not carry ──────────────
+# These three steps were inline in main() until 2026-09-08 and were therefore
+# unreachable from anywhere else. tropo-build-candidate-box.py calls the named
+# emitters and could not call these, so every candidate box ever built was
+# missing all seven files they place -- including `.tropo-studio/mission-brief.md`,
+# a Required:Yes boot read. Three of the twelve box gates then refused on the
+# builder's gap rather than on the product (task f0158df832b1, the keystone).
+#
+# One producer, two callers: the release build and the candidate build now run
+# the SAME functions, so the two boxes cannot drift on this content again.
+# Hand-copying the seven filenames into the candidate builder would have
+# recreated the two-producers defect in a smaller form; the task said so and it
+# is the studio's costliest family. `test_candidate_builder_parity.py` asserts
+# the inclusion direction with a mutation control.
+# [talos-t65, 2026-09-08]
+
+
+def step_5c_copy_changelog(build_dir):
+    """The public user-facing changelog (Keep a Changelog), studio → box root.
+
+    RELEASE-NOTES.md deliberately does NOT ship (Mike-ruled 2026-08-15, weld
+    batch cb194126 AC1). It describes the LIVING product -- release history keeps
+    growing after the zip is sealed -- so an immutable artifact carrying it is
+    stale by physics, not by neglect: v1.87 shipped a copy two releases out of
+    date, and no freshness weld can fix a document whose subject moves after the
+    box closes. Its live home is the website. CHANGELOG.md is the in-box answer
+    to "what is this version", and it is frozen-and-accurate forever because it
+    describes THIS box. The studio still authors RELEASE-NOTES.md at every ship
+    (the validator's version-section check reads the studio copy, not the box).
+
+    The ship gate (require_release_authorization with version) enforces this file
+    is current before upload is authorized (Metis G83 anti-drift gate, v1.74).
+    """
+    cl_src = os.path.join(tropo_roots.STUDIO_ROOT, 'CHANGELOG.md')
+    if os.path.exists(cl_src):
+        cl_dst = os.path.join(build_dir, 'CHANGELOG.md')
+        copy_file(cl_src, cl_dst, DRY_RUN)
+        print('  CHANGELOG.md: copied from argo-os/CHANGELOG.md to build root')
+    else:
+        print(f'  ⚠ CHANGELOG.md not found at {cl_src} — ship gate will block until it exists')
+
+
+# D2 — folder-mirror AGENTS.md + package.json (dev-spec f8b51f4d D2, v1.74).
+# These files exist in the studio but the manifest-driven Phase 3 doesn't ship them.
+# channels/AGENTS.md, context/AGENTS.md, operating-agreement/AGENTS.md: required by the
+# AGENTS_MD_REQUIRED_DIRS check in the validator; their absence causes FAIL in release.
+# package.json: ships so a downloader's `npm test` (the studio health check) actually runs.
+# Each entry is (source_rel_path, dest_dir[, dest_name]). dest_name defaults to
+# the source basename; supply it explicitly when the SHIPPED filename must differ
+# from the source filename (source ≠ dest).
+D2_FOLDER_MIRROR_FILES = [
+    ('package.json', ''),                                    # root → root
+    (os.path.join('vault', 'templates', 'agents-skeleton', 'AGENTS.md'),
+     'agents'),
+    (os.path.join('channels', 'AGENTS.md'), 'channels'),
+    (os.path.join('context', 'AGENTS.md'), 'context'),
+    (os.path.join('operating-agreement', 'AGENTS.md'), 'operating-agreement'),
+    # NOTE: the mission-brief boot slot is seeded AFTER step_7_create_vault_skeleton
+    # (step_7_1_seed_mission_brief_slot), NOT here — its destination now lives inside
+    # .tropo-studio/, which step_7 rmtree's + recreates, so a copy placed in this
+    # pre-skeleton loop would be clobbered. Relocated from context/ per task 2ffda37e
+    # defect #4 (Mike-approved).
+]
+
+
+def step_5d_copy_folder_mirror_files(build_dir):
+    """D2: the folder-level AGENTS.md contracts and package.json."""
+    for _entry in D2_FOLDER_MIRROR_FILES:
+        rel_path, dest_dir = _entry[0], _entry[1]
+        dest_name = _entry[2] if len(_entry) > 2 else os.path.basename(rel_path)
+        src = os.path.join(tropo_roots.STUDIO_ROOT, rel_path)
+        if os.path.exists(src):
+            dst_folder = os.path.join(build_dir, dest_dir) if dest_dir else build_dir
+            if not DRY_RUN:
+                os.makedirs(dst_folder, exist_ok=True)
+            dst = os.path.join(dst_folder, dest_name)
+            copy_file(src, dst, DRY_RUN)
+            print(f'  D2: {rel_path} → build root/{os.path.join(dest_dir, dest_name) if dest_dir else dest_name}')
+        else:
+            print(f'  ⚠ D2: {rel_path} not found at {src} — skipped')
+
+
+def step_7_1_seed_mission_brief_slot(build_dir):
+    """Step 7.1 — Seed the mission-brief boot slot (task 2ffda37e defects #1+#4).
+
+    Ship the GENERIC <FILL> TEMPLATE, not Argo's real internal mission brief, into the
+    authoritative boot slot .tropo-studio/mission-brief.md (activation playbook Step 2.3
+    + Tier 2 read at every boot; relocated from context/ per Mike's decision, defect #4).
+    MUST run AFTER step_7_create_vault_skeleton: that step rmtree's + recreates
+    .tropo-studio/ from the skeleton, so a copy placed in the pre-skeleton D2 loop would
+    be clobbered. Sourcing the single canonical template (no content duplication) keeps
+    the boot read resolvable while shipping only <FILL: …> placeholders. Argo's real
+    brief (.tropo-studio/mission-brief.md, extraction_scope: argo-reference) never ships;
+    it ships separately as the labeled example (vault/templates/examples/mission-brief.example.md)
+    — do not touch that.
+    """
+    _mb_src = os.path.join(tropo_roots.VAULT_DIR, 'templates', 'root-docs', 'mission-brief.template.md')
+    _mb_dst = os.path.join(build_dir, '.tropo-studio', 'mission-brief.md')
+    if not os.path.exists(_mb_src):
+        # refusal: misuse — the source mission-brief template is absent; missing input, and assert_mission_brief_slot re-checks the box
+        raise SystemExit(
+            f'Mission-brief template not found at {_mb_src}.\n'
+            f'The boot slot .tropo-studio/mission-brief.md is a Required:Yes read at Step 2.3 of the\n'
+            f'activation playbook (99341618) and a Tier-2 read-at-every-boot (cf8c3be9) — shipping a box\n'
+            f'without it makes every customer agent hit a missing required read on first boot.\n'
+            f'Path-base / tier-reachability failure — halting rather than silent-skipping, '
+            f'per ADR-032 amendment 2026-04-19.'
+        )
+    # The slot is GENERATED from the template, not a copy of a shipped path: the template's
+    # own ship-artifact (d340faf1) is DENY so the template never ships at its template path,
+    # and without a named exemption the resolver refused this copy on every v1.94 build attempt
+    # (census: deny-pruned by d340faf1) while this step still printed success; the end guard
+    # assert_mission_brief_slot then failed the build. Named exemption, never silent (GENERATED
+    # in the census); the guard still verifies the slot IS the generic template. metis-g119, 2026-09-04.
+    copy_file(_mb_src, _mb_dst, DRY_RUN,
+              verdict_exempt='mission-brief boot slot seeded from the generic template (task 2ffda37e); '
+                             'the template path stays DENY by d340faf1; assert_mission_brief_slot checks the content')
+    print('  Mission-brief slot: template → build root/.tropo-studio/mission-brief.md')
+
+
+def step_7_2_seed_score_formula_doctrine(build_dir):
+    """Step 7.2 — place the memory score-formula doctrine (ship-artifact f0155122c0b8).
+
+    MUST run AFTER step_7_create_vault_skeleton, for exactly the reason step_7_1
+    above must: that step rmtree's and recreates .tropo-studio/ from the skeleton,
+    so anything placed in the pre-skeleton direct-copy loop is deleted before the
+    box is sealed.
+
+    MEASURED, not assumed. metis-g126 built from HEAD 2026-09-08 and found the
+    walk reporting 29 direct-copy entries read — including this one — while the
+    file was still absent from the box. This is the only direct-copy entry whose
+    destination lives under .tropo-studio/, which is why it is the only one the
+    skeleton step could eat, and why the defect survived six releases without
+    anyone noticing a copy that reported success.
+
+    Sourced from the canonical doctrine, NOT duplicated into the skeleton
+    template. The other available cure was to add the file to
+    vault/templates/.tropo-studio-skeleton/, which works and is one line shorter,
+    and was rejected: it would put a second copy of live content inside a template
+    tier, free to drift from the real one, which is the studio's most expensive
+    defect family. One source, placed late.
+
+    The shipped memory curator (session-agent 50c0bdce) reads this path at boot —
+    it is a Required read, not a nicety, and its absence is why beat 4 of the
+    first-day walk could not score.
+
+    Implemented by talos-t66 on Mike's explicit authorization 2026-09-08, after
+    argus-a175 (owner of the record) set it down mid-retirement. Ownership of
+    f0155122c0b8 remains his line's; this is implementation, not adoption.
+    """
+    _sfd_src = os.path.join(tropo_roots.STUDIO_ROOT, '.tropo-studio',
+                            'score-formula-doctrine.md')
+    _sfd_dst = os.path.join(build_dir, '.tropo-studio', 'score-formula-doctrine.md')
+    if not os.path.exists(_sfd_src):
+        # refusal: priced/false-success — the box seals without a document the
+        # shipped curator reads at boot, and the build reports a complete release.
+        raise SystemExit(
+            f'Score-formula doctrine not found at {_sfd_src}.\n'
+            f'The shipped memory curator (50c0bdce) reads '
+            f'.tropo-studio/score-formula-doctrine.md at boot; a box without it '
+            f'cannot rank memory at all.\n'
+            f'Path-base / tier-reachability failure — halting rather than '
+            f'silent-skipping, per ADR-032 amendment 2026-04-19.'
+        )
+    os.makedirs(os.path.dirname(_sfd_dst), exist_ok=True)
+    copy_file(_sfd_src, _sfd_dst, DRY_RUN,
+              verdict_exempt='score-formula doctrine placed after the skeleton step '
+                             '(ship-artifact f0155122c0b8); the pre-skeleton copy is '
+                             'destroyed by step_7_create_vault_skeleton')
+    print('  Score-formula doctrine: → build root/.tropo-studio/score-formula-doctrine.md')
+
+
 def step_7_create_vault_skeleton(build_dir):
     """Step 4g: Copy the .tropo-studio/ skeleton template into the release.
 
@@ -4345,95 +4517,23 @@ def main():
     step_3f_remove_per_studio_boot_derivations(build_dir)
     step_3g_write_update_source(build_dir)
 
-    # RELEASE-NOTES.md deliberately does NOT ship (Mike-ruled 2026-08-15, weld batch
-    # cb194126 AC1). It describes the LIVING product — release history keeps growing
-    # after the zip is sealed — so an immutable artifact carrying it is stale by
-    # physics, not by neglect: v1.87 shipped a copy two releases out of date, and no
-    # freshness weld can fix a document whose subject moves after the box closes.
-    # Its live home is the website. CHANGELOG.md below is the in-box answer to
-    # "what is this version", and it is frozen-and-accurate forever because it
-    # describes THIS box. The studio still authors RELEASE-NOTES.md at every ship
-    # (the validator's version-section check reads the studio copy, not the box).
-    # CHANGELOG.md (public user-facing changelog, Keep a Changelog format). Studio source-of-truth.
-    # The ship gate (require_release_authorization with version) enforces this file is current
-    # before upload is authorized (Metis G83 anti-drift gate, v1.74).
-    cl_src = os.path.join(tropo_roots.STUDIO_ROOT, 'CHANGELOG.md')
-    if os.path.exists(cl_src):
-        cl_dst = os.path.join(build_dir, 'CHANGELOG.md')
-        copy_file(cl_src, cl_dst, DRY_RUN)
-        print(f'  CHANGELOG.md: copied from argo-os/CHANGELOG.md to build root')
-    else:
-        print(f'  ⚠ CHANGELOG.md not found at {cl_src} — ship gate will block until it exists')
-    # D2 — folder-mirror AGENTS.md + package.json (dev-spec f8b51f4d D2, v1.74).
-    # These files exist in the studio but the manifest-driven Phase 3 doesn't ship them.
-    # channels/AGENTS.md, context/AGENTS.md, operating-agreement/AGENTS.md: required by the
-    # AGENTS_MD_REQUIRED_DIRS check in the validator; their absence causes FAIL in release.
-    # package.json: ships so a downloader's `npm test` (the studio health check) actually runs.
-    # Each entry is (source_rel_path, dest_dir[, dest_name]). dest_name defaults to
-    # the source basename; supply it explicitly when the SHIPPED filename must differ
-    # from the source filename (source ≠ dest).
-    _d2_files = [
-        ('package.json', ''),                                    # root → root
-        (os.path.join('vault', 'templates', 'agents-skeleton', 'AGENTS.md'),
-         'agents'),
-        (os.path.join('channels', 'AGENTS.md'), 'channels'),
-        (os.path.join('context', 'AGENTS.md'), 'context'),
-        (os.path.join('operating-agreement', 'AGENTS.md'), 'operating-agreement'),
-        # NOTE: the mission-brief boot slot is seeded AFTER step_7_create_vault_skeleton
-        # (see below), NOT here — its destination now lives inside .tropo-studio/, which
-        # step_7 rmtree's + recreates, so a copy placed in this pre-skeleton loop would be
-        # clobbered. Relocated from context/ per task 2ffda37e defect #4 (Mike-approved).
-    ]
-    for _entry in _d2_files:
-        rel_path, dest_dir = _entry[0], _entry[1]
-        dest_name = _entry[2] if len(_entry) > 2 else os.path.basename(rel_path)
-        src = os.path.join(tropo_roots.STUDIO_ROOT, rel_path)
-        if os.path.exists(src):
-            dst_folder = os.path.join(build_dir, dest_dir) if dest_dir else build_dir
-            if not DRY_RUN:
-                os.makedirs(dst_folder, exist_ok=True)
-            dst = os.path.join(dst_folder, dest_name)
-            copy_file(src, dst, DRY_RUN)
-            print(f'  D2: {rel_path} → build root/{os.path.join(dest_dir, dest_name) if dest_dir else dest_name}')
-        else:
-            print(f'  ⚠ D2: {rel_path} not found at {src} — skipped')
+    # The tree-resident files the manifest channel does not carry. Extracted to
+    # named steps 2026-09-08 (talos-t65, task f0158df832b1) so the candidate
+    # builder runs the SAME code: they were inline here, unreachable from
+    # anywhere else, and every candidate box was missing all seven.
+    step_5c_copy_changelog(build_dir)
+    step_5d_copy_folder_mirror_files(build_dir)
 
     # Step 7: .tropo-studio/ skeleton
     step_7_create_vault_skeleton(build_dir)
 
-    # Step 7.1 — Seed the mission-brief boot slot (task 2ffda37e defects #1+#4).
-    # Ship the GENERIC <FILL> TEMPLATE, not Argo's real internal mission brief, into the
-    # authoritative boot slot .tropo-studio/mission-brief.md (activation playbook Step 2.3
-    # + Tier 2 read at every boot; relocated from context/ per Mike's decision, defect #4).
-    # MUST run AFTER step_7_create_vault_skeleton: that step rmtree's + recreates
-    # .tropo-studio/ from the skeleton, so a copy placed in the pre-skeleton D2 loop would
-    # be clobbered. Sourcing the single canonical template (no content duplication) keeps
-    # the boot read resolvable while shipping only <FILL: …> placeholders. Argo's real
-    # brief (.tropo-studio/mission-brief.md, extraction_scope: argo-reference) never ships;
-    # it ships separately as the labeled example (vault/templates/examples/mission-brief.example.md)
-    # — do not touch that.
-    _mb_src = os.path.join(tropo_roots.VAULT_DIR, 'templates', 'root-docs', 'mission-brief.template.md')
-    _mb_dst = os.path.join(build_dir, '.tropo-studio', 'mission-brief.md')
-    if not os.path.exists(_mb_src):
-        # refusal: misuse — the source mission-brief template is absent; missing input, and assert_mission_brief_slot re-checks the box
-        raise SystemExit(
-            f'Mission-brief template not found at {_mb_src}.\n'
-            f'The boot slot .tropo-studio/mission-brief.md is a Required:Yes read at Step 2.3 of the\n'
-            f'activation playbook (99341618) and a Tier-2 read-at-every-boot (cf8c3be9) — shipping a box\n'
-            f'without it makes every customer agent hit a missing required read on first boot.\n'
-            f'Path-base / tier-reachability failure — halting rather than silent-skipping, '
-            f'per ADR-032 amendment 2026-04-19.'
-        )
-    # The slot is GENERATED from the template, not a copy of a shipped path: the template's
-    # own ship-artifact (d340faf1) is DENY so the template never ships at its template path,
-    # and without a named exemption the resolver refused this copy on every v1.94 build attempt
-    # (census: deny-pruned by d340faf1) while this step still printed success; the end guard
-    # assert_mission_brief_slot then failed the build. Named exemption, never silent (GENERATED
-    # in the census); the guard still verifies the slot IS the generic template. metis-g119, 2026-09-04.
-    copy_file(_mb_src, _mb_dst, DRY_RUN,
-              verdict_exempt='mission-brief boot slot seeded from the generic template (task 2ffda37e); '
-                             'the template path stays DENY by d340faf1; assert_mission_brief_slot checks the content')
-    print(f'  Mission-brief slot: template → build root/.tropo-studio/mission-brief.md')
+    # Step 7.1 — the mission-brief boot slot. MUST follow step_7: that step
+    # rmtree's + recreates .tropo-studio/ from the skeleton.
+    step_7_1_seed_mission_brief_slot(build_dir)
+
+    # Step 7.2 — the score-formula doctrine. Same rule as 7.1: after step_7,
+    # which rmtree's .tropo-studio/ and would delete a pre-skeleton copy.
+    step_7_2_seed_score_formula_doctrine(build_dir)
 
     # Step 8: Version file
     step_8_write_version(build_dir, new_version)
@@ -4751,14 +4851,29 @@ def main():
     print(f'       c. Re-run: python3 vault/tools/tropo-build-release.py --target {new_version} --force --activation-uid <uid>')
     print(f'          (--target is idempotent: re-uses the existing build, does NOT re-bump to next version)')
     print(f'  3. Generate RELEASE-NOTES.md')
-    print(f'  4. Update source vault version to {new_version} (manual: echo "v{new_version}" > .tropo/version.md)')
-    print(f'  5. PUBLISH (Release Coupling, fbe50871) — nothing above made anything public:')
-    print(f'       a. python3 vault/tools/tropo-publish-release.py stage --activation-uid <uid> --version {new_version}')
-    print(f'          (automated, idempotent, PRIVATE — re-runs the outward gate, physically disables the')
-    print(f'          staged clone\'s push URL, stops at STAGED)')
-    print(f'       b. python3 vault/tools/tropo-publish-release.py --fire   (Mike\'s hand — the one public act)')
-    print(f'          tropo.release.published is emitted only on full green verify-live.')
-    print(f'       c. Or: python3 vault/tools/tropo-publish-release.py --defer --reason "..."   (Mike-gestured skip)')
+    print(f'  4. The driver bumps .tropo/version.md to v{new_version}')
+    # THE PUBLISH SEQUENCE IS GONE FROM HERE, and nothing replaced it with more
+    # prose (C6/AC7 of f015ee0c7ea5, talos-t65 2026-09-08).
+    #
+    # Three printed steps stood here, ending in a command for a human to paste.
+    # That is the release's whole thesis in one place: prose addressed to an
+    # agent is not a wire, it is a request. The build composed a five-step
+    # runbook — including a shell literal it wrote itself, for a file the driver
+    # already bumps — and then waited for hands. v1.95 took four separate pastes
+    # of a correct fire command, each stopped by a different defect in our own
+    # machinery, and the founder came within one message of ending the project
+    # over it.
+    #
+    # Publishing is now one gesture on the promotion lane, not a sequence read
+    # off a terminal: `promote --version X.Y.Z --activation-uid <uid>` resolves
+    # the named record, runs both verdicts and asks once. The procedure lives in
+    # RELEASING.md, where a human can read it before they need it, rather than
+    # scrolling back through build output to find it. Steps 1-3 above stay
+    # because they are reasoning a person still has to do; step 4 is now a
+    # statement of what the driver does, not an instruction to do it by hand.
+    #
+    # Do not re-add a command here. If the next reader believes something is
+    # missing, the missing thing belongs in the lane or in RELEASING.md.
 
 
 if __name__ == '__main__':

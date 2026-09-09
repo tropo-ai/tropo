@@ -28,9 +28,14 @@ primary_collection: 7698b824
 tasks_collection: 66572e33
 lifecycle: standing
 created_by: argus-a23
-last_release_reflected: 1.86.0
+last_release_reflected: "1.96.0"
 aligned_with: 8a4e21c5
 release_history:
+  - release_uid: f01576b6ade3
+    release_version: "1.96.0"
+    summary: 'Agents owns the first two days. v1.96 gives a stranger a first message that says what the agent can do and what it actually read, an identity file that does not contradict itself, a box that does not call its own files anomalies, one sentence on disk saying how to come back tomorrow, and a documented retire gesture.'
+    registry_uid: 98652385
+    derived_from: capabilities_touched
   - release_uid: 71b5a973
     release_version: 1.86.0
     summary: 'v1.86.0 (pre-ship at this row; fire pending Mike). Working With Real Files reaches customer studios: tropo-folder mount (attach/adopt/reconcile), mount-aware import walker, tropo-extract-text (cdadf603) with FTS-indexed mounted-binary text, tropo-mount-folder skill (e392a8e6). Delivery-path repair rides along: publish fire verifies published == fired; cold-walk clearance fail-closed; import-closure preflight. Update-walk playbook 71f186cf made walkable (11 defects, d220d43b). Row written at dev-pipeline step 9d4f7e21, run 635b62b7, activation ff6f762e.'

@@ -34,11 +34,13 @@
     },
     "saga_id": {
       "type": "string",
-      "pattern": "^release:[0-9a-f]{8}$"
+      "pattern": "^release:(?:[0-9a-f]{12}|[0-9a-f]{8})$",
+      "description": "accepts-both uid shape. The 8-only pattern this replaced could not validate any release opened after the composite mint flip of 2026-08-31 -- run f015af4a6a0a is 12 hex -- so the scorecard was unvalidatable for this release and every future one, and the fire preflight refused on it. LOWERCASE-EXACT ON PURPOSE: a scorecard field is ADMISSION (is this value a governed uid), not extraction, and governed_path is explicit that the case-insensitive UID_HEX_PATTERN is only for finding uid-shaped text inside a larger document. ONE HOME for the shape fact: vault/tools/lib/governed_path.py UID_SHAPES. JSON Schema cannot import it, so this literal is derived from it by test_scorecard_uid_shape_accepts_both.py, which fails when the two disagree."
     },
     "pipeline_run_uid": {
       "type": "string",
-      "pattern": "^[0-9a-f]{8}$"
+      "pattern": "^(?:[0-9a-f]{12}|[0-9a-f]{8})$",
+      "description": "accepts-both uid shape; same one home and same derivation test as saga_id above (vault/tools/lib/governed_path.py UID_SHAPES)."
     },
     "release_version": {
       "type": "string",

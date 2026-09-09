@@ -598,6 +598,13 @@ def register_pre_outward_fire_gates(
 
 BUILD_GUARD_ROSTER = (
     # ── candidate: readers of the assembled box ──
+    ("build-score-formula-doctrine", "boot-read-missing-from-box",
+     ("extracted_tree",),
+     "the shipped .tropo-studio/score-formula-doctrine.md is present and carries "
+     "real content — the shipped memory curator (50c0bdce) reads it at boot, and "
+     "it was absent from every box for six releases while the build reported it "
+     "copied, because step_7_create_vault_skeleton rmtree's the folder it had "
+     "been copied into (ship-artifact f0155122c0b8, beat 4 of the first-day walk)"),
     ("build-mission-brief-slot", "confidentiality-leak-in-boot-slot",
      ("extracted_tree",),
      "the shipped .tropo-studio/mission-brief.md is present and is the generic "
@@ -759,9 +766,17 @@ def _build_release_harness(context: Dict[str, Any]) -> GateOutcome:
 
 
 def _build_box_self_test(context: Dict[str, Any]) -> GateOutcome:
-    problems, out = build_guards.box_self_test_problems(_tree(context, "extracted_tree"))
+    # ON AN INITIALIZED DISPOSABLE COPY, not the shipped bytes (f0152b4c4ef4,
+    # argus-a175's direction). A box ships without its index by design, so the
+    # shipped bytes can only answer NOT INITIALIZED — this gate spent its whole
+    # life asking the artifact a question it could not answer, and refusing it
+    # for the answer. The copy is initialized the way the BUILD does it
+    # (--no-genesis), the artifact is never touched, and the copy is discarded.
+    problems, out = build_guards.box_self_test_on_initialized_copy(
+        _tree(context, "extracted_tree"))
     return _problems_outcome("build-box-self-test", problems,
-                             "shipped self-test in-box GREEN/YELLOW", {"output": out[-2000:]})
+                             "shipped self-test GREEN/YELLOW on an initialized copy; "
+                             "artifact untouched", {"output": out[-2000:]})
 
 
 def _build_box_registry_rows(context: Dict[str, Any]) -> GateOutcome:
@@ -774,6 +789,23 @@ def _build_covenant_floor(context: Dict[str, Any]) -> GateOutcome:
     return _problems_outcome("build-covenant-floor", problems,
                              "gauntlet caught the planted violation; real run shows zero churn",
                              {"output": out[-2000:]})
+
+
+def _build_score_formula_doctrine(context: Dict[str, Any]) -> GateOutcome:
+    problems, _body = build_guards.score_formula_doctrine_problems(
+        _tree(context, "extracted_tree"))
+    if problems:
+        return GateOutcome(
+            gate_id="build-score-formula-doctrine",
+            verdict=VERDICT_REFUSED,
+            detail="score-formula doctrine: %s" % "; ".join(problems),
+            evidence={"problems": list(problems), "count": len(problems)},
+        )
+    return GateOutcome(
+        gate_id="build-score-formula-doctrine", verdict=VERDICT_PASS,
+        detail="%s ships and carries real content"
+               % build_guards.SCORE_FORMULA_DOCTRINE_REL,
+    )
 
 
 def _build_mission_brief_slot(context: Dict[str, Any]) -> GateOutcome:
@@ -841,6 +873,7 @@ def _build_memory_surfaces(context: Dict[str, Any]) -> GateOutcome:
 
 
 BUILD_GUARD_VERIFIERS = {
+    "build-score-formula-doctrine": _build_score_formula_doctrine,
     "build-mission-brief-slot": _build_mission_brief_slot,
     "build-doc-currency": _build_doc_currency,
     "build-no-shell-instructions": _build_no_shell_instructions,
@@ -940,6 +973,15 @@ def main(argv=None) -> int:
         help="the release activation whose run minted the Pipeline Activation Key; "
              "omitted, build-activation-key reports skipped-inputs-absent (v1.95 Spine B)",
     )
+    parser.add_argument(
+        "--extracted-tree", default=None,
+        help="an assembled box for the candidate gates to judge (the box/ under "
+             "tropo-build-candidate-box.py --out). Omitted, all twelve candidate "
+             "gates report skipped-inputs-absent — which was their ONLY possible "
+             "outcome from this CLI before this flag existed, because nothing but "
+             "the build's own in-process path could supply the one input they all "
+             "declare. (metis-g124, 2026-09-07, measured before cured.)",
+    )
     args = parser.parse_args(argv)
 
     vault = Path(args.vault).resolve()
@@ -979,6 +1021,7 @@ def main(argv=None) -> int:
         context = gate_inputs.build_context(
             vault, args.plan_uid, version_string=args.version_string,
             activation_uid=args.activation_uid,
+            extracted_tree=args.extracted_tree,
         )
     except gate_inputs.GateInputError as exc:
         # An input that cannot be read is operational, never a verdict.
@@ -987,6 +1030,7 @@ def main(argv=None) -> int:
 
     phases = list(PHASES) if args.phase == "all" else [args.phase]
     outcomes = []
+    final_incomplete = False
     try:
         for phase in phases:
             phase_outcomes = registry.run_phase(phase, context)
@@ -997,6 +1041,17 @@ def main(argv=None) -> int:
             for outcome in phase_outcomes:
                 print("[%s] %s — %s"
                       % (outcome.verdict.upper(), outcome.gate_id, outcome.detail))
+            if phase == "pre-outward-fire":
+                final_incomplete = not phase_outcomes or any(
+                    o.verdict == VERDICT_SKIPPED for o in phase_outcomes)
+                if final_incomplete:
+                    print(
+                        "[OPERATIONAL] Final-fire checks did not all execute. "
+                        "Run the publisher with its staged context: "
+                        "python3 vault/tools/tropo-publish-release.py preflight "
+                        "--version <version> --activation-uid <activation>.",
+                        file=sys.stderr,
+                    )
             outcomes.extend(phase_outcomes)
     except ReleaseGateError as exc:
         print("[MISUSE] %s" % exc, file=sys.stderr)
@@ -1017,6 +1072,8 @@ def main(argv=None) -> int:
     if any(o.verdict == VERDICT_REFUSED for o in outcomes):
         return EXIT_REFUSED
     if any(o.verdict == VERDICT_ERROR for o in outcomes):
+        return EXIT_OPERATIONAL
+    if final_incomplete:
         return EXIT_OPERATIONAL
     return EXIT_OK
 

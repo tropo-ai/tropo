@@ -55,11 +55,13 @@ class IdentityLayerReceipt(unittest.TestCase):
     """AC8: one check per row."""
 
     def test_row_governed_path_authority(self) -> None:
-        t = src("vault/tools/lib/governed_path.py")
-        self.assertIn("UID_SHAPES", t)
-        self.assertIn("8", t.split("UID_SHAPES")[1][:80])
-        self.assertIn("12", t.split("UID_SHAPES")[1][:80])
-        self.assertIn("def is_legacy_uid", t)
+        # Historical identities remain readable when the authority grows;
+        # source layout and nearby comments are not evidence of that behavior.
+        for width in (8, 12):
+            self.assertTrue(mint.gp.is_governed_uid_shape("a" * width))
+        self.assertTrue(mint.gp.is_legacy_uid("a" * 8))
+        self.assertFalse(mint.gp.is_legacy_uid("a" * 12))
+        self.assertTrue(mint.gp.new_uid_is_valid_shape("a" * mint.gp.MINT_HEX_LEN))
 
     def test_row_ts_adapter(self) -> None:
         t = src("tropo-app/lib/governed-path.ts")
@@ -78,7 +80,13 @@ class IdentityLayerReceipt(unittest.TestCase):
 
     def test_row_mint_id_stage_a(self) -> None:
         t = src("vault/tools/tropo-mint-id.py")
-        self.assertTrue(has_marker(t, 3))
+        # The collision reader must see every authority width, irrespective
+        # of how many sites/comments implement that property.
+        for width in mint.gp.UID_SHAPES:
+            uid = "a" * width
+            match = mint._INDEX_UID.search(json.dumps({"uid": uid}))
+            self.assertIsNotNone(match, f"collision scan is blind to {width}-hex")
+            self.assertEqual(match.group(1), uid)
         self.assertIn('"--title"', t)
 
     def test_row_template_leg_title(self) -> None:

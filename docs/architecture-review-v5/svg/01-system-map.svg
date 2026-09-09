@@ -1,0 +1,210 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 994" font-family="Helvetica, Arial, sans-serif" role="img">
+  <title>The Tropo Studio system map: three layers, the nine ruled subsystems placed by their declared home folder, and the GitHub Actions candidate lane outside the studio folder.</title>
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .stamp { font-size: 13px; font-weight: bold; fill: #5a6a7a; }
+      .layer-label { font-size: 15px; font-weight: bold; fill: #ffffff; }
+      .bound-label { font-size: 13px; font-weight: bold; fill: #2c4a6e; letter-spacing: 0.4px; }
+      .ci-label { font-size: 13px; font-weight: bold; fill: #b08a4a; letter-spacing: 0.4px; }
+      .box-title { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .box-title-amber { font-size: 13px; font-weight: bold; fill: #b08a4a; }
+      .box-title-green { font-size: 13px; font-weight: bold; fill: #4a8a6b; }
+      .box-title-red { font-size: 13px; font-weight: bold; fill: #9c2b2b; }
+      .box-sub { font-size: 11.5px; fill: #2c3742; }
+      .box-sub-muted { font-size: 11.5px; fill: #5a6a7a; }
+      .box-sub-red { font-size: 11.5px; fill: #9c2b2b; }
+      .box-sub-amber { font-size: 11.5px; fill: #8a6a34; }
+      .box-sub-green { font-size: 11.5px; fill: #4a8a6b; }
+      .note { font-size: 11.5px; fill: #5a6a7a; }
+      .legend { font-size: 11.5px; fill: #2c3742; }
+      .caption { font-size: 12px; fill: #5a6a7a; font-style: italic; }
+      .arrow-label { font-size: 12px; fill: #2c3742; }
+    </style>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2c4a6e"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="994" fill="#fafbfc"/>
+
+  <text x="40" y="46" class="title">Tropo L1 — The Studio System Map</text>
+  <text x="40" y="70" class="subtitle">Three layers, nine ruled subsystems placed by their declared home folder, and one CI lane that runs outside the folder.</text>
+
+  <!-- ===================== STUDIO BOUNDARY ===================== -->
+  <rect x="40" y="92" width="1200" height="644" rx="10" fill="#ffffff" stroke="#2c4a6e" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="56" y="116" class="bound-label">THE STUDIO — one folder on an operator's machine. No server, no database; day-to-day operation fully offline.</text>
+
+  <!-- ===================== LAYER 1 — KERNEL ===================== -->
+  <rect x="52" y="126" width="1176" height="140" rx="8" fill="#2c4a6e" opacity="0.95"/>
+  <text x="68" y="150" class="layer-label">LAYER 1 — KERNEL  ·  .tropo/ + .tropo-studio/  ·  1 of the 9 subsystems homes here</text>
+
+  <rect x="68" y="162" width="268" height="90" rx="4" fill="#ffffff"/>
+  <text x="80" y="183" class="box-title">Governance · 8dd772a0</text>
+  <text x="80" y="201" class="box-sub">home .tropo/  ·  490 declaring entries</text>
+  <text x="80" y="216" class="box-sub-muted">OS invariants, capsule contracts, the</text>
+  <text x="80" y="231" class="box-sub-muted">validators, the decisions record.</text>
+  <text x="80" y="246" class="box-sub-muted">If a thing can refuse, this says why.</text>
+
+  <rect x="360" y="162" width="268" height="90" rx="4" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="372" y="183" class="box-title">.tropo/ — the bootstrap floor</text>
+  <text x="372" y="201" class="box-sub">boot-config.md · TROPO-CONTROL.md</text>
+  <text x="372" y="216" class="box-sub">SELF-HEALING.md · orientation.md</text>
+  <text x="372" y="231" class="box-sub">concierge/ · studio-identity.md</text>
+  <text x="372" y="246" class="box-sub-muted">Read cold, before the index exists.</text>
+
+  <rect x="652" y="162" width="268" height="90" rx="4" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="664" y="183" class="box-title">.tropo-studio/ — the registries</text>
+  <text x="664" y="201" class="box-sub">subsystems.yaml — status: ruled,</text>
+  <text x="664" y="216" class="box-sub">count: 9, ruled_by: mike-maziarz</text>
+  <text x="664" y="231" class="box-sub-red">subsystem-registry.jsonl — 147 rows;</text>
+  <text x="664" y="246" class="box-sub-red">newest ship-stamped is v1.91.0.</text>
+
+  <rect x="944" y="162" width="268" height="90" rx="4" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="956" y="183" class="box-title">The standard library is not here</text>
+  <text x="956" y="201" class="box-sub">0 capsules, 0 skills under .tropo/</text>
+  <text x="956" y="216" class="box-sub-muted">It is in the Vault: 69 capsules in</text>
+  <text x="956" y="231" class="box-sub-muted">vault/capsules/, 120 tool scripts</text>
+  <text x="956" y="246" class="box-sub-muted">in vault/tools/  (2026-09-08)</text>
+
+  <!-- ===================== LAYER 2 — PRIMITIVES ===================== -->
+  <rect x="52" y="278" width="1176" height="240" rx="8" fill="#3a6b8a" opacity="0.95"/>
+  <text x="68" y="302" class="layer-label">LAYER 2 — PRIMITIVES  ·  vault/  ·  5 subsystems; band_of() sends any unmatched home here</text>
+
+  <rect x="68" y="314" width="268" height="90" rx="4" fill="#ffffff"/>
+  <text x="80" y="335" class="box-title">Playbooks · 76bab75f</text>
+  <text x="80" y="353" class="box-sub">home vault/playbooks/ · 119 entries</text>
+  <text x="80" y="368" class="box-sub-muted">Activation and retirement playbooks,</text>
+  <text x="80" y="383" class="box-sub-muted">dev and release pipelines, the loops.</text>
+  <text x="80" y="398" class="box-sub-muted">Substrate with a run journal.</text>
+
+  <rect x="360" y="314" width="268" height="90" rx="4" fill="#ffffff"/>
+  <text x="372" y="335" class="box-title">Work · 2d083137</text>
+  <text x="372" y="353" class="box-sub">home vault/ · 78 declaring entries</text>
+  <text x="372" y="368" class="box-sub-muted">Typed work objects and the pipelines</text>
+  <text x="372" y="383" class="box-sub-muted">that move them to done. Apps in L1,</text>
+  <text x="372" y="398" class="box-sub-amber">primitives by home — the one clash.</text>
+
+  <rect x="652" y="314" width="268" height="90" rx="4" fill="#ffffff"/>
+  <text x="664" y="335" class="box-title">Link · 3a207ed3</text>
+  <text x="664" y="353" class="box-sub">home vault/events/ · 2 entries</text>
+  <text x="664" y="368" class="box-sub-muted">Append-only event bus, receipts,</text>
+  <text x="664" y="383" class="box-sub-muted">party addressing, wake discipline.</text>
+  <text x="664" y="398" class="box-sub-muted">Never-simultaneous agents, one crew.</text>
+
+  <rect x="944" y="314" width="268" height="90" rx="4" fill="#ffffff"/>
+  <text x="956" y="335" class="box-title">Library · 1aba710c</text>
+  <text x="956" y="353" class="box-sub">home library/ · 7 declaring entries</text>
+  <text x="956" y="368" class="box-sub-muted">At Studio root, not under vault/:</text>
+  <text x="956" y="383" class="box-sub-muted">home corrected 2026-09-07 ef4809ad8.</text>
+  <text x="956" y="398" class="box-sub-amber">vault/library/ never existed.</text>
+
+  <rect x="68" y="414" width="268" height="90" rx="4" fill="#ffffff" stroke="#b08a4a" stroke-width="1.5"/>
+  <text x="80" y="435" class="box-title-amber">Test Harness · 952f3aa3</text>
+  <text x="80" y="453" class="box-sub">home vault/tools/tests/ · 0 entries</text>
+  <text x="80" y="468" class="box-sub-muted">Declares zero. Appears in 0 of the</text>
+  <text x="80" y="483" class="box-sub-muted">147 per-release registry rows, ever.</text>
+  <text x="80" y="498" class="box-sub-amber">Ruled a subsystem; unevidenced.</text>
+
+  <rect x="360" y="414" width="268" height="90" rx="4" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="372" y="435" class="box-title">Two layer models, not one</text>
+  <text x="372" y="453" class="box-sub-muted">L1 eca73d77:119-129 — Kernel is the</text>
+  <text x="372" y="468" class="box-sub-muted">std library at vault/&lt;type&gt;/tropo-*</text>
+  <text x="372" y="483" class="box-sub-muted">plus .tropo/. The registry's layer is</text>
+  <text x="372" y="498" class="box-sub-muted">band_of() — render-studio-map.py:457</text>
+
+  <rect x="652" y="414" width="268" height="90" rx="4" fill="#eef2f6" stroke="#b08a4a" stroke-width="1.5"/>
+  <text x="664" y="435" class="box-title-amber">Import Primitive is not a tenth</text>
+  <text x="664" y="453" class="box-sub-muted">58722bdf — ruled a capability</text>
+  <text x="664" y="468" class="box-sub-muted">2026-09-07. Still typed subsystem-</text>
+  <text x="664" y="483" class="box-sub-muted">hub on disk (58722bdf.md:3), the only</text>
+  <text x="664" y="498" class="box-sub-amber">one; the re-typing is not applied.</text>
+
+  <rect x="944" y="414" width="268" height="90" rx="4" fill="#eef2f6" stroke="#b08a4a" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="956" y="435" class="box-title-amber">Seven readers, none re-pointed</text>
+  <text x="956" y="453" class="box-sub-muted">The registry names 7 phase-2 readers;</text>
+  <text x="956" y="468" class="box-sub-muted">each still carries a private copy of</text>
+  <text x="956" y="483" class="box-sub-muted">the list. The phase-3 gate that would</text>
+  <text x="956" y="498" class="box-sub-amber">refuse a disagreement is unbuilt.</text>
+
+  <!-- ===================== LAYER 3 — APPS ===================== -->
+  <rect x="52" y="530" width="1176" height="140" rx="8" fill="#5a6a7a" opacity="0.95"/>
+  <text x="68" y="554" class="layer-label">LAYER 3 — APPS  ·  agents/ · boards/ · docs/  ·  3 subsystems</text>
+
+  <rect x="68" y="566" width="268" height="90" rx="4" fill="#ffffff"/>
+  <text x="80" y="587" class="box-title">Agents · 99ed55fd</text>
+  <text x="80" y="605" class="box-sub">home agents/ · 87 declaring entries</text>
+  <text x="80" y="620" class="box-sub-muted">Crew identity across generations,</text>
+  <text x="80" y="635" class="box-sub-muted">boot and retirement lifecycle,</text>
+  <text x="80" y="650" class="box-sub-muted">session agents, the concierge.</text>
+
+  <rect x="360" y="566" width="268" height="90" rx="4" fill="#ffffff"/>
+  <text x="372" y="587" class="box-title">Documentation · f87e33f0</text>
+  <text x="372" y="605" class="box-sub">home docs/ · 67 declaring entries</text>
+  <text x="372" y="620" class="box-sub-muted">The two canonical documents, the L1</text>
+  <text x="372" y="635" class="box-sub-muted">entry, KB articles, the root docs.</text>
+  <text x="372" y="650" class="box-sub-muted">This review lives here.</text>
+
+  <rect x="652" y="566" width="268" height="90" rx="4" fill="#ffffff"/>
+  <text x="664" y="587" class="box-title">Rendering · dbc1cbbf</text>
+  <text x="664" y="605" class="box-sub">home boards/ · 28 declaring entries</text>
+  <text x="664" y="620" class="box-sub-muted">Index, catalogs, boards, rendered</text>
+  <text x="664" y="635" class="box-sub-muted">maps, the release build. Nothing</text>
+  <text x="664" y="650" class="box-sub-muted">here is authored; all regenerates.</text>
+
+  <rect x="944" y="566" width="268" height="90" rx="4" fill="#ffffff" stroke="#4a8a6b" stroke-width="1.5"/>
+  <text x="956" y="587" class="box-title-green">The ruled list has one reader</text>
+  <text x="956" y="605" class="box-sub">tropo-render-systems-explorer.py</text>
+  <text x="956" y="620" class="box-sub-muted">(0e67e9a25, 2026-09-08) parses it,</text>
+  <text x="956" y="635" class="box-sub-muted">fingerprints it as a staleness</text>
+  <text x="956" y="650" class="box-sub-muted">source, REFUSES on zero (:498).</text>
+
+  <!-- ===================== footnote inside the boundary ===================== -->
+  <text x="56" y="696" class="note">808 of the 3,904 live records in vault/00-index.jsonl — 21% — declare an owning hub at all. The nine counts above sum to 878 because 58 records declare more than one.</text>
+  <text x="56" y="714" class="note">That index was built 2026-09-06 10:22, so every figure is a floor. The rendered map boards/po/studio-map.html still carries two occurrences of vault/library/.</text>
+
+  <!-- ===================== the crossing ===================== -->
+  <line x1="200" y1="736" x2="200" y2="774" stroke="#2c4a6e" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="216" y="762" class="arrow-label">Nightly on GitHub's cron, off the operator's machine. It decides nothing, repairs nothing, publishes nothing, dispatches nobody.</text>
+
+  <!-- ===================== CI LANE — outside the folder ===================== -->
+  <rect x="40" y="780" width="1200" height="142" rx="10" fill="#ffffff" stroke="#b08a4a" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="56" y="804" class="ci-label">OUTSIDE THE STUDIO FOLDER — GitHub-hosted runners, ubuntu-latest, permissions: contents: read</text>
+
+  <rect x="56" y="814" width="373" height="94" rx="4" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="68" y="835" class="box-title">.github/workflows/candidate.yml</text>
+  <text x="68" y="853" class="box-sub">8,201 bytes · first commit 3cfe12f01, 2026-09-07</text>
+  <text x="68" y="868" class="box-sub-muted">cron '0 7 * * *' — builds a candidate box from HEAD.</text>
+  <text x="68" y="883" class="box-sub-muted">This Studio had no CI of any kind before it.</text>
+  <text x="68" y="898" class="box-sub-muted">Fenced by the candidate-lane rulings f015e0581314.</text>
+
+  <rect x="453" y="814" width="373" height="94" rx="4" fill="#ffffff" stroke="#b08a4a" stroke-width="1.5"/>
+  <text x="465" y="835" class="box-title-amber">BUILT; THE SCHEDULE HAS NOW FIRED ONCE</text>
+  <text x="465" y="853" class="box-sub">4 runs. 3 workflow_dispatch, 2026-09-07: 2m15s pass;</text>
+  <text x="465" y="868" class="box-sub-muted">51s FAIL 16:06:22Z on a credential-needing check the</text>
+  <text x="465" y="883" class="box-sub-muted">lane had declared credential-free; 1m40s pass after.</text>
+  <text x="465" y="898" class="box-sub-green">Schedule first fired 2026-09-08, 11:53Z — pass, 2m39s.</text>
+
+  <rect x="850" y="814" width="374" height="94" rx="4" fill="#ffffff" stroke="#9c2b2b" stroke-width="1.5"/>
+  <text x="862" y="835" class="box-title-red">CANDIDATE BOX ≠ RELEASE BOX</text>
+  <text x="862" y="853" class="box-sub">10 files ship in v1.95.0 that this builder omits, one</text>
+  <text x="862" y="868" class="box-sub-muted">of them .tropo-studio/mission-brief.md, a Required:Yes</text>
+  <text x="862" y="883" class="box-sub-muted">boot read. 12 box-content gates are unwired here; 3</text>
+  <text x="862" y="898" class="box-sub-red">would refuse on the builder's own gap.</text>
+
+  <!-- ===================== legend ===================== -->
+  <rect x="40" y="938" width="14" height="13" rx="2" fill="#4a8a6b"/>
+  <text x="60" y="949" class="legend">PROVEN — has run against the world</text>
+  <rect x="294" y="938" width="14" height="13" rx="2" fill="#2c4a6e"/>
+  <text x="314" y="949" class="legend">BUILT and in routine use</text>
+  <rect x="485" y="938" width="14" height="13" rx="2" fill="#b08a4a"/>
+  <text x="505" y="949" class="legend">BUILT BUT UNPROVEN, or ruled but unbuilt</text>
+  <rect x="765" y="938" width="14" height="13" rx="2" fill="#9c2b2b"/>
+  <text x="785" y="949" class="legend">KNOWN BROKEN or stale</text>
+  <rect x="937" y="938" width="14" height="13" rx="2" fill="#ffffff" stroke="#5a6a7a" stroke-dasharray="3 2"/>
+  <text x="957" y="949" class="legend">dashed = does not exist yet</text>
+
+  <text x="40" y="976" class="caption">Every box is a folder of plain markdown. Source of the ruled list: .tropo-studio/registries/subsystems.yaml (count: 9).</text>
+  <text x="1240" y="976" text-anchor="end" class="stamp">measured 2026-09-08 · v1.95.0</text>
+</svg>

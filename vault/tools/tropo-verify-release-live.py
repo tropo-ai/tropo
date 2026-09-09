@@ -518,7 +518,7 @@ def _emit_completion_verified(
     """
     journal = run_dir / "run.jsonl"
     for row in _read_journal(journal):
-        if row.get("event") != COMPLETION_EVENT:
+        if _event_type(row) != COMPLETION_EVENT:
             continue
         if str((row.get("data") or {}).get("pipeline_run_uid") or "") == identity["pipeline_run_uid"]:
             return False
@@ -647,7 +647,15 @@ def clear_publish_pending(studio_root: Path, run_dir: Path,
     run_version = (_normalise_version(verified_version)
                    if verified_version
                    else _release_version_for(run_dir, studio_root))
-    if str(body.get("publish_state")) in PUBLISH_PENDING_SILENT_STATES:
+    # A silent state silences only ITS OWN version (f015ebc247ce, argus-a173
+    # diagnosis 2026-09-07). Unscoped, this guard fired before run_version was
+    # ever compared, so a marker silenced for v1.94 (Mike's own defer) stayed
+    # silent forever after -- v1.95, v1.96, every release after it, because
+    # the version-compare branch two lines down existed for exactly this case
+    # and could never be reached. Third recurrence of one predicate error:
+    # "a silent state exists" is not "a silent state FOR THIS VERSION exists".
+    if (str(body.get("publish_state")) in PUBLISH_PENDING_SILENT_STATES
+            and (not run_version or marker_version == run_version)):
         return "publish-pending: already %s for v%s" % (body.get("publish_state"), marker_version)
     if not run_version:
         return ("publish-pending: run %s names no release version, so the marker for "
@@ -702,7 +710,9 @@ def defer_publish_pending(studio_root: Path, version: str,
         return "publish-pending: marker %s unreadable (%s) — left as is" % (marker, exc)
     marker_version = _normalise_version(body.get("version"))
     want = _normalise_version(version)
-    if str(body.get("publish_state")) in PUBLISH_PENDING_SILENT_STATES:
+    # Same scoping fix as clear_publish_pending above -- see its comment.
+    if (str(body.get("publish_state")) in PUBLISH_PENDING_SILENT_STATES
+            and (not want or marker_version == want)):
         return "publish-pending: already %s for v%s" % (body.get("publish_state"), marker_version)
     if not want:
         return ("publish-pending: defer names no release version, so the marker for "

@@ -199,8 +199,16 @@ class TemplateLeg:
         "Minted from this leg" is the whole scope: pair this with grandfathers()
         before reporting, or the mint-time contract gets applied retroactively to
         entries written before the scaffold existed."""
+        # A heading that IS a mint token (`# <<MINT:title>>`, the document
+        # template's H1) is substituted at mint, so its literal can never
+        # appear in a stamped instance; requiring it made every new `document`
+        # fail its own validator by construction. Found by Po on the founder's
+        # test of the v1.96 box (Finding 8, 2026-09-09): the leg carried
+        # `enforced_from: 2026-07-13` and every shipped document predated it,
+        # so the defect was invisible until a stranger minted the first one.
         return [title for title, chunk in self._section_spans(self.body_text)
-                if REQUIRED_PLACEHOLDER_RE.search(chunk)]
+                if REQUIRED_PLACEHOLDER_RE.search(chunk)
+                and not MINT_TOKEN_RE.search(title)]
 
     def optional_sections(self) -> list[str]:
         """Fixed-title headings marked OPTIONAL and carrying no REQUIRED placeholder
@@ -559,6 +567,17 @@ def list_mintable_types(vault_root: Path) -> list[str]:
     )
 
 
+
+def _mintable_hint(rows, required_mode: str) -> str:
+    """Name the valid answers, always. A refusal that withholds the set it is
+    checking against forces an ephemeral agent to guess, and a guessing agent
+    is how a naming convention drifts (metis-g124, 2026-09-07)."""
+    ok = sorted(r["type"] for r in rows if r.get("mint_mode") == required_mode)
+    if not ok:
+        return f"No type currently carries mint_mode {required_mode!r}."
+    return ("Types you CAN mint this way: " + ", ".join(ok)
+            + ". (Same list: tropo-mint-id.py --list-types.)")
+
 def _load_bound_mint_template(
     vault_root: Path, type_name: str, *, required_mode: str
 ) -> TemplateLeg:
@@ -571,6 +590,19 @@ def _load_bound_mint_template(
     """
     rows = load_mint_registry(vault_root)
     row = next((candidate for candidate in rows if candidate["type"] == type_name), None)
+    # Every refusal below already holds `rows` -- the whole registry -- and used
+    # to report only the failing type's internal mode. It knew every valid
+    # answer at the moment it refused and threw it away, so the caller had to
+    # discover --list-types separately or guess.
+    #
+    # metis-g124 guessed, on 2026-09-07: dropped to bare-identifier minting and
+    # hand-named 68 governed files, which the founder caught. His ruling, and it
+    # is the general one: "the tool should return valid codes and values for the
+    # agent... agents are ephemeral, the tools are designed to make it effortless
+    # and bulletproof." This same tool already does it right one refusal later,
+    # naming agents/<agent>/.tropo-capsule/workspace when the output dir is
+    # wrong -- and that refusal was complied with instantly. Same tool, both
+    # behaviours, and the difference in outcome was 68 files.
     if row is None:
         expected = capsule_path_for_type(vault_root, type_name)
         if expected.is_file():
@@ -579,12 +611,13 @@ def _load_bound_mint_template(
                 "regenerate the registry; mint refuses stale type selection"
             )
         raise TemplateLegError(
-            f"unknown type {type_name!r}: no capsule or generated mint binding exists"
+            f"unknown type {type_name!r}: no capsule or generated mint binding exists. "
+            + _mintable_hint(rows, required_mode)
         )
     if row["mint_mode"] != required_mode:
         raise TemplateLegError(
             f"type {type_name!r} has mint_mode {row['mint_mode']!r}, not "
-            f"{required_mode!r}"
+            f"{required_mode!r}. " + _mintable_hint(rows, required_mode)
         )
 
     required_registry_fields = (

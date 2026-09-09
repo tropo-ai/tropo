@@ -25,3 +25,11 @@ the canonical activation playbook carried by this Studio.
 If the per-Studio boot derivations are absent, that is expected on a fresh
 extraction. Continue through the canonical playbook; do not treat their absence
 as a broken boot.
+
+## Come back tomorrow
+
+For the person working with {{display_name}}:
+
+```text
+To come back tomorrow, open this same Studio folder in your AI tool, start a new chat, attach agents/{{slug}}/{{slug}}-activation.md, and say: Activate {{display_name}} using this file.
+```

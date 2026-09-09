@@ -16,8 +16,8 @@ spawnable_by:
   - all-executives
 created: 2026-08-31
 created_by: talos-t56
-modified: 2026-09-06
-modified_by: argus-a172
+modified: 2026-09-09
+modified_by: metis-g128
 governed_by: d5e1b4a3
 member_of:
   - 99ed55fd
@@ -49,6 +49,9 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib import memory_surfaces  # noqa: E402  — Phase 2 (f0153a6df07f)
 
 import yaml
 
@@ -456,10 +459,27 @@ def _materialize_memory(
     ):
         if _write_if_absent(home / target_name, source.read_bytes()):
             changed.append((home / target_name).relative_to(root).as_posix())
-    episodic = home / "agent-memories.jsonl"
+    # Phase 2 (f0153a6df07f) is a five-step order, and step 1 is READERS ONLY:
+    # a creation site that jumped to the new name here would put a freshly minted
+    # companion on memory.md while every executive still has agent-memory.md, so
+    # the tree would carry two conventions at once — exactly what the ordering is
+    # designed to avoid. These stay on the LEGACY constants until step 2 moves the
+    # existing files, and they are written as constants rather than literals so
+    # that step is a one-line flip here and greppable from the module.
+    episodic = home / memory_surfaces.AGENT_LOG_LEGACY
     if _write_if_absent(episodic, b""):
         changed.append(episodic.relative_to(root).as_posix())
-    active = home / "agent-memory.md"
+    # v1.96 first-minute fix 6 (Mike-ruled 2026-09-09): the shipped memory
+    # skill writes pins to memory/entries/<uid>.md, and genesis seeded the four
+    # memory files but never that directory. Measured on a built box (Po,
+    # 2026-09-09). An empty directory is not a file, so it is created here
+    # rather than written; it is reported as created only when it was absent.
+    entries = home / "entries"
+    if not entries.is_dir():
+        entries.mkdir(parents=True, exist_ok=True)
+        changed.append(entries.relative_to(root).as_posix() + "/")
+    active = home / memory_surfaces.AGENT_INDEX_LEGACY
+    episodic_name = episodic.name
     active_text = f"""# {display} — Active Memory
 
 ## Inherited method
@@ -473,9 +493,28 @@ Read `crew-memories.jsonl`. Every non-empty row must resolve to the originating
 rehearsal journal by timestamp. This partition remains empty until that
 rehearsal actually occurs.
 
+## What I have learned working here
+
+*This section is read at the start of every session. It is the only part of this
+file that carries forward what {display} learned from the work itself, so what is
+not written here does not survive the night.*
+
+Append a short dated line whenever something is worth knowing next time: a choice
+the owner made and the reason behind it, a preference they showed rather than
+stated, a constraint discovered by hitting it, how some part of this Studio
+actually behaves as opposed to how it is described. Prefer what was learned from
+doing over what was read. Keep each line short enough to be worth re-reading, and
+leave the reasoning in the episodic log below.
+
+- <!-- first session: replace this line with the first thing worth carrying -->
+
 ## Episodic log
 
-Append lived observations to `agent-memories.jsonl`. Do not rewrite prior rows.
+Append lived observations to `{episodic_name}`. Do not rewrite prior rows.
+That file is the complete raw record and is deliberately **not** read at boot —
+it grows without bound. Promote anything from it that should shape tomorrow into
+the section above; that promotion is the whole difference between a log and a
+memory.
 
 ## Handoff
 

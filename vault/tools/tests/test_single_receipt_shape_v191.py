@@ -161,6 +161,80 @@ class ProductionDoorReceiptShapeTests(unittest.TestCase):
         self.assertIsNotNone(refusal)
         self.assertEqual(payload["verdict"], "fail")
 
+    # --- Authorized skips (Mike-ruled 2026-09-09) --------------------------
+
+    def _rows(self):
+        return [json.loads(l) for l in (self.tmp / "run.jsonl").read_text().splitlines()]
+
+    def _skipped_receipts(self):
+        return [r for r in self._rows()
+                if (r.get("data") or {}).get("verdict") == "skipped"]
+
+    def test_the_real_writer_writes_an_excusal_and_the_real_freeze_discloses_it(self):
+        """Three real passes plus the founder's real excusal earn the freeze, loudly."""
+        harness = release_verify.INSTRUMENT_NODES["release-harness"]
+        for step_uid in sorted(release_verify.INSTRUMENT_NODES.values()):
+            if step_uid != harness:
+                self.assertTrue(runtime.emit_release_verification_receipt(
+                    self.tmp, self.pr, step_uid, "sa.test-harness", "pass"))
+        self.assertTrue(runtime.emit_release_verification_receipt(
+            self.tmp, self.pr, harness, "user", "skipped", execution_mode="human",
+            evidence_ref="skip_authorization@auth1", authorized_by="mike-maziarz"))
+        skipped = self._skipped_receipts()
+        self.assertEqual(len(skipped), 1)
+        self.assertEqual(skipped[0]["data"]["authorized_by"], "mike-maziarz")
+        payload, refusal = freeze.decide(self.tmp, self.candidate)
+        self.assertIsNone(refusal, f"freeze refused a signed excusal: {refusal!r}")
+        self.assertEqual(payload["verdict"], "pass")
+        self.assertEqual(len(payload["excused_instruments"]), 1)
+        self.assertIn("mike-maziarz", payload["excused_instruments"][0])
+
+    def test_the_writer_refuses_an_excusal_nobody_signed(self):
+        harness = release_verify.INSTRUMENT_NODES["release-harness"]
+        with self.assertRaises(Exception) as ctx:
+            runtime.emit_release_verification_receipt(
+                self.tmp, self.pr, harness, "user", "skipped",
+                execution_mode="human", evidence_ref="skip_authorization@auth1")
+        self.assertIn("authorized_by", str(ctx.exception))
+        self.assertEqual(self._skipped_receipts(), [])
+
+    def test_apply_skip_writes_the_excusal_through_the_one_writer(self):
+        """The wiring from an authorization span to the receipt, idempotent,
+        and apply-skip is its caller (a writer nothing calls is the AC2 class)."""
+        harness = release_verify.INSTRUMENT_NODES["release-harness"]
+        with (self.tmp / "run.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({
+                "event": "skip_authorization", "step": harness, "span_id": "auth1",
+                "data": {"step_id": harness, "authorized_by": "mike-maziarz",
+                         "conditions": "test"},
+            }) + "\n")
+        line = runtime._write_skip_excusal_receipt(self.tmp, self.pr, harness, "user", "auth1")
+        self.assertIn("EXCUSED", line)
+        skipped = self._skipped_receipts()
+        self.assertEqual(len(skipped), 1)
+        self.assertEqual(skipped[0]["data"]["authorized_by"], "mike-maziarz")
+        self.assertEqual(skipped[0]["data"]["evidence_ref"], "skip_authorization@auth1")
+        self.assertEqual(skipped[0]["data"]["candidate_sha256"], self.sha)
+        again = runtime._write_skip_excusal_receipt(self.tmp, self.pr, harness, "user", "auth1")
+        self.assertIn("already", again)
+        self.assertEqual(len(self._skipped_receipts()), 1)
+        self.assertEqual(
+            runtime._write_skip_excusal_receipt(self.tmp, self.pr, "deadbeef", "user", "auth1"), "")
+        import inspect
+        self.assertIn("_write_skip_excusal_receipt(",
+                      inspect.getsource(runtime.action_apply_skip))
+
+    def test_no_candidate_means_no_excusal_receipt_and_no_crash(self):
+        empty = Path(tempfile.mkdtemp(prefix="ac4-skip-no-candidate-"))
+        self.addCleanup(shutil.rmtree, empty, True)
+        harness = release_verify.INSTRUMENT_NODES["release-harness"]
+        (empty / "run.jsonl").write_text(json.dumps({
+            "event": "skip_authorization", "step": harness, "span_id": "auth1",
+            "data": {"step_id": harness, "authorized_by": "mike-maziarz"},
+        }) + "\n", encoding="utf-8")
+        line = runtime._write_skip_excusal_receipt(empty, self.pr, harness, "user", "auth1")
+        self.assertIn("no active candidate", line)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

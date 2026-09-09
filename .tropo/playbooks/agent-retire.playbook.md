@@ -21,7 +21,7 @@ that was already compacted. Context pressure is not the end of a session, and
 retiring over it ends a generation the principal meant to keep. That case has
 its own verb:
 
-> If this agent session was compacted or you no longer remember completing boot, do not activate and never run `born`. Run `python3 vault/tools/tropo-compact-continue.py --agent <slug>` before any other work.
+> If this agent session was compacted, auto-compacted, or resumed, or you no longer remember completing boot, do not activate and never run `born`. Run `python3 vault/tools/tropo-compact-continue.py --agent <slug>` before any other work.
 
 Only the principal explicitly ending the session is retirement authority
 (dev-spec d5f8fe55).

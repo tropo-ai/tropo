@@ -8,8 +8,8 @@ uid: c7ea9e01
 owner: argus
 created: 2026-04-21
 created_by: argus-a31
-modified: 2026-07-19
-modified_by: argus-a135
+modified: 2026-09-07
+modified_by: argus-a174
 aligned_with: e7b3c509
 status: active
 governed_by: a7c3f489
@@ -96,7 +96,7 @@ These rules are the covenant. Every agent creation satisfies them.
 8. Every agent MUST have a `sessions.md` file created from `vault/templates/tropo-sessions.template.md`.
 9. Every agent MUST be registered in `.tropo-studio/registries/agent-registry.yaml`.
 10. Every agent creation MUST be logged to the crew event log via `tropo-emit-event.py --type tropo.broadcast.crew` (`channels/ops.md` was retired v1.61 — the event log is the crew-communication surface).
-11. Every agent creation MUST be reflected in the vault index (`vault/00-index.jsonl`) via `tropo-rebuild-vault.py` (`agents/00-index.md` was retired v1.74 — the JSONL index is the discovery surface).
+11. Every agent creation MUST be reflected in the vault index (`vault/00-index.jsonl`) via `tropo-rebuild-index.py` (`agents/00-index.md` was retired v1.74 — the JSONL index is the discovery surface).
 12. Agent creation requires the founder's confirmation BEFORE writing files. Show the slate: "Here's what I'll create — [agent name], [role], three files + workspace + memory + session log. OK to proceed?" Wait for yes.
 
 ---
@@ -109,7 +109,7 @@ Run these in order. Every step maps to one or more Rules.
 
 Before authoring:
 - `.tropo/schema/charter-schema.md` — the required charter frontmatter fields
-- `vault/files/3572cded.md` (or `agents/AGENTS.md` if pre-v0.3.0) — folder-level governance for where new agents may be created
+- `.tropo/TROPO-CONTROL.md` and `STUDIO.md` — the live Studio rules, including the founder’s location and ownership constraints for `agents/<name>/`
 
 ### 2. Get founder confirmation (Rule 12)
 
@@ -223,11 +223,30 @@ the briefing/activation).
 
 ### 12. Refresh the vault index (Rule 11)
 
-Rebuild the JSONL discovery index so the new agent resolves (`agents/00-index.md` was retired v1.74):
+Register all three new files with a source-complete index rebuild. Their friendly
+paths under `agents/<name>/` are not discoverable by `--only <uid>` until the
+first full scan has recorded those paths. Using `--only` for this first
+registration fails even when the charter exists and has a valid UID.
+
+Preview the rebuild:
+
 ```bash
-python3 vault/tools/tropo-rebuild-vault.py --only <uid>   # or a full rebuild
+python3 vault/tools/tropo-rebuild-index.py
 ```
-Confirm the agent is present in `vault/00-index.jsonl`.
+
+Read its purge list. Resolve any unexpected removal before applying; a missing
+UID in an existing governed file must be repaired, not silently pruned. After
+the preview has been reviewed, apply the rebuild:
+
+```bash
+python3 vault/tools/tropo-rebuild-index.py --apply
+```
+
+Confirm that `vault/00-index.jsonl` contains **each of the three UIDs from
+Step 3**, pointing to the new charter, briefing, and activation files. Later
+edits to an indexed charter may use
+`python3 vault/tools/tropo-rebuild-vault.py --only <charter-uid>` because its
+source path is then known.
 
 ### 13. Log the creation to the crew event log (Rule 10)
 
@@ -253,7 +272,7 @@ After creating the agent, before reporting success, verify:
 7. `agents/<name>/sessions.md` exists with agent name
 8. `agents/<name>/AGENTS.md` and `agents/<name>/CAPSULE.md` exist
 9. `.tropo-studio/registries/agent-registry.yaml` has at least one entry for this agent
-10. `vault/00-index.jsonl` contains the new agent's entry (after `tropo-rebuild-vault.py`) — the current discovery surface (`agents/00-index.md` retired v1.74)
+10. `vault/00-index.jsonl` contains all three distinct UIDs and their charter, briefing, and activation paths after Step 12 — the current discovery surface (`agents/00-index.md` retired v1.74)
 11. A `tropo.broadcast.crew` creation event was emitted (verify with `tropo-query-events.py`) carrying the correct UID (`channels/ops.md` retired v1.61)
 12. Zero `[FILL:...]` or `[agent-name]` placeholders survive in any authored file
 13. **`agents/<name>/<name>-activation.md` contains a non-empty `## Routing` section** (D4.9 / [playbook.capsule v2.3 §Subtypes §Concierge-Paths](../capsules/playbook.capsule.md)). The section MUST list at minimum the four bounce intents (project creation / team setup / new standalone agent / system updates) and one inline-handling clause. Validation: grep the activation file for `^## Routing$` heading + ≥ 4 bounce-bullets in the section body. If missing or partial, the template was not copied correctly or was edited away — halt and re-copy from `vault/templates/tropo-executive-activation.template.md`.

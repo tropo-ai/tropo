@@ -1067,12 +1067,34 @@ class PublisherReceiptTests(unittest.TestCase):
             saga_lib = root / "vault" / "tools" / "lib"
             saga_lib.mkdir(parents=True)
             shutil.copy2(TOOLS / "lib" / "release_saga.py", saga_lib / "release_saga.py")
+            from test_release_coupling_fbe50871 import _named_release_fixture
+            run_folder, identity = _named_release_fixture(publisher, root)
+            folder_seam = patch.object(publisher, "_run_journal_folder", return_value=run_folder)
+            folder_seam.start()
+            self.addCleanup(folder_seam.stop)
+            zip_path = root / "private-releases" / f"v{VERSION}" / "dist" / f"tropo-os-v{VERSION}.zip"
+            zip_path.parent.mkdir(parents=True)
+            zip_path.write_bytes(b"verified receipt fixture package")
+            package_digest = publisher.release_package.hash_final_zip(zip_path)
+            asset_seam = patch.object(publisher, "_observe_public_asset", return_value=package_digest)
+            asset_seam.start()
+            self.addCleanup(asset_seam.stop)
+            credential_seam = patch.object(publisher, "_load_supabase_credentials",
+                                           return_value=("https://fixture.invalid", "fixture-only"))
+            credential_seam.start()
+            self.addCleanup(credential_seam.stop)
+            # Keep the event in the disposable journal; minting is an outward
+            # identity boundary unrelated to this receipt-write-failure test.
+            mint_seam = patch.object(publisher, "_chokepoint_mint_uid", return_value="f00000000001", create=True)
+            mint_seam.start()
+            self.addCleanup(mint_seam.stop)
             state = {
                 **self._state(),
                 "activation_uid": "deadbeef",
                 "clone_dir": str(root / "staged-clone"),
                 "remote": publisher.DEFAULT_REMOTE,
             }
+            (zip_path.parent.parent / "publish-state.json").write_text(json.dumps(state))
 
             def fake_git(arguments, cwd, check=True, timeout=120, env=None):
                 # _git grew an env= kwarg (site_ref_cas_push's push call passes
@@ -1116,7 +1138,6 @@ class PublisherReceiptTests(unittest.TestCase):
                     "RELEASES_DIR",
                     root / "private-releases",
                 ),
-                patch.object(publisher, "_read_state", return_value=state),
                 patch.object(publisher, "_confirm_tty", return_value=True),
                 patch.object(
                     publisher,
@@ -1156,7 +1177,7 @@ class PublisherReceiptTests(unittest.TestCase):
                     side_effect=publisher.release_receipt.ReleaseReceiptError(
                         "planted receipt failure"
                     ),
-                ),
+                ) as write_receipt,
                 patch.object(publisher, "_emit_published_event") as emit,
                 patch.object(publisher, "_stamp_release_entry") as stamp,
                 # Stage 6 put the AC7 receipt-set gate ahead of everything in
@@ -1173,20 +1194,15 @@ class PublisherReceiptTests(unittest.TestCase):
                 # context; that the gate is wired is proved in
                 # test_ac07_publish_receipt_gate.
                 patch.object(publisher, "require_ac7_receipt_set",
-                             return_value={
-                                 "identity": types.SimpleNamespace(
-                                     activation_uid="acc00001",
-                                     run_uid="b0000001",
-                                     plan_uid="c0000001",
-                                     root_uid="d0000001",
-                                     fan_in_digest="d" * 64),
-                                 "package_sha256": "c" * 64,
-                                 "receipts": {}}),
+                             return_value={"identity": identity,
+                                           "package_sha256": package_digest,
+                                           "receipts": {}}),
                 patch.object(publisher, "_release_entry_uid_for",
                              return_value="e0000001"),
             ):
-                result = publisher.cmd_fire(types.SimpleNamespace(version=VERSION))
+                result = publisher.cmd_fire(types.SimpleNamespace(version=VERSION, activation_uid="deadbeef"))
             self.assertEqual(result, 14)
+            write_receipt.assert_called_once()
             verify_manifest.assert_called_once_with(VERSION)
             emit.assert_not_called()
             stamp.assert_not_called()

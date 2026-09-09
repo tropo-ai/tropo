@@ -77,7 +77,15 @@ RECEIPT_FIELDS = (
 )
 
 EXECUTION_MODES = ("machine", "human", "agent")
-VERDICTS = ("pass", "fail")
+#: "skipped" is the founder's recorded excusal, never an instrument's verdict.
+#: It is legal only when the receipt names `authorized_by`; it satisfies AC7's
+#: count; and every reader that resolves a receipt set prints it loudly (see
+#: `excusal_lines`). Before 2026-09-09 the runtime had an authorized-skip path
+#: and this resolver had no notion of it, so a skip the founder authorized was
+#: refused at the freeze and again at the fire — one fact, three readers, one
+#: of them updated. Mike, 2026-09-09: "We need that flexibility. I like the
+#: warn loudly and document as part of the process. I should be warned."
+VERDICTS = ("pass", "fail", "skipped")
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -104,9 +112,11 @@ class Receipt:
     evidence_ref: str
     started_at: str
     completed_at: str
+    #: Only ever set on a `skipped` receipt: who excused the instrument.
+    authorized_by: str = ""
 
     def as_dict(self) -> dict:
-        return {
+        out = {
             "receipt_kind": RECEIPT_KIND,
             "instrument": self.instrument,
             "release_run_uid": self.release_run_uid,
@@ -118,6 +128,9 @@ class Receipt:
             "started_at": self.started_at,
             "completed_at": self.completed_at,
         }
+        if self.authorized_by:
+            out["authorized_by"] = self.authorized_by
+        return out
 
 
 def validate_receipt(raw: dict) -> Receipt:
@@ -177,6 +190,12 @@ def validate_receipt(raw: dict) -> Receipt:
         raise VerifyRefusal(
             f"candidate_sha256 {digest[:16]!r} is not a sha-256 hex digest"
         )
+    authorized_by = str(raw.get("authorized_by") or "").strip()
+    if verdict == "skipped" and not authorized_by:
+        raise VerifyRefusal(
+            f"the {instrument} receipt says skipped but names no authorized_by; "
+            f"an excusal nobody signed is a missing receipt, not a skip"
+        )
 
     return Receipt(
         instrument=instrument,
@@ -188,6 +207,7 @@ def validate_receipt(raw: dict) -> Receipt:
         evidence_ref=str(raw["evidence_ref"]),
         started_at=str(raw["started_at"]),
         completed_at=str(raw["completed_at"]),
+        authorized_by=authorized_by,
     )
 
 
@@ -196,7 +216,11 @@ def resolve_receipt_set(
     release_run_uid: str,
     expected_sha256: str,
 ) -> dict:
-    """The one-digest bundle: exactly four passing receipts, or refuse.
+    """The one-digest bundle: four receipts, each passing or excused, or refuse.
+
+    An excused instrument (verdict `skipped`, with `authorized_by`) counts
+    toward the four and is returned in the set so the caller can print it
+    loudly via `excusal_lines`; an absent instrument still refuses.
 
     Every refusal here is a different way of not knowing whether the shipping
     bytes were tested, and they are kept distinct because the operator's next
@@ -263,6 +287,13 @@ def resolve_receipt_set(
         history.sort(key=lambda pair: str(pair[0].completed_at or ""))
         winner, winner_raw = history[-1]
         other_passes = any(r.verdict == "pass" for r, _ in history[:-1])
+        if winner.verdict == "skipped" and other_passes:
+            raise VerifyRefusal(
+                f"{instrument} passed against {expected_sha256[:12]} and was "
+                f"excused afterwards by {winner.authorized_by}. Excusing an "
+                f"instrument that already passed has no meaning; retire one "
+                f"record or the other."
+            )
         if winner.verdict == "pass" and other_passes:
             declared_reason = str(winner_raw.get("duplicate_reason") or "").strip()
             if not (winner_raw.get("supersedes_duplicate_receipt") and declared_reason):
@@ -286,7 +317,8 @@ def resolve_receipt_set(
             f"an instrument that passed."
         )
 
-    failed = [r.instrument for r in by_instrument.values() if r.verdict != "pass"]
+    failed = [r.instrument for r in by_instrument.values()
+              if r.verdict not in ("pass", "skipped")]
     if failed:
         raise VerifyRefusal(
             f"{', '.join(sorted(failed))} reported a failing verdict against "
@@ -294,6 +326,27 @@ def resolve_receipt_set(
         )
 
     return by_instrument
+
+
+def excused(by_instrument: dict) -> list:
+    """The instruments in a resolved set that the founder excused, not verified."""
+    return [r for r in by_instrument.values() if r.verdict == "skipped"]
+
+
+def excusal_lines(by_instrument: dict) -> list:
+    """The loud warning EVERY reader of a resolved receipt set prints.
+
+    One home for the wording so the freeze, the fire and any later reader say
+    the same thing about the same fact. An excused instrument is disclosed,
+    never hidden inside a green summary (Mike-ruled 2026-09-09).
+    """
+    return [
+        (f"⚠ EXCUSED, NOT VERIFIED: {r.instrument} did not run against "
+         f"{r.candidate_sha256[:12]}. Skipped with authorization by "
+         f"{r.authorized_by} ({r.evidence_ref}). Its verdict on these bytes is "
+         f"unknown; the release proceeds on the founder's word.")
+        for r in excused(by_instrument)
+    ]
 
 
 def assert_ready_to_freeze(

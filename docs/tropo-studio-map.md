@@ -11,8 +11,8 @@ member_of:
   - "8dd772a0"
 created: '2026-08-27'
 created_by: metis-g113
-modified: '2026-09-05'
-modified_by: metis-g121
+modified: '2026-09-09'
+modified_by: metis-g127   # the four Architecture Review links repointed v4 → v5 (v4 stopped shipping, Mike-ruled 2026-09-09); rows not re-verified, as_of unchanged
 as_of: '2026-09-05'   # the date every hand-written row below was last verified against the tree; the render prints it (v1.95 A5 accuracy plan)
 as_of_release: '1.95.0'
 schema_version: 2
@@ -35,7 +35,7 @@ tags:
 
 *The router. One page that tells you where everything is and when to reach for it. It points and
 never restates — the law lives where the links go, and restating is how maps rot. Sibling canon:
-[the Architecture Review](architecture-review-v4/tropo-l1-architecture-review.md) (WHAT the system
+[the Architecture Review](architecture-review-v5/tropo-l1-architecture-review.md) (WHAT the system
 is and why — read-at-need for architecture work) and, for crew shorthand, the Studio Dictionary
 (`b955b2b8`, in design). This Map and the Review are the Studio's **two canonical documents**
 (Mike-ruled 2026-08-26), refreshed every release or two by the Metis line at Mike's commission.*
@@ -76,7 +76,7 @@ is machine-guaranteed and the human verifies results at defined gates. Full stat
 | Add a gate, check, or process | Answer first: what is the irreversible harm, in one sentence, and what does Mike lose without it? Warn-safe is the default (`deb77758`); the default is cut |
 | Ship | [How We Build Software](how-we-build-software.html) — the process canon: two locks and a fire; then [RELEASING.md](../vault/templates/root-docs/RELEASING.md), the release procedure as it ships |
 | Change any output format | Ask "who else reads this?" and visit every reader — the studio's costliest defect family is one fact, two readers, one updated |
-| Get lost | This Map §5, then the [Architecture Review](architecture-review-v4/tropo-l1-architecture-review.md) |
+| Get lost | This Map §5, then the [Architecture Review](architecture-review-v5/tropo-l1-architecture-review.md) |
 
 ## 3 · The rules that bind
 
@@ -127,14 +127,14 @@ boards at `boards/` · a project's `01-inbox`, where it keeps one, walks up to t
 **At boot:** the fast-path and digest are the mechanism; this Map is a full read (Mike-ruled
 2026-08-30 — was a §2-only skim; see boot-fast-path Step 3a).
 **At need:** everything §2–§6 points to, one hop away.
-**For depth:** [the Architecture Review](architecture-review-v4/tropo-l1-architecture-review.md)
+**For depth:** [the Architecture Review](architecture-review-v5/tropo-l1-architecture-review.md)
 — what the system is, why it is shaped this way, and its honest failure record, re-verified
 against the live substrate on its own dated schedule.
 
 ---
 
 *The Studio Map | uid `3e581123` | one of the two canonical documents (with the
-[Architecture Review](architecture-review-v4/tropo-l1-architecture-review.md), Mike-ruled
+[Architecture Review](architecture-review-v5/tropo-l1-architecture-review.md), Mike-ruled
 2026-08-26) | refreshed every release or two, Metis-line, Mike-commissioned | it points, it never
 restates | fingerprint-gated into the boot digest so drift fails loud | replaces the retired
 kernel index and the hand-maintained sa.* indexes (2026-08-27 consolidation).*

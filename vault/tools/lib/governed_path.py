@@ -78,30 +78,17 @@ _UID_MAX = 64
 
 
 # --------------------------------------------------------------------------- #
-# The shape authority (3d430852 Stage A, step 1 of 13).
+# The shape authority (3d430852; width flexibility f015b5322af8).
 #
-# Two flat-hex shapes are first-class FOREVER: the legacy 8-hex this corpus was
-# born on (ADR-067: existing UIDs untouched, first-class, never migrated) and
-# the 12-hex COMPOSITE every new governed mint has taken since the Stage B
-# flip (2026-08-31: issued 4-hex prefix + 8 local, no separator). Generation
-# reads exactly ONE constant (MINT_HEX_LEN — 12); reading and validation
-# accept BOTH shapes so legacy records resolve forever. The TypeScript
-# adapter mirrors this block; neither is the other's
-# oracle — parity is proven against the shared vector file like the rest of
-# this module.
+# History is append-only: existing identities remain first-class forever.
+# The last entry controls new mints; every entry remains readable. A future
+# width change also needs the kernel/TypeScript parity gates to pass before
+# rollout. This change leaves the production width at 12.
 # --------------------------------------------------------------------------- #
 
-#: The one generation length. Stage A left it at the legacy value so every
-#: observable output was unchanged; Stage B (flipped 2026-08-31 per W4's
-#: locked composite-mint contract, bb3911f5) sets it to 12 — every new
-#: governed mint is composite (4-hex issued prefix + 8-hex local, no
-#: separator). Nothing else in the tree may carry a length literal for
-#: generating new governed identities (AC2's checker enforces exactly that).
-MINT_HEX_LEN = 12
-
-#: Every shape a governed flat-hex UID may take, legacy first. Membership in
-#: this set is what "accepts-both" means at every reader/gate site.
-UID_SHAPES: frozenset[int] = frozenset({8, 12})
+MINT_HEX_HISTORY: tuple[int, ...] = (8, 12)
+MINT_HEX_LEN = MINT_HEX_HISTORY[-1]
+UID_SHAPES: frozenset[int] = frozenset(MINT_HEX_HISTORY)
 
 _BARE_HEX_RE = re.compile(r"^[0-9a-f]+$")
 
@@ -113,7 +100,7 @@ def uid_shape(uid: str) -> int | None:
     (the hex tail carries the shape), so they are handled by
     `parse_anchored_uid`, not by this predicate.
     """
-    if not isinstance(uid, str) or not _BARE_HEX_RE.match(uid):
+    if not isinstance(uid, str) or not _BARE_HEX_RE.fullmatch(uid):
         return None
     return len(uid) if len(uid) in UID_SHAPES else None
 
@@ -171,12 +158,12 @@ def new_uid_is_valid_shape(uid: str) -> bool:
     """What a FRESHLY MINTED uid must satisfy: the current generation shape.
     Stage A this equals legacy (len == MINT_HEX_LEN == 8); Stage B it is 12.
     Existing records never pass through this gate — only new mints do."""
-    return (isinstance(uid, str) and _BARE_HEX_RE.match(uid) is not None
+    return (isinstance(uid, str) and _BARE_HEX_RE.fullmatch(uid) is not None
             and len(uid) == MINT_HEX_LEN)
 
 
 # --------------------------------------------------------------------------- #
-# The composite split (3d430852 Stage B; dormant until the flip).
+# The composite split (3d430852 Stage B; active since 2026-08-31).
 #
 # At the 12-hex flip every new governed mint becomes COMPOSITE: the
 # studio-identity manifest's 4-hex mint_prefix concatenated with 8 random
@@ -188,41 +175,41 @@ def new_uid_is_valid_shape(uid: str) -> bool:
 # untouched and first-class forever.
 # --------------------------------------------------------------------------- #
 
-#: The issued half of a composite uid. 4 + 8 local = the 12-hex generation
-#: length; both numbers are the shape contract, not tunables.
+#: The issued prefix stays fixed when the local random portion grows.
 COMPOSITE_PREFIX_HEX_LEN = 4
 
 
 def is_composite_mint_prefix(prefix: str) -> bool:
     """Exactly 4 lowercase hex — the only prefix shape a composite mint
-    accepts. Bound tight on purpose: 4-hex + 8-hex = 12 flat hex, and a
-    prefix of any other length would not compose into the generation shape."""
+    accepts. The issued prefix has a fixed width; future generation widths
+    grow the local random portion without changing the Studio namespace."""
     return (isinstance(prefix, str)
-            and _BARE_HEX_RE.match(prefix) is not None
+            and _BARE_HEX_RE.fullmatch(prefix) is not None
             and len(prefix) == COMPOSITE_PREFIX_HEX_LEN)
 
 
-def composite_uid(mint_prefix: str, token_hex=None) -> str:
-    """A composite generation uid: issued 4-hex prefix + 8 random local hex,
-    no separator.
+def mint_is_composite() -> bool:
+    """Every generation after the original flat-hex shape carries a prefix."""
+    return MINT_HEX_LEN > MINT_HEX_HISTORY[0]
 
-    DORMANT until the flip: refuses unless MINT_HEX_LEN is 12. Running this
-    half-configured (at Stage A's 8) would mint a uid of the wrong generation
-    shape — the refusal is loud on purpose, because a plausible-but-wrong uid
-    is the most expensive thing a minter can produce. Callers route through
-    tropo-mint-id.py, which reads the prefix from the studio-identity
-    manifest and refuses when the manifest is absent.
+
+def composite_uid(mint_prefix: str, token_hex=None) -> str:
+    """Issued prefix + random local hex, at the current mint width.
+
+    The local portion must contain at least four whole bytes. Refuse partial
+    configurations before asking for randomness; never round down an odd width.
+    The caller reads the issued prefix from the Studio identity manifest.
     """
-    if MINT_HEX_LEN != COMPOSITE_PREFIX_HEX_LEN + 8:
+    local_hex_len = MINT_HEX_LEN - COMPOSITE_PREFIX_HEX_LEN
+    if local_hex_len < 8 or local_hex_len % 2:
         raise RuntimeError(
-            f"composite_uid is dormant until the Stage B flip: MINT_HEX_LEN is "
-            f"{MINT_HEX_LEN}, composite generation requires 12 (4-hex issued "
-            "prefix + 8-hex local, no separator) — see 3d430852 Stage B")
+            f"MINT_HEX_LEN {MINT_HEX_LEN} cannot mint a composite UID: "
+            f"the {COMPOSITE_PREFIX_HEX_LEN}-hex prefix requires at least "
+            "8 local hex characters and an even local width")
     if not is_composite_mint_prefix(mint_prefix):
         raise ValueError(
             f"mint_prefix {mint_prefix!r} is not the composite prefix shape "
             f"(exactly {COMPOSITE_PREFIX_HEX_LEN} lowercase hex)")
-    local_hex_len = MINT_HEX_LEN - COMPOSITE_PREFIX_HEX_LEN
     th = token_hex if token_hex is not None else secrets.token_hex
     return mint_prefix + th(local_hex_len // 2)
 
@@ -240,10 +227,10 @@ def parse_anchored_uid(filename: str) -> tuple[str | None, str] | None:
     if not filename.endswith(".md"):
         return None
     stem = filename[:-3]
-    if _BARE_HEX_RE.match(stem) and len(stem) in UID_SHAPES:
+    if _BARE_HEX_RE.fullmatch(stem) and len(stem) in UID_SHAPES:
         return (None, stem)
     head, sep, tail = stem.rpartition("-")
-    if sep and head and _BARE_HEX_RE.match(tail) and len(tail) in UID_SHAPES:
+    if sep and head and _BARE_HEX_RE.fullmatch(tail) and len(tail) in UID_SHAPES:
         return (head, tail)
     return None
 

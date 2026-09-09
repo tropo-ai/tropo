@@ -28,6 +28,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS))
@@ -76,7 +78,7 @@ class ProducerShapeIsReadable(unittest.TestCase):
         )
 
     def _mirrored_row(self, version: str = "1.91.0") -> dict:
-        """Exactly the row `_mirror_published_event_to_journal` appends."""
+        """Historical publication mirror; keep this legacy fixture literal."""
         return {
             "type": release_closure.PUBLISHED_EVENT,
             "ts": "2026-08-24T09:40:11Z",
@@ -93,15 +95,30 @@ class ProducerShapeIsReadable(unittest.TestCase):
         self.assertNotIn("publication_receipt_sha256", data)
         self.assertIn("version", data, "version is what binds an event to a release")
 
-    def test_mirror_writes_type_not_event(self):
-        """The mirror copies the bus CloudEvent verbatim; `type` is its key."""
-        source = (TOOLS / "tropo-publish-release.py").read_text(encoding="utf-8")
-        marker = '"type": release_closure.PUBLISHED_EVENT,'
-        self.assertIn(
-            marker, source,
-            "the journal mirror no longer writes `type:` — retire the fallback "
-            "in tropo-verify-release-live._event_type if that is deliberate",
-        )
+    def test_current_mirror_uses_runtime_envelope(self):
+        """Capture real producer output; historical fixtures stay literal below."""
+        runtime = PUBLISH._load_pipeline_runtime()
+        identity = SimpleNamespace(activation_uid="f01512345678", run_uid="f015abcdef12")
+        data = _producer_event_data()
+        with patch.object(PUBLISH, "_run_journal_folder", return_value=self.run_dir), \
+             patch.object(PUBLISH, "_load_pipeline_runtime", return_value=runtime), \
+             patch.object(runtime, "read_events", return_value=[]), \
+             patch.object(runtime, "append_event") as append:
+            PUBLISH._mirror_published_event_to_journal({"identity": identity}, data, RSHA)
+        append.assert_called_once()
+        row = append.call_args.args[1]
+        self.assertEqual(row["event"], release_closure.PUBLISHED_EVENT)
+        self.assertNotIn("type", row)
+        self.assertEqual(row["trace_id"], identity.activation_uid)
+        self.assertEqual(row["actor"], PUBLISH.release_receipt.PUBLISHER_TOOL_UID)
+        self.assertEqual(row["actor_label_resolved"], PUBLISH.release_receipt.PUBLISHER_TOOL_SOURCE)
+        self.assertEqual(row["schema_version"], 2)
+        self.assertTrue(row["span_id"])
+        self.assertEqual(row["data"], data)
+        self._journal([row])
+        observed = VERIFY.build_observers(self.run_dir, [], "1.91.0")["run_published_event"]()
+        self.assertTrue(observed.present, observed.detail)
+        self.assertEqual(observed.evidence_sha256, RSHA)
 
     # --- the reader must see it ------------------------------------------
 

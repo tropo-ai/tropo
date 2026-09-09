@@ -124,15 +124,19 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-decision.capsule.md",
-      "capsule_sha256": "c8d8b780b6643aff72408059038f9392ddea934d1e7fc81f97f81ea810a25047",
+      "capsule_sha256": "e664113985afa4826c3465a56f3793e161ba0761ac7c1e5504ac9571026defb7",
       "capsule_version": "3.3",
-      "mint_mode": "disabled",
+      "mint_mode": "human",
+      "mint_output_home": "vault/files",
+      "mint_template": "vault/capsules/templates/decision.template.md",
+      "mint_template_sha256": "778b10ba179232c1f2923a57ffdbbb8d9eb802d71af3c4f7735ac6df2655975e",
+      "mint_template_version": "1.0",
       "type": "decision"
     },
     {
       "capsule_path": "vault/capsules/tropo-design-brief.capsule.md",
-      "capsule_sha256": "bce1fc699b27cc9ca38836dc7d77b93a0e46f91e574c7c39a2c1ca58f09cc348",
-      "capsule_version": "3.5",
+      "capsule_sha256": "8590fbd4778450275aba1d2f98d02c8eeaa760ea4c29e40f75329524c831522f",
+      "capsule_version": "3.6",
       "mint_mode": "human",
       "mint_output_home": "vault/files",
       "mint_template": "vault/capsules/templates/design-brief.template.md",
@@ -167,9 +171,13 @@
     },
     {
       "capsule_path": "vault/capsules/tropo-document.capsule.md",
-      "capsule_sha256": "c75b3e6d0c94cf42aa6d510f7265ebb14fa56be290787e7dc063d352c196cbc8",
+      "capsule_sha256": "42e380215cd009af752e56b25e47af491f387a58e2d4d795a4d991c3b36cf97a",
       "capsule_version": "3.3",
-      "mint_mode": "disabled",
+      "mint_mode": "human",
+      "mint_output_home": "vault/files",
+      "mint_template": "vault/capsules/templates/document.template.md",
+      "mint_template_sha256": "123f8be65d88558cad9260248a62ccf385de1bd96465f518756c71dbbadbb8f9",
+      "mint_template_version": "1.0",
       "type": "document"
     },
     {

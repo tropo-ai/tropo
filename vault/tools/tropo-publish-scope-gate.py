@@ -118,10 +118,15 @@ _MODE_LABEL = {
 # The app legitimately resolves vault content, so it names the vault node and
 # the event types it reads; flagging those as leaks was a historical false
 # positive (lib/studio-events.ts, lib/kb.ts). Reported for human eyes only.
+# Advisory substrings. Both memory-surface eras are listed through the Phase-2
+# rename (f0153a6df07f): this tier is a REVIEWER's net, and a net that stops
+# matching the moment the file is renamed is worse than no net, because its
+# silence reads as "no agent memory referenced" (talos-t65, 2026-09-08).
 CONTENT_REVIEW = (
     "argo-private",
     "§Soul",
     "agent-memory.md",
+    "memory.md",
 )
 
 

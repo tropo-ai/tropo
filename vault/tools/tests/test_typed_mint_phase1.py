@@ -563,12 +563,14 @@ class TypedMintPhase1Tests(unittest.TestCase):
                         f"{type_name}: declares_title disagrees with the scaffold's own "
                         f"tokens — one fact, two readers")
                 leg = template_leg.load_mint_template(fixture.root, type_name)
+                title = "Describe the problem" if type_name == "design-brief" else None
                 expected = template_leg.stamp(
                     leg,
                     uid=uid,
                     date="2026-08-03",
                     author=author,
                     activation_uid=None,
+                    title=title,
                 )
                 with mock.patch.object(mint, "mint", return_value=[uid]), mock.patch.object(
                     mint._dt, "date", FixedDate
@@ -576,6 +578,7 @@ class TypedMintPhase1Tests(unittest.TestCase):
                     minted_uid, path = mint.mint_file(
                         type_name,
                         author=author,
+                        title=title,
                         studio_root=fixture.root,
                         output_dir=output_dir,
                         freshen=False,
@@ -1515,6 +1518,126 @@ class InlineCodeSpanCitationIsVocabularyInEveryTypeTests(unittest.TestCase):
         self.assertEqual(
             template_leg.find_stray_mint_tokens(text, "note"), ["<<MINT:uid>>"]
         )
+
+
+class DesignBriefTitleRequiredTests(unittest.TestCase):
+    """Mike's mint-time naming rule: refuse before identity or durable writes."""
+
+    def setUp(self) -> None:
+        fixtures = _load("title_gate_canonical_fixture", TOOLS / "tests/test_identity_layer_v194.py")
+        self.fixture = fixtures._FlagFixture()
+        self.addCleanup(self.fixture.close)
+        self.root = self.fixture.root
+        self.fixture.set_readable_minting(True)
+        for relative in (
+            "vault/capsules/tropo-design-brief.capsule.md",
+            "vault/capsules/templates/design-brief.template.md",
+        ):
+            shutil.copy2(ROOT / relative, self.root / relative)
+        (self.root / template_leg.MINT_REGISTRY_REL).write_bytes(
+            template_leg.build_mint_registry_bytes(self.root))
+
+    def _durable_snapshot(self):
+        paths = list((self.root / "vault/files").glob("*.md"))
+        paths.extend((self.root / "vault").glob("00-*"))
+        return {p.relative_to(self.root).as_posix(): p.read_bytes()
+                for p in paths if p.is_file()}
+
+    def test_missing_and_blank_titles_refuse_before_mint_or_write(self):
+        before = self._durable_snapshot()
+        for index, title in enumerate((None, "", "  ", "\t\n", "\u00a0")):
+            with self.subTest(title=title):
+                with mock.patch.object(mint, "mint", return_value=[f"beef{index:08x}"]) as identity_mint:
+                    with self.assertRaisesRegex(ValueError, "design-brief requires.*--title"):
+                        mint.mint_file("design-brief", author="fixture-agent",
+                                       title=title, studio_root=self.root)
+                    identity_mint.assert_not_called()
+                self.assertEqual(self._durable_snapshot(), before)
+
+    def test_scratch_override_cannot_bypass_title_requirement(self):
+        output = self.root / "agents/fixture-agent/.tropo-capsule/workspace/brief"
+        before = self._durable_snapshot()
+        with self.assertRaisesRegex(ValueError, "design-brief requires.*--title"):
+            mint.mint_file("design-brief", author="fixture-agent", studio_root=self.root,
+                           output_dir=output, freshen=False)
+        self.assertFalse(output.exists())
+        self.assertEqual(self._durable_snapshot(), before)
+
+    def test_cli_refuses_omitted_and_blank_titles_without_side_effects(self):
+        command = [sys.executable, str(self.root / "vault/tools/tropo-mint-id.py"),
+                   "--type", "design-brief", "--author", "fixture-agent"]
+        for arguments in ([], ["--title", ""], ["--title", " \t "]):
+            with self.subTest(arguments=arguments):
+                before = self._durable_snapshot()
+                result = subprocess.run(command + arguments, cwd=self.root, text=True,
+                                        capture_output=True, check=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("design-brief requires", result.stderr)
+                self.assertIn("--title", result.stderr)
+                self.assertEqual(result.stdout.strip(), "")
+                self.assertEqual(self._durable_snapshot(), before)
+
+    def test_cli_title_creates_readable_brief_and_matching_index(self):
+        title = "Adaptive Project Dashboard"
+        result = subprocess.run(
+            [sys.executable, str(self.root / "vault/tools/tropo-mint-id.py"),
+             "--type", "design-brief", "--author", "fixture-agent", "--title", title],
+            cwd=self.root, text=True, capture_output=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        uid = result.stdout.strip()
+        path = self.root / "vault/files" / f"adaptive-project-dashboard-{uid}.md"
+        text = path.read_text()
+        self.assertEqual(_frontmatter(text)["title"], title)
+        self.assertEqual(_frontmatter(text)["uid"], uid)
+        self.assertIn("# " + title, text)
+        rows = [json.loads(line) for line in (self.root / "vault/00-index.jsonl").read_text().splitlines() if line.strip()]
+        row = next(row for row in rows if row.get("uid") == uid)
+        self.assertEqual(row["title"], title)
+        self.assertEqual(row["path"], path.relative_to(self.root).as_posix())
+
+
+class AMintTokenHeadingIsNeverARequiredSectionTests(unittest.TestCase):
+    """Po's Finding 8 on the founder's test of the v1.96 box (2026-09-09): the
+    document template's H1 is `# <<MINT:title>>`, its chunk carries a REQUIRED
+    placeholder, so the leg required the LITERAL token as a heading -- which
+    substitution guarantees can never appear. Every new `document` failed its
+    own validator by construction; every shipped one predated `enforced_from`
+    and was grandfathered, so a fresh box was the only place it could surface.
+
+    Mutation partner: a fixed-title heading with a REQUIRED placeholder still
+    counts, so this is not "require nothing"."""
+
+    def _leg(self, body: str) -> template_leg.TemplateLeg:
+        return template_leg.TemplateLeg(
+            capsule_path=Path("synthetic.capsule.md"), capsule_type="synthetic",
+            capsule_version="1.0", scaffold="", frontmatter_text="", body_text=body)
+
+    def test_the_real_document_leg_requires_no_token_heading(self) -> None:
+        leg = template_leg.load_verifier_template(ROOT, "document")
+        required = leg.required_sections()
+        self.assertFalse(
+            any(template_leg.MINT_TOKEN_RE.search(t) for t in required),
+            f"a mint token survived as a required section title: {required}")
+
+    def test_a_stamped_document_carries_every_required_section(self) -> None:
+        """What the validator actually checks, on what the minter actually writes."""
+        leg = template_leg.load_mint_template(ROOT, "document")
+        stamped = template_leg.stamp(
+            leg, uid="55555555", date="2026-09-09", author="human", activation_uid=None)
+        for title in leg.required_sections():
+            self.assertTrue(
+                any(line.strip().lstrip("#").strip() == title
+                    for line in stamped.splitlines() if line.startswith("#")),
+                f"required section {title!r} is not a heading of the stamped instance")
+
+    def test_a_fixed_title_with_a_required_placeholder_still_counts(self) -> None:
+        leg = self._leg(
+            "# <<MINT:title>>\n<!-- REQUIRED: one paragraph -->\n\n"
+            "## Who\n<!-- REQUIRED: who this is -->\n\n"
+            "## Notes\n<!-- OPTIONAL: anything -->\n")
+        self.assertEqual(leg.required_sections(), ["Who"])
+        self.assertEqual(leg.optional_sections(), ["Notes"])
+
 
 if __name__ == "__main__":
     unittest.main()

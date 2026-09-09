@@ -14,6 +14,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 TOOLS = Path(__file__).resolve().parents[1]
 ROOT = TOOLS.parents[1]
@@ -34,7 +35,8 @@ rr = importlib.util.module_from_spec(_rr)
 sys.modules["rr"] = rr
 _rr.loader.exec_module(rr)
 
-IDENT = {"saga_id": "release:aaaaaaaa", "pipeline_run_uid": "aaaaaaaa"}
+IDENT = {"saga_id": "release:aaaaaaaa", "pipeline_run_uid": "aaaaaaaa",
+         "activation_uid": "aabbccdd"}
 
 
 def _lock_row():
@@ -106,7 +108,11 @@ class WalkRefusalTests(unittest.TestCase):
                 # other and with nothing that actually runs. A fixture built in
                 # the reader's own shape is why this gate looked tested.
                 (rd / PREFLIGHT_EVIDENCE_FILENAME).write_text("{}\n")
-            return tr._fire_sequence_gate(rd, ROOT, IDENT)
+            wired = tr._load_wired_publisher()
+            with patch.object(tr, "_load_wired_publisher", return_value=wired), \
+                 patch.object(wired.tropo_roots, "RELEASES_DIR", Path(tmp) / "releases"), \
+                 patch.object(wired, "_run_publish_state", side_effect=AssertionError("no staged fixture to probe")):
+                return tr._fire_sequence_gate(rd, Path(tmp), IDENT, "9.9.9")
 
     def test_empty_run_refuses_at_lock_naming_the_command(self) -> None:
         r = self._gate()
@@ -130,8 +136,9 @@ class WalkRefusalTests(unittest.TestCase):
                        state={"activation_uid": "aabbccdd", "run_status": "active",
                               "step_status": {"s1": "verified"}})
         self.assertIsNotNone(r)
-        self.assertNotIn("BUILD", r[1],
-                         "the frozen row satisfied BUILD — got %s" % r[1])
+        self.assertIn("STAGE", r[1])
+        self.assertIn("nothing is staged", r[1],
+                      "BUILD passed and the explicitly named fixture has no stage")
 
     def test_no_refusal_names_an_outward_act_as_remedy(self) -> None:
         """The A159 stale-cure-string rule: refusals never say 're-fire'."""

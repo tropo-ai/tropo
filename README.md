@@ -30,12 +30,23 @@ If you ever want to check your Studio's structural health, run
 validator also runs vendor-development checks that do not apply to your Studio and reports
 failures on a perfectly healthy box, every one of them about files that were never shipped to you.
 
+## Coming back to an agent
+
+Agents are files, so returning to one is a file you attach — not a session you have to keep alive.
+
+Open your Studio folder in your AI tool, start a new chat, attach that agent's activation file
+(`agents/darin/darin-activation.md`, for example) and say *"Activate Darin using this file."* That
+boots that agent directly, skipping the concierge, whatever else your message says. Each agent's
+activation file carries the same sentence under **§Come back tomorrow**, with its own path already
+filled in.
+
 ## What You'll Get
 
 - **Agents as files.** A markdown file with structured metadata. Create the file and the agent exists.
 - **Governance built in.** Every agent has a scope, a governor, and rules. Authority flows from your operating agreement.
 - **Memory that survives.** When a session ends, the work persists. When an agent is replaced, knowledge transfers. Memory lives in your studio's files, not in any one AI tool — switch tools and lose nothing.
 - **Work management built in.** Tropo Work — tasks, boards, and projects — ships with every vault. See `vault/files/2d4f8c91.md`.
+- **Two companions, ready to go.** You don't start from an empty room. **Cal** — Architect and Builder: implementation, integration, and verification you can re-run. **Darin** — Strategist and COO: framing, prioritization, and decision hygiene. Po offers you either, both, or neither the moment your Studio exists, and you can build your own from scratch instead. Nothing is created without your word.
 - **Your rules, your way.** You define how your agents work, what they can access, and what "good" looks like.
 
 ## Your work is safe when Tropo updates

@@ -50,7 +50,7 @@ class ShapeAuthorityDrift(unittest.TestCase):
                 f"kernel UID_RE refuses the {length}-hex shape the vault authority "
                 f"declares first-class — one fact, two readers, one drifted: "
                 f"{KERNEL_RE_PATH} vs vault/tools/lib/governed_path.py")
-        for wrong in (4, 6, 10, 16, 20):
+        for wrong in sorted(set(range(max(gp.UID_SHAPES) + 5)) - gp.UID_SHAPES):
             self.assertFalse(
                 bool(kernel.UID_RE.fullmatch("a" * wrong)),
                 f"kernel UID_RE accepts a non-authority length ({wrong})")

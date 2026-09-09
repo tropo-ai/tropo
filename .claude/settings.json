@@ -6,8 +6,30 @@
         "hooks": [
           {
             "type": "command",
-            "command": "printf %s \"If this agent session was compacted or you no longer remember completing boot, do not activate and never run `born`. Run `python3 vault/tools/tropo-compact-continue.py --agent <slug>` before any other work.\"",
+            "command": "printf %s 'If this agent session was compacted, auto-compacted, or resumed, or you no longer remember completing boot, do not activate and never run `born`. Run `python3 vault/tools/tropo-compact-continue.py --agent <slug>` before any other work.'",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|compact|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/vault/tools/tropo-boot-read-observe.py\" session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/vault/tools/tropo-boot-read-observe.py\" post-read",
+            "timeout": 10
           }
         ]
       }

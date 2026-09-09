@@ -25,7 +25,7 @@ The single authored boot procedure is [Agent Activation (`99341618`)](../vault/p
 completed current-generation activation run is a birth. A compacted session WITH one is a
 continuation, and the two must never be inferred from each other:
 
-> If this agent session was compacted or you no longer remember completing boot, do not activate and never run `born`. Run `python3 vault/tools/tropo-compact-continue.py --agent <slug>` before any other work.
+> If this agent session was compacted, auto-compacted, or resumed, or you no longer remember completing boot, do not activate and never run `born`. Run `python3 vault/tools/tropo-compact-continue.py --agent <slug>` before any other work.
 
 If the canonical playbook cannot be resolved, **birth still happens**:
 

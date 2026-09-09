@@ -170,6 +170,25 @@ def load_builder(studio: Path):
     return builder
 
 
+def box_declared_version(box: Path) -> str:
+    """The version the BOX itself declares, from its own .tropo/version.md.
+
+    A candidate never bumps, so this is the tracked value at the source commit.
+    Reading it from the box rather than accepting a flag is deliberate: it is the
+    only value that cannot disagree with what a stranger opening the box reads.
+    """
+    version_file = box / ".tropo" / "version.md"
+    if not version_file.is_file():
+        # LOUD. Three generated artifacts stamp this string, and a box with no
+        # declared version would stamp them "unknown" and look like a real
+        # release with a broken version — worse than refusing to build one.
+        raise SystemExit(
+            f"REFUSED: {version_file} is absent, so the box declares no version and "
+            "MANIFEST.md / tropo-image-manifest.json cannot be stamped truthfully."
+        )
+    return version_file.read_text(encoding="utf-8").strip().lstrip("v")
+
+
 def emit_box(builder, box: Path) -> dict:
     """The same emitters, in the same order, as a real build."""
     root_uid = builder.read_manifest_root_uid(builder.SHIP_ARTIFACT_CAPSULE_PATH)
@@ -203,10 +222,33 @@ def emit_box(builder, box: Path) -> dict:
     builder.step_4_copy_ship_entries(
         str(box), builder.load_ship_entries(builder.INDEX_PATH)
     )
+    # The tree-resident files the manifest channel does not carry: CHANGELOG.md,
+    # package.json, the four folder-level AGENTS.md contracts, and the
+    # mission-brief boot slot. Until 2026-09-08 these lived inline in the release
+    # build's main() and no other caller could reach them, so every candidate box
+    # ever built was missing all seven — and three of the twelve box gates refused
+    # on that gap rather than on the product (task f0158df832b1, the keystone;
+    # measured on a HEAD box the same morning: build-mission-brief-slot,
+    # build-box-self-test and build-release-harness all RED, none a product
+    # defect). They are now named steps in tropo-build-release.py and these are
+    # calls to the SAME functions, in the release build's own order — one
+    # producer, so the two boxes cannot drift on this content again. Copying the
+    # seven filenames into this file instead would have recreated the
+    # two-producers-of-one-fact defect that has cost this studio most of the last
+    # six releases. [talos-t65]
+    builder.step_5c_copy_changelog(str(box))
+    builder.step_5d_copy_folder_mirror_files(str(box))
     try:
         builder.step_7_create_vault_skeleton(str(box))
     except SystemExit as exc:
         print(f"  · skeleton step declined: {exc}")
+    # AFTER the skeleton, exactly as the release build orders it: step_7 rmtree's
+    # and recreates .tropo-studio/, so a slot seeded before it is clobbered.
+    builder.step_7_1_seed_mission_brief_slot(str(box))
+    # Step 7.2 — the score-formula doctrine, same post-skeleton rule. Added
+    # 2026-09-08 by talos-t66: the candidate lane is where beat 4 is scored, so a
+    # candidate box missing this file is precisely the case that has been failing.
+    builder.step_7_2_seed_score_formula_doctrine(str(box))
     # The address is DERIVED — from the publish environment, else from tracked
     # publication evidence. A candidate box that invented a URL would have
     # someone walk a lie, and a candidate that merely REPORTED the gap and
@@ -233,6 +275,30 @@ def emit_box(builder, box: Path) -> dict:
     # below exactly as in a release box.
     builder.step_9b_regenerate_tropo_nav(str(box))
     builder.step_9b2_render_studio_map(str(box))
+    # The three artifacts the release build GENERATES rather than copies:
+    # vault/vendor-refs-manifest.json (9c, before sanitize), MANIFEST.md (9,
+    # after the purge so it cannot list files the freeze removed) and
+    # tropo-image-manifest.json (9d, last, because it is the only record a
+    # recipient can integrity-check the box against). Bucket two of task
+    # f0158df832b1: generate them, or make the gates that read them skip with a
+    # named reason. GENERATE, for the reason this tool's own contract already
+    # states -- "a candidate that represents the FINAL box must end where the
+    # official build ends." Measured 2026-09-08: without MANIFEST.md the box
+    # fails its own shipped harness 11/12 and `build-release-harness` refuses,
+    # while the SHIPPED v1.95.0 box passes that same gate -- a difference that
+    # is the builder's, not the product's, which is precisely what the twelve
+    # gates must stop reporting before they can be wired into the nightly.
+    #
+    # THE VERSION IS THE BOX'S OWN. A candidate does not bump, so the box carries
+    # the tracked .tropo/version.md, and all three artifacts are stamped from it:
+    # the version.md, the MANIFEST header and the image manifest then agree with
+    # each other. Inventing a candidate-only string here would put one fact in
+    # three places with two of them disagreeing -- the defect family this whole
+    # task exists to close. Candidate identity is the source commit, and it lives
+    # where a walker looks for it: CANDIDATE-BOX-MANIFEST.json, next to
+    # not_a_release: true. [talos-t65]
+    version = box_declared_version(box)
+    builder.step_9c_generate_vendor_ref_manifest(str(box), version)
 
     # A candidate that represents the FINAL box must end where the official
     # build ends. Stopping earlier shipped an intermediate shape: an unsanitized
@@ -251,11 +317,63 @@ def emit_box(builder, box: Path) -> dict:
     # ship, and evidence for absent files is the self-contradiction evt 114
     # rules out. The recipient's first rebuild seals its own generation.
     builder.step_10_2_purge_run_local_artifacts(str(box))
-    return {"manifest_root": root_uid, "entries": len(entries), "update_source": "written"}
+    # After the purge, exactly as the release build orders it: the manifest must
+    # not list files the freeze removed, and must be stamped AFTER sanitize
+    # rewrote its subjects (a hash taken before the rewrite makes every untouched
+    # shipped file read USER_MODIFIED_SHIPPED on a customer's disk).
+    builder.step_9_generate_manifest(str(box), version)
+    # Last thing written, as in the release build: it is the only record a
+    # recipient can integrity-check the box against, and it excludes itself.
+    builder.step_9d_emit_image_manifest(str(box), version)
+    return {
+        "manifest_root": root_uid,
+        "entries": len(entries),
+        "update_source": "written",
+        "box_version": version,
+    }
+
+
+# Every shipped file that stamps its own build time. They are real shipped bytes
+# and belong in the package identity; they also make that identity differ between
+# two builds of the SAME commit, which would silently retire this tool's
+# reproducibility claim. So both numbers are reported, each saying what it is.
+#
+# MEASURED, not assumed (talos-t65, 2026-09-08): two builds of commit 51803f445
+# were compared file by file. Exactly these five differ, each by a timestamp
+# alone; with them set aside the remaining 1,436 files are byte-identical. The
+# first draft of this list named only the first two — the ones I had just added —
+# and asserted reproducibility on that basis; the double build said otherwise.
+# If a future emitter stamps a time, this list goes stale silently: the way to
+# find out is the same double build, not a re-reading of this comment.
+SELF_TIMESTAMPED_ARTIFACTS = (
+    "MANIFEST.md",                               # Step 9's "Generated:" header
+    "tropo-image-manifest.json",                 # Step 9d's generated_utc
+    "vault/vendor-refs-manifest.json",           # Step 9c's "generated"
+    ".tropo-studio/shards/index-rebuild-run.json",  # the box's own index rebuild: run_started_at
+    "vault/events/00-events.jsonl",              # the rebuild's ephemeral substrate.modified event
+)
+
+
+def _fold(files: dict) -> str:
+    return hashlib.sha256(
+        "\n".join(f"{rel}\0{digest}" for rel, digest in sorted(files.items())).encode()
+    ).hexdigest()
 
 
 def digest_tree(box: Path) -> tuple:
-    """Per-file digests plus one package SHA over the sorted (path, digest) list."""
+    """Per-file digests, the package SHA, and the commit-reproducible SHA.
+
+    `package` covers every shipped byte — Argus's ruling (evt 113) that a package
+    SHA excluding a shipped file is not an identity for that package. `content`
+    drops the five artifacts that stamp their own build time, so two builds of one
+    commit can be compared for real. Neither replaces the other: `package`
+    identifies THIS box, `content` answers "is this the same box as that one".
+
+    `content` is NOT a reproducibility guarantee — it is the question asked
+    honestly. Equal content SHAs across two builds of one commit mean the 1,436
+    other files matched; unequal means something outside the named five moved,
+    and that is the finding.
+    """
     files = {}
     for path in sorted(box.rglob("*")):
         if not path.is_file() or path.is_symlink():
@@ -264,10 +382,9 @@ def digest_tree(box: Path) -> tuple:
         if rel == MANIFEST_NAME:
             continue
         files[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
-    package = hashlib.sha256(
-        "\n".join(f"{rel}\0{digest}" for rel, digest in sorted(files.items())).encode()
-    ).hexdigest()
-    return files, package
+    content = _fold({k: v for k, v in files.items()
+                     if k not in SELF_TIMESTAMPED_ARTIFACTS})
+    return files, _fold(files), content
 
 
 def verify_portable_surfaces(box: Path) -> dict:
@@ -375,7 +492,7 @@ def main(argv: list | None = None) -> int:
     print("[3/4] emitting through production package functions…")
     stats = emit_box(load_builder(workspace), box)
     print("[4/4] digesting and checking the Fresh-Box contract…")
-    files, package_sha = digest_tree(box)
+    files, package_sha, content_sha = digest_tree(box)
     checks = contract_checks(box, workspace)
 
     manifest = {
@@ -383,11 +500,22 @@ def main(argv: list | None = None) -> int:
         "not_a_release": True,
         "built_by": f"{TOOL_UID} tropo-build-candidate-box.py",
         "source_commit": commit,
+        # The version the box declares, stamped into MANIFEST.md and
+        # tropo-image-manifest.json. It is the tracked value at source_commit, NOT
+        # a release: a candidate does not bump, and `not_a_release` above plus
+        # `source_commit` are this box's identity.
+        "box_declared_version": stats["box_version"],
         "manifest_root": stats["manifest_root"],
         "ship_artifact_entries": stats["entries"],
         "update_source": stats["update_source"],
         "file_count": len(files),
         "package_sha256": package_sha,
+        # Same bytes minus the five artifacts that stamp their own build time
+        # (SELF_TIMESTAMPED_ARTIFACTS, listed here so a reader of this manifest
+        # alone knows what the number covers). Compare THIS across two builds to
+        # ask whether one commit produced one box.
+        "content_sha256": content_sha,
+        "content_sha256_excludes": list(SELF_TIMESTAMPED_ARTIFACTS),
         "contract_checks": checks,
         "files": files,
     }
@@ -398,7 +526,8 @@ def main(argv: list | None = None) -> int:
     print()
     print(f"  box:          {box}")
     print(f"  files:        {len(files)}")
-    print(f"  package_sha:  {package_sha}")
+    print(f"  package_sha:  {package_sha}  (every shipped byte)")
+    print(f"  content_sha:  {content_sha}  (minus {len(SELF_TIMESTAMPED_ARTIFACTS)} self-timestamped artifacts)")
     print(f"  manifest:     {box.parent / MANIFEST_NAME}")
     print(f"  update-source: {stats['update_source']}")
     print()

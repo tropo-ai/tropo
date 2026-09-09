@@ -4,6 +4,18 @@
 
 This procedure covers `tropo-publish-release.py`, the Tropo-OS publisher for GitHub and distribution channels. It does not cover `tropo-publish.py`, the federation team-vault publisher.
 
+**Every command on this page is the subcommand form and has been run with `--help` to confirm it parses with the flags shown.** Until 2026-09-08 four of them were written in a retired flag form, and two of those omitted a required argument — `stage` needs `--activation-uid`, `defer` needs `--reason` — so a founder pasting them got an argparse error at the moment they were trying to ship. A printed command that fails when run is the same defect in a release doc as in a shipped box.
+
+## The one gesture, when the candidate is already green
+
+```bash
+python3 vault/tools/tropo-publish-release.py promote --version X.Y.Z --activation-uid <uid>
+```
+
+`promote` resolves the named run rather than the newest file on disk, runs the fire preflight once
+and `tropo-ship.py` once, prints **both** verdicts in full, and then asks once. On disagreement it
+records the comparison and proceeds — the machinery wins and the disagreement is the finding.
+
 ## The flow
 
 Before the build there is the release plan, and its member list fills itself: locking a dev-spec (`tropo-lock-dev-spec.py`) appends that spec's uid to the `dev_spec_uids` of the live release plan whose `release_version` matches the spec's `target_release`, so the plan owner no longer maintains the fan-in list by hand, and `tropo-validate.py` warns on any locked spec its plan does not list.
@@ -38,7 +50,7 @@ Mike supplies the human signoff through the pipeline ceremony. The builder canno
 ### 3. Stage — still private
 
 ```bash
-python3 vault/tools/tropo-publish-release.py --version X.Y.Z
+python3 vault/tools/tropo-publish-release.py stage --activation-uid <uid> --version X.Y.Z
 ```
 
 Stage:
@@ -56,7 +68,7 @@ Nothing is public after staging.
 ### 4a. Fire — Mike's second gesture
 
 ```bash
-python3 vault/tools/tropo-publish-release.py --version X.Y.Z --fire
+python3 vault/tools/tropo-publish-release.py fire --version X.Y.Z
 ```
 
 Fire requires an interactive terminal confirmation whose default is **No**. Piped input is refused. It re-runs the outward gate, refuses a stale stage, then:
@@ -71,7 +83,7 @@ Only complete remote proof earns `publish_state: live`.
 ### 4b. Defer — Mike's alternative gesture
 
 ```bash
-python3 vault/tools/tropo-publish-release.py --version X.Y.Z --defer
+python3 vault/tools/tropo-publish-release.py defer --version X.Y.Z --reason "..."
 ```
 
 Defer uses the same interactive discipline. It records who deferred, when, and why. A deferred release stays fireable later and does not produce a recurring boot warning.
@@ -113,7 +125,7 @@ strangers three different stories. One version, every surface.
 An attested-manual release has no normal pipeline run, so the coupled stage/fire path refuses it. Mike performs that release manually, then records remote proof with:
 
 ```bash
-python3 vault/tools/tropo-publish-release.py --version X.Y.Z --verify-only
+python3 vault/tools/tropo-publish-release.py verify-only --version X.Y.Z
 ```
 
 ## Network boundary

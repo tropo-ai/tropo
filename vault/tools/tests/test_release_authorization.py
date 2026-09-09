@@ -7,6 +7,7 @@ defeat the gate. Self-running (python3 test_release_authorization.py) and pytest
 """
 import sys, json, tempfile, shutil
 from pathlib import Path
+from unittest.mock import patch
 
 _TROPO_SCRIPTS = Path(__file__).resolve().parents[3] / ".tropo" / "scripts"
 sys.path.insert(0, str(_TROPO_SCRIPTS))
@@ -47,8 +48,10 @@ def _run(tmp, fn):
     return fn()
 
 
-def main():
+@patch("lib.event_emitter.auto_emit")
+def main(_emit):
     results = []
+    original_runs = ra.PIPELINE_RUNS
 
     def check(name, cond):
         results.append((name, bool(cond)))
@@ -360,6 +363,7 @@ def main():
               pipeline_ok and attested_ok)
 
     finally:
+        ra.PIPELINE_RUNS = original_runs
         shutil.rmtree(tmp, ignore_errors=True)
 
     passed = sum(1 for _, ok in results if ok)

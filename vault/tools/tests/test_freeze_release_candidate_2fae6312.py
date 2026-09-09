@@ -188,6 +188,106 @@ class FreezeDecisionTests(unittest.TestCase):
         )
 
 
+class AuthorizedSkipTests(FreezeDecisionTests):
+    """An authorized skip is the fourth receipt, disclosed, never silent.
+
+    Mike-ruled 2026-09-09 on the v1.96 run: the runtime honored his authorized
+    skip of the harness for step dependencies while this tool and the fire
+    counted receipts and refused on three. The excusal now lives in the same
+    receipt set (verdict `skipped` + `authorized_by`), so one reader change
+    fixes every reader. Each test here has a mutation partner: strip the
+    signature and it refuses; excuse a pass and it refuses; a later real pass
+    governs and nothing stays excused.
+    """
+
+    HARNESS_STEP = "a0f2bea8"
+
+    def build_with_excusal(self, *, signed=True, authorized_by="mike-maziarz",
+                           after_pass=False, then_pass=False) -> Path:
+        present = (list(freeze.INSTRUMENTS) if after_pass
+                   else [u for u in freeze.INSTRUMENTS if u != self.HARNESS_STEP])
+        tmp = self.build(receipts=present)
+        sha = hashlib.sha256((tmp / "tropo-1.89.0.zip").read_bytes()).hexdigest()
+
+        def receipt(verdict, completed_at, **extra):
+            data = {
+                "receipt_kind": release_verify.RECEIPT_KIND,
+                "instrument": freeze.INSTRUMENTS[self.HARNESS_STEP],
+                "release_run_uid": RUN,
+                "candidate_sha256": sha,
+                "verdict": verdict,
+                "executor_or_attester": "user",
+                "execution_mode": "human",
+                "evidence_ref": "skip_authorization@auth1",
+                "started_at": completed_at,
+                "completed_at": completed_at,
+            }
+            data.update(extra)
+            return json.dumps({"event": release_verify.RECEIPT_KIND,
+                               "step": self.HARNESS_STEP, "data": data}) + "\n"
+
+        rows = receipt("skipped", "2026-09-09T15:40:08Z",
+                       **({"authorized_by": authorized_by} if signed else {}))
+        if then_pass:
+            rows += receipt("pass", "2026-09-10T00:00:00Z")
+        with (tmp / "run.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(rows)
+        return tmp
+
+    def test_an_authorized_skip_is_the_fourth_receipt_and_is_disclosed(self):
+        payload, refusal = self.decide(self.build_with_excusal())
+        self.assertIsNone(refusal, refusal)
+        self.assertEqual(payload["verdict"], "pass")
+        self.assertEqual(len(payload["instrument_receipts"]), 4)
+        harness = payload["instrument_receipts"][self.HARNESS_STEP]
+        self.assertEqual(harness["verdict"], "skipped")
+        self.assertEqual(harness["authorized_by"], "mike-maziarz")
+        self.assertEqual(len(payload["excused_instruments"]), 1)
+        self.assertIn("release-harness", payload["excused_instruments"][0])
+        self.assertIn("mike-maziarz", payload["excused_instruments"][0])
+        self.assertIn("EXCUSED", payload["rationale"])
+
+    def test_a_skipped_receipt_nobody_signed_still_refuses(self):
+        """The mutation direction: strip the signature, the excusal is a gap."""
+        payload, refusal = self.decide(self.build_with_excusal(signed=False))
+        self.assertIsNotNone(refusal)
+        self.assertIn("authorized_by", refusal)
+        self.assertEqual(payload["verdict"], "fail")
+
+    def test_three_receipts_and_no_excusal_still_refuse(self):
+        """The skip must be a receipt; an absent instrument stays a fail."""
+        present = [u for u in freeze.INSTRUMENTS if u != self.HARNESS_STEP]
+        payload, refusal = self.decide(self.build(receipts=present))
+        self.assertIsNotNone(refusal)
+        self.assertIn("release-harness", refusal)
+
+    def test_excusing_an_instrument_that_already_passed_refuses(self):
+        payload, refusal = self.decide(self.build_with_excusal(after_pass=True))
+        self.assertIsNotNone(refusal)
+        self.assertIn("excused afterwards", refusal)
+
+    def test_a_real_pass_after_an_excusal_governs_and_nothing_stays_excused(self):
+        payload, refusal = self.decide(self.build_with_excusal(then_pass=True))
+        self.assertIsNone(refusal, refusal)
+        self.assertEqual(payload["instrument_receipts"][self.HARNESS_STEP]["verdict"], "pass")
+        self.assertEqual(payload["excused_instruments"], [])
+        self.assertNotIn("EXCUSED", payload["rationale"])
+
+    def test_the_emitted_freeze_carries_the_excusal(self):
+        """A reader of package_frozen alone must not see four verified instruments."""
+        tmp = self.build_with_excusal()
+        code = freeze.main(["--run-dir", str(tmp), "--candidate",
+                            str(tmp / "tropo-1.89.0.zip"), "--emit"])
+        self.assertEqual(code, 0)
+        rows = [json.loads(l) for l in (tmp / "run.jsonl").read_text().splitlines()]
+        frozen = [r for r in rows if r.get("event") == "tropo.release.package_frozen"]
+        self.assertEqual(len(frozen), 1)
+        data = frozen[0]["data"]
+        self.assertEqual(len(data["excused_instruments"]), 1)
+        self.assertIn("release-harness", data["excused_instruments"][0])
+        self.assertIn("EXCUSED", data["note"])
+
+
 class ExitCodeTests(unittest.TestCase):
     def test_earned_freeze_exits_zero_and_refusal_exits_one(self):
         helper = FreezeDecisionTests("run")

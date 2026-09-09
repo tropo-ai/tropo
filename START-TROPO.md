@@ -6,11 +6,20 @@ To get started you need a folder-aware AI tool — one that can read and write f
 
 ## Compacted session? Continue — do not activate
 
-> If this agent session was compacted or you no longer remember completing boot, do not activate and never run `born`. Run `python3 vault/tools/tropo-compact-continue.py --agent <slug>` before any other work.
+> If this agent session was compacted, auto-compacted, or resumed, or you no longer remember completing boot, do not activate and never run `born`. Run `python3 vault/tools/tropo-compact-continue.py --agent <slug>` before any other work.
 
 Continue means this same agent session keeps going. Nothing is born, retired, or added to
 permanent lineage. Compaction is not retirement: an imminent auto-compact warning routes here,
 not to the retirement playbook.
+
+## Meet your two companions
+
+Tropo ships with two ready-made agents, so your first session isn't a blank page:
+
+- **Cal — Architect and Builder.** Implementation, integration, and verification someone else can re-run. When a product-direction call is missing, he routes it to you rather than inventing one.
+- **Darin — Strategist and COO.** Framing, prioritization, decision hygiene, and clean handoffs. He turns intent into a brief you can inspect.
+
+Po offers them by name once your Studio exists. **Say yes to either, both, or neither** — you can build your own agent from scratch instead. Nothing is created without your word.
 
 ## First setup after unzip
 
@@ -57,6 +66,23 @@ against, and the validator will report failures for that reason alone.
    - **Cursor / Windsurf:** open this folder as the project root, then ask the AI: *"please read CLAUDE.md and activate the Tropo Studio."*
    - **Codex / Gemini CLI:** open a session in this folder, then ask the AI: *"please read START-TROPO.md and activate the Tropo Studio."*
 2. **Wait for the AI to greet you.** The first message should be the Tropo concierge offering to help.
+
+## How to work with an agent you've created
+
+Once you have an agent — Cal, Darin, or one you built yourself — you go straight to them. You do
+not go through the concierge again.
+
+**To come back to an agent, in any future session:** open this same Studio folder in your AI tool,
+start a new chat, attach that agent's activation file — `agents/darin/darin-activation.md`, for
+example — and say:
+
+> Activate Darin using this file.
+
+That boots the agent directly and skips the concierge, no matter what else your message says. You
+can attach the file and just say "Hi" if you like; the attachment is the instruction.
+
+The same sentence is written inside each agent's own activation file, under **§Come back
+tomorrow**, with that agent's real path filled in. You do not have to remember it from here.
 
 ## Want to skip ahead and just make your first agent? (5 minutes)
 

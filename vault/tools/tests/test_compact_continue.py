@@ -21,6 +21,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -153,9 +154,31 @@ class ContinueFixture:
         (self.root / "vault" / "agents").mkdir(parents=True, exist_ok=True)
         (self.root / "vault" / "agents" / "3031ffa3.md").write_text(
             "---\nuid: 3031ffa3\ntype: agent\nagent: talos\nparty_uid: 34cf0f1c\n"
-            "agent_root_uid: 123e12e7\n---\n\n# talos\n",
+            "agent_root_uid: 123e12e7\nmodel: fixture-sleeve\n---\n\n# talos\n",
             encoding="utf-8",
         )
+        # The activation thin-pointer — the canonical agent_uid source the
+        # identity card resolves first (f015fcaf29b9 item 4).
+        (self.root / "agents" / SLUG / f"{SLUG}-activation.md").write_text(
+            "---\nagent_uid: 3031ffa3\ntype: agent-activation-pointer\n---\n"
+            "\n# activation pointer\n",
+            encoding="utf-8",
+        )
+        # One read-list file that exists, so outstanding counts are real.
+        memory = self.root / "agents" / SLUG / ".tropo-capsule" / "memory"
+        memory.mkdir(parents=True, exist_ok=True)
+        (memory / "agent-memory.md").write_text(
+            "# memory\n\n## §Top-of-Mind\n\n- fixture entry\n",
+            encoding="utf-8",
+        )
+        # Retired v2 surfaces, present as they are on a real un-restructured
+        # capsule. Since 2026-09-07 the not-to-read list is derived from what
+        # EXISTS rather than hardcoded, so a fixture that omits these would be
+        # asserting against a shape no agent has.
+        (memory / "memory-current.md").write_text(
+            "# v2 surface (retired)\n", encoding="utf-8"
+        )
+        (memory / "short-term-memory.jsonl").write_text("", encoding="utf-8")
 
     def init_git(self) -> None:
         git(["init", "--bare", "-b", "main", str(self.remote)], self.tmp)
@@ -244,7 +267,10 @@ class IdentityAndSessionTests(ContinueCase):
 
         packet = fx.packet()
 
-        self.assertIn(packet["status"], ("continued", "continued-degraded"))
+        self.assertIn(
+            packet["status"],
+            ("continued", "continued-pending-attest", "continued-degraded"),
+        )
         self.assertEqual(packet["agent"], SLUG)
         self.assertEqual(packet["generation"], GEN)
         self.assertTrue(packet["same_session"])
@@ -290,10 +316,16 @@ class IdentityAndSessionTests(ContinueCase):
 
         Executable cases above prove lineage does not change on the paths they
         walk. This closes the remaining shape: a `born` call reachable from a
-        branch no fixture happens to take.
+        branch no fixture happens to take. Pure equality COMPARISONS against
+        a lineage row's ``t`` field are reading lineage, not running anything
+        (identity card + predecessor resolution, f015fcaf29b9 items 2+4), so
+        exactly ``== "born"`` / ``!= "born"`` are allowed — anything else
+        quoted (subprocess args, command strings) still refuses.
         """
         source = TOOL.read_text(encoding="utf-8")
         code = source.split('"""', 2)[-1]
+        code = re.sub(r'[!=]= "born"', "", code)
+        code = re.sub(r"[!=]= 'born'", "", code)
         self.assertNotIn('"born"', code)
         self.assertNotIn("'born'", code)
         self.assertNotIn("lineage.py born", code)
@@ -506,14 +538,31 @@ class RecentCommitSafetyTests(ContinueCase):
 
 
 class BroadcastAndRetryTests(ContinueCase):
-    """AC5 — one continuation UID, at most one crew event, ever."""
+    """AC5 — one continuation UID, at most one crew event, ever.
 
-    def test_one_continue_emits_exactly_one_broadcast(self):
+    f015fcaf29b9 item 3: the continuation run HOLDS the broadcast; only the
+    attest gesture — after the read list — emits it. Every test below walks
+    that two-gesture shape.
+    """
+
+    def test_continue_holds_and_attest_emits_exactly_one_broadcast(self):
         fx = self.fixture()
-        packet = fx.packet()
+        held = fx.packet()
+
+        self.assertEqual(held["broadcast"], "held")
+        self.assertEqual(held["status"], "continued-pending-attest")
+        self.assertGreater(held["reads_outstanding"], 0)
+        self.assertEqual(fx.broadcasts(), [], "a held run emitted anyway")
+        self.assertTrue(
+            CC.journal_path(fx.root, SLUG, GEN).exists(),
+            "held run kept no journal for --attest to resume",
+        )
+
+        packet = fx.packet("--attest")
 
         self.assertEqual(packet["broadcast"], "emitted")
-        self.assertEqual(packet["status"], "continued")
+        self.assertEqual(packet["status"], "attested")
+        self.assertEqual(packet["reads_outstanding"], 0)
         broadcasts = fx.broadcasts()
         self.assertEqual(len(broadcasts), 1)
         data = broadcasts[0]["data"]
@@ -521,6 +570,8 @@ class BroadcastAndRetryTests(ContinueCase):
         self.assertEqual(data["t"], "continued")
         self.assertEqual(data["agent"], SLUG)
         self.assertEqual(data["gen"], GEN)
+        self.assertTrue(data["reads_attested"])
+        self.assertIn("reads attested", data["headline"])
         self.assertFalse(
             CC.journal_path(fx.root, SLUG, GEN).exists(),
             "pending state survived a successful broadcast",
@@ -528,6 +579,8 @@ class BroadcastAndRetryTests(ContinueCase):
 
     def test_emitter_failure_is_warn_safe_and_retry_emits_once(self):
         fx = self.fixture()
+        held = fx.packet()
+        self.assertEqual(held["broadcast"], "held")
         emitter = fx.root / "vault" / "tools" / "tropo-emit-event.py"
         saved = emitter.read_bytes()
         emitter.write_text(
@@ -536,10 +589,10 @@ class BroadcastAndRetryTests(ContinueCase):
             encoding="utf-8",
         )
 
-        first = fx.packet()
+        first = fx.packet("--attest")
 
         self.assertEqual(first["broadcast"], "pending")
-        self.assertEqual(first["status"], "continued-degraded")
+        self.assertEqual(first["status"], "attested-degraded")
         self.assertEqual(fx.broadcasts(), [])
         pending = CC.journal_path(fx.root, SLUG, GEN)
         self.assertTrue(pending.is_file(), "degraded run kept no retry state")
@@ -547,7 +600,7 @@ class BroadcastAndRetryTests(ContinueCase):
         self.assertEqual(journal["continuation_uid"], first["continuation_uid"])
 
         emitter.write_bytes(saved)
-        second = fx.packet()
+        second = fx.packet("--attest")
 
         self.assertEqual(
             second["continuation_uid"],
@@ -559,7 +612,8 @@ class BroadcastAndRetryTests(ContinueCase):
 
     def test_crash_after_emit_never_duplicates(self):
         fx = self.fixture()
-        first = fx.packet()
+        fx.packet()
+        first = fx.packet("--attest")
         self.assertEqual(len(fx.broadcasts()), 1)
         # Re-plant the pending record exactly as a crash between emit and
         # cleanup would leave it.
@@ -577,7 +631,7 @@ class BroadcastAndRetryTests(ContinueCase):
             },
         )
 
-        second = fx.packet()
+        second = fx.packet("--attest")
 
         self.assertEqual(second["continuation_uid"], first["continuation_uid"])
         self.assertEqual(second["broadcast"], "emitted")
@@ -625,6 +679,7 @@ class PacketContractTests(ContinueCase):
         "same_session",
         "same_generation",
         "continuation_uid",
+        "identity",
         "activation_run",
         "git",
         "events",
@@ -632,6 +687,10 @@ class PacketContractTests(ContinueCase):
         "refresh",
         "broadcast",
         "lineage_written",
+        "read_list",
+        "not_to_read",
+        "reads_outstanding",
+        "snapshot",
         "pointers",
     }
 
@@ -639,12 +698,41 @@ class PacketContractTests(ContinueCase):
         fx = self.fixture()
         packet = fx.packet()
         self.assertEqual(set(packet), self.REQUIRED)
-        self.assertIn(packet["broadcast"], ("emitted", "pending"))
+        self.assertIn(packet["broadcast"], ("held", "emitted", "pending"))
         self.assertRegex(packet["continuation_uid"], r"^[0-9a-f]{32}$")
         self.assertEqual(
             packet["pointers"]["retirement_playbook"], CC.RETIREMENT_PLAYBOOK
         )
         self.assertIn("check-events", packet["pointers"]["event_mechanics"])
+        # Item 4: the events how-to must name the thread-closing shape.
+        self.assertIn("--correlationid", packet["pointers"]["event_mechanics"])
+        self.assertIn("--subject", packet["pointers"]["event_mechanics"])
+        # Item 2: the read list is specific files with reasons, never bare
+        # folder pointers; the rollback files are named beside it.
+        self.assertTrue(packet["read_list"], "read list is empty")
+        for item in packet["read_list"]:
+            self.assertIn("path", item)
+            self.assertIn("why", item)
+            self.assertNotIn("<", item["path"], "unresolved placeholder in read list")
+            self.assertFalse(
+                item["path"].endswith("/"), "folder pointer in the read list"
+            )
+        self.assertTrue(
+            any("memory-current.md" in i["path"] for i in packet["not_to_read"]),
+            "rollback v2 surface not named in not-to-read",
+        )
+        # And the other direction, which the original did not assert: the list
+        # is DERIVED from disk, so it must never name a file that is not there.
+        # A not-to-read list of absent files teaches a reader that the tool does
+        # not know the tree, which is exactly the trust this tool needs.
+        for item in packet["not_to_read"]:
+            self.assertTrue(
+                (fx.root / item["path"]).exists(),
+                f"not-to-read names a file that does not exist: {item['path']}",
+            )
+        # Item 4: the identity card resolves party uid and the emit shape.
+        self.assertEqual(packet["identity"]["party_uid"], "34cf0f1c")
+        self.assertIn("--correlationid", packet["identity"]["emit_shape"])
 
     def test_human_report_states_same_session_and_generation(self):
         fx = self.fixture()
@@ -689,7 +777,7 @@ class NonGoalsAndIsolationTests(ContinueCase):
     def test_no_milestone_memory_or_voice_file_is_touched(self):
         fx = self.fixture()
         memory = fx.root / "agents" / SLUG / ".tropo-capsule" / "memory"
-        memory.mkdir(parents=True)
+        memory.mkdir(parents=True, exist_ok=True)
         entry = memory / "entries.jsonl"
         entry.write_text('{"seed": true}\n', encoding="utf-8")
         voice = fx.root / "vault" / "agents" / "3031ffa3.md"
@@ -739,7 +827,13 @@ class NonGoalsAndIsolationTests(ContinueCase):
 
 
 class RefreshInterfaceTests(ContinueCase):
-    """AC10 — Phase-2 seam only; absent and stale both mandate full reads."""
+    """AC10 — the Phase-2 seam, now driven by --attest (f015fcaf29b9 item 3).
+
+    Absent attestation: every existing read-list file counts outstanding.
+    The attest gesture authors the activation file; drift after attest
+    re-outstands the read. Freshness is refresh_state's word for the same
+    file the attest writes.
+    """
 
     def refresh_path(self, fx: ContinueFixture) -> Path:
         return fx.root / "agents" / SLUG / f"{SLUG}-compact-continue-activation.md"
@@ -749,14 +843,18 @@ class RefreshInterfaceTests(ContinueCase):
         packet = fx.packet()
         self.assertEqual(packet["refresh"]["status"], "absent")
         self.assertIsNone(packet["refresh"]["path"])
-        self.assertTrue(packet["pointers"]["refresh_full_reads"])
+        self.assertEqual(packet["broadcast"], "held")
+        self.assertGreater(
+            packet["reads_outstanding"], 0,
+            "no attestation exists but nothing reads as outstanding",
+        )
 
     def test_phase_1_never_authors_the_refresh_file(self):
         fx = self.fixture()
         fx.packet()
         self.assertFalse(
             self.refresh_path(fx).exists(),
-            "Phase 1 authored a Phase-2 self-summary",
+            "the continuation run authored the attestation without --attest",
         )
 
     def test_stale_refresh_is_distinct_and_still_mandates_full_reads(self):
@@ -767,21 +865,266 @@ class RefreshInterfaceTests(ContinueCase):
         )
         packet = fx.packet()
         self.assertEqual(packet["refresh"]["status"], "stale")
-        self.assertTrue(packet["pointers"]["refresh_full_reads"])
+        self.assertEqual(packet["broadcast"], "held")
+        self.assertGreater(packet["reads_outstanding"], 0)
 
     def test_fresh_refresh_drops_the_full_read_mandate(self):
         fx = self.fixture()
-        source_rel = "agents/talos/present-source.md"
-        (fx.root / source_rel).write_text("body\n", encoding="utf-8")
-        digest = hashlib.sha256(b"body\n").hexdigest()
-        self.refresh_path(fx).write_text(
-            f"---\nstatus: active\n---\n\nsource: {source_rel}\n"
-            f"sources_fingerprint: {digest}\n",
-            encoding="utf-8",
+        held = fx.packet()
+        packet = fx.packet("--attest")
+        self.assertEqual(packet["status"], "attested")
+        self.assertEqual(packet["broadcast"], "emitted")
+        self.assertEqual(packet["reads_outstanding"], 0)
+        # refresh_state now reads the attest-written file and says fresh.
+        again = fx.packet()
+        self.assertEqual(again["refresh"]["status"], "fresh")
+        self.assertEqual(again["broadcast"], "held")
+        # And the attest gesture is what carries reads_attested in the event.
+        data = fx.broadcasts()[0]["data"]
+        self.assertTrue(data["reads_attested"])
+
+    def test_drift_after_attest_downgrades_status_not_continued(self):
+        """T64 second-read defect, regression-pinned: refresh_state() is
+        presence-only and cannot see post-attest content drift; the status
+        decision must read the hash-based detector, so drift downgrades to
+        continued-pending-attest, never plain 'continued'."""
+        fx = self.fixture()
+        fx.packet()
+        attested = fx.packet("--attest")
+        self.assertEqual(attested["status"], "attested")
+        memory = fx.root / "agents" / SLUG / ".tropo-capsule" / "memory" / "agent-memory.md"
+        memory.write_text("drifted body\n", encoding="utf-8")
+        drifted = fx.packet()
+        self.assertEqual(drifted["reads_outstanding"], 1)
+        self.assertNotEqual(drifted["status"], "continued",
+            "presence-only freshness let drifted content report 'continued'")
+        self.assertEqual(drifted["status"], "continued-pending-attest")
+
+    def test_precompact_snapshot_reads_back_first(self):
+        """Item 5 seam: compact-continue prints the snapshot before any
+        fresh truth; absence is recorded honestly, presence renders its
+        open threads and pipeline work."""
+        import subprocess as sp
+        fx = self.fixture()
+        workspace = fx.root / "agents" / SLUG / ".tropo-capsule" / "workspace"
+        workspace.mkdir(parents=True, exist_ok=True)
+        snap = workspace / "precompact-snapshot.json"
+        proc = sp.run(
+            [sys.executable, str(fx.root / "vault" / "tools" / "tropo-compact-continue.py"),
+             "--agent", SLUG],
+            cwd=str(fx.root), capture_output=True, text=True,
         )
+        self.assertIn("no snapshot", proc.stdout)
+        self.assertIn("IDENTITY CARD", proc.stdout)
+        snap.write_text(json.dumps({
+            "written_at": "2026-09-07T13:00:00Z", "trigger": "manual",
+            "open_reply_required": ["evt_x_1"], "pipeline_work": None,
+        }), encoding="utf-8")
+        proc = sp.run(
+            [sys.executable, str(fx.root / "vault" / "tools" / "tropo-compact-continue.py"),
+             "--agent", SLUG],
+            cwd=str(fx.root), capture_output=True, text=True,
+        )
+        self.assertLess(
+            proc.stdout.index("PRECOMPACT SNAPSHOT"),
+            proc.stdout.index("IDENTITY CARD"),
+            "snapshot did not print first",
+        )
+        self.assertIn("2026-09-07T13:00:00Z", proc.stdout)
+        self.assertIn("evt_x_1", proc.stdout)
+
+    def test_drift_after_attest_re_outstands_the_read(self):
+        fx = self.fixture()
+        fx.packet()
+        first = fx.packet("--attest")
+        self.assertEqual(first["reads_outstanding"], 0)
+        # A read-list file changes after the attestation was recorded.
+        memory = fx.root / "agents" / SLUG / ".tropo-capsule" / "memory" / "agent-memory.md"
+        memory.parent.mkdir(parents=True, exist_ok=True)
+        memory.write_text("drifted body\n", encoding="utf-8")
         packet = fx.packet()
-        self.assertEqual(packet["refresh"]["status"], "fresh")
-        self.assertEqual(packet["pointers"]["refresh_full_reads"], [])
+        self.assertGreater(
+            packet["reads_outstanding"], 0,
+            "post-attest drift did not re-outstand the read",
+        )
+        self.assertEqual(packet["broadcast"], "held")
+
+
+class AttestationPreservesGovernedPointerTests(ContinueCase):
+    """f0153f5ac5a6, 2026-09-07 incident: --attest used to overwrite this
+    exact path unconditionally. A real governed vault artifact (uid
+    4d1c8a37, a how-to entry minted by talos-t44 in August, long before
+    compact-continue existed) already occupied it -- production, not a
+    hypothetical -- and the old write destroyed its uid and every other
+    governance field in place. Proven here against a fixture carrying the
+    real shape of that file (git show a4ca4b6b5^ names the exact fields
+    lost), not a synthetic stand-in."""
+
+    GOVERNED_TEXT = (
+        "---\n"
+        "uid: 4d1c8a37\n"
+        "type: how-to\n"
+        "title: Talos - compact-continue refresh pointer\n"
+        "status: active\n"
+        "owner: talos\n"
+        "created_by: talos-t44\n"
+        "schema_version: 2\n"
+        "governed_by: 8dd772a0\n"
+        "description: What a compacted Talos reads to re-anchor.\n"
+        "---\n\n"
+        "# Talos - compact-continue refresh\n\n"
+        "Some real prose a human wrote here before compact-continue existed.\n"
+    )
+
+    def _pointer(self, fx: ContinueFixture) -> Path:
+        return fx.root / "agents" / SLUG / f"{SLUG}-compact-continue-activation.md"
+
+    def test_attest_preserves_a_pre_existing_governed_pointer(self):
+        fx = self.fixture()
+        self._pointer(fx).write_text(self.GOVERNED_TEXT, encoding="utf-8")
+        fx.packet()  # open the continuation journal --attest requires
+
+        packet = fx.packet("--attest")
+
+        self.assertEqual(packet["status"], "attested")
+        after = self._pointer(fx).read_text(encoding="utf-8")
+        for original in (
+            "uid: 4d1c8a37", "type: how-to",
+            "title: Talos - compact-continue refresh pointer",
+            "owner: talos", "created_by: talos-t44", "governed_by: 8dd772a0",
+            "Some real prose a human wrote here before compact-continue existed.",
+        ):
+            self.assertIn(original, after, f"governed content lost: {original!r}")
+        self.assertIn("sources_fingerprint:", after)
+        self.assertIn("attested_by:", after)
+        self.assertEqual(CC.refresh_state(fx.root, SLUG)["status"], "fresh")
+
+    def test_the_old_unconditional_overwrite_actually_destroys_it(self):
+        """Mutation proof, not an assumption: revert write_attestation to
+        its pre-fix shape (a bare, unconditional path.write_text) and watch
+        this exact scenario go red -- the fixed test above must fail
+        against the code this incident actually shipped."""
+        fx = self.fixture()
+        self._pointer(fx).write_text(self.GOVERNED_TEXT, encoding="utf-8")
+        fx.packet()
+
+        original = (fx.root / "vault" / "tools" / "tropo-compact-continue.py").read_text(
+            encoding="utf-8"
+        )
+        marker = "    existing = path.read_text("
+        self.assertIn(marker, original, "write_attestation body shape changed underneath this test")
+        start = original.index("def write_attestation(")
+        body_start = original.index("\n", start) + 1
+        end = original.index("\ndef attest_reads(")
+        mutated = (
+            original[:start]
+            + 'def write_attestation(root, slug, identity, read_list):\n'
+            '    rel = Path("agents") / slug / f"{slug}-compact-continue-activation.md"\n'
+            '    path = root / rel\n'
+            '    path.write_text("agent: " + slug + "\\n", encoding="utf-8")\n'
+            '    return path\n'
+            + original[end:]
+        )
+        self.assertNotEqual(mutated, original)
+        (fx.root / "vault" / "tools" / "tropo-compact-continue.py").write_text(
+            mutated, encoding="utf-8"
+        )
+
+        fx.packet("--attest")
+        after = self._pointer(fx).read_text(encoding="utf-8")
+        self.assertNotIn(
+            "uid: 4d1c8a37", after,
+            "the old unconditional overwrite no longer reproduces the "
+            "incident -- this test can no longer prove the fix matters",
+        )
+
+    def test_re_attesting_a_governed_pointer_replaces_only_its_own_section(self):
+        """A second --attest on the same governed file must not grow it
+        unbounded or duplicate the attestation section."""
+        fx = self.fixture()
+        self._pointer(fx).write_text(self.GOVERNED_TEXT, encoding="utf-8")
+        fx.packet()
+        fx.packet("--attest")
+        first_len = len(self._pointer(fx).read_text(encoding="utf-8"))
+
+        second = fx.packet("--attest")
+        after = self._pointer(fx).read_text(encoding="utf-8")
+
+        self.assertEqual(second["status"], "attested")
+        self.assertEqual(
+            after.count("BEGIN tropo-compact-continue attestation"), 1,
+            "re-attest duplicated the section instead of replacing it",
+        )
+        self.assertEqual(after.count("uid: 4d1c8a37"), 1)
+        self.assertLess(
+            len(after), first_len * 1.5,
+            "re-attest grew the governed file instead of replacing in place",
+        )
+
+    def test_ungoverned_pointer_still_gets_the_original_simple_overwrite(self):
+        """The common case (no prior governance at this path) is untouched
+        by this fix -- same shape as before the incident."""
+        fx = self.fixture()
+        fx.packet()
+
+        packet = fx.packet("--attest")
+        text = self._pointer(fx).read_text(encoding="utf-8")
+
+        self.assertEqual(packet["status"], "attested")
+        self.assertTrue(text.startswith("---\n"))
+        self.assertNotIn("BEGIN tropo-compact-continue attestation", text)
+
+
+class ContinuationKindTests(unittest.TestCase):
+    """The broadcast must not claim a compaction that did not happen.
+
+    Regression for two real false crew broadcasts: argus-a161 on 2026-08-29
+    ("CORRECTION — I did NOT compact") and orpheus-o38 on 2026-09-07, which
+    ran this tool on a SessionStart:resume with full context and announced a
+    compaction anyway. The tool cannot observe a compaction — its own docstring
+    says so — so the claim is derived from the PreCompact snapshot, which is
+    written once per compaction and ONLY on a compaction.
+    """
+
+    CU = "cont-uid-under-test"
+
+    def _kind(self, snapshot):
+        return CC.continuation_kind(snapshot, self.CU)
+
+    def test_no_snapshot_is_a_resume_not_a_compaction(self):
+        k = self._kind({"present": False, "reason": "no snapshot"})
+        self.assertEqual(k["kind"], "resume")
+
+    def test_fresh_snapshot_is_a_compaction_for_both_triggers(self):
+        for trigger in ("auto", "manual"):
+            with self.subTest(trigger=trigger):
+                k = self._kind({"present": True, "data": {
+                    "written_at": "2026-09-07T18:00:00Z", "trigger": trigger}})
+                self.assertEqual(k["kind"], "compaction")
+                self.assertIn(trigger, k["why"])
+
+    def test_snapshot_consumed_by_an_earlier_continuation_is_a_resume(self):
+        """A stale snapshot must not make today's resume look like a compaction."""
+        k = self._kind({"present": True, "data": {
+            "written_at": "2026-09-01T09:00:00Z", "trigger": "auto",
+            "consumed_by": "some-older-continuation"}})
+        self.assertEqual(k["kind"], "resume")
+        self.assertIn("consumed", k["why"])
+
+    def test_rerun_of_the_same_continuation_still_reads_compaction(self):
+        """Idempotence: re-running the same continuation is still that compaction."""
+        k = self._kind({"present": True, "data": {
+            "written_at": "2026-09-07T18:00:00Z", "trigger": "auto",
+            "consumed_by": self.CU}})
+        self.assertEqual(k["kind"], "compaction")
+
+    def test_headline_wording_differs_and_never_says_compacted_on_a_resume(self):
+        """The words the crew actually reads are the point of this whole fix."""
+        src = TOOL.read_text(encoding="utf-8")
+        self.assertIn("re-anchored on resume", src,
+                      "no resume wording — a resume would announce a compaction")
+        self.assertIn('if kind["kind"] == "compaction"', src,
+                      "headline is not gated on the derived kind")
 
 
 if __name__ == "__main__":

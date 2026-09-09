@@ -14,8 +14,8 @@ cli_command: "python3 vault/tools/tropo-lineage.py"
 script_path: vault/tools/tropo-lineage.py
 created: '2026-08-06'
 created_by: metis-g102
-version: "0.2"
-version_note: '0.2 (talos-t46, 5fffbbe9 AC6): best-effort lifecycle-field sync onto the unified entry after the append — status/generation/predecessor/last_session/last_updated/born_at/retired_at, frontmatter only, body and voice untouched, every failure a swallowed warning. The lineage line remains the only record; the card is a convenience surface.'
+version: "0.3"
+version_note: '0.3 (argus-a175, f015f176a9d4): a first live birth claims the sole unretired studio-genesis placeholder once; original lineage is preserved and later generations advance normally. Prior 0.2 (talos-t46, 5fffbbe9 AC6): best-effort lifecycle-field sync onto the unified entry after the append — status/generation/predecessor/last_session/last_updated/born_at/retired_at, frontmatter only, body and voice untouched, every failure a swallowed warning. The lineage line remains the only record; the card is a convenience surface.'
 schema_version: 2
 extraction_scope: ship
 ---
@@ -376,11 +376,19 @@ def cmd_born(args):
     root = Path(args.root).resolve()
     path = lineage_path(root, args.agent)
     lines = read_lines(path)
-    gen = next_generation(lines, args.prefix)
+    births = [row for row in lines if row.get("t") == "born"]
+    claim = (len(births) == 1 and births[0].get("by") == "studio-genesis"
+             and GEN_RE.fullmatch(str(births[0].get("gen") or "")) is not None
+             and args.by != "studio-genesis"
+             and not any(row.get("t") == "retired"
+                         and row.get("gen") == births[0].get("gen") for row in lines))
+    gen = births[0]["gen"] if claim else next_generation(lines, args.prefix)
 
     open_gen = current(lines)
     notes = []
-    if open_gen and not open_gen["retired"]:
+    if claim:
+        notes.append("claimed unlived genesis placeholder; generation unchanged")
+    elif open_gen and not open_gen["retired"]:
         notes.append(f"{open_gen['gen']} never retired; recorded, not blocked")
 
     prev = None
@@ -401,7 +409,9 @@ def cmd_born(args):
                    # S3 (f0153e0eb53e): retire wrote retired_at; a birth must clear
                    # it or the active entry reads retired-before-born forever.
                    "retired_at": None}
-    if prev:
+    if claim:
+        born_fields["predecessor"] = None
+    elif prev:
         born_fields["predecessor"] = prev
     if args.model:
         # metis-g111 2026-08-23: the sleeve is a lifecycle fact the lineage line already

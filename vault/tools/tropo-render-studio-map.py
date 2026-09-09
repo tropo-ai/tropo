@@ -80,8 +80,8 @@ CONTROL_REL = Path(".tropo") / "TROPO-CONTROL.md"
 DIGEST_REL = Path(".tropo") / "boot-digest.md"
 PRINCIPLES_REL = Path(".tropo-studio") / "operating-principles.md"
 VERSION_REL = Path(".tropo") / "version.md"
-REVIEW_REL = Path("docs") / "architecture-review-v4" / "tropo-l1-architecture-review.md"
-REVIEW_HTML_REL = Path("docs") / "architecture-review-v4" / "tropo-l1-architecture-review.html"
+REVIEW_REL = Path("docs") / "architecture-review-v5" / "tropo-l1-architecture-review.md"
+REVIEW_HTML_REL = Path("docs") / "architecture-review-v5" / "tropo-l1-architecture-review.html"
 CREW_BRIEF_REL = Path("00-crew-brief.md")
 
 #: The index types counted per hub, in display order, and the words a human
@@ -99,7 +99,10 @@ COUNT_LABELS = {
 #: The Review figures the Map embeds by reference (never redrawn, never
 #: inlined: 01's own text names the studio it was drawn in). Captions are
 #: read from the Review's Appendix A table at render time.
-FIGURE_FILES = ("01-system-map", "02-capsule-type-system", "07-pipelines-and-loops", "10-write-path")
+FIGURE_FILES = ("01-system-map", "02-capsule-type-system", "12-two-pipeline-dag", "17-genesis-arrival")
+# 2026-09-09 (metis-g127): the Review moved to v5, which does not carry 07-pipelines-and-loops or
+# 10-write-path. 12-two-pipeline-dag is 07's successor; 17-genesis-arrival is the first-day figure a
+# stranger meets first. Captions still come from the Review's Appendix A at render time.
 
 #: The root project every subsystem hub declares membership in. The visual is
 #: generated from ITS members, so the diagram cannot drift from the substrate.

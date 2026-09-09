@@ -34,6 +34,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -43,6 +44,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 TOOLS = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(TOOLS))
 _spec = importlib.util.spec_from_file_location(
     "publisher_transport_v191", TOOLS / "tropo-publish-release.py")
 pub = importlib.util.module_from_spec(_spec)
@@ -113,6 +115,14 @@ class TransportPreflightTests(unittest.TestCase):
         self._stage_state(remote)
         ac7 = {"identity": types.SimpleNamespace(activation_uid="deadbeef", run_uid="r1"),
                "package_sha256": "a" * 64, "receipts": []}
+        # Exercise the real transport/staged/origin checks only. Every other
+        # roster boundary is fixture-green; no gh auth, secrets or badge probe.
+        real_verifiers = pub._pre_outward_fire_verifiers
+        def fixture_verifiers(gates):
+            checks = real_verifiers(gates)
+            return {key: check if key in {"fire-staged-state", "fire-remote-identity", "fire-transport"} else
+                    (lambda ctx, key=key: gates.GateOutcome(key, gates.VERDICT_PASS, "fixture boundary"))
+                    for key, check in checks.items()}
         out = io.StringIO()
         started = time.monotonic()
         with patch.object(pub.tropo_roots, "STUDIO_ROOT", self.studio), \
@@ -124,12 +134,13 @@ class TransportPreflightTests(unittest.TestCase):
              patch.object(pub, "require_release_authorization", lambda *a, **k: {}), \
              patch.object(pub, "require_ac7_receipt_set", lambda *a, **k: ac7), \
              patch.object(pub, "_release_entry_uid_for", lambda *a, **k: "00000001"), \
+             patch.object(pub, "_pre_outward_fire_verifiers", side_effect=fixture_verifiers), \
              patch.object(pub, "_confirm_tty", side_effect=_Prompted), \
              patch("builtins.input", side_effect=_Prompted), \
              patch.dict(os.environ, GIT_ENV), \
              contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
             try:
-                rc = pub.cmd_preflight(types.SimpleNamespace(version="9.9.9"))
+                rc = pub.cmd_preflight(types.SimpleNamespace(version="9.9.9", activation_uid="deadbeef"))
             except _Prompted:
                 self.fail("preflight asked a human something — it must refuse or "
                           "pass without any prompt (S3 AC1)")

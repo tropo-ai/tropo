@@ -6,7 +6,7 @@ type: tool
 name: scan-import-state.py
 title: scan-import-state.py — Boot-Time Import State Scanner
 description: Boot-time shallow scanner per Import Primitive Arch Spec §A.6 anomaly-driven trigger path. Walks Studio root one level deep, categorizes top-level entries as governed / orphan-source / orphan-sidecar / unindexed; writes JSON output to workspace; cost ~50ms. Triggers sa.reconciler when anomaly_detected is true.
-version: 1.0.0
+version: 1.0.1
 status: active
 state: active
 stage: build
@@ -42,9 +42,9 @@ trigger_description: "Boot-time shallow scanner for orphan/anomaly detection."
 governed_by: d5e1b4a3
 capsule_version: '2.5'
 created: 2026-05-13
-modified: 2026-05-14
+modified: 2026-09-07
 created_by: argus-a60
-modified_by: argus-a62
+modified_by: argus-a174
 aligned_with:
 - 2b49ba79
 member_of:
@@ -91,6 +91,7 @@ Spec: vault/files/2b49ba79.md (Import Primitive Architecture Specification v1.0 
 
 import argparse
 import fnmatch
+import hashlib
 import json
 import os
 import sys
@@ -99,13 +100,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-# Kernel-known directories that import-walker NEVER ingests.
-# Baked into the tool in addition to .tropoignore for safety.
+# First-party Studio infrastructure is not external source material.
+# These root names ship in the box even when .tropoignore does not. The
+# release-zip regression checks the actual product inventory (f0151c88eff3).
 KERNEL_INGEST_NEVER = {
     '.tropo', '.tropo-studio', 'vault', 'agents', 'channels', 'playbooks',
     '00-tropo-nav', '01-exchange', '01-studio-inbox', 'playbook-runs',
     'recycle', 'archive', 'updates', 'shared', 'templates', 'context',
     'boards', '.git', '.svn', '.hg', '.obsidian',
+    '.claude', '.gemini', '.github', '02-outbox', '03-design', '99-recycle',
+    'docs', 'operating-agreement', 'system',
+    'AGENT-ORIENTATION.md', 'AGENTS.md', 'CAPSULE.md', 'CHANGELOG.md',
+    'CLAUDE.md', 'GEMINI.md', 'KNOWN-LIMITATIONS.md', 'LICENSE', 'MANIFEST.md',
+    'README.md', 'RELEASING.md', 'START-TROPO.md', 'STUDIO.md',
+    'TROPO-CAPABILITIES.md', 'operating-agreement.md', 'package.json',
+    'test-report.md', 'tropo-image-manifest.json', '.cursorrules', '.gitattributes',
 }
 
 
@@ -158,6 +167,32 @@ def matches_ignore(entry_name, is_dir, patterns):
     return False
 
 
+def watch_surface_is_scaffold(entry, studio_root):
+    """Only an empty watch folder or its unchanged shipped README is quiet.
+
+    The existing image manifest owns the shipped bytes; no second hash table
+    is maintained here. A changed README or missing/unreadable manifest stays
+    visible as source input. Check size before hashing a customer-sized file.
+    """
+    if entry.is_symlink():
+        return False
+    try:
+        children = list(entry.iterdir())
+        if not children:
+            return True
+        if len(children) != 1:
+            return False
+        readme = children[0]
+        if readme.name != 'README.md' or not readme.is_file() or readme.is_symlink():
+            return False
+        manifest = json.loads((studio_root / 'tropo-image-manifest.json').read_text())
+        expected = manifest['files']['04-external-work/README.md']
+        return (expected['bytes'] == readme.stat().st_size
+                and expected['sha256'] == hashlib.sha256(readme.read_bytes()).hexdigest())
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
 def categorize_entry(entry, studio_root, patterns):
     """Categorize a top-level entry. Returns one of:
         'kernel-or-ignored', 'governed-folder', 'governed-file',
@@ -169,7 +204,14 @@ def categorize_entry(entry, studio_root, patterns):
         return 'kernel-or-ignored'
     if is_dir:
         marker = entry / '.tropo-studio' / '.tropo-folder.md'
-        return 'governed-folder' if marker.exists() else 'orphan-folder'
+        if marker.exists():
+            return 'governed-folder'
+        # The shipped watch surface starts with just README.md. It contains
+        # no source to reconcile yet. Do not put it in KERNEL_INGEST_NEVER:
+        # as soon as user content arrives, the folder must become observable.
+        if name == '04-external-work' and watch_surface_is_scaffold(entry, studio_root):
+            return 'kernel-or-ignored'
+        return 'orphan-folder'
     # Top-level file
     sidecar = studio_root / '.tropo-studio' / f'{name}.tropo.md'
     return 'governed-file' if sidecar.exists() else 'orphan-file'

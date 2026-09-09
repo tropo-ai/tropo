@@ -114,11 +114,18 @@ def _check_p05() -> tuple[bool, str]:
     if not tool.exists():
         return False, "write-activation-entry.py not found"
     text = tool.read_text(encoding='utf-8', errors='replace')
-    if 'living-transfer.md' in text and 'agent-memory.md' not in text:
+    # Phase 2 (f0153a6df07f): either era of the surface name satisfies this.
+    # Checking only the legacy name would turn this P0 self-check red on the
+    # commit that renames the file it is checking for -- a check that fails
+    # because the thing it wants was done.
+    surface_names = ('agent-memory.md', 'memory.md')
+    names_a_surface = any(n in text for n in surface_names)
+    if 'living-transfer.md' in text and not names_a_surface:
         return False, "stub template still references v2 living-transfer.md path"
-    if 'agent-memory.md' not in text:
-        return False, "stub template does not reference agent-memory.md"
-    return True, "transfer-stub template uses v1.1 agent-memory.md surface"
+    if not names_a_surface:
+        return False, "stub template does not reference a memory surface (%s)" % (
+            ' or '.join(surface_names))
+    return True, "transfer-stub template uses the v1.1 memory surface"
 
 
 def _check_p06() -> tuple[bool, str]:

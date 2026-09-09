@@ -117,6 +117,7 @@ from lib.distiller_edge import (  # noqa: E402
 # here and nothing about its contract is restated. ``span_guard`` is imported
 # only for :func:`match_domain_bytes`, the single shipped definition of Lock
 # 2(a)'s match domain — this module does not get a second one.
+from lib import memory_surfaces  # noqa: E402  — Phase 2 (f0153a6df07f) names
 from lib import span_guard  # noqa: E402
 from lib.orient_stage_c import StageCBlock, StageCRefusal, run_stage_c  # noqa: E402
 
@@ -805,6 +806,11 @@ class GitDAG:
     def list_paths(self, commit: str, prefix: str) -> tuple:  # pragma: no cover
         raise NotImplementedError
 
+    def path_exists(
+        self, commit: str, path: str
+    ) -> bool:  # pragma: no cover - interface
+        raise NotImplementedError
+
 
 class SubprocessGitDAG(GitDAG):
     """Git CLI implementation using exact commit identities and DAG operations."""
@@ -1014,6 +1020,20 @@ class SubprocessGitDAG(GitDAG):
         return tuple(
             sorted(self._decode_nul_paths(result.stdout, operation="tree-list"))
         )
+
+    def path_exists(self, commit: str, path: str) -> bool:
+        if (
+            not isinstance(path, str)
+            or not path
+            or Path(path).is_absolute()
+            or ".." in Path(path).parts
+        ):
+            raise BootOrientationError(
+                BootOrientationErrorCode.TRANSFER_FORBIDDEN,
+                "snapshot path must be canonical and Studio-relative",
+            )
+        result = self._run("cat-file", "-e", f"{commit}:{path}")
+        return result.returncode == 0
 
 
 _TERMINAL_WORK_STATES = frozenset(
@@ -1496,7 +1516,30 @@ def _resolve_agent_authority(
 
 
 def _canonical_memory_path(agent: str) -> str:
-    return f"agents/{agent}/.tropo-capsule/memory/agent-memory.md"
+    # The NAME comes from lib/memory_surfaces (Phase 2, f0153a6df07f), which is
+    # the one producer of it; the path SHAPE stays here because this reader
+    # addresses a git tree by string, not a filesystem it can probe.
+    return f"agents/{agent}/.tropo-capsule/memory/{memory_surfaces.AGENT_INDEX}"
+
+
+def _legacy_memory_path(agent: str) -> str:
+    """Pre-rename name (Phase 2, f0153a6df07f). Fallback only -- remove this
+    function and every caller of it at step 5, once no commit under test can
+    predate the rename."""
+    return f"agents/{agent}/.tropo-capsule/memory/{memory_surfaces.AGENT_INDEX_LEGACY}"
+
+
+def _read_memory_bytes(topology: "GitDAG", commit: str, agent: str) -> bytes:
+    """New name preferred; existence resolved via path_exists() -- a separate
+    git-plumbing probe, deliberately NOT a try/read-then-fallback through
+    read_bytes -- so exactly one real content read happens either way (Phase
+    2 rename, f0153a6df07f). A caller observing read_bytes calls (mutation
+    tests, provenance re-reads) sees the same single call it always did when
+    a commit predates the rename. Remove at step 5."""
+    new_path = _canonical_memory_path(agent)
+    if topology.path_exists(commit, new_path):
+        return topology.read_bytes(commit, new_path)
+    return topology.read_bytes(commit, _legacy_memory_path(agent))
 
 
 def _authorize_memory(
@@ -1508,12 +1551,16 @@ def _authorize_memory(
     """Authorize the canonical memory surface before any content read."""
 
     canonical_path = _canonical_memory_path(agent)
+    legacy_path = _legacy_memory_path(agent)
     for source_name, source in (
         ("identity", identity),
         ("boot_index.identity", indexed_identity),
     ):
         declared_path = source.get("memory_path")
-        if declared_path is not None and declared_path != canonical_path:
+        if declared_path is not None and declared_path not in (
+            canonical_path,
+            legacy_path,
+        ):
             raise BootOrientationError(
                 BootOrientationErrorCode.TRANSFER_FORBIDDEN,
                 f"{source_name} declares a non-canonical memory path",
@@ -2223,13 +2270,13 @@ def orient_boot(
             as_of=as_of_commit,
             git_dag=topology,
         )
-        memory_path = _authorize_memory(
+        _authorize_memory(
             identity,
             indexed_identity,
             normalized_agent,
             viewer,
         )
-        memory_bytes = topology.read_bytes(as_of_commit, memory_path)
+        memory_bytes = _read_memory_bytes(topology, as_of_commit, normalized_agent)
         try:
             memory_text = memory_bytes.decode("utf-8")
         except UnicodeDecodeError as error:
@@ -2401,8 +2448,8 @@ def serve_boot_orientation(
         topology = git_dag or SubprocessGitDAG(root)
         canonical_as_of = topology.normalize_commit(as_of, field="as_of")
         snapshot_bytes = topology.read_bytes(canonical_as_of, _BOOT_SUBSTRATE_PATH)
-        memory_bytes = topology.read_bytes(
-            canonical_as_of, _canonical_memory_path(orientation.agent)
+        memory_bytes = _read_memory_bytes(
+            topology, canonical_as_of, orientation.agent
         )
         expected_source = _boot_source_identity(
             canonical_as_of, viewer, snapshot_bytes, memory_bytes

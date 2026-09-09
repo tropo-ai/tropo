@@ -244,10 +244,25 @@ def decide(run_dir: Path, candidate: Path) -> Tuple[Dict[str, Any], Optional[str
             "instrument": name,
             "verdict": receipt.verdict,
             "bound_sha256": receipt.candidate_sha256,
+            **({"authorized_by": receipt.authorized_by}
+               if receipt.verdict == "skipped" else {}),
         }
         for name, receipt in by_instrument.items()
     }
     payload["instrument_receipts"] = receipts
+    # An excused instrument counts toward the four and is DISCLOSED, never
+    # folded into a green sentence: on the payload, on stderr in main(), and on
+    # the package_frozen event itself. Mike-ruled 2026-09-09 ("I should be
+    # warned"); before this the freeze refused an authorized skip outright.
+    payload["excused_instruments"] = release_verify.excusal_lines(by_instrument)
+    excused = release_verify.excused(by_instrument)
+    excusal_note = ""
+    if excused:
+        excusal_note = (
+            "; %d instrument(s) EXCUSED by authorization, NOT verified: %s"
+            % (len(excused),
+               ", ".join("%s (by %s)" % (r.instrument, r.authorized_by) for r in excused))
+        )
 
     # 3 — no live invalidation. Already guaranteed: active_candidate() above
     # returns None (handled earlier) for exactly this case, so reaching here
@@ -290,14 +305,14 @@ def decide(run_dir: Path, candidate: Path) -> Tuple[Dict[str, Any], Optional[str
             "candidate re-hashes to the recorded bytes, all four instrument "
             "receipts bind them, and the run's one active package_frozen binds "
             "these same bytes (criterion 4 holds as the post-state)"
-        )
+        ) + excusal_note
         return payload, None
 
     payload["verdict"] = "pass"
     payload["rationale"] = (
         "candidate re-hashes to the recorded bytes and all four instrument "
         "receipts bind them"
-    )
+    ) + excusal_note
     return payload, None
 
 
@@ -353,6 +368,12 @@ def main(argv=None) -> int:
         identity["frozen_by_step"] = FREEZE_STEP
         identity["note"] = ("emitted by the freeze step itself on a pass verdict, with "
                             "all four instrument receipts bound to these bytes")
+        if payload.get("excused_instruments"):
+            # The frozen event carries the excusal too, so a reader of the
+            # freeze alone cannot mistake it for four verified instruments.
+            identity["excused_instruments"] = list(payload["excused_instruments"])
+            identity["note"] += ("; one or more instruments EXCUSED by authorization, "
+                                 "not verified — see excused_instruments")
         with journal.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps({
                 "event": "tropo.release.package_frozen",
@@ -368,6 +389,8 @@ def main(argv=None) -> int:
     elif args.emit and refusal is not None:
         print("[REFUSED] --emit ignored: the verdict is not pass", file=sys.stderr)
 
+    for line in payload.get("excused_instruments") or []:
+        print("[EXCUSED] " + line, file=sys.stderr)
     print(json.dumps(payload, indent=2, sort_keys=True))
     if refusal and not args.quiet:
         print("REFUSED (%s): %s" % (FREEZE_STEP, refusal), file=sys.stderr)

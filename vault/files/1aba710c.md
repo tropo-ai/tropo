@@ -1,6 +1,6 @@
 ---
 uid: 1aba710c
-subsystem_home: vault/library/   # v1.95 A5: the folder this subsystem lives in; the shipped map places it in the layer that folder belongs to
+subsystem_home: library/   # v1.95 A5: the folder this subsystem lives in; the shipped map places it in the layer that folder belongs to
 type: project
 state: active
 status: active

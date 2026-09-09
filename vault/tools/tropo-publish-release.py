@@ -9,7 +9,7 @@ owner: talos
 domain: "Release Coupling (fbe50871) — the publish continuation: STAGE (private) -> --fire (the one public act) -> verify-live."
 transport: cli
 implementation_kind: python-script
-cli_command: "python3 vault/tools/tropo-publish-release.py stage --activation-uid <uid> --version <X.Y.Z> | --fire | --defer --reason <text> | --verify-only --version <X.Y.Z>"
+cli_command: "python3 vault/tools/tropo-publish-release.py promote --version <X.Y.Z> --activation-uid <uid>"
 script_path: vault/tools/tropo-publish-release.py
 spawnable_by:
   - all-executives
@@ -41,7 +41,7 @@ STATE MACHINE (binding, per the dev-spec body):
     - state file {staged_sha, tag, version, staged_at}
     - EDGE SUMMARY -> STAGED, stop. Nothing public happened.
 
-  preflight --version <v> (S3 AC1/AC2, 176a8995 -- no TTY, asks nothing):
+  preflight --version <v> --activation-uid <uid> (S3 AC1/AC2, 176a8995 -- no TTY, asks nothing):
     - runs the pre-outward-fire phase of the ONE gate roster
       (tropo-release-preflight.py PRE_OUTWARD_FIRE_ROSTER): staged state,
       pinned remote, read-only `git ls-remote` + https credential probe,
@@ -1408,13 +1408,16 @@ def _mirror_published_event_to_journal(
         existing = None
     if existing is not None:
         return
-    journal_event = {
-        "type": release_closure.PUBLISHED_EVENT,
-        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "source": release_receipt.PUBLISHER_TOOL_SOURCE,
-        "source_uid": release_receipt.PUBLISHER_TOOL_UID,
-        "data": dict(event_data),
-    }
+    # Normalize the journal envelope; publication payload remains unchanged.
+    # Historical type-keyed rows remain readable without rewriting evidence.
+    identity = (ac7_context or {}).get("identity")
+    journal_event = runtime.make_event(
+        release_closure.PUBLISHED_EVENT,
+        release_receipt.PUBLISHER_TOOL_UID,
+        actor_label=release_receipt.PUBLISHER_TOOL_SOURCE,
+        data=dict(event_data),
+        trace_id=getattr(identity, "activation_uid", "") or run_folder.name,
+    )
     try:
         runtime.append_event(run_folder, journal_event)
     except Exception as exc:
@@ -1740,8 +1743,19 @@ def require_ac7_receipt_set(state: dict, version: str) -> dict:
     except release_verify.VerifyRefusal as exc:
         raise PublishError(str(exc)) from exc
 
-    print(f"  ✓ AC7: four instruments passed against package "
-          f"{package_sha256[:12]}… on run {identity.run_uid}")
+    # An excused instrument is disclosed here, before the one ask, in the same
+    # words the freeze used (release_verify.excusal_lines is the one home).
+    # Mike-ruled 2026-09-09: "I should be warned."
+    excusals = release_verify.excusal_lines(resolved)
+    for line in excusals:
+        print(f"  {line}")
+    if excusals:
+        print(f"  ✓ AC7: {len(resolved) - len(excusals)} instruments passed and "
+              f"{len(excusals)} EXCUSED by authorization against package "
+              f"{package_sha256[:12]}… on run {identity.run_uid}")
+    else:
+        print(f"  ✓ AC7: four instruments passed against package "
+              f"{package_sha256[:12]}… on run {identity.run_uid}")
     return {"identity": identity, "package_sha256": package_sha256,
             "receipts": resolved}
 
@@ -2208,30 +2222,87 @@ def cmd_stage(args) -> int:
     print(f"  would-delete acknowledged: {len(would_delete)}")
     print(f"  staged_sha: {staged_sha}")
     print(f"  tag: {tag}")
-    print(f"=== STAGED — nothing public happened. Run --fire to publish. ===")
+    print(f"=== STAGED — nothing public happened. Run promote --version {version} --activation-uid {state['activation_uid']} to publish. ===")
     return 0
 
 
 # ── FIRE ───────────────────────────────────────────────────────────────────────
 
-def _latest_staged_version() -> str | None:
-    """--fire with no --version: find the most recently staged version (the
-    normal case — stage then immediately fire)."""
-    if not tropo_roots.RELEASES_DIR.is_dir():
-        return None
-    candidates = []
-    for d in tropo_roots.RELEASES_DIR.iterdir():
-        sp = d / STATE_FILE_NAME
-        if sp.is_file():
-            try:
-                st = json.loads(sp.read_text())
-                candidates.append((sp.stat().st_mtime, st.get("version")))
-            except Exception:
-                continue
-    if not candidates:
-        return None
-    candidates.sort()
-    return candidates[-1][1]
+def _require_named_record(version, activation_uid) -> dict:
+    """Resolve precisely the staged version and activation supplied by the driver."""
+    if not version or not activation_uid:
+        raise PublishError("Name both --version X.Y.Z and --activation-uid from that version's publish-state.json; run stage first if no record exists.")
+    state = _read_state(version)
+    if not state:
+        raise PublishError(f"No publish-state at {_state_path(version)}. Run stage --version {version} --activation-uid {activation_uid} first.")
+    actual = str(state.get("activation_uid") or "")
+    if actual != activation_uid:
+        raise PublishError(f"Named activation {activation_uid} differs from record activation {actual!r} for v{version}. Use --version {version} --activation-uid {actual}, or stage the intended activation first.")
+    return state
+
+
+def _named_run_folder(state) -> Path:
+    try:
+        identity = release_package.resolve_release_run(
+            state["activation_uid"], Path(tropo_roots.VAULT_DIR) / "files",
+            Path(tropo_roots.VAULT_DIR) / "pipeline-runs")
+    except release_package.PackageRefusal as exc:
+        raise PublishError(str(exc)) from exc
+    folder = _run_journal_folder({"identity": identity})
+    if folder is None:
+        raise PublishError(f"Run {identity.run_uid} has no run_folder; restore its declared run_folder before firing activation {state['activation_uid']}.")
+    return folder
+
+
+def _refuse_if_published(version, state, run_folder):
+    """Disclose completed re-publication; let an incomplete saga resume by name."""
+    findings = []
+    for row in _load_pipeline_runtime().read_events(run_folder):
+        if release_closure.event_type(row) == release_closure.PUBLISHED_EVENT:
+            findings.append(f"published journal row in {run_folder / 'run.jsonl'}: {row.get('data') or row}")
+    if state.get("published_at"):
+        findings.append(f"publish-state published_at={state['published_at']}")
+    directory = Path(tropo_roots.STUDIO_ROOT) / "vault/events/release-receipts"
+    try:
+        receipts = release_receipt.load_release_receipts(tropo_roots.STUDIO_ROOT)
+    except release_receipt.ReleaseReceiptError as exc:
+        receipts = {}
+        print(f"WARNING: unreadable receipt set {directory}: {exc}. Journal and published_at carry the decision; restore the named receipt set.", file=sys.stderr)
+    else:
+        if not receipts:
+            print(f"WARNING: no readable receipts at {directory}. Journal and published_at carry the decision; restore the committed receipt set.", file=sys.stderr)
+    for digest, receipt in receipts.items():
+        if receipt.get("version") == version:
+            findings.append(f"receipt {directory / (digest + '.json')} published_at={receipt.get('published_at')}")
+    if not findings:
+        return
+    print(f"WARNING: v{version} already published: " + "; ".join(findings), file=sys.stderr)
+    journal = _fire_journal(version, state["activation_uid"])
+    missing = [c for c in FIRE_WIRED_CHECKPOINTS if journal.observed(c) is None]
+    if missing:
+        print(f"WARNING: SAGA INCOMPLETE ({', '.join(missing)}). Resume by checkpoint with fire --version {version} --activation-uid {state['activation_uid']}; no extra confirmation for recovery.", file=sys.stderr)
+        return
+    consequence = (f"Re-publishing v{version}: the tag is force-pushed, the live asset is re-uploaded, "
+                   "and the public manifest is regenerated. Cut a new version instead to preserve this publication.")
+    print("WARNING: " + consequence, file=sys.stderr)
+    if not _confirm_tty(consequence + " Re-publish anyway?"):
+        raise PublishError(f"Re-publication of v{version} not confirmed (default NO). Cut a new version, or confirm explicitly at a TTY.")
+
+
+def _confirm_shipping_digest(version, ac7):
+    zip_path = tropo_roots.RELEASES_DIR / f"v{version}" / "dist" / f"tropo-os-v{version}.zip"
+    try:
+        actual = release_package.hash_final_zip(zip_path)
+    except release_package.PackageRefusal as exc:
+        raise PublishError(str(exc)) from exc
+    expected = ac7["package_sha256"]
+    if actual != expected:
+        message = (f"WARNING: {zip_path} digest {actual} differs from frozen receipt {expected}. "
+                   "Bytes nobody verified would become the public asset. Restore the frozen zip "
+                   f"with digest {expected}, or verify and freeze the changed package.")
+        print(message, file=sys.stderr)
+        if not _confirm_tty(message + " Publish these changed bytes anyway?"):
+            raise PublishError("Changed shipping bytes not confirmed (default NO); restore the frozen zip or verify the changed package.")
 
 
 def _load_supabase_credentials() -> tuple[str, str]:
@@ -2614,23 +2685,7 @@ def _pre_outward_fire_verifiers(gates) -> dict:
             raise PublishError(
                 "publish-state names no activation_uid, so the release run "
                 "cannot be located and the scorecard's inputs cannot be checked")
-        runs = Path(tropo_roots.STUDIO_ROOT) / "vault" / "pipeline-runs"
-        run_dir = None
-        for candidate in sorted(runs.glob("release-pipeline-*")):
-            state_file = candidate / "run.state.json"
-            if not state_file.is_file():
-                continue
-            try:
-                body = json.loads(state_file.read_text(encoding="utf-8")) or {}
-            except (OSError, ValueError):
-                continue
-            if str(body.get("activation_uid") or "") == activation:
-                run_dir = candidate
-                break
-        if run_dir is None:
-            raise PublishError(
-                "no release run folder carries activation %s, so the "
-                "scorecard's inputs cannot be checked" % activation)
+        run_dir = _named_run_folder(state)
         journal = run_dir / "run.jsonl"
         moment = ""
         if journal.is_file():
@@ -2697,9 +2752,16 @@ def run_fire_preflight(version: str, state: dict) -> int:
     next to the publish-state, in the registry's own row shape.
     """
     preflight = _load_release_preflight()
-    registry = preflight.build_registry(fire_verifiers=_pre_outward_fire_verifiers(preflight))
-    context = _pre_outward_fire_context(version, state)
-    outcomes = registry.run_phase("pre-outward-fire", context)
+    try:
+        registry = preflight.build_registry(fire_verifiers=_pre_outward_fire_verifiers(preflight))
+        context = _pre_outward_fire_context(version, state)
+        outcomes = registry.run_phase("pre-outward-fire", context)
+    except preflight.ReleaseGateError as exc:
+        print(f"PREFLIGHT INCOMPLETE — operational registry error: {exc}", file=sys.stderr)
+        print("  Repair the named verifier binding, then rerun "
+              f"python3 vault/tools/tropo-publish-release.py preflight --version {version} "
+              f"--activation-uid {state.get('activation_uid')}", file=sys.stderr)
+        return 3
 
     print(f"--- preflight v{version}: pre-outward-fire ({len(outcomes)} gate(s)) ---")
     for outcome in outcomes:
@@ -2713,11 +2775,18 @@ def run_fire_preflight(version: str, state: dict) -> int:
 
     refused = [o.gate_id for o in outcomes if o.verdict == preflight.VERDICT_REFUSED]
     errored = [o.gate_id for o in outcomes if o.verdict == preflight.VERDICT_ERROR]
-    if refused or errored:
-        print(f"PREFLIGHT RED — {len(refused)} refusal(s) {refused}, "
-              f"{len(errored)} operational error(s) {errored}.", file=sys.stderr)
+    skipped = [o.gate_id for o in outcomes if o.verdict == preflight.VERDICT_SKIPPED]
+    if refused or errored or skipped or not outcomes:
+        verdict = "RED" if refused else "INCOMPLETE"
+        print(f"PREFLIGHT {verdict} — {len(refused)} refusal(s) {refused}, "
+              f"{len(errored)} operational error(s) {errored}, "
+              f"{len(skipped)} unexecuted gate(s) {skipped}.", file=sys.stderr)
+        if not outcomes:
+            print("  No final-fire gates executed; restore the publisher's verifier roster.",
+                  file=sys.stderr)
         print(f"  Nothing was asked and nothing was published. Cure the named gates, then: "
-              f"python3 vault/tools/tropo-publish-release.py preflight --version {version}",
+              f"python3 vault/tools/tropo-publish-release.py preflight --version {version} "
+              f"--activation-uid {state.get('activation_uid')}",
               file=sys.stderr)
         return 2 if refused else 3
     print(f"PREFLIGHT GREEN — {len(outcomes)} gate(s) passed; the fire cannot refuse "
@@ -2727,46 +2796,75 @@ def run_fire_preflight(version: str, state: dict) -> int:
 
 def cmd_preflight(args) -> int:
     """`preflight --version <v>` — S3 AC1's command. Same resolution as fire, no TTY."""
-    version = getattr(args, "version", None) or _latest_staged_version()
-    if not version:
-        print("✗ No staged version found (and none given via --version). "
-              "Not staged — run stage first.", file=sys.stderr)
-        return 3
-    state = _read_state(version)
-    if not state:
-        print(f"✗ No publish-state for v{version} — not staged. Run stage first.",
-              file=sys.stderr)
-        return 3
+    version = getattr(args, "version", None)
+    state = _require_named_record(version, getattr(args, "activation_uid", None))
     print(f"=== PREFLIGHT v{version} (every fire precondition, before anyone is asked) ===\n")
     return run_fire_preflight(version, state)
 
 
-def cmd_fire(args) -> int:
-    version = args.version or _latest_staged_version()
-    if not version:
-        print("✗ No staged version found (and none given via --version). Run stage first.", file=sys.stderr)
-        return 3
-    state = _read_state(version)
-    if not state:
-        print(f"✗ No publish-state for v{version} — not staged. Run stage first.", file=sys.stderr)
-        return 3
+def cmd_promote(args) -> int:
+    """Show both judgments, retain their comparison, then use the ordinary fire."""
+    version = getattr(args, "version", None)
+    state = _require_named_record(version, getattr(args, "activation_uid", None))
+    run_folder = _named_run_folder(state)
+    _refuse_if_published(version, state, run_folder)
+    preflight_rc = run_fire_preflight(version, state)
+    candidate = tropo_roots.RELEASES_DIR / f"v{version}" / "dist" / f"tropo-os-v{version}.zip"
+    command = [sys.executable, str(Path(__file__).with_name("tropo-ship.py")),
+               "--run-dir", str(run_folder), "--candidate", str(candidate), "--json"]
+    try:
+        shadow = subprocess.run(command, capture_output=True, text=True, timeout=120,
+                                stdin=subprocess.DEVNULL)
+        shadow_rc, output, errors = shadow.returncode, shadow.stdout, shadow.stderr
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        shadow_rc, output, errors = 3, "", str(exc)
+    print("--- tropo-ship shadow (full verdict) ---")
+    print(output)
+    if errors:
+        print(errors, file=sys.stderr)
+    comparison = {"version": version, "activation_uid": state["activation_uid"],
+                  "preflight_rc": preflight_rc, "ship_rc": shadow_rc,
+                  "ship_stdout": output, "ship_stderr": errors,
+                  "agreement": (preflight_rc == 0) == (shadow_rc == 0)}
+    (_state_path(version).parent / "promotion-comparison.json").write_text(
+        json.dumps(comparison, indent=2) + "\n", encoding="utf-8")
+    if not comparison["agreement"]:
+        print("WARNING: preflight and ship shadow disagree; comparison recorded. The existing fire machinery decides.", file=sys.stderr)
+    if preflight_rc == 0:
+        orchestrator = _load_vault_lib_by_path(
+            "tropo_publish_release_orchestrator", Path(__file__).with_name("tropo-release.py"))
+        args.scorecard_producer = orchestrator.real_fire_scorecard_producer(
+            run_folder, Path(tropo_roots.STUDIO_ROOT))
+    return cmd_fire(args, preflight_rc=preflight_rc, prepared_state=state)
+
+
+def cmd_fire(args, preflight_rc=None, prepared_state=None) -> int:
+    version = getattr(args, "version", None)
+    # Promotion's verdict belongs to this resolved record, not a later disk read.
+    state = (prepared_state if prepared_state is not None else
+             _require_named_record(version, getattr(args, "activation_uid", None)))
+    if preflight_rc is None:
+        _refuse_if_published(version, state, _named_run_folder(state))
     # S3 AC1 (176a8995): the whole pre-outward-fire phase runs BEFORE the
     # confirm. Green here means nothing below may refuse on a precondition;
     # red here is a refusal, not an apology after the yes.
-    preflight_rc = run_fire_preflight(version, state)
+    if preflight_rc is None:
+        preflight_rc = run_fire_preflight(version, state)
     if preflight_rc:
-        print("✗ REFUSED by preflight — nothing was asked, nothing was published.",
+        verdict = "REFUSED" if preflight_rc == 2 else "OPERATIONALLY INCOMPLETE"
+        print(f"✗ {verdict} by preflight — nothing was asked, nothing was published.",
               file=sys.stderr)
         return preflight_rc
     try:
         _ac7 = require_ac7_receipt_set(state, version)
+        _confirm_shipping_digest(version, _ac7)
         _ac7["transaction_id"] = f"fire-{version}-{_ac7['package_sha256'][:12]}"
         _ac7["release_entry_uid"] = _release_entry_uid_for(_ac7["identity"])
     except PublishError as e:
         print(f"✗ REFUSED: {e}", file=sys.stderr)
         print(f"    Nothing was published. Record the missing verification, "
               f"then re-run: python3 vault/tools/tropo-publish-release.py "
-              f"--fire --version {version}", file=sys.stderr)
+              f"fire --version {version} --activation-uid {state['activation_uid']}", file=sys.stderr)
         return 6
     try:
         remote = _require_pinned_remote(state.get("remote"))
@@ -3043,7 +3141,7 @@ def cmd_fire(args) -> int:
     # have stamped this run's journal (so every measurement input is true), and
     # before the read below that decides whether completion_verification can be
     # observed. The orchestrator owns the inputs and builds the card; this call
-    # site owns only the timing. See tropo-release.py::_produce_scorecard for
+    # site owns only the timing. See tropo-release.py::real_fire_scorecard_producer for
     # why the previous order (produce AFTER cmd_fire returned, gated on its exit
     # code) could never converge.
     _producer = getattr(args, "scorecard_producer", None)
@@ -3156,10 +3254,8 @@ def _verify_live_module():
 
 
 def cmd_defer(args) -> int:
-    version = args.version or _latest_staged_version()
-    if not version:
-        print("✗ No staged version found (and none given via --version).", file=sys.stderr)
-        return 3
+    version = getattr(args, "version", None)
+    _require_named_record(version, getattr(args, "activation_uid", None))
     if not args.reason:
         print("✗ --reason is required for --defer.", file=sys.stderr)
         return 3
@@ -3507,17 +3603,25 @@ def main() -> int:
     pf = sub.add_parser("preflight", help="run every fire precondition (transport, receipts, "
                                           "authorization, credentials, badge target) with no "
                                           "prompt; green means the fire cannot refuse on one")
-    pf.add_argument("--version", default=None, help="default: the most recently staged version")
+    pf.add_argument("--version", required=True)
+    pf.add_argument("--activation-uid", required=True)
     pf.set_defaults(func=cmd_preflight)
 
     f = sub.add_parser("fire", help="--fire: the one public act (TTY-only, default NO)")
-    f.add_argument("--version", default=None, help="default: the most recently staged version")
+    f.add_argument("--version", required=True)
+    f.add_argument("--activation-uid", required=True)
     f.set_defaults(func=cmd_fire)
 
     d = sub.add_parser("defer", help="--defer: Mike-gestured skip (TTY-only, default NO)")
-    d.add_argument("--version", default=None, help="default: the most recently staged version")
+    d.add_argument("--version", required=True)
+    d.add_argument("--activation-uid", required=True)
     d.add_argument("--reason", required=True)
     d.set_defaults(func=cmd_defer)
+
+    promote = sub.add_parser("promote", help="compare preflight and ship shadow, then fire once")
+    promote.add_argument("--version", required=True)
+    promote.add_argument("--activation-uid", required=True)
+    promote.set_defaults(func=cmd_promote)
 
     h = sub.add_parser("handback", help="AC6: produce the transfer bundle (credential-less build host)")
     h.add_argument("--version", required=True)

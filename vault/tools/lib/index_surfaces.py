@@ -47,7 +47,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterable, Iterator, NamedTuple, Optional, Sequence
+from typing import Callable, Iterable, Iterator, NamedTuple, Optional, Sequence
 
 import fcntl
 
@@ -2504,6 +2504,7 @@ def write_jsonl_pair_atomic(
     incremental_owned_route_uid: Optional[str] = None,
     incremental_owned_route_uids: Optional[Iterable[str]] = None,
     incremental_owned_removal_uids: Optional[Iterable[str]] = None,
+    post_write_verify: Optional[Callable[[], None]] = None,
 ) -> list[int]:
     """Journal, fsync, and recoverably replace the surface pair plus companions."""
     replacement_list = list(replacements)
@@ -3301,6 +3302,14 @@ def write_jsonl_pair_atomic(
                     )
                 os.replace(after_stage, path)
                 _fsync_dir(path.parent)
+            if post_write_verify is not None:
+                # Read-only verification runs under the write lock while the
+                # before-images still exist. Its failure restores every
+                # destination, including sources and maintenance receipts.
+                try:
+                    post_write_verify()
+                except Exception as exc:
+                    raise OSError(f'post-write verification failed: {exc}') from exc
         except OSError as exc:
             try:
                 _restore_transaction_before(journal_path, entries)
@@ -3448,6 +3457,7 @@ def write_records_route(
     source_replacements: Optional[Iterable[tuple[Path, bytes]]] = None,
     derivation_provenance: Optional[SurfaceDerivationProvenance] = None,
     incremental_owned_route_uids: Optional[Iterable[str]] = None,
+    post_write_verify: Optional[Callable[[], None]] = None,
 ) -> tuple[tuple[str, str, str], ...]:
     """Commit one preplanned multi-UID route and companions atomically."""
     route_moves_between_surfaces = (
@@ -3462,6 +3472,7 @@ def write_records_route(
         allow_shrink=route_moves_between_surfaces,
         companion_replacements=companion_replacements,
         source_replacements=source_replacements,
+        post_write_verify=post_write_verify,
         derivation_provenance=derivation_provenance,
         incremental_owned_route_uids=(
             plan.uids

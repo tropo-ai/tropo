@@ -223,12 +223,22 @@ def build_context(
     version_string: str = "",
     activation_uid: Optional[str] = None,
     force: bool = False,
+    extracted_tree: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Every input the lock-static gates declare, read from the vault.
+    """Every input the lock-static AND candidate gates declare, read from the vault.
 
     `plan_uid` omitted returns the two path inputs alone — the pre-existing
     behaviour, kept so a caller with no plan in hand (the `ship-python-floor`
     gate needs none) is unchanged rather than newly refused.
+
+    `extracted_tree` is the assembled box a candidate gate judges. Omitted, the
+    twelve candidate gates report skipped-inputs-absent exactly as before —
+    which was their ONLY behaviour from any caller but the build's own
+    in-process path, because nothing outside it could supply this key. Same
+    defect this function's own header comment in the preflight already records
+    for lock-static ("The gates declared what they needed and nothing read
+    it"), cured there and left standing here.
+    *(metis-g124, 2026-09-07, after measuring all twelve skip from the CLI.)*
     """
     root = Path(studio_root).resolve()
     context: Dict[str, Any] = {
@@ -257,6 +267,24 @@ def build_context(
         # gate refuse on files that exist.
         "shipped_tool_corpus": str(root),
     }
+    # Present only when a caller actually has a box in hand. Absent, run_phase's
+    # None check reports skipped-inputs-absent per gate, which is the honest
+    # answer and the pre-existing one — never a silent pass.
+    # BLANK IS ABSENT, and the `.strip()` is the whole fix (argus-a173 peer
+    # review, 2026-09-07, FAIL). Written first as `is not None`, which let
+    # `--extracted-tree ""` -- ordinary shell hygiene with an unset variable --
+    # become `Path("").resolve()`, i.e. the OPERATOR'S WORKING DIRECTORY. He
+    # reproduced it against a decoy holding two empty folders and a README:
+    # THREE box gates returned PASS. They are the ones phrased as absence
+    # checks, so an empty directory passes every "nothing bad is here" test --
+    # which means the false-PASS count RISES as the product gets better, and
+    # would rise again the moment Talos closes the builder gap and today's
+    # genuine refusals turn green. A release gate printing PASS over a tree
+    # nothing examined is worse than the skip it replaced.
+    #
+    # Same shape this function already uses for `version_string` at :264.
+    if extracted_tree is not None and str(extracted_tree).strip():
+        context["extracted_tree"] = str(Path(extracted_tree).resolve())
     if not plan_uid:
         return context
 

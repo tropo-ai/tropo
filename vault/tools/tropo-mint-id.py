@@ -30,8 +30,8 @@ output:
   description: "one collision-checked identifier per line on stdout; --type also atomically creates the governed artifact and reports its path on stderr"
 created: 2026-06-02
 created_by: argus-a93
-modified: '2026-08-03'
-modified_by: argus-a144
+modified: '2026-09-09'
+modified_by: metis-g128
 version: "2.3"
 v2_0_amendment_note: "Talos T25 2026-07-06, dev-spec 796d9330 (ADR-050 cb0f8e46 step 1). Renamed mint-uid -> mint-id (belt mint-uid->mint-id) — the tool now mints identifiers generally, not only file UIDs. Added --kind {file,agent,vault,studio,event} per ADR-050 Decision 3: file/agent are the live flat-8-hex shape (identical collision domain — Decision 2's identifier != identity split means 'agent' here is a handle shape, not the governed agent entity); vault/studio/event are declared in the contract but stub NotImplementedError until their consumers exist (ADR-050 Decision 4c/4d). Added extra_existing= to mint() so the 3 partial-duplicator callers (40b2f455/9e7003b1/e337f1dd) can merge their in-session accumulated set into the collision check without reimplementing the mint loop. UID 5187be30 unchanged — the stable address; no caller link breaks."
 v2_1_amendment_note: "Talos T25 2026-07-06, dev-spec 32067bea (Studio-Identity Primitive — Federation Phase A). --kind studio is now real: the idempotent genesis writer for a self-sovereign studio-identity manifest at .tropo/studio-identity.md (studio_id + short mint_prefix, minted once, never regenerated). Added --segment {private,team} (default private): a team-segment file/agent mint reads the manifest and produces <mint_prefix>-<8hex>; private stays bare 8-hex (unchanged default behavior). A missing/corrupt manifest on a team-segment mint raises StudioIdentityError — fails loud, never falls back to a silent bare or fabricated identity (AC5). 'studio' moved file/agent -> _IMPLEMENTED_KINDS; vault/event remain declared-not-built per ADR-050 Decision 4d."
@@ -144,12 +144,9 @@ from lib import template_leg  # noqa: E402 -- must follow the sys.path insert ab
 from lib import governed_path as gp  # noqa: E402 -- the shape authority (3d430852)
 
 _HEX8 = re.compile(r"^[0-9a-f]{8}$")
-#: 3d430852 Stage A (step 6): the accepts-both stem. Composite 12-hex uids are
-#: READ everywhere a collision scan or gate looks -- a mint that cannot SEE an
-#: existing uid can collide with it. Dormant until Stage B flips generation;
-#: reading both shapes breaks nothing today (no 12-hex uid exists yet).
-_UID_STEM_BOTH = re.compile(r"^[0-9a-f]{8}(?:[0-9a-f]{4})?$")
-_INDEX_UID = re.compile(r'"uid"\s*:\s*"([0-9a-f]{8}(?:[0-9a-f]{4})?)"')  # accepts-both (step 6)
+#: Extraction follows every historical shape. In-hand identity values use
+#: the authority's strict lowercase admission predicate instead.
+_INDEX_UID = re.compile(rf'"uid"\s*:\s*"({gp.UID_HEX_PATTERN})"')
 _MINT_PREFIX_SHAPE = re.compile(r"^[a-z0-9]{4,6}$")
 
 # ADR-050 Decision 3 — the typed-kind contract. file/agent share the flat-8-hex shape
@@ -259,12 +256,11 @@ def _validate_manifest_fields(path: Path, data: dict) -> None:
         raise StudioIdentityError(
             f"studio-identity manifest at {path} is corrupt: missing field(s) {missing}"
         )
-    if not _UID_STEM_BOTH.match(str(data["studio_id"])):
+    if not gp.is_governed_uid_shape(str(data["studio_id"])):
         raise StudioIdentityError(
             f"studio-identity manifest at {path} is corrupt: studio_id "
-            f"{data['studio_id']!r} is neither the legacy 8-hex nor the "
-            f"12-hex composite shape (accepts-both since the Stage B flip; "
-            f"legacy manifests stay first-class)"
+            f"{data['studio_id']!r} is not a governed lowercase hex UID "
+            f"of an accepted width {sorted(gp.UID_SHAPES)}"
         )
     if not _MINT_PREFIX_SHAPE.match(str(data["mint_prefix"])):
         raise StudioIdentityError(
@@ -300,11 +296,11 @@ def _generate_mint_prefix() -> str:
     also uses; kept as its own named function since callers (this module's tests
     included) reference `_generate_mint_prefix` by name.
 
-    3d430852 Stage B (dormant until the flip): at MINT_HEX_LEN 12 the prefix is
-    EXACTLY 4-hex — it is the issued half of every composite mint (4 + 8 local
-    = 12, no separator), so the short-code alnum bound no longer applies.
+    Composite generations use exactly 4 hex characters for the issued prefix,
+    independent of the current local random width. The short-code alphanumeric
+    bound remains available only for legacy flat-hex generation.
     """
-    if gp.MINT_HEX_LEN == 12:
+    if gp.mint_is_composite():
         for _attempt in range(64):
             candidate = secrets.token_hex(gp.COMPOSITE_PREFIX_HEX_LEN // 2)
             if candidate not in _RESERVED_MINT_PREFIXES:
@@ -396,13 +392,12 @@ def mint_studio_identity(
         _validate_manifest_fields(path, data)
         return data
     mint_prefix = _generate_mint_prefix()
-    # 3d430852 Stage B (dormant until the flip): the studio's own identity
-    # mints composite — its issued prefix + 8 local hex. Stage A stays the
-    # legacy flat 8-hex so observable output is unchanged.
-    if gp.MINT_HEX_LEN == 12:
+    # Genesis follows the same composite policy as file/agent minting.
+    # A pre-composite generation retains its original flat-hex shape.
+    if gp.mint_is_composite():
         studio_id = gp.composite_uid(mint_prefix)
     else:
-        studio_id = secrets.token_hex(4)
+        studio_id = secrets.token_hex(gp.MINT_HEX_LEN // 2)
     data = {
         "studio_id": studio_id,
         "mint_prefix": mint_prefix,
@@ -427,7 +422,7 @@ def set_entity_name(name: str, root: Path | None = None) -> dict:
     """
     if not name or not name.strip():
         raise ValueError("entity_name must be a non-empty string")
-    if _UID_STEM_BOTH.match(name.strip()):
+    if gp.is_governed_uid_shape(name.strip()):
         raise ValueError(
             f"entity_name {name!r} looks like a bare hex uid, not a human name — "
             f"7191d685: names and uids never substitute for one another"
@@ -482,7 +477,7 @@ def load_existing_uids(studio_root: Path | None = None) -> set[str]:
         for line in index_path.read_text(encoding="utf-8").splitlines():
             m = _INDEX_UID.search(line)
             if m:
-                uids.add(m.group(1))
+                uids.add(m.group(1).lower())
     if files_dir.is_dir():
         for f in files_dir.glob("*.md"):
             parsed = gp.parse_anchored_uid(f.name)
@@ -580,20 +575,11 @@ def mint(count: int = 1, prefix: str = "", kind: str = "file",
         return out_codes
     if segment not in ("private", "team"):
         raise ValueError(f"unknown segment {segment!r}; must be 'private' or 'team'")
-    # --- 3d430852 Stage B (DORMANT until the flip lands MINT_HEX_LEN=12). At
-    # the flip every new bare file/agent mint becomes COMPOSITE — the
-    # studio-identity manifest's 4-hex mint_prefix + 8 random local hex, no
-    # separator. Refuse-if-absent is the design (Metis-ruled: a studio never
-    # self-assigns a prefix), so the manifest must be issued (kind='studio'
-    # genesis) in the same gesture as the flip or mints stop loudly. The team
-    # segment AND the explicit --prefix seam both park with loud refusals in
-    # the same branch: the hyphenated shapes retired, and an explicit foreign
-    # prefix would mint identity in a namespace this studio cannot assign
-    # (the issued-prefix ruling cuts both ways — no self-assigned prefixes,
-    # including other studios'). Found live by Metis at the flip verify
-    # (abcd-f015b0743329: hyphen + double-prefixed composite).
+    # Every composite generation reads its issued namespace from the manifest.
+    # A width change must never bypass that read or revive the retired prefix
+    # and team seams; those would assign identity in an unissued namespace.
     composite_prefix = None
-    if gp.MINT_HEX_LEN == 12:
+    if gp.mint_is_composite():
         if segment == "team":
             raise ValueError(
                 "segment='team' is PARKED at the Stage B flip (3d430852): the "
@@ -613,7 +599,7 @@ def mint(count: int = 1, prefix: str = "", kind: str = "file",
             raise StudioIdentityError(
                 f"studio-identity manifest at {STUDIO_IDENTITY_REL} carries "
                 f"mint_prefix {composite_prefix!r} — not the 4-hex composite "
-                "prefix shape (4 + 8 local = 12, no separator). The manifest "
+                "prefix shape (issued prefix + local hex, no separator). The manifest "
                 "predates the flip; re-issue per the identity spec (3d430852)."
             )
     effective_prefix = prefix
@@ -627,7 +613,7 @@ def mint(count: int = 1, prefix: str = "", kind: str = "file",
         effective_prefix = identity["mint_prefix"]
     if count < 1:
         raise ValueError("count must be >= 1")
-    existing = load_existing_uids()
+    existing = load_existing_uids(studio_root=studio_root)
     if extra_existing:
         existing = existing | set(extra_existing)
     out: list[str] = []
@@ -676,36 +662,6 @@ def _derived_uid_present(root: Path, uid: str) -> bool:
         except sqlite3.Error:
             return True
     return False
-
-
-def _rollback_minted_birth(
-    freshener,
-    root: Path,
-    uid: str,
-    out_path: Path,
-) -> str | None:
-    """Remove a committed source and its derived rows after failed verification."""
-    try:
-        out_path.unlink(missing_ok=True)
-    except OSError as exc:
-        return f"could not remove minted source {out_path}: {exc}"
-    if not _derived_uid_present(root, uid):
-        return None
-    stdout = io.StringIO()
-    stderr = io.StringIO()
-    try:
-        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            code = freshener.remove_many((uid,), root)
-    except Exception as exc:
-        return f"derived-row rollback could not complete: {exc}"
-    if code != 0:
-        diagnostic = (stderr.getvalue() or stdout.getvalue()).strip()
-        return f"derived-row rollback exited {code}" + (
-            f": {diagnostic}" if diagnostic else ""
-        )
-    if _derived_uid_present(root, uid):
-        return f"derived-row rollback returned success but UID {uid} is still indexed"
-    return None
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
@@ -912,7 +868,8 @@ def _resolve_inbox_project(root: Path) -> tuple[str | None, str | None]:
     if not rows:
         return None, (
             "the current index is missing or empty, so no vault-entity can be "
-            "resolved -- run `python3 vault/tools/tropo-rebuild-index.py --apply`, "
+            "resolved -- run a read-only `python3 vault/tools/tropo-rebuild-index.py` preview, "
+            "adjudicate any purge candidates, then run the reviewed rebuild with --apply, "
             "which builds the index and, in a fresh Studio, mints your vault-entity "
             "and its inbox project."
         )
@@ -926,8 +883,9 @@ def _resolve_inbox_project(root: Path) -> tuple[str | None, str | None]:
     if not entities:
         return None, (
             "no live vault-entity exists in this Studio, so there is nothing to "
-            "ground new work in -- run `python3 vault/tools/tropo-rebuild-index.py "
-            "--apply`, which mints one in a fresh Studio."
+            "ground new work in -- run a read-only `python3 vault/tools/tropo-rebuild-index.py` "
+            "preview and adjudicate any purge candidates before --apply, which mints "
+            "one in a fresh Studio."
         )
 
     # DETERMINISTIC PICK (metis-g114-endorsed). A Studio may carry the SHIPPED
@@ -1317,10 +1275,10 @@ def _resolve_activation_provenance(
             "(Or provide --activation-uid / TROPO_ACTIVATION_UID for a "
             "pre-lineage generation.)"
         )
-    if not _UID_STEM_BOTH.fullmatch(activation_uid):
+    if not gp.is_governed_uid_shape(activation_uid):
         raise ValueError(
-            "activation provenance UID must be 8 or 12 lowercase hex "
-            "(accepts-both, 3d430852 step 6)")
+            "activation provenance UID must be governed lowercase hex "
+            f"of an accepted width {sorted(gp.UID_SHAPES)}")
     index_row = _indexed_activation_row(root, activation_uid)
     rel = Path("vault/files") / f"{activation_uid}.md"
     path = template_leg._strict_regular_file(
@@ -1484,6 +1442,16 @@ def mint_file(
             f"generic door -- it is written by its own lifecycle tool alone: "
             f"{_SYSTEM_ONLY_TYPES[type_name]}"
         )
+    # Mike, 2026-09-07: naming belongs to creation, not later cleanup.
+    # Keep this at the shared entry point so CLI and library callers refuse
+    # before minting an identity or touching a file/index transaction.
+    if type_name == "design-brief" and (
+        not isinstance(title, str) or not title.strip()
+    ):
+        raise ValueError(
+            'design-brief requires a non-empty --title. '
+            'Supply --title "Describe the problem" and retry; no brief was created.'
+        )
     if not freshen and output_dir is None:
         raise ValueError(
             "freshen=False is legal only with an explicit scratch output_dir; "
@@ -1556,6 +1524,13 @@ def mint_file(
             raise AssertionError("canonical no-freshen guard should have refused")
         freshener = _load_rebuild_index(root)
         diagnostic = ""
+        transaction_verified = False
+
+        def verify_birth() -> None:
+            nonlocal transaction_verified
+            _verify_minted_index_row(root, uid, out_path, type_name)
+            transaction_verified = True
+
         for attempt in range(4):
             stdout = io.StringIO()
             stderr = io.StringIO()
@@ -1565,6 +1540,8 @@ def mint_file(
                     root,
                     source_replacements={out_path: instance_text.encode("utf-8")},
                     require_absent_sources=(out_path,),
+                    reconcile_unrelated_mounts=True,
+                    post_write_verify=verify_birth,
                 )
             diagnostic = (stderr.getvalue() or stdout.getvalue()).strip()
             transient_contention = (
@@ -1580,21 +1557,14 @@ def mint_file(
                 f"surfaces remain unchanged"
                 + (f": {diagnostic}" if diagnostic else "")
             )
-        try:
-            _verify_minted_index_row(root, uid, out_path, type_name)
-        except Exception as exc:
-            rollback_error = _rollback_minted_birth(
-                freshener, root, uid, out_path
-            )
-            if rollback_error:
-                raise RuntimeError(
-                    "mint transaction returned success but exact-row verification "
-                    f"failed ({exc}); rollback is incomplete: {rollback_error}"
-                ) from exc
+        if not transaction_verified:
             raise RuntimeError(
-                "mint transaction returned success but exact-row verification "
-                f"failed and the governed birth was rolled back: {exc}"
-            ) from exc
+                "freshener returned success without transactional identity verification"
+            )
+        if stderr.getvalue().strip():
+            # Preserve the machine-readable UID on stdout. Report reconciliation
+            # only after the canonical source and exact index row are verified.
+            print(stderr.getvalue().strip(), file=sys.stderr)
     return uid, out_path
 
 
@@ -1681,6 +1651,18 @@ def mint_founder_principal(
         "behind every `locked_by:` and human signoff recorded here. Registered at "
         "the arrival conversation, by name, in answer to being asked." % (name or "").strip(),
         1)
+    # v1.96 first-minute fix 4 (Mike-ruled 2026-09-09): the template's second
+    # REQUIRED slot was left as a placeholder, so a stranger's first `npm test`
+    # read RED with their own founder record as the failure. The default scope
+    # is the founder's actual authority in a fresh Studio; they may edit it.
+    text = text.replace(
+        "<!-- REQUIRED: what this principal can attest/lock/sign (e.g. human signoff, "
+        "independent attestation, cycle verification) -->",
+        "Founder authority for this Studio: human signoff on every lock and "
+        "ratification, the retirement signal for every agent, approval of agent "
+        "scope changes and new agents, and acceptance of any change to this "
+        "Studio's governance.",
+        1)
     path.write_text(text, encoding="utf-8")
     return uid, path, True
 
@@ -1729,7 +1711,8 @@ def main() -> int:
                    help="author label (required with --type); registered agent-generation "
                         "labels also require activation provenance")
     p.add_argument("--title", default=None, metavar="TITLE",
-                   help="human-readable title for the minted artifact (fills the template's "
+                   help="human-readable title; required and non-blank for design-brief "
+                        "(fills the template's "
                         "title token where the type carries one; the note type is EXEMPT -- "
                         "3d430852 step 6 plumbing, the leg's optional token)")
     p.add_argument("--activation-uid", default="",

@@ -325,5 +325,73 @@ class CustomerIdentitySetExclusions(unittest.TestCase):
         self.assertIn("A163", reason)
 
 
+class TheStudioMemorySurfacesAreProtected(unittest.TestCase):
+    """`.tropo-studio/memory/` has NO prefix rule — the exact keys are the whole
+    protection, and this dict had none for the episodic log shipping today.
+
+    Found by the adversarial hunt in the Phase-2 rename survey (f0153a6df07f)
+    by asking what is ABSENT from the dict rather than reading what is in it.
+    Until 2026-09-08 this test file contained the word "memory" zero times while
+    the dict's own comment called overwriting crew memory "the headline harm
+    this boundary exists to prevent". [talos-t65]
+    """
+
+    #: Read from the LIVE studio, not restated. A second hand-written list of
+    #: memory filenames is the defect the Phase-2 rename exists to end, and it
+    #: would go stale on exactly the commit that matters — the one that moves
+    #: the files.
+    MEMORY_DIR = ROOT / ".tropo-studio" / "memory"
+
+    def test_every_live_studio_memory_surface_is_protected(self) -> None:
+        """Whatever is on disk in `.tropo-studio/memory/` right now, apply must
+        not overwrite it. This reads the folder, so it keeps meaning the same
+        thing after step 2 moves the files."""
+        live = sorted(
+            p.name for p in self.MEMORY_DIR.iterdir()
+            if p.is_file() and p.name != "CAPSULE.md"
+        )
+        self.assertTrue(live, "no live studio memory surfaces found — this test "
+                              "cannot pass vacuously; check MEMORY_DIR")
+        for name in live:
+            with self.subTest(name=name):
+                self.assertTrue(
+                    psx.is_studio_state(f".tropo-studio/memory/{name}"),
+                    f".tropo-studio/memory/{name} is on disk and NOT protected: "
+                    "an update-apply may overwrite the customer's own copy",
+                )
+
+    def test_both_names_are_protected_across_the_phase_2_transition(self) -> None:
+        """Old and new names together, so neither step 2 nor a revert of it can
+        open a window where the live file is unprotected."""
+        for path in (
+            ".tropo-studio/memory/memory-current.md",
+            ".tropo-studio/memory/memory.md",
+            ".tropo-studio/memory/agent-memories.jsonl",
+            ".tropo-studio/memory/memories.jsonl",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(psx.is_studio_state(path), path)
+
+    def test_the_predicate_is_live_here(self) -> None:
+        """Negative control. `.tropo-studio/memory/` has no prefix rule, so a
+        neighbouring file in the same folder that is NOT listed must classify
+        as vendor content. If this ever passes as protected, a prefix rule was
+        added and the assertions above stopped proving the keys exist."""
+        self.assertFalse(
+            psx.is_studio_state(".tropo-studio/memory/CAPSULE.md"),
+            "CAPSULE.md in this folder is vendor OS content and must keep "
+            "receiving updates",
+        )
+        self.assertFalse(
+            psx.is_studio_state(".tropo-studio/memory/not-a-real-surface.md"))
+
+    def test_each_protected_memory_surface_gives_a_reason_a_human_can_act_on(self) -> None:
+        for path in (".tropo-studio/memory/memory.md",
+                     ".tropo-studio/memory/memories.jsonl",
+                     ".tropo-studio/memory/agent-memories.jsonl"):
+            with self.subTest(path=path):
+                self.assertNotEqual(psx.why_excluded(path).strip(), "")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

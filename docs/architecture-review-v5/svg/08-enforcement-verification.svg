@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 960" font-family="Helvetica, Arial, sans-serif" role="img">
+  <title>Governance and enforcement: one guard registry read at two run points, and the 2026-09-01 ruling that splits a decidable claim (which may refuse) from everything else (which warns) — with the override log that would close the loop still unbuilt.</title>
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .panel-title { font-size: 15px; font-weight: bold; fill: #1a2332; }
+      .layer-label { font-size: 13px; font-weight: bold; fill: #2c4a6e; letter-spacing: 0.4px; }
+      .node { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .node-sub { font-size: 11.5px; fill: #2c3742; }
+      .label { font-size: 11px; fill: #5a6a7a; }
+      .arrow-label { font-size: 11px; fill: #5a6a7a; }
+      .quote { font-size: 12px; fill: #5a6a7a; font-style: italic; }
+      .stamp { font-size: 11px; fill: #5a6a7a; }
+      .pill { font-size: 10.5px; font-weight: bold; }
+      .caption { font-size: 12px; fill: #5a6a7a; font-style: italic; }
+    </style>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a6a7a"/>
+    </marker>
+    <marker id="ah-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b08a4a"/>
+    </marker>
+    <marker id="ah-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9c2b2b"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="960" fill="#fafbfc"/>
+
+  <text x="40" y="46" class="title">Governance and Enforcement — One Guard Registry, Two Run Points</text>
+  <text x="40" y="70" class="subtitle">A deterministic gate may assert only what is mechanically decidable; everything else warns. Tree at commit b7555b5b5.</text>
+
+  <!-- ================= BAND 1 — ONE DEFINITION ================= -->
+  <rect x="40" y="90" width="1200" height="178" rx="10" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="60" y="118" class="panel-title">ONE DEFINITION — the guard registry lives in vault/tools/lib/, and no gate may amend it</text>
+
+  <rect x="60" y="134" width="572" height="130" rx="4" fill="#ffffff" stroke="#2c4a6e" stroke-width="2"/>
+  <text x="76" y="158" class="node">build_guards.py — 573 lines · the checks</text>
+  <text x="76" y="180" class="node-sub">16 guards, each a pure function returning the problems it found, each naming</text>
+  <text x="76" y="197" class="node-sub">its harm in one sentence. build-no-studio-identity stops every unzipped box</text>
+  <text x="76" y="214" class="node-sub">from beginning life as the same Studio; build-no-absolute-paths caught three</text>
+  <text x="76" y="231" class="node-sub">maintainer scripts hard-coded to one machine, one paste from public (v1.90).</text>
+  <text x="76" y="252" class="label">12 of the 16 read the assembled box; the other 4 read only pre-build inputs.</text>
+
+  <rect x="648" y="134" width="572" height="130" rx="4" fill="#ffffff" stroke="#2c4a6e" stroke-width="2"/>
+  <text x="664" y="158" class="node">release_gates.py — 422 lines · the schedule</text>
+  <text x="664" y="180" class="node-sub">PHASES — five, ordered, closed: lock-static · candidate · pre-freeze ·</text>
+  <text x="664" y="197" class="node-sub">pre-outward-fire · post-publication-reconcile.</text>
+  <text x="664" y="214" class="node-sub">INPUT_FIRST_AVAILABLE maps 33 inputs to when each first exists in the world;</text>
+  <text x="664" y="231" class="node-sub">a gate declares only its inputs and first_evaluable_phase() takes the latest.</text>
+  <text x="664" y="252" class="label">No refusal_class → refused at registration. Gates describe; the registry decides.</text>
+
+  <!-- ================= BAND 2 — TWO RUN POINTS ================= -->
+  <text x="40" y="318" class="layer-label">TWO RUN POINTS</text>
+
+  <line x1="346" y1="266" x2="346" y2="322" stroke="#5a6a7a" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="338" y="296" class="arrow-label" text-anchor="end">calls the checks directly, in sequence</text>
+
+  <line x1="618" y1="266" x2="706" y2="322" stroke="#5a6a7a" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="612" y="294" class="arrow-label" text-anchor="end">one definition, two readers</text>
+
+  <line x1="934" y1="266" x2="934" y2="322" stroke="#5a6a7a" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="944" y="296" class="arrow-label">builds its roster from it</text>
+
+  <rect x="60" y="326" width="572" height="150" rx="4" fill="#ffffff" stroke="#3a6b8a" stroke-width="2"/>
+  <text x="76" y="350" class="node">tropo-build-release.py — the build's own reader</text>
+  <text x="76" y="372" class="node-sub">Imports build_guards; does not import release_gates.</text>
+  <text x="76" y="389" class="node-sub">It calls the checks directly, in sequence — so the box fails at the first</text>
+  <text x="76" y="406" class="node-sub">guard on each attempt. v1.94's build failed at its first guard on each of</text>
+  <text x="76" y="423" class="node-sub">eight attempts (tropo-release-preflight.py:590-591).</text>
+  <rect x="76" y="438" width="234" height="22" rx="3" fill="#f7efdf" stroke="#b08a4a"/>
+  <text x="86" y="453" class="pill" fill="#7a5c22">SEQUENTIAL — one defect per attempt</text>
+
+  <rect x="648" y="326" width="572" height="150" rx="4" fill="#ffffff" stroke="#3a6b8a" stroke-width="2"/>
+  <text x="664" y="350" class="node">tropo-release-preflight.py — 1,035 lines · the roster</text>
+  <text x="664" y="372" class="node-sub">Registers 23 gates unconditionally; 34 once the publisher hands in its</text>
+  <text x="664" y="389" class="node-sub">outward verifiers — 6 lock-static governance rows, 16 build guards,</text>
+  <text x="664" y="406" class="node-sub">11 pre-outward-fire rows, plus ship-python-floor. No row names its own</text>
+  <text x="664" y="423" class="node-sub">phase: 4 guards land at lock-static, before a build is attempted; 12 at candidate.</text>
+  <rect x="664" y="438" width="164" height="22" rx="3" fill="#e6f1ea" stroke="#4a8a6b"/>
+  <text x="674" y="453" class="pill" fill="#2f6b4f">45 REGISTRY TESTS GREEN</text>
+  <rect x="840" y="438" width="228" height="22" rx="3" fill="#f7efdf" stroke="#b08a4a"/>
+  <text x="850" y="453" class="pill" fill="#7a5c22">EXERCISED END TO END ONCE (v1.95)</text>
+
+  <text x="648" y="496" class="label">v1.95's first candidate: all 12 box gates in one pass — 10 PASS, 2 REFUSED (f015ba71c711).</text>
+
+  <!-- ================= BAND 3 — WHAT A GATE MAY ASSERT ================= -->
+  <text x="40" y="518" class="layer-label">WHAT A GATE MAY ASSERT — the ruling that changed the standard, 2026-09-01 · .tropo-studio/memory/entries/f015eb797361.md</text>
+  <text x="40" y="538" class="quote">"fail loudly, but allow for easy human override with a strong lean towards fixing issues with the inputs into the machinery at the root cause."</text>
+
+  <rect x="40" y="556" width="370" height="62" rx="4" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="56" y="576" class="node" font-size="12">The cold-boot invariant (sacrosanct)</text>
+  <text x="56" y="594" class="label">The validate gate may WARN on a hand-written file but</text>
+  <text x="56" y="610" class="label">must never hard-reject it. TROPO-CONTROL.md §5, ADR-044.</text>
+
+  <rect x="440" y="556" width="400" height="62" rx="4" fill="#ffffff" stroke="#2c4a6e" stroke-width="2"/>
+  <text x="640" y="581" class="node" text-anchor="middle">Is the claim mechanically DECIDABLE?</text>
+  <text x="640" y="601" class="node-sub" text-anchor="middle" fill="#5a6a7a">Shape, not truth.</text>
+
+  <rect x="870" y="556" width="370" height="62" rx="4" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="886" y="576" class="node" font-size="12">The reflex it retires: "add a check to the gate"</text>
+  <text x="886" y="594" class="label">19 v1.94 acceptance criteria carried malformed command</text>
+  <text x="886" y="610" class="label">fields. Routing: "route them to Argus as inputs to fix."</text>
+
+  <!-- warn path: amber, 2px -->
+  <path d="M 540 618 L 400 638" stroke="#b08a4a" stroke-width="2" fill="none" marker-end="url(#ah-amber)"/>
+  <rect x="418" y="623" width="72" height="15" fill="#fafbfc"/>
+  <text x="454" y="635" class="arrow-label" fill="#7a5c22" text-anchor="middle" font-weight="bold">NO — warns</text>
+
+  <!-- refuse path: red, 3px -->
+  <path d="M 740 618 L 880 638" stroke="#9c2b2b" stroke-width="3" fill="none" marker-end="url(#ah-red)"/>
+  <rect x="772" y="623" width="110" height="15" fill="#fafbfc"/>
+  <text x="827" y="635" class="arrow-label" fill="#9c2b2b" text-anchor="middle" font-weight="bold">YES — may refuse</text>
+
+  <rect x="40" y="640" width="580" height="150" rx="4" fill="#fdf7ec" stroke="#b08a4a" stroke-width="2"/>
+  <text x="56" y="664" class="node" fill="#7a5c22">WARN — and route it to a person</text>
+  <text x="56" y="684" class="node-sub">Everything not mechanically decidable warns. The validate-time gate is</text>
+  <text x="56" y="701" class="node-sub">warn-by-construction: on FAIL findings tropo-rebuild-vault.py prints them</text>
+  <text x="56" y="718" class="node-sub">and completes the rebuild anyway, exiting 8 (:345-355, :627-632).</text>
+  <text x="56" y="740" class="node-sub" fill="#7a5c22">WORKED — lock-verify-commands-runnable, preflight:432: reading each</text>
+  <text x="56" y="757" class="node-sub" fill="#7a5c22">whitespace token of a verify command as a path made this gate refuse two</text>
+  <text x="56" y="774" class="node-sub" fill="#7a5c22">TRUE rows at the v1.95 ignition. Loosened to a warn, citing this ruling.</text>
+
+  <rect x="660" y="640" width="580" height="150" rx="4" fill="#fdf1f1" stroke="#9c2b2b" stroke-width="2"/>
+  <text x="676" y="664" class="node" fill="#9c2b2b">REFUSED — with a named class</text>
+  <text x="676" y="684" class="node-sub">A decidable claim may refuse. GateOutcome returns a typed verdict — pass,</text>
+  <text x="676" y="701" class="node-sub">refused, operational-error, skipped-inputs-absent — never a bare exit code,</text>
+  <text x="676" y="718" class="node-sub">plus a refusal_class, so a caller branches on the kind of failure.</text>
+  <text x="676" y="740" class="node-sub" fill="#9c2b2b">WORKED — preflight:339-347: an unresolvable `python3 -m unittest` id IS</text>
+  <text x="676" y="757" class="node-sub" fill="#9c2b2b">decidable (static ast.parse, never import), and the harm is a spec locked</text>
+  <text x="676" y="774" class="node-sub" fill="#9c2b2b">carrying a criterion nobody can ever run. Kept as a refusal, same ruling.</text>
+
+  <!-- override chain -->
+  <line x1="330" y1="790" x2="330" y2="816" stroke="#b08a4a" stroke-width="2" marker-end="url(#ah-amber)"/>
+  <text x="340" y="808" class="arrow-label" fill="#7a5c22">override must be easy AND logged</text>
+
+  <rect x="40" y="818" width="1200" height="104" rx="4" fill="#ffffff" stroke="#9c2b2b" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="56" y="844" class="node" fill="#9c2b2b">THE OVERRIDE LOG — RULED, NOT BUILT. Clause 2's logging half and all of clause 3 rest on an artifact that does not exist.</text>
+  <text x="56" y="866" class="node-sub">28 distinct event types across 14,094 events in vault/events/streams/*.jsonl and vault/events/00-events.jsonl; none matches override | waiv | exempt | disposition.</text>
+  <text x="56" y="883" class="node-sub">The right shape exists once, by hand: principal_disposition: accepted_with_exceptions in vault/files/f0152fdb44ff.md — defined by no capsule, read by no tool.</text>
+  <text x="56" y="900" class="node-sub">Clause 3 has no instrument. Nearest: three frozen shrink-only debt baselines (22, 22 and 269 rows, .tropo/*-debt-baseline.json) record what is exempt — not who overrode it, or why.</text>
+
+  <!-- legend -->
+  <rect x="40" y="932" width="14" height="14" rx="2" fill="#2c4a6e"/>
+  <text x="60" y="944" class="label">built, in use</text>
+  <rect x="160" y="932" width="14" height="14" rx="2" fill="#4a8a6b"/>
+  <text x="180" y="944" class="label">proven — has run</text>
+  <rect x="300" y="932" width="14" height="14" rx="2" fill="#b08a4a"/>
+  <text x="320" y="944" class="label">warn path / unproven</text>
+  <rect x="450" y="932" width="14" height="14" rx="2" fill="#9c2b2b"/>
+  <text x="470" y="944" class="label">refuse path / not built</text>
+  <rect x="620" y="932" width="14" height="14" rx="2" fill="#ffffff" stroke="#9c2b2b" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="640" y="944" class="label">dashed = does not exist yet</text>
+  <text x="1240" y="944" class="stamp" text-anchor="end">measured 2026-09-08 · v1.95.0</text>
+</svg>

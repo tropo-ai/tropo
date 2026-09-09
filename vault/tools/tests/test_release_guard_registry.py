@@ -142,6 +142,11 @@ BOX_GATES = (
     # Spine A AC7's reachability rows (f015de6b3a18), registered here
     "build-doc-currency", "build-no-shell-instructions", "build-changelog-names-version",
     "build-memory-surfaces",
+    # The score-formula doctrine the shipped curator reads at boot. Absent from
+    # every box for six releases while the build reported it copied — the
+    # skeleton step deleted the folder it had been copied into. talos-t66,
+    # 2026-09-08, ship-artifact f0155122c0b8.
+    "build-score-formula-doctrine",
 )
 TREE_GATES = ("build-covenant-floor", "build-overwrite-guard", "build-no-absolute-paths",
               "build-activation-key")

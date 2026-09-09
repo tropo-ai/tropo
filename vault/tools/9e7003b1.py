@@ -3175,9 +3175,22 @@ def action_reverify_step(activation_uid: str, step_uid: str, actor: str,
     # was invalidated"; it is "no green was ever RECORDED". The invariant that
     # must not move is the one below: a receipt naming the ACTIVE candidate
     # refuses untouched. No current green is ever erased either way.
-    if any(str(r.get("candidate_sha256") or "") == active_sha for r in prior):
+    # v1.95 candidate #3 (metis-g123, 2026-09-07): count only PASSING prior
+    # receipts. The guard below protects a current green from being erased; a
+    # FAIL receipt is not a green, and treating it as one made a failed
+    # instrument permanent — reverify refused ("this green is current" about a
+    # fail) while step-redeclare refuses a verified step, so no verb could
+    # re-earn it. That contradicts resolve_receipt_set's own v1.90 ruling,
+    # recorded in its comments: re-running an instrument after a cure is the
+    # only way a failed instrument ever passes, and the harm the rule named was
+    # TWO PASSING executions with one record of why. Found live on the v1.95
+    # external-test node, whose AC7 receipt read fail because its evidence
+    # record carried no verdict field at step-complete time.
+    if any(str(r.get("candidate_sha256") or "") == active_sha
+           and str(r.get("verdict") or "") in ("pass", "passed")
+           for r in prior):
         raise ContractError(
-            f"step {step_uid!r} already holds a {instrument} receipt naming the ACTIVE "
+            f"step {step_uid!r} already holds a PASSING {instrument} receipt naming the ACTIVE "
             f"candidate {active_sha[:12]}. Re-verify refuses: this green is current and "
             f"re-opening it would erase a passing result about the bytes actually shipping."
         )
@@ -3486,8 +3499,14 @@ def emit_release_verification_receipt(run_folder, pr: dict, step_uid: str,
                                       execution_mode: str = "machine",
                                       evidence_ref: str = "",
                                       supersedes_duplicate: bool = False,
-                                      duplicate_reason: str = "") -> bool:
+                                      duplicate_reason: str = "",
+                                      authorized_by: str = "") -> bool:
     """Write the one canonical AC7 receipt when a Verify instrument completes.
+
+    `verdict="skipped"` + `authorized_by` writes the founder's EXCUSAL for an
+    instrument that did not run (action_apply_skip is the only caller of that
+    shape). It is still this one writer: a skip is a receipt with a different
+    verdict, not a second vocabulary. Mike-ruled 2026-09-09.
 
     A148 addendum 26 item 3: the receipt VOCABULARY existed and nothing in
     production emitted one, so "four instruments passed against this package"
@@ -3537,9 +3556,11 @@ def emit_release_verification_receipt(run_folder, pr: dict, step_uid: str,
         "instrument": instrument,
         "release_run_uid": run_uid,
         "candidate_sha256": str(active["candidate_sha256"]),
-        "verdict": "pass" if str(verdict) in ("pass", "passed") else "fail",
+        "verdict": ("pass" if str(verdict) in ("pass", "passed")
+                    else "skipped" if str(verdict) == "skipped" else "fail"),
         "executor_or_attester": actor,
         "execution_mode": execution_mode,
+        **({"authorized_by": str(authorized_by)} if str(verdict) == "skipped" else {}),
         **({"supersedes_duplicate_receipt": True,
             "duplicate_reason": str(duplicate_reason)} if supersedes_duplicate else {}),
         "evidence_ref": evidence_ref or f"{step_uid}@{now}",
@@ -3599,6 +3620,16 @@ def _redeclare_scan_active(events, step, upto, candidate) -> bool:
     for j, e in enumerate(events[:upto]):
         et = e.get("event")
         if et == "step_declared" and (e.get("data") or {}).get("step_id") == step:
+            reset_at = j
+        elif et in ("step_reverify_opened", "step_reopened") and e.get("step") == step:
+            # v1.95 candidate #3 (metis-g123, 2026-09-06 16:38Z): reverify-step
+            # legitimately returned 4262d5fa to 'declared' (its receipt named
+            # the retired candidate); the re-drive refused on a studio-side
+            # finding and left it 'started'; step-redeclare then refused because
+            # the 13:10Z completion and receipt from the retired candidate still
+            # counted -- neither reset verb was a reset HERE. Both are: they are
+            # the engine's own ruled returns to 'declared', and only rows after
+            # the latest one count. Same for the reopen verb on the produce step.
             reset_at = j
         elif et == "tropo.release.package_superseded":
             _inv = (e.get("data") or {}).get("invalidated_steps") or []
@@ -3912,13 +3943,67 @@ def action_apply_skip(activation_uid: str, step_uid: str, actor: str, dry_run: b
         raise SkipAuthError(str(e)) from e
     if dry_run:
         return _dry_run_report("apply-skip", f"would emit step_skipped for {step_uid!r}")
-    ev = make_event("step_skipped", actor, step=step_uid,
-                    trace_id=activation_uid, parent_span_id=auth_span,
-                    data={"disposition": "skip_with_authorization",
-                          "skip_authorization_span_id": auth_span})
-    append_event(run_folder, ev)
+    # Idempotent on the step event: a step already skipped under this chain is
+    # not skipped twice. What may still be missing is the excusal RECEIPT
+    # below — the case on the v1.96 run, where the skip landed before the
+    # receipt existed as a shape (metis-g128, 2026-09-09).
+    already = str((state.get("step_status") or {}).get(step_uid) or "") == "skipped"
+    if not already:
+        ev = make_event("step_skipped", actor, step=step_uid,
+                        trace_id=activation_uid, parent_span_id=auth_span,
+                        data={"disposition": "skip_with_authorization",
+                              "skip_authorization_span_id": auth_span})
+        append_event(run_folder, ev)
+    excusal = _write_skip_excusal_receipt(run_folder, pr, step_uid, actor, auth_span)
     write_run_state_json(run_folder, pr["frontmatter"], derive_state(read_events(run_folder)), activation_uid)
-    return f"skipped:{step_uid}"
+    head = f"already_skipped:{step_uid}" if already else f"skipped:{step_uid}"
+    return head + (f" {excusal}" if excusal else "")
+
+
+def _write_skip_excusal_receipt(run_folder, pr: dict, step_uid: str, actor: str,
+                                auth_span: str) -> str:
+    """An authorized skip of an AC7 instrument is a receipt with verdict skipped.
+
+    Mike-ruled 2026-09-09 ("We need that flexibility. I like the warn loudly
+    and document as part of the process. I should be warned."). Before this,
+    the runtime honored an authorized skip for step dependencies while the
+    freeze and the fire counted receipts and refused on three: the skip path
+    existed and led to a wall. The excusal now lives in the ONE receipt set
+    every reader already resolves, so no reader needs a second source of
+    truth. Non-instrument steps and non-release runs write nothing, exactly
+    as emit_release_verification_receipt already decides. Returns the loud
+    line for the caller's output, or "" when nothing applied.
+    """
+    from lib import release_package as _pkg, release_verify as _rv
+    instrument = _rv.instrument_for_node(step_uid)
+    if instrument is None:
+        return ""
+    fm = pr.get("frontmatter") or {}
+    if str(fm.get("pipeline") or "") != RELEASE_PIPELINE_ROOT_UID:
+        return ""
+    events = read_events(run_folder)
+    auth = next((e for e in events
+                 if e.get("event") == "skip_authorization" and e.get("span_id") == auth_span), None)
+    authorized_by = str(((auth or {}).get("data") or {}).get("authorized_by") or "").strip()
+    run_uid = str(fm.get("uid") or "")
+    active = _pkg.active_candidate(events, run_uid)
+    sha = str((active or {}).get("candidate_sha256") or "")
+    if not sha:
+        return (f"no excusal receipt for {instrument}: this run has no active "
+                f"candidate yet, and a receipt must name the bytes it excuses")
+    for e in events:
+        d = e.get("data") or {}
+        if (str(d.get("receipt_kind") or "") == _rv.RECEIPT_KIND
+                and d.get("instrument") == instrument
+                and d.get("candidate_sha256") == sha
+                and d.get("verdict") == "skipped"):
+            return f"excusal receipt for {instrument} already bound to {sha[:12]}"
+    emit_release_verification_receipt(
+        run_folder, pr, step_uid, actor, "skipped", execution_mode="human",
+        evidence_ref=f"skip_authorization@{auth_span}", authorized_by=authorized_by)
+    return (f"⚠ EXCUSED, NOT VERIFIED: {instrument} did not run against {sha[:12]}; "
+            f"receipt verdict=skipped, authorized_by={authorized_by}. The freeze and "
+            f"the fire will say so again.")
 
 
 def _step_has_pending_human_criterion(step_uid: str, decl: dict, events: list[dict]) -> bool:

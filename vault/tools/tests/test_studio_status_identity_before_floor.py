@@ -50,6 +50,7 @@ class IdentityWarnPrecedesTheFloor(unittest.TestCase):
         r = self._run()
         out = r.stdout + r.stderr
         self.assertNotIn("[WARN] studio identity", out, out[-800:])
+        self.assertIn("[OK] studio identity: present and valid", out, out[-800:])
         self.assertIn("[WARN] studio-ops substrate not initialised", out, out[-800:])
         self.assertEqual(r.returncode, 0, out[-800:])
 
@@ -64,7 +65,44 @@ class IdentityWarnPrecedesTheFloor(unittest.TestCase):
         r = self._run()
         out = r.stdout + r.stderr
         self.assertIn("FATAL", out, out[-800:])
+        self.assertIn("[OK] studio identity: present and valid", out, out[-800:])
+        self.assertLess(out.index("[OK] studio identity"), out.index("FATAL"))
         self.assertEqual(r.returncode, 1)
+
+    def test_corrupt_ops_still_reports_the_identity_verdict(self):
+        self._write_manifest()
+        ops = self.root / "vault" / "studio-ops"
+        ops.mkdir(parents=True)
+        (ops / "roster.json").write_text("{invalid-json")
+        (ops / "log.jsonl").write_text("{}\n")
+        r = self._run()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("[OK] studio identity: present and valid", r.stdout)
+        self.assertIn("FATAL: studio-ops substrate unreadable", r.stdout)
+        self.assertNotIn("Traceback", r.stderr)
+
+    def test_structurally_corrupt_ops_still_reports_identity(self):
+        self._write_manifest()
+        ops = self.root / "vault" / "studio-ops"
+        ops.mkdir(parents=True)
+        cases = [('{"items":[null]}', '{}\n'),
+                 ('{"items":[{"runner":"sa.fixture","cadence":"daily"}]}', 'null\n')]
+        for roster, log in cases:
+            with self.subTest(roster=roster, log=log):
+                (ops / "roster.json").write_text(roster)
+                (ops / "log.jsonl").write_text(log)
+                r = self._run()
+                self.assertEqual(r.returncode, 1)
+                self.assertIn("[OK] studio identity: present and valid", r.stdout)
+                self.assertIn("FATAL: studio-ops report failed", r.stdout)
+                self.assertNotIn("Traceback", r.stderr)
+
+    def test_malformed_identity_never_reports_ok(self):
+        (self.root / ".tropo" / "studio-identity.md").write_text("---\nstudio_id: invalid\n---\n")
+        r = self._run()
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("[WARN] studio identity", r.stdout)
+        self.assertNotIn("[OK] studio identity", r.stdout)
 
     def _write_manifest(self):
         (self.root / ".tropo" / "studio-identity.md").write_text(

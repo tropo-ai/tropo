@@ -1200,8 +1200,10 @@ def _gate_r2_preserve(agent_slug: str) -> str | None:
     count do — both are properties of the substrate the honest fold produces, not claims
     about it.
     """
-    mem_path = (VAULT_ROOT / "agents" / agent_slug / ".tropo-capsule" / "memory"
-                / "agent-memory.md")
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from lib import memory_surfaces  # noqa: E402  — Phase 2 (f0153a6df07f)
+
+    mem_path = memory_surfaces.agent_index(VAULT_ROOT, agent_slug)
     if not mem_path.is_file():
         return f"R-2 practice-gap: {mem_path.relative_to(VAULT_ROOT)} does not exist."
     parsed = parse_frontmatter(mem_path)

@@ -87,8 +87,8 @@ DIGEST_REL = Path(".tropo") / "boot-digest.md"
 VERSION_REL = Path(".tropo") / "version.md"
 REGISTRY_REL = Path(".tropo-studio") / "registries" / "subsystem-registry.jsonl"
 CREW_BRIEF_REL = Path("00-crew-brief.md")
-REVIEW_REL = Path("docs") / "architecture-review-v4" / "tropo-l1-architecture-review.md"
-REVIEW_SVG_REL = Path("docs") / "architecture-review-v4" / "svg"
+REVIEW_REL = Path("docs") / "architecture-review-v5" / "tropo-l1-architecture-review.md"
+REVIEW_SVG_REL = Path("docs") / "architecture-review-v5" / "svg"
 DERIVED_FILES = (CONTROL_REL, DIGEST_REL, VERSION_REL, REGISTRY_REL, CREW_BRIEF_REL, REVIEW_REL)
 
 #: The five derived sections, by the `map-<name>` class each carries.
@@ -729,7 +729,7 @@ class DerivedSectionsArePresent(unittest.TestCase):
             any(f'="{wanted}"' in img for img in images),
             f"no <img> points at {wanted}; images: {images}",
         )
-        for name in ("02-capsule-type-system", "07-pipelines-and-loops", "10-write-path"):
+        for name in ("02-capsule-type-system", "12-two-pipeline-dag", "17-genesis-arrival"):
             self.assertIn(f"../../{REVIEW_SVG_REL.as_posix()}/{name}.svg", section)
         self.assertIn("<figcaption", section)
         self.assertIn(review_caption(self.studio, "01-system-map.svg"), html.unescape(section))

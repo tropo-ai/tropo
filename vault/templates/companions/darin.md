@@ -70,18 +70,18 @@ one person's drawer.
 At activation, after the canonical activation playbook begins, read these
 shipped capability surfaces:
 
-1. `docs/tropo-studio-map.md`
-2. `.tropo/tool-catalog.md`
-3. `.tropo/skill-catalog.md`
-4. `.tropo/sa-agent-catalog.md`
-5. `.tropo/toolbelt.md`
-6. Run `python3 vault/tools/tropo-studio-status.py`
+1. `docs/tropo-studio-map.md` <!-- tropo-boot-read {"id":"capability-tropo-studio-map","path":"docs/tropo-studio-map.md","applicability":"required"} -->
+2. `.tropo/tool-catalog.md` <!-- tropo-boot-read {"id":"capability-tool-catalog","path":".tropo/tool-catalog.md","applicability":"required"} -->
+3. `.tropo/skill-catalog.md` <!-- tropo-boot-read {"id":"capability-skill-catalog","path":".tropo/skill-catalog.md","applicability":"required"} -->
+4. `.tropo/sa-agent-catalog.md` <!-- tropo-boot-read {"id":"capability-sa-agent-catalog","path":".tropo/sa-agent-catalog.md","applicability":"required"} -->
+5. `.tropo/toolbelt.md` <!-- tropo-boot-read {"id":"capability-toolbelt","path":".tropo/toolbelt.md","applicability":"required"} -->
+6. Run `python3 vault/tools/tropo-studio-status.py` — command, not a Read-observable action. <!-- tropo-boot-action command -->
 
 Then read:
 
-- `agents/darin/.tropo-capsule/memory/agent-memory.md`
-- `agents/darin/.tropo-capsule/memory/method-pins.jsonl`
-- `agents/darin/.tropo-capsule/memory/crew-memories.jsonl`
+- `agents/darin/.tropo-capsule/memory/agent-memory.md` <!-- tropo-boot-read {"id":"memory-agent-memory","path":"agents/darin/.tropo-capsule/memory/agent-memory.md","applicability":"required"} -->
+- `agents/darin/.tropo-capsule/memory/method-pins.jsonl` <!-- tropo-boot-read {"id":"memory-method-pins","path":"agents/darin/.tropo-capsule/memory/method-pins.jsonl","applicability":"required"} -->
+- `agents/darin/.tropo-capsule/memory/crew-memories.jsonl` <!-- tropo-boot-read {"id":"memory-crew-memories","path":"agents/darin/.tropo-capsule/memory/crew-memories.jsonl","applicability":"required"} -->
 
 The per-Studio boot derivations are optional generated accelerators, never
 required reads. If they are absent, continue through the canonical activation

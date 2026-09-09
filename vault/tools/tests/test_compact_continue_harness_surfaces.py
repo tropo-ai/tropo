@@ -180,13 +180,34 @@ class RetirementBoundaryTests(unittest.TestCase):
         # practice incomplete" and moved the tool pointer into §When to
         # Start Retirement (3). The contract this row carries is unchanged:
         # human-directed close or Compact-Continue — never race the compactor.
-        row = next(
-            line
-            for line in text.splitlines()
+        # FIXED 2026-09-07 (orpheus-o38): this used next() on the FIRST line
+        # starting "| Context pressure", but the canonical now carries TWO such
+        # rows — the human-directed close and the not-directed one — and the
+        # compaction contract lives on the second. The old selector silently
+        # asserted against the wrong row, which is how a green-looking test can
+        # check nothing. Select by content, and require BOTH halves of the
+        # contract to exist somewhere in the escalation table.
+        rows = [
+            line for line in text.splitlines()
             if line.startswith("| Context pressure")
+        ]
+        self.assertGreaterEqual(len(rows), 2, f"escalation rows missing: {rows}")
+        continue_row = next(
+            (r for r in rows if "Compact-Continue" in r), None
         )
-        self.assertIn("Compact-Continue", row)
-        self.assertIn("human has already directed", row)
+        self.assertIsNotNone(
+            continue_row,
+            "no escalation row routes context pressure to Compact-Continue",
+        )
+        self.assertIn("premature retirement", continue_row)
+        directed_row = next(
+            (r for r in rows if "directed the close" in r or "HAS already directed" in r),
+            None,
+        )
+        self.assertIsNotNone(
+            directed_row,
+            "no escalation row covers a human-directed close under pressure",
+        )
         self.assertIn(
             "tropo-compact-continue.py",
             text.split("## When to Start Retirement", 1)[1].split("---", 1)[0],

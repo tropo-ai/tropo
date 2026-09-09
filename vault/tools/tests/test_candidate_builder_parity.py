@@ -123,6 +123,61 @@ class CandidateBoxCarriesNothingTheBuildExcludes(unittest.TestCase):
         rehearsed on a box that lacks it, as every shipped box does."""
         self.assertFalse((self.box / "vault" / "studio-ops").exists())
 
+    # ── The inclusion direction (task f0158df832b1, talos-t65 2026-09-08) ─────
+    # Everything above asserts the candidate carries nothing the release build
+    # EXCLUDES. Nothing asserted that it carries what the release build
+    # INCLUDES, and that half was false for every candidate box ever built: the
+    # seven tree-resident files below were placed by code inline in the release
+    # build's main(), unreachable from the candidate builder, so they were simply
+    # absent. A one-directional parity test is how that survived -- the gate was
+    # green and blind on the side that was broken.
+
+    def _tree_resident_destinations(self):
+        """Box-relative paths the release build's tree-resident steps place.
+
+        Derived from the build tool's OWN declaration, not restated here: a
+        second hand-written list is the defect this task exists to close.
+        """
+        dests = ["CHANGELOG.md", ".tropo-studio/mission-brief.md"]
+        for entry in self.build.D2_FOLDER_MIRROR_FILES:
+            rel_path, dest_dir = entry[0], entry[1]
+            dest_name = entry[2] if len(entry) > 2 else os.path.basename(rel_path)
+            dests.append(os.path.join(dest_dir, dest_name) if dest_dir else dest_name)
+        return sorted(set(dests))
+
+    def test_the_expected_set_is_drawn_from_the_build_tool_and_is_not_empty(self):
+        """Control on the list itself: if D2_FOLDER_MIRROR_FILES is emptied or
+        renamed, the assertion below must not pass vacuously. Seven files, and
+        each one names a real reader: the four AGENTS.md are the validator's
+        AGENTS_MD_REQUIRED_DIRS check, package.json is `npm test` inside the box,
+        CHANGELOG.md is build-changelog-names-version, and the mission-brief slot
+        is a Required:Yes boot read (99341618 Step 2.3 + cf8c3be9 Tier 2)."""
+        dests = self._tree_resident_destinations()
+        self.assertEqual(len(dests), 7, dests)
+        self.assertIn("package.json", dests)
+        self.assertIn(".tropo-studio/mission-brief.md", dests)
+
+    def test_the_candidate_box_carries_every_tree_resident_file_the_build_places(self):
+        """Mutation-proven 2026-09-08: dropping either the step_5d call or the
+        step_7_1 call from tropo-build-candidate-box.py turns this red, naming
+        the exact files that went missing."""
+        missing = [d for d in self._tree_resident_destinations()
+                   if not (self.box / d).is_file()]
+        self.assertEqual(
+            missing, [],
+            "the candidate builder omits tree-resident files the release build places "
+            "(three of the twelve box gates then refuse on the builder, not the product):\n  "
+            + "\n  ".join(missing))
+
+    def test_the_mission_brief_slot_is_the_generic_template_not_argos_own(self):
+        """The slot must exist AND be the <FILL> template. Argo's real brief is
+        extraction_scope: argo-reference and must never ship; a candidate box
+        carrying it would hand a walker content no customer receives."""
+        slot = self.box / ".tropo-studio" / "mission-brief.md"
+        self.assertTrue(slot.is_file(), "mission-brief boot slot absent from the candidate box")
+        body = slot.read_text(encoding="utf-8")
+        self.assertIn("<FILL", body, "the shipped mission-brief slot is not the generic template")
+
 
 if __name__ == "__main__":
     unittest.main()

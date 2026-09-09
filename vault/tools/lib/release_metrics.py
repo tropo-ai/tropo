@@ -27,9 +27,15 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+
+_TOOLS_DIR = Path(__file__).resolve().parent.parent
+if str(_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TOOLS_DIR))
+from lib.journal_event import run_journal_event_type  # noqa: E402
 
 __all__ = [
     "PRINCIPAL_GESTURES",
@@ -294,14 +300,14 @@ def derive_real_fire_verdict(
     """
     principal_rows = [
         r for r in journal_rows
-        if r.get("event") in GESTURE_EVENT_CLASSES
+        if run_journal_event_type(r) in GESTURE_EVENT_CLASSES
         and r.get("actor") in principal_uids and not _is_machine_row(r)
     ]
     fire_by_principal = any(
-        r.get("event") == FIRE_AUTHORIZED_EVENT for r in principal_rows)
+        run_journal_event_type(r) == FIRE_AUTHORIZED_EVENT for r in principal_rows)
     attested_path = any(
-        r.get("event") == ATTESTED_PATH_EVENT for r in journal_rows)
-    published = any(r.get("event") == PUBLISHED_EVENT for r in journal_rows)
+        run_journal_event_type(r) == ATTESTED_PATH_EVENT for r in journal_rows)
+    published = any(run_journal_event_type(r) == PUBLISHED_EVENT for r in journal_rows)
 
     if fire_by_principal and published and len(principal_rows) <= GESTURE_TARGETS_V2[REAL_FIRE]:
         verdict = "fired-one-gesture"
@@ -313,7 +319,7 @@ def derive_real_fire_verdict(
     return {
         "verdict": verdict,
         "principal_gesture_rows": [
-            {"span_id": r.get("span_id"), "event": r.get("event")} for r in principal_rows
+            {"span_id": r.get("span_id"), "event": run_journal_event_type(r)} for r in principal_rows
         ],
         "derivation": {
             "fire_authorized_by_principal": fire_by_principal,
@@ -338,13 +344,13 @@ def count_gestures_v2(
     target = GESTURE_TARGETS_V2[mode]
     principal_rows = [
         r for r in journal_rows
-        if r.get("event") in GESTURE_EVENT_CLASSES
+        if run_journal_event_type(r) in GESTURE_EVENT_CLASSES
         and r.get("actor") in principal_uids and not _is_machine_row(r)
     ]
     met = len(principal_rows) <= target if mode == REAL_FIRE else len(principal_rows) == target
     return {
         "principal_inputs": [
-            {"event": r.get("event"), "at": r.get("ts")} for r in principal_rows
+            {"event": run_journal_event_type(r), "at": r.get("ts")} for r in principal_rows
         ],
         "target": target,
         "met": met,

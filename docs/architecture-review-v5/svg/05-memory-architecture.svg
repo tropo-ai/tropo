@@ -1,0 +1,221 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 980" font-family="Helvetica, Arial, sans-serif" role="img">
+  <title>Memory architecture — three scopes, the 32,768-byte ceiling with no routed overflow, and curation moved to a weekly loop outside boot and retirement</title>
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .stamp { font-size: 11.5px; fill: #5a6a7a; }
+      .panel-title { font-size: 15px; font-weight: bold; fill: #1a2332; }
+      .panel-title-red { font-size: 15px; font-weight: bold; fill: #9c2b2b; }
+      .box-title { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .box-title-w { font-size: 13px; font-weight: bold; fill: #ffffff; }
+      .box-title-amber { font-size: 13px; font-weight: bold; fill: #b08a4a; }
+      .box-title-red { font-size: 13px; font-weight: bold; fill: #9c2b2b; }
+      .box-sub { font-size: 11px; fill: #5a6a7a; }
+      .box-sub-navy { font-size: 11px; fill: #cfe0ee; }
+      .box-sub-steel { font-size: 11px; fill: #d6e6ef; }
+      .box-sub-amber { font-size: 11px; fill: #f3e8d2; }
+      .box-sub-green { font-size: 11px; fill: #4a8a6b; }
+      .box-sub-red { font-size: 11px; fill: #9c2b2b; }
+      .label { font-size: 11.5px; fill: #44525f; }
+      .layer-label { font-size: 11px; font-weight: bold; fill: #5a6a7a; letter-spacing: 0.6px; }
+      .layer-label-green { font-size: 11px; font-weight: bold; fill: #4a8a6b; letter-spacing: 0.6px; }
+      .layer-label-red { font-size: 11px; font-weight: bold; fill: #9c2b2b; letter-spacing: 0.6px; }
+      .mono { font-family: Menlo, Consolas, monospace; font-size: 11px; fill: #2c4a6e; }
+      .mono-w { font-family: Menlo, Consolas, monospace; font-size: 10.5px; fill: #cfe0ee; }
+      .caption { font-size: 11.5px; fill: #5a6a7a; font-style: italic; }
+      .edge { stroke: #8aa0b5; stroke-width: 1.8; fill: none; }
+      .edge-red { stroke: #9c2b2b; stroke-width: 2; fill: none; }
+      .edge-green { stroke: #4a8a6b; stroke-width: 2; fill: none; }
+    </style>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8aa0b5"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9c2b2b"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a8a6b"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="980" fill="#ffffff"/>
+
+  <text x="40" y="46" class="title">Memory architecture — three scopes, one ceiling, no route for the overflow</text>
+  <text x="40" y="70" class="subtitle">The index-and-bodies shape is built and proven. What is broken is a hard byte ceiling on the one file boot reads, with nowhere defined for the excess.</text>
+
+  <!-- ============ SCOPE BAND ============ -->
+
+  <!-- agent scope -->
+  <rect x="40" y="95" width="420" height="320" rx="4" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="56" y="120" class="panel-title">agent scope · 21 folders · 5 executives on v3</text>
+  <text x="56" y="140" class="mono">agents/&lt;slug&gt;/.tropo-capsule/memory/</text>
+
+  <rect x="56" y="155" width="388" height="54" rx="4" fill="#2c4a6e"/>
+  <text x="70" y="177" class="box-title-w">agent-memory.md</text>
+  <text x="70" y="196" class="box-sub-navy">THE boot read · spec_version 3.0 · scored index lines</text>
+
+  <rect x="56" y="217" width="388" height="24" rx="4" fill="#ffffff" stroke="#4a8a6b"/>
+  <text x="70" y="233" class="box-sub-green">covered by check_agent_memory_bound</text>
+
+  <rect x="56" y="249" width="388" height="50" rx="4" fill="#3a6b8a"/>
+  <text x="70" y="270" class="box-title-w">entries/&lt;uid&gt;.md — the pin bodies</text>
+  <text x="70" y="288" class="box-sub-steel">score · tier · last_referenced · reference_count</text>
+
+  <rect x="56" y="307" width="388" height="44" rx="4" fill="#3a6b8a"/>
+  <text x="70" y="326" class="box-title-w">agent-memories.jsonl</text>
+  <text x="70" y="343" class="box-sub-steel">append-only, never truncated · never boot-read</text>
+
+  <rect x="56" y="359" width="388" height="44" rx="4" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="70" y="378" class="box-title">history/ — read on need, never at boot</text>
+  <text x="70" y="395" class="box-sub">retired memory-current.md + short-term-memory.jsonl</text>
+
+  <!-- studio scope -->
+  <rect x="480" y="95" width="420" height="320" rx="4" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="496" y="120" class="panel-title">studio scope · 1 folder</text>
+  <text x="496" y="140" class="mono">.tropo-studio/memory/</text>
+
+  <rect x="496" y="155" width="388" height="54" rx="4" fill="#2c4a6e"/>
+  <text x="510" y="177" class="box-title-w">memory-current.md</text>
+  <text x="510" y="196" class="box-sub-navy">THE boot read here · a different name, the same role</text>
+
+  <rect x="496" y="217" width="388" height="24" rx="4" fill="#ffffff" stroke="#9c2b2b"/>
+  <text x="510" y="233" class="box-sub-red">NOT covered — 17,883 bytes, bounded by nothing</text>
+
+  <rect x="496" y="249" width="388" height="50" rx="4" fill="#3a6b8a"/>
+  <text x="510" y="270" class="box-title-w">entries/&lt;uid&gt;.md — 73 bodies</text>
+  <text x="510" y="288" class="box-sub-steel">same shape as agent scope · 377 bodies in all, 7 folders</text>
+
+  <rect x="496" y="307" width="388" height="44" rx="4" fill="#3a6b8a"/>
+  <text x="510" y="326" class="box-title-w">agent-memories.jsonl</text>
+  <text x="510" y="343" class="box-sub-steel">append-only episodic log · folds advance a marker</text>
+
+  <rect x="496" y="359" width="388" height="44" rx="4" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="510" y="378" class="box-title">history/ — read on need, never at boot</text>
+  <text x="510" y="395" class="box-sub">retired MEMORY.md — the 8-day invisible ruling (6f29870e5)</text>
+
+  <!-- doctrine scope -->
+  <rect x="920" y="95" width="320" height="320" rx="4" fill="#eef2f6" stroke="#c5d0da"/>
+  <text x="936" y="120" class="panel-title">doctrine scope · 3 records</text>
+  <text x="936" y="140" class="mono">vault/files/&lt;uid&gt;.md</text>
+
+  <rect x="936" y="155" width="288" height="54" rx="4" fill="#2c4a6e"/>
+  <text x="950" y="177" class="box-title-w">type: memory</text>
+  <text x="950" y="196" class="box-sub-navy">one row in the vault index</text>
+
+  <rect x="936" y="217" width="288" height="24" rx="4" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="950" y="233" class="box-sub">no index file, no jsonl, no fold</text>
+
+  <text x="936" y="266" class="layer-label">22 MEMORY FOLDERS · 3 INDEX NAMES</text>
+  <text x="936" y="288" class="mono">agent-memory.md</text>
+  <text x="1224" y="288" class="mono" text-anchor="end">11</text>
+  <text x="936" y="306" class="mono">memory-current.md</text>
+  <text x="1224" y="306" class="mono" text-anchor="end">6</text>
+  <text x="936" y="324" class="mono">MEMORY.md</text>
+  <text x="1224" y="324" class="mono" text-anchor="end">3</text>
+  <text x="936" y="342" class="mono">both of the first two</text>
+  <text x="1224" y="342" class="mono" text-anchor="end">2</text>
+
+  <rect x="936" y="356" width="288" height="50" rx="4" fill="#ffffff" stroke="#b08a4a" stroke-dasharray="6 4"/>
+  <text x="950" y="375" class="box-title-amber">phase-2 rename · f0153a6df07f</text>
+  <text x="950" y="393" class="box-sub">status: draft · 171 sites, 20 boot-blocking</text>
+
+  <!-- ============ CEILING BAND ============ -->
+  <rect x="40" y="435" width="1200" height="280" rx="4" fill="#fbf1f1" stroke="#9c2b2b"/>
+  <text x="60" y="462" class="panel-title-red">The ceiling — enforced on one filename, and with no routed overflow</text>
+  <text x="60" y="482" class="label">check_agent_memory_bound · vault/tools/tropo-validate.py:9941, thresholds :9969-9971 — WARN &gt; 16,384 B · ERROR &gt; 32,768 B · ERROR &gt; 15 Top-of-Mind entries</text>
+
+  <!-- source -->
+  <rect x="60" y="548" width="270" height="86" rx="4" fill="#2c4a6e"/>
+  <text x="74" y="572" class="box-title-w">agent-memory.md</text>
+  <text x="74" y="592" class="box-sub-navy">the one bounded surface</text>
+  <text x="74" y="608" class="box-sub-navy">8 surfaces at the v1.95 cut</text>
+  <text x="74" y="624" class="mono-w">spec_version: "3.0"</text>
+
+  <path class="edge" d="M 330 591 L 348 591" marker-end="url(#arr)"/>
+
+  <!-- the wall -->
+  <rect x="352" y="500" width="20" height="190" fill="#9c2b2b"/>
+  <text transform="rotate(-90 362 595)" x="362" y="595" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#ffffff">32,768 B — ERROR</text>
+
+  <!-- outcome: the route that exists -->
+  <path class="edge-green" d="M 374 542 L 434 542" marker-end="url(#arr-green)"/>
+  <rect x="440" y="500" width="380" height="84" rx="4" fill="#ffffff" stroke="#4a8a6b"/>
+  <text x="454" y="519" class="layer-label-green">THE ROUTE THAT EXISTS · NOTHING ENFORCES IT</text>
+  <text x="454" y="540" class="box-title">entries/&lt;uid&gt;.md</text>
+  <text x="454" y="558" class="box-sub">one index line stays on the surface; the body moves here</text>
+  <text x="454" y="574" class="box-sub">demonstrated once at 66e7d4fa0: 393 B, not ~4,800 B</text>
+
+  <!-- outcome: what actually happens -->
+  <path class="edge-red" d="M 374 638 L 434 638" marker-end="url(#arr-red)"/>
+  <rect x="440" y="596" width="380" height="84" rx="4" fill="#f6e4e4" stroke="#9c2b2b"/>
+  <text x="454" y="615" class="layer-label-red">WHAT THE FOLD DOES INSTEAD</text>
+  <text x="454" y="636" class="box-title-red">discard — and nothing records what fell off</text>
+  <text x="454" y="654" class="box-sub">no rule makes a fold name what it dropped, or where it went</text>
+  <text x="454" y="670" class="box-sub">never reason from absence to intent on a bounded surface</text>
+
+  <!-- evidence -->
+  <rect x="850" y="500" width="390" height="180" rx="4" fill="#ffffff" stroke="#c9a0a0"/>
+  <text x="864" y="524" class="box-title">Measured against the wall</text>
+  <text x="864" y="546" class="label">argus fold ended at 32,753 B — 15 bytes headroom</text>
+  <text x="864" y="564" class="label">vela ended at 32,703 B — 65 bytes clear</text>
+  <text x="864" y="582" class="label">argus v2 surface: 56 pins → v3 surface: 15 pins</text>
+  <text x="864" y="600" class="label">34 entry bodies carry recovered_from:</text>
+  <text x="864" y="618" class="label">25 argus · 8 talos · 1 vela (the brief said 35)</text>
+  <text x="864" y="636" class="label">4 of 5 executive surfaces past the freshness gate</text>
+  <text x="864" y="660" class="caption">The ceiling was found by breaking it, not by a warning.</text>
+
+  <text x="60" y="702" class="label">Also outside the gate: agents/*/directors/ capsules — check_agent_memory_bound reads agents/&lt;slug&gt;/.tropo-capsule/memory/agent-memory.md only and does not recurse.</text>
+
+  <!-- ============ CURATION BAND ============ -->
+  <rect x="40" y="735" width="1200" height="195" rx="4" fill="#fdf8ef" stroke="#d8c49a"/>
+  <text x="60" y="762" class="panel-title">Curation — a weekly loop, wired out of boot and out of retirement</text>
+
+  <rect x="60" y="778" width="270" height="80" rx="4" fill="#2c4a6e"/>
+  <text x="74" y="800" class="box-title-w">BOOT</text>
+  <text x="74" y="820" class="box-sub-navy">reads agent-memory.md as it stands</text>
+  <text x="74" y="836" class="box-sub-navy">no dispatch, no staleness arithmetic</text>
+  <text x="74" y="852" class="mono-w">99341618.md:393, :401</text>
+
+  <path class="edge" d="M 330 818 L 348 818" marker-end="url(#arr)"/>
+
+  <rect x="350" y="778" width="270" height="80" rx="4" fill="#3a6b8a"/>
+  <text x="364" y="800" class="box-title-w">WORK</text>
+  <text x="364" y="820" class="box-sub-steel">append to agent-memories.jsonl</text>
+  <text x="364" y="836" class="box-sub-steel">Tropo paths only — OP-14</text>
+  <text x="364" y="852" class="mono-w">operating-principles.md:326</text>
+
+  <path class="edge" d="M 620 818 L 638 818" marker-end="url(#arr)"/>
+
+  <rect x="640" y="778" width="270" height="80" rx="4" fill="#2c4a6e"/>
+  <text x="654" y="800" class="box-title-w">RETIRE</text>
+  <text x="654" y="820" class="box-sub-navy">raw append to the jsonl, then stop</text>
+  <text x="654" y="836" class="box-sub-navy">no fold, no bound check, no annotation</text>
+  <text x="654" y="852" class="mono-w">e2c7d185.md:100</text>
+
+  <rect x="940" y="778" width="300" height="80" rx="4" fill="#b08a4a"/>
+  <text x="954" y="800" class="box-title-w">sa.memory-curator — weekly sweep</text>
+  <text x="954" y="820" class="box-sub-amber">loop 4a895e0f · status: active</text>
+  <text x="954" y="836" class="box-sub-amber">last_run: null · 3 single-target folds logged</text>
+  <text x="954" y="852" class="box-sub-amber">fired only on Mike's word — no cron</text>
+
+  <text x="60" y="878" font-size="11" fill="#9c2b2b">× dispatch removed 2026-08-29 (691095b6d); F5 gate removed 2026-09-04 (ed79e444a)</text>
+  <text x="640" y="878" font-size="11" fill="#9c2b2b">× fold removed 2026-08-29 (4e3146813); self-fold removed 2026-09-04 (19539afe7)</text>
+
+  <text x="60" y="900" class="label">Two contracts have not caught up — tropo-memory.capsule.md v1.7 (locked, §A4) still calls the retirement fold canonical; class-def 50c0bdce v1.4 still lists trigger: boot | retire.</text>
+  <text x="60" y="918" class="label">Governance drift: 87 of the 377 entry bodies lack type: memory, and all 34 recovered pins carry slug uids where UID_SHAPES = {8, 12} — linkable, but unfindable by the index.</text>
+
+  <!-- ============ LEGEND + STAMP ============ -->
+  <rect x="40" y="948" width="14" height="12" fill="#2c4a6e"/>
+  <text x="60" y="958" class="box-sub">BUILT, in routine use</text>
+  <rect x="230" y="948" width="14" height="12" fill="#4a8a6b"/>
+  <text x="250" y="958" class="box-sub">PROVEN against the world</text>
+  <rect x="430" y="948" width="14" height="12" fill="#b08a4a"/>
+  <text x="450" y="958" class="box-sub">RULED or UNPROVEN</text>
+  <rect x="590" y="948" width="14" height="12" fill="#9c2b2b"/>
+  <text x="610" y="958" class="box-sub">KNOWN BROKEN — live defect</text>
+  <path d="M 810 954 L 838 954" stroke="#5a6a7a" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="846" y="958" class="box-sub">does not exist yet</text>
+
+  <text x="1240" y="958" class="stamp" text-anchor="end">measured 2026-09-08 · v1.95.0</text>
+</svg>

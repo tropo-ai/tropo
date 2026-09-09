@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Optional
 
 from lib.governed_path import is_governed_uid_shape
+from lib.journal_event import run_journal_event_type
 
 #: The release pipeline root. A run whose pipeline is anything else is a dev
 #: run, and a dev run may not authorise a release package.
@@ -95,9 +96,7 @@ def event_type(event) -> str:
     the worst possible way for a gate to succeed (A148,
     evt_a9360f18f56fe472_00000026 item 2).
     """
-    if not isinstance(event, dict):
-        return ""
-    return str(event.get("event") or event.get("type") or "")
+    return run_journal_event_type(event)
 
 
 CANDIDATE_BUILT_EVENT = "tropo.release.candidate_built"

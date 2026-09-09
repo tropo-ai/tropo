@@ -63,6 +63,7 @@ _VAULT_TOOLS = Path(__file__).resolve().parents[3] / "vault" / "tools"
 if str(_VAULT_TOOLS) not in sys.path:
     sys.path.insert(0, str(_VAULT_TOOLS))
 from lib.release_events import RELEASE_EVENTS  # noqa: E402
+from lib.journal_event import run_journal_event_type  # noqa: E402
 
 VAULT_ROOT = Path(__file__).resolve().parents[3]
 PIPELINE_RUNS = VAULT_ROOT / "vault" / "pipeline-runs"
@@ -490,7 +491,12 @@ def _post_mint_event_allowed(ev: dict) -> bool:
     key. RELEASE_EVENTS is authoritative for "does this event exist" (AC1/AC2 refuse
     anything absent from it); this reads that same table rather than re-asserting it.
     """
-    et = ev.get("event")
+    # Only publication mirrors were historically written under type. Do not
+    # admit alias step/signoff rows: the unchanged independence/fingerprint
+    # readers consume canonical engine events, so broader admission hides actors.
+    et = run_journal_event_type(ev)
+    if not ev.get("event") and et != "tropo.release.published":
+        return False
     if et == "step_completed" and _step(ev) == PRODUCE_STEP_UID:
         return (ev.get("data") or {}).get("natural_verdict") == "pass"
     if et == "human_signoff":
@@ -568,7 +574,7 @@ def require_release_authorization(activation_uid: str, gate: str = GATE_PRODUCE,
                 if not _post_mint_event_allowed(_ev):
                     raise ReleaseAuthorizationError(
                         f"post-mint event does not match an authorized shape "
-                        f"(event={_ev.get('event')!r}, step={_step(_ev)!r}) — "
+                        f"(event={run_journal_event_type(_ev)!r}, step={_step(_ev)!r}) — "
                         f"possible tampering after the key was minted; refused"
                     )
         if require_human_signoff and not _has_human_signoff(run_folder, activation_uid):

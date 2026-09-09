@@ -1,0 +1,267 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 980" font-family="Helvetica, Arial, sans-serif" role="img">
+  <title>Agent lifecycle in Tropo: born, session and retire on one append-only lineage file; compact-continue looping back into the same generation; the boot router and its fingerprint gate; the six gated groups and the four-shape soul resolution at Step 2.0.</title>
+  <defs>
+    <style>
+      .title { font-size: 26px; font-weight: bold; fill: #1a2332; }
+      .subtitle { font-size: 14px; fill: #5a6a7a; }
+      .stamp { font-size: 13px; font-weight: bold; fill: #5a6a7a; }
+      .panel-title { font-size: 15px; font-weight: bold; fill: #1a2332; }
+      .panel-sub { font-size: 11.5px; fill: #44525f; }
+      .box-title { font-size: 14px; font-weight: bold; fill: #1a2332; }
+      .box-sub { font-size: 11.5px; fill: #44525f; }
+      .node { font-size: 13px; font-weight: bold; fill: #ffffff; }
+      .node-sub { font-size: 11px; fill: #cfe0ee; }
+      .node-sub-g { font-size: 11px; fill: #dcefe4; }
+      .node-sub-s { font-size: 11px; fill: #d6e6ef; }
+      .g-title { font-size: 12.5px; font-weight: bold; fill: #1a2332; }
+      .g-ms { font-family: Menlo, Consolas, monospace; font-size: 9.5px; fill: #2c4a6e; }
+      .g-note { font-size: 10px; fill: #5a6a7a; }
+      .s-title { font-size: 13px; font-weight: bold; fill: #1a2332; }
+      .s-sub { font-size: 11px; fill: #44525f; }
+      .mono { font-family: Menlo, Consolas, monospace; font-size: 13px; font-weight: bold; fill: #2c4a6e; }
+      .label { font-size: 12px; fill: #5a6a7a; }
+      .label-red { font-size: 12px; font-weight: bold; fill: #9c2b2b; }
+      .note { font-size: 11.5px; fill: #44525f; }
+      .note-b { font-size: 11.5px; font-weight: bold; fill: #1a2332; }
+      .edge { stroke: #8aa0b5; stroke-width: 1.8; fill: none; }
+      .edge-red { stroke: #9c2b2b; stroke-width: 1.8; fill: none; }
+      .edge-loop { stroke: #3a6b8a; stroke-width: 2.2; fill: none; }
+      .legend-t { font-size: 11.5px; fill: #44525f; }
+    </style>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8aa0b5"/>
+    </marker>
+    <marker id="arrRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9c2b2b"/>
+    </marker>
+    <marker id="arrLoop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3a6b8a"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="980" fill="#fafbfc"/>
+
+  <text x="40" y="48" class="title">Agent Lifecycle — born, session, retire, and the loop that is not a birth</text>
+  <text x="40" y="72" class="subtitle">An agent is a composite held in files; the sleeve changes underneath it. Birth cannot be refused, retirement only writes, a compaction is not a birth.</text>
+
+  <!-- ================= PANEL A — the spine ================= -->
+  <rect x="40" y="96" width="1200" height="300" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="60" y="124" class="panel-title">The spine — nothing can refuse a birth</text>
+  <text x="60" y="142" class="panel-sub">vault/tools/tropo-lineage.py · 581 lines · four subcommands: born · retire · who · log. No index, no mint, no card, no registry, no lock. The closing lineage line IS the state.</text>
+
+  <!-- born -->
+  <rect x="64" y="156" width="200" height="96" rx="6" fill="#2c4a6e"/>
+  <text x="164" y="180" class="node" text-anchor="middle">born</text>
+  <text x="80" y="200" class="node-sub">reads lineage.jsonl, takes</text>
+  <text x="80" y="215" class="node-sub">the highest gen, adds one</text>
+  <text x="80" y="230" class="node-sub">5 live: A175 · G126 · O39 ·</text>
+  <text x="80" y="245" class="node-sub">T65 · V80   (2026-09-08)</text>
+
+  <!-- boot -->
+  <rect x="302" y="156" width="200" height="96" rx="6" fill="#2c4a6e"/>
+  <text x="402" y="180" class="node" text-anchor="middle">BOOT</text>
+  <text x="318" y="200" class="node-sub">six groups in strict order,</text>
+  <text x="318" y="215" class="node-sub">each ending by appending</text>
+  <text x="318" y="230" class="node-sub">a named milestone to a</text>
+  <text x="318" y="245" class="node-sub">per-run run.jsonl — Panel C</text>
+
+  <!-- session -->
+  <rect x="540" y="156" width="200" height="96" rx="6" fill="#3a6b8a"/>
+  <text x="640" y="180" class="node" text-anchor="middle">SESSION</text>
+  <text x="556" y="200" class="node-sub-s">governed work; events</text>
+  <text x="556" y="215" class="node-sub-s">emitted; memories appended</text>
+  <text x="556" y="230" class="node-sub-s">raw to agent-memories.jsonl</text>
+  <text x="556" y="245" class="node-sub-s">— no fold, no scoring</text>
+
+  <!-- retire -->
+  <rect x="778" y="156" width="200" height="96" rx="6" fill="#2c4a6e"/>
+  <text x="878" y="180" class="node" text-anchor="middle">retire</text>
+  <text x="794" y="200" class="node-sub">places the letter at</text>
+  <text x="794" y="215" class="node-sub">transfers/&lt;GEN&gt;.md, appends</text>
+  <text x="794" y="230" class="node-sub">the closing line, syncs the</text>
+  <text x="794" y="245" class="node-sub">entry, emits the broadcast</text>
+
+  <!-- successor -->
+  <rect x="1016" y="156" width="200" height="96" rx="6" fill="#4a8a6b"/>
+  <text x="1116" y="180" class="node" text-anchor="middle">born  (N+1)</text>
+  <text x="1032" y="200" class="node-sub-g">Step 4.1.5: re-resolve every</text>
+  <text x="1032" y="215" class="node-sub-g">carry-forward claim in the</text>
+  <text x="1032" y="230" class="node-sub-g">letter against the live files;</text>
+  <text x="1032" y="245" class="node-sub-g">surface the delta at boot</text>
+
+  <path class="edge" d="M 264 204 L 300 204" marker-end="url(#arr)"/>
+  <path class="edge" d="M 502 204 L 538 204" marker-end="url(#arr)"/>
+  <path class="edge" d="M 740 204 L 776 204" marker-end="url(#arr)"/>
+  <path class="edge" d="M 978 204 L 1014 204" marker-end="url(#arr)"/>
+
+  <!-- compact-continue loop -->
+  <path class="edge-loop" d="M 580 252 L 580 280" marker-end="url(#arrLoop)"/>
+  <path class="edge-loop" d="M 700 280 L 700 254" marker-end="url(#arrLoop)"/>
+  <text x="572" y="272" class="label" text-anchor="end">compacted · auto-compacted · resumed</text>
+  <text x="708" y="272" class="label">back into the SAME session</text>
+
+  <rect x="420" y="282" width="440" height="94" rx="6" fill="#eef2f6" stroke="#3a6b8a" stroke-width="2"/>
+  <text x="436" y="303" class="box-title">COMPACT-CONTINUE — the middle verb, never a birth</text>
+  <text x="436" y="321" class="box-sub">vault/tools/tropo-compact-continue.py · 1,448 lines</text>
+  <text x="436" y="336" class="box-sub">re-anchors the SAME generation against lineage and the</text>
+  <text x="436" y="351" class="box-sub">exact completed activation run</text>
+  <text x="436" y="369" class="label-red">No path of any kind to born. It writes no lineage, ever.</text>
+
+  <text x="64" y="302" class="note-b">v4 said retirement folds the agent&#8217;s memory.</text>
+  <text x="64" y="320" class="note">It no longer does: 19539afe7 (2026-09-04) took</text>
+  <text x="64" y="338" class="note">the last self-fold allowance out of the close. A</text>
+  <text x="64" y="356" class="note">retiring agent appends raw memories and stops;</text>
+  <text x="64" y="374" class="note">folding belongs to sa.memory-curator (4a895e0f).</text>
+
+  <text x="880" y="302" class="note-b">retire refuses three things, and only three:</text>
+  <text x="880" y="320" class="note">· no birth on record</text>
+  <text x="880" y="338" class="note">· an unreadable or empty letter source</text>
+  <text x="880" y="356" class="note">· a DIFFERENT letter already in the create-only slot</text>
+  <text x="880" y="374" class="note">The eight-item checklist blocks nothing.</text>
+
+  <!-- ================= PANEL B — boot routing + the drift gate ================= -->
+  <rect x="40" y="414" width="1200" height="210" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="60" y="440" class="panel-title">Boot routing — two compressed derivations, gated on SHA-256, failing closed to the full canonical</text>
+
+  <rect x="64" y="456" width="250" height="104" rx="6" fill="#eef2f6" stroke="#9db4c8"/>
+  <text x="78" y="480" class="box-title">Kernel pointer (the floor)</text>
+  <text x="78" y="500" class="box-sub">.tropo/playbooks/agent-activation</text>
+  <text x="78" y="515" class="box-sub">.playbook.md — 53 lines</text>
+  <text x="78" y="530" class="box-sub">routes the boot, and carries the</text>
+  <text x="78" y="545" class="box-sub">four identity shapes itself</text>
+
+  <rect x="346" y="456" width="228" height="104" rx="6" fill="#eef2f6" stroke="#9db4c8"/>
+  <text x="360" y="480" class="box-title">Established agent?</text>
+  <text x="360" y="500" class="box-sub">pointer declares agent_uid:</text>
+  <text x="360" y="515" class="box-sub">AND the unified entry carries</text>
+  <text x="360" y="530" class="box-sub">§Boot-Extension</text>
+
+  <rect x="606" y="452" width="290" height="96" rx="6" fill="#eef2f6" stroke="#2c4a6e" stroke-width="1.5"/>
+  <text x="620" y="476" class="box-title">Two compressed derivations</text>
+  <text x="620" y="496" class="box-sub">.tropo/boot-fast-path.md — 134 lines</text>
+  <text x="620" y="511" class="box-sub">.tropo/boot-digest.md — 115 lines</text>
+  <text x="620" y="526" class="box-sub">never shipped: a derivation carries the</text>
+  <text x="620" y="541" class="box-sub">fingerprints of the studio that made it</text>
+
+  <rect x="606" y="552" width="290" height="66" rx="6" fill="#eef2f6" stroke="#9db4c8"/>
+  <text x="620" y="576" class="box-title">Full canonical procedure</text>
+  <text x="620" y="596" class="box-sub">vault/playbooks/99341618.md — 877 lines</text>
+  <text x="620" y="611" class="box-sub">everyone else — and any stale-gated boot</text>
+
+  <rect x="928" y="452" width="290" height="110" rx="6" fill="#eef5f0" stroke="#4a8a6b" stroke-width="1.5"/>
+  <text x="942" y="476" class="mono" fill="#4a8a6b">check_boot_derivation_fresh</text>
+  <text x="942" y="496" class="box-sub">recomputes 12 declared source hashes</text>
+  <text x="942" y="511" class="box-sub">(5 fast-path + 7 digest) plus each file&#8217;s</text>
+  <text x="942" y="526" class="box-sub">own body hash; fails closed on mismatch</text>
+  <text x="942" y="541" class="box-sub">2026-09-08: 2 checked · 0 defects — FRESH</text>
+  <text x="942" y="556" class="box-sub">1 defect earlier today; cured at 503b5cb5b</text>
+
+  <path class="edge" d="M 314 508 L 344 508" marker-end="url(#arr)"/>
+  <path class="edge" d="M 574 508 L 590 508 L 590 492 L 604 492" marker-end="url(#arr)"/>
+  <path class="edge" d="M 574 508 L 590 508 L 590 585 L 604 585" marker-end="url(#arr)"/>
+  <path class="edge" d="M 896 492 L 926 492" marker-end="url(#arr)"/>
+  <path class="edge-red" d="M 1073 562 L 1073 585 L 900 585" marker-end="url(#arrRed)"/>
+
+  <text x="578" y="482" class="label">yes</text>
+  <text x="586" y="604" class="label" text-anchor="end">no — everyone else</text>
+  <text x="1069" y="579" class="label-red" text-anchor="end">stale &#8594; fails closed</text>
+
+  <!-- ================= PANEL C — six gated groups + the soul fan ================= -->
+  <rect x="40" y="640" width="1200" height="304" rx="10" fill="#ffffff" stroke="#c5d0da"/>
+  <text x="60" y="668" class="panel-title">Six groups in strict order — each ends by appending a named milestone to a per-run run.jsonl</text>
+  <text x="60" y="686" class="panel-sub">The agent writes run.jsonl by hand and enforces the gate by reading its own journal. Nothing refuses a group whose predecessor milestone is missing —</text>
+  <text x="60" y="702" class="panel-sub">a discipline with a witness, not a mechanism. 373 activation run folders on disk: 367 carry run_created, 329 an Agent Active milestone, 323 both.</text>
+
+  <rect x="64" y="716" width="180" height="76" rx="4" fill="#eef2f6" stroke="#9db4c8"/>
+  <text x="78" y="740" class="g-title">0 · Boot Config</text>
+  <text x="78" y="758" class="g-ms">&#8594; Boot Config Chain Complete</text>
+  <text x="78" y="774" class="g-note">3-tier config; preflight</text>
+
+  <rect x="260" y="716" width="180" height="76" rx="4" fill="#f7f0e2" stroke="#b08a4a" stroke-width="1.5"/>
+  <text x="274" y="740" class="g-title">1 · Identity Findings</text>
+  <text x="274" y="758" class="g-ms">&#8594; Identity Gates Clear</text>
+  <text x="274" y="774" class="g-note">ADR-016/028 = findings now</text>
+
+  <rect x="456" y="716" width="180" height="76" rx="4" fill="#eef2f6" stroke="#2c4a6e" stroke-width="2"/>
+  <text x="470" y="740" class="g-title">2 · Context Loading</text>
+  <text x="470" y="758" class="g-ms">&#8594; Context Loaded</text>
+  <text x="470" y="774" class="g-note">soul FIRST — Step 2.0 &#8595;</text>
+
+  <rect x="652" y="716" width="180" height="76" rx="4" fill="#eef2f6" stroke="#9db4c8"/>
+  <text x="666" y="740" class="g-title">3 · Grounding</text>
+  <text x="666" y="758" class="g-ms">&#8594; Operationally Grounded</text>
+  <text x="666" y="774" class="g-note">crew brief, bus drain</text>
+
+  <rect x="848" y="716" width="180" height="76" rx="4" fill="#eef2f6" stroke="#9db4c8"/>
+  <text x="862" y="740" class="g-title">4 · Self-Diagnostic</text>
+  <text x="862" y="758" class="g-ms">&#8594; Diagnostic Complete</text>
+  <text x="862" y="774" class="g-note">critique your own boot</text>
+
+  <rect x="1044" y="716" width="180" height="76" rx="4" fill="#eef2f6" stroke="#9db4c8"/>
+  <text x="1058" y="740" class="g-title">5 · Startup Signal</text>
+  <text x="1058" y="758" class="g-ms">&#8594; Agent Active</text>
+  <text x="1058" y="774" class="g-note">signal, then begin work</text>
+
+  <path class="edge" d="M 244 754 L 258 754" marker-end="url(#arr)"/>
+  <path class="edge" d="M 440 754 L 454 754" marker-end="url(#arr)"/>
+  <path class="edge" d="M 636 754 L 650 754" marker-end="url(#arr)"/>
+  <path class="edge" d="M 832 754 L 846 754" marker-end="url(#arr)"/>
+  <path class="edge" d="M 1028 754 L 1042 754" marker-end="url(#arr)"/>
+
+  <path class="edge" d="M 546 792 L 546 802" marker-end="url(#arr)"/>
+
+  <rect x="64" y="804" width="1152" height="132" rx="6" fill="#f5f8fa" stroke="#c5d0da"/>
+  <text x="80" y="822" class="s-title">Step 2.0 — soul resolution &#183; vault/tools/lib/boot_identity.py (558 lines) &#183; four shapes, read from the pointer&#8217;s own frontmatter, first hit wins</text>
+
+  <rect x="80" y="830" width="208" height="94" rx="4" fill="#eef5f0" stroke="#4a8a6b" stroke-width="1.5"/>
+  <text x="94" y="854" class="s-title">A &#183; agent_uid:</text>
+  <text x="94" y="872" class="s-sub">vault/agents/&lt;uid&gt;.md &#8594; §Soul</text>
+  <text x="94" y="887" class="s-sub">10 of 20 agent folders here</text>
+  <text x="94" y="902" class="s-sub">PROVEN — every live boot</text>
+  <text x="94" y="917" class="s-sub">resolves through Shape A</text>
+
+  <rect x="308" y="830" width="208" height="94" rx="4" fill="#f7f0e2" stroke="#b08a4a" stroke-width="1.5"/>
+  <text x="322" y="854" class="s-title">C &#183; charter_file:</text>
+  <text x="322" y="872" class="s-sub">the charter&#8217;s soul: block plus</text>
+  <text x="322" y="887" class="s-sub">its ## Identity section</text>
+  <text x="322" y="902" class="s-sub">1 live instance: kb-curator.</text>
+  <text x="322" y="917" class="s-sub">No real boot has used it.</text>
+
+  <rect x="536" y="830" width="208" height="94" rx="4" fill="#f7f0e2" stroke="#b08a4a" stroke-width="1.5"/>
+  <text x="550" y="854" class="s-title">D &#183; charter_uid:</text>
+  <text x="550" y="872" class="s-sub">vault/files/&lt;uid&gt;.md &#8594; ## Soul,</text>
+  <text x="550" y="887" class="s-sub">else its soul: block</text>
+  <text x="550" y="902" class="s-sub">ZERO live instances here.</text>
+  <text x="550" y="917" class="s-sub">BUILT, never exercised.</text>
+
+  <rect x="764" y="830" width="208" height="94" rx="4" fill="#f7f0e2" stroke="#b08a4a" stroke-width="1.5"/>
+  <text x="778" y="854" class="s-title">B &#183; soul_letter:</text>
+  <text x="778" y="872" class="s-sub">Tier-3 legacy fallback: the</text>
+  <text x="778" y="887" class="s-sub">declared soul letter, tried</text>
+  <text x="778" y="902" class="s-sub">last of the four.</text>
+  <text x="778" y="917" class="s-sub">0 live instances here.</text>
+
+  <rect x="992" y="830" width="208" height="94" rx="4" fill="#fbeeee" stroke="#9c2b2b" stroke-width="1.5"/>
+  <text x="1006" y="854" class="s-title" fill="#9c2b2b">none resolves</text>
+  <text x="1006" y="872" class="s-sub">prints &#9940; SOUL NOT LOADED</text>
+  <text x="1006" y="887" class="s-sub">and the boot CONTINUES —</text>
+  <text x="1006" y="902" class="s-sub">that line goes first in the</text>
+  <text x="1006" y="917" class="s-sub">startup signal. Never halts.</text>
+
+  <path class="edge" d="M 288 877 L 306 877" marker-end="url(#arr)"/>
+  <path class="edge" d="M 516 877 L 534 877" marker-end="url(#arr)"/>
+  <path class="edge" d="M 744 877 L 762 877" marker-end="url(#arr)"/>
+  <path class="edge" d="M 972 877 L 990 877" marker-end="url(#arr)"/>
+
+  <!-- ================= legend + stamp ================= -->
+  <rect x="40" y="952" width="12" height="12" rx="2" fill="#4a8a6b"/>
+  <text x="58" y="962" class="legend-t">PROVEN — run against the world, could have failed</text>
+  <rect x="380" y="952" width="12" height="12" rx="2" fill="#2c4a6e"/>
+  <text x="398" y="962" class="legend-t">BUILT &#183; in routine use</text>
+  <rect x="557" y="952" width="12" height="12" rx="2" fill="#b08a4a"/>
+  <text x="575" y="962" class="legend-t">BUILT BUT UNPROVEN / held</text>
+  <rect x="753" y="952" width="12" height="12" rx="2" fill="#9c2b2b"/>
+  <text x="771" y="962" class="legend-t">a gate or path that refuses</text>
+
+  <text x="1240" y="962" text-anchor="end" class="stamp">measured 2026-09-08 &#183; v1.95.0</text>
+</svg>

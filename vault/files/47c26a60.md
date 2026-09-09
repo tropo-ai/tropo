@@ -3,7 +3,9 @@ uid: 47c26a60
 type: dev-spec
 title: "Memory reinforcement scoring — a recurrence counter for the curator"
 description: "Adds reinforcement_count (a recurrence signal distinct from read-usage), incremented on ratified MERGE, into memory scoring — so lessons reality re-teaches auto-float."
-status: locked
+status: done
+closed_by: backlog-close-sweep/vela-v79
+closed_at: '2026-09-07T14:25:27Z'
 locked_by: argus
 locked_at: '2026-07-22'
 dev_spec_activation_uid: 'b233b7ac'
@@ -14,7 +16,8 @@ author: argus-a136
 created: 2026-07-22
 modified: '2026-07-22'
 created_by: argus-a136
-modified_by: tropo-lock-dev-spec.py
+modified_by: argus-a175
+reference_repair_2026_09_08: 'Removed the obsolete planned-identifier prose prefix from the implemented test path. Exact source and zip member exist; 23 tests pass. No acceptance criterion, scoring rule or completion status changed.'
 schema_version: 2
 capsule_version: '1.5'
 extraction_scope: ship
@@ -43,7 +46,7 @@ committed_substrate:
   - target: vault/tools/tropo-validate.py
     change_class: AMENDED
     description: "Add checks: reinforcement_count is a non-negative integer; curator-mutable-field discipline covers it; reinforced_by entries are well-formed generation labels."
-  - target: "planned identifier: vault/tools/tests/test_memory_reinforcement.py"
+  - target: vault/tools/tests/test_memory_reinforcement.py
     change_class: NEW
     description: "Plants: MERGE increments + lineage, score monotonicity in reinforcement_count, log-compression cap, non-curator write refusal, weight-sum invariant, seeding backfill."
 acceptance_criteria:

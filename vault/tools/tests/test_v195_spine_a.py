@@ -437,10 +437,10 @@ class IdentityCheck(unittest.TestCase):
         shutil.copy(TOOLS / "tropo-mint-id.py", root / "vault" / "tools" / "tropo-mint-id.py")
         return root
 
-    def test_silent_when_this_studio_has_its_identity(self) -> None:
+    def test_ok_when_this_studio_has_its_identity(self) -> None:
         title, lines = self.status.section_identity()
         self.assertEqual(title, "studio identity")
-        self.assertEqual(lines, [])
+        self.assertEqual(lines, ["  [OK] studio identity: present and valid"])
 
     def test_warns_and_names_the_cure_when_the_manifest_is_absent(self) -> None:
         _title, lines = self.status.section_identity(str(self._scratch()))
@@ -743,7 +743,7 @@ class FirstBoot(unittest.TestCase):
 
     def test_status_script_quiet_when_present(self) -> None:
         IdentityCheck.setUpClass()
-        IdentityCheck("test_silent_when_this_studio_has_its_identity").debug()
+        IdentityCheck("test_ok_when_this_studio_has_its_identity").debug()
 
     def test_both_boot_paths_carry_the_identity_step(self) -> None:
         BothBootPathsRunTheCheck("test_concierge_step_0d_runs_it_and_routes_to_the_rebuild").debug()
@@ -1084,9 +1084,15 @@ class Founder(unittest.TestCase):
         j = text.index("### 1.5b")
         section = text[i:j]
         self.assertIn('tropo-mint-id.py --founder "<vault_owner>"', section)
-        self.assertLess(section.index('--set-entity-name "<vault_name>"'),
-                        section.index('--founder "<vault_owner>"'),
-                        "the founder is minted after the Studio is named")
+        # Order flipped 2026-09-09 (metis-g128, Mike's words for the beat:
+        # "what name you would like to go by and a name for / purpose of the
+        # studio"): the person is asked first, so the founder is minted BEFORE
+        # the Studio is named. Po's Finding 4 on the founder's own test: the
+        # words and the mechanics disagreed and he answered the words. The two
+        # mints are independent; the order is the script's to choose.
+        self.assertLess(section.index('--founder "<vault_owner>"'),
+                        section.index('--set-entity-name "<vault_name>"'),
+                        "the founder is minted before the Studio is named, as the words ask")
 
     def test_principal_born_through_mint_file_with_title_and_slug(self):
         uid, path, minted = self._mint("Ada Lovelace")

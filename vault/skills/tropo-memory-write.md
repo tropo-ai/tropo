@@ -15,8 +15,8 @@ status: active
 owner: talos
 created: 2026-07-03
 created_by: talos-t24
-modified: 2026-07-15
-modified_by: argus-a132
+modified: 2026-09-09
+modified_by: metis-g128
 governed_by: a5b3c891
 capsule_version: '1.5'
 extraction_scope: ship
@@ -58,8 +58,8 @@ Use this whenever you want to pin a memory. One call routes to the right Tropo t
 
 | Scope | Path | Who reads it |
 |-------|------|-------------|
-| `agent` | `agents/<agent_slug>/.tropo-capsule/memory/entries/<uid>.md` | That agent at every boot |
-| `studio` | `.tropo-studio/memory/entries/<uid>.md` | Every executive at every boot |
+| `agent` | `agents/<agent_slug>/.tropo-capsule/memory/entries/<uid>.md` | **Nothing, at boot — the entry file is durable storage, not a boot read.** Boot reads the curated surface, so step 5b is what makes this reach your successor |
+| `studio` | `.tropo-studio/memory/entries/<uid>.md` | **Nothing, at boot — same as `agent`.** The boot read is `.tropo-studio/memory/memory-current.md`; step 5b is what puts the pin there |
 | `doctrine` | `vault/files/<uid>.md` (type: `memory`) | Vault-level; any agent via grep |
 
 ---
@@ -68,9 +68,9 @@ Use this whenever you want to pin a memory. One call routes to the right Tropo t
 
 1. **Choose scope.** Ask: "Should only I (this agent) know this? → `agent`. Should the whole crew know? → `studio`. Is this a binding OS-level rule? → `doctrine`."
 
-2. **Generate a UID.** Run `python3 vault/tools/tropo-mint-id.py` to get a collision-checked 8-character hex UID (e.g. `3f8c2d61`).
+2. **Generate a UID.** Run `python3 vault/tools/tropo-mint-id.py` and paste what it prints: a collision-checked 12-hex composite carrying this Studio's mint prefix (e.g. `5028888a2741`). Never hand-generate one. *(Older entries carry the legacy 8-hex shape; both resolve.)*
 
-3. **Determine the target path.**
+3. **Determine the target path.** Create the `entries/` directory if it does not exist yet (genesis seeds it for companions minted at v1.96 or later; an agent minted earlier, or by hand, may not have it).
    - `agent`: `agents/<agent_slug>/.tropo-capsule/memory/entries/<uid>.md`
    - `studio`: `.tropo-studio/memory/entries/<uid>.md`
    - `doctrine`: `vault/files/<uid>.md`
@@ -99,6 +99,28 @@ Use this whenever you want to pin a memory. One call routes to the right Tropo t
    ```
 
    `kind` uses the same five values as `subtype`. The log is append-only forever: do **not** rewrite historical `date/generation/type/content/expires` rows or `event: fold-boundary` rows. Readers normalize those legacy dialects; new writes use only the envelope above.
+
+5b. **Put one line where boot actually looks — this is the step that makes the pin survive the night.** Steps 4 and 5 write durable storage. **Neither is read at boot.** Append a single line to the carry-forward section of your boot-read memory surface — `agents/<agent_slug>/.tropo-capsule/memory/agent-memory.md` (`memory.md` once the Phase-2 rename lands; resolve via `vault/tools/lib/memory_surfaces.py`, never hardcode):
+
+   ```
+   - <YYYY-MM-DD> · [<uid>](entries/<uid>.md) · <subtype> · "<the rule, in one line>"
+   ```
+
+   The date is not decoration. A companion's own surface tells it to "append a short **dated** line", and a successor reading an undated list cannot tell last night's learning from one a year old without opening every entry file — which is the digging this step exists to remove. Measured 2026-09-08: an undated line sent a day-2 reader into the entry file to answer "when", and it reported the memory as not-carried on those grounds.
+
+   **The surface depends on the scope you chose in step 1:**
+
+   | Scope | Boot-read surface to append to | Section heading in it |
+   |-------|-------------------------------|----------------------|
+   | `agent` | `agents/<agent_slug>/.tropo-capsule/memory/agent-memory.md` | `§Top-of-Mind` (executive) or `## What I have learned working here` (companion) |
+   | `studio` | `.tropo-studio/memory/memory-current.md` | `## Top-of-Mind (tier=current)` |
+   | `doctrine` | none — governed entries are found by index and grep, not by a boot surface | — |
+
+   Match whichever heading your file actually has; do not invent a third.
+
+   **Why this step exists.** The canonical playbook sets the boot read to the curated surface and, two lines later, sends your pins to `entries/<uid>.md`. Following only the second instruction writes a perfect memory nothing ever reads. Measured on a real box 2026-09-08: a companion recorded a day-1 learning exactly as instructed, and the day-2 boot of that same agent — following the box's own steps — saw nothing. Storage is not memory until something reads it back.
+
+   Executives: this is a Top-of-Mind slot and the tier is bounded (5–15); if it is full, that is a curation decision, not a reason to skip the line.
 
 6. **Register in the vault index.** Run `python3 vault/tools/tropo-rebuild-index.py --apply` (or the full `python3 vault/tools/tropo-rebuild-vault.py --apply` for a comprehensive refresh). The rebuild automatically scans `.tropo-studio/memory/entries/` (studio scope) and `agents/*/.tropo-capsule/memory/entries/` (agent scope) since v1.79 — no manual index entry required.
 

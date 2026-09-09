@@ -27,8 +27,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 BUILD_TOOL = ROOT / "vault" / "tools" / "tropo-build-release.py"
-HTML_ENTRY = "f015ddd23f10"
-SVG_ENTRY = "f015804812dc"
+HTML_ENTRY = "f015b2fd6b4b"   # v5; v4's f015ddd23f10 archived 2026-09-09 (v4 stopped shipping, Mike-ruled)
+SVG_ENTRY = "f015e4074694"    # v5; v4's f015804812dc archived 2026-09-09
 RESOURCES_ENTRY = "f015fb16887b"
 
 
@@ -154,15 +154,15 @@ class ShipEntriesTest(unittest.TestCase):
         self.assertTrue(fm, "review HTML ship-artifact entry file not in vault/files")
         self.assertEqual(fm.get("type"), "ship-artifact")
         self.assertEqual(fm.get("source_mode"), "direct-copy")
-        self.assertEqual(fm.get("output_path"), "docs/architecture-review-v4/tropo-l1-architecture-review.html")
-        self.assertTrue((ROOT / "docs/architecture-review-v4/tropo-l1-architecture-review.html").is_file())
+        self.assertEqual(fm.get("output_path"), "docs/architecture-review-v5/tropo-l1-architecture-review.html")
+        self.assertTrue((ROOT / "docs/architecture-review-v5/tropo-l1-architecture-review.html").is_file())
 
     def test_review_svgs_ship_recursively(self):
         fm = self._frontmatter(SVG_ENTRY)
         self.assertTrue(fm, "review svg/ ship-artifact entry file not in vault/files")
         self.assertEqual(fm.get("source_mode"), "recursive-ship-all")
-        self.assertEqual(fm.get("output_path"), "docs/architecture-review-v4/svg/")
-        svgs = sorted((ROOT / "docs/architecture-review-v4/svg").glob("*.svg"))
+        self.assertEqual(fm.get("output_path"), "docs/architecture-review-v5/svg/")
+        svgs = sorted((ROOT / "docs/architecture-review-v5/svg").glob("*.svg"))
         self.assertEqual(len(svgs), 15, [p.name for p in svgs])
 
     def test_map_resources_file_ships(self):

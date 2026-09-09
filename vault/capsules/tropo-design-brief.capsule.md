@@ -7,8 +7,9 @@ ship_scope_lock_break: 'extraction_scope: ship ADDED 2026-07-02 per Mike verbati
 name: design-brief
 type: capsule-definition
 extends: core
-version: 3.5
+version: 3.6
 lifecycle_pairing_amendment_2026_08_16: "v3.4 -> v3.5 amendment 2026-08-16 by talos-t44 under Mike-locked v1.89 dev-spec 271d28d7 (activation 7a47c089), whose committed_substrate assigns this amendment to the pairing package. Purely additive: adds the OPTIONAL lifecycle_pairing declaration (core.capsule v2.1) so this type's archived-state law is machine-readable. No enum, alias, state-machine, transition, rollup, template, or validation-rule change; every existing instance stays valid. Version bumped 2026-08-16 on Argus A150's ruling (evt_dd132e700471fc5e_00000014, verbatim: 'semantic capsule changes bump all six'), after T44 measured the effect and asked rather than deciding. For dev-spec specifically A150 held template_enforced_from_version at 1.8 in the same ruling, so v1.8+ stable-AC-ID behaviour is unchanged by the bump. Mint registry regenerated in the same commit."
+v3_6_title_required_amendment: 'Mike-directed 2026-09-07: "I would require it" and "why count on them to do it after - that is error prone." New design-brief mints must supply a non-blank title; the shared minter refuses before issuing an ID or writing a file/index. Existing briefs retain their identities and lifecycle. Companion bytes and template version are unchanged.'
 mint_mode: human
 mint_template: vault/capsules/templates/design-brief.template.md
 mint_template_version: '1.0'
@@ -18,12 +19,12 @@ template_enforced_from: '2026-07-12'
 template_enforced_from_note: 'ADDED 2026-07-31 per core.capsule v1.9 §Governance Rule 11 (OPTIONAL `template_enforced_from`). Value is the date THIS capsule''s §Template leg was authored, derived from the first commit introducing the ## §Template heading in this file and cross-checked against this capsule''s own changelog/amendment note. Declares the mint-time contract''s start so instances predating the scaffold are not judged against it. One-line enforcement-scope metadata; no schema/enum/state-machine/template change, so no version bump (the extraction_scope sweep precedent).'
 v3_4_companion_template_amendment: "Mike-approved 2026-08-05: connects design-brief to the existing typed mint through a visible hash-bound companion. The companion preserves the v3.3 required sections, adds inherited core owner and activation provenance, and uses the Studio inbox as a valid birth fallback. No lifecycle or instance migration."
 v3_3_amendment_note: 'v3.2 → v3.3 amendment 2026-07-12 by argus-a130 per Mike-locked Governed Autonomy S2 dev-spec bba40cd7 (activation 0d9f89bc; committed substrate "Template legs for the top-10 types... Argus: contract + design-brief leg"). Additive + non-breaking: NEW §Template section (the mint-stamped scaffold; first leg of ten — the dogfood) per the Template-Leg Contract v1.0 (b933eafb). No schema, enum, or state-machine change. Note: the v3.2 changelog row was already absent pre-amendment (pre-existing gap, not this edit).'
-supersedes_version: '3.3'
+supersedes_version: '3.5'
 tier: os
 author: tropo
 created: 2026-04-10
-modified: '2026-08-16'
-modified_by: talos-t44
+modified: '2026-09-07'
+modified_by: argus-a174
 meta_status_rollup_added: argus-a104 2026-06-08 — +locked→done in meta_status_rollup per 4acf3f2d v0.4 DERIVE (Mike-signed 7-capsule lock-break batch); additive, bucket-only (status enforced_enums unchanged — locked still WARNs per v3_2 note); prior modified argus-a99 2026-06-05
 status: locked
 locked_by: argus-a99
@@ -301,13 +302,21 @@ See [`127d2fe2`](../../vault/files/127d2fe2.md) — frontmatter shows `author: a
 
 ---
 
-## §Template (v3.4 — companion scaffold; contract at [b933eafb](../../vault/files/b933eafb.md))
+## §Template (v3.6 — title required at mint; contract at [b933eafb](../../vault/files/b933eafb.md))
 
 The single mint and verifier scaffold is the visible companion
 [design-brief.template.md](templates/design-brief.template.md), hash-bound in
 this capsule's frontmatter. It preserves the v3.3 problem/direction/questions
 contract, stamps the inherited core fields, and starts `member_of` at the
 Studio-inbox fallback until the author replaces it with the real owning project.
+
+**Title is required at mint (Mike-directed, 2026-09-07).** The caller supplies
+`--title` (or `title=` through the shared mint API). Missing, empty, or whitespace-only
+titles are refused before a UID is issued or any file/index is written, including
+scratch-output calls. The error names the missing argument and tells the agent to
+retry with a title. This applies to new design briefs; existing records keep their
+identities. Title placeholders in the reusable scaffold are not permission to mint
+an unnamed brief.
 
 **Leg rules (per the contract):** `status: design` is the only legal birth value (§State Machine — briefs are born being-written, no `new` state); optional relationship fields (`informs`/`refs`/`derived_from`/`composes_into`/`requested_by`/`requested_of`/`accepted_by`) are added when real, never scaffolded empty; the companion defaults are valid-by-construction against this capsule's own enums — plant-test: mint once into scratch → `check-one` passes with zero edits beyond placeholder consumption.
 
@@ -317,6 +326,7 @@ Studio-inbox fallback until the author replaces it with the real owning project.
 
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
+| 3.6 | 2026-09-07 | Require a non-blank title at design-brief mint time, enforced by the shared CLI/API writer before identity generation or durable writes. Mike-directed. Existing records and companion bytes unchanged. | argus-a174 |
 | 3.4 | 2026-08-05 | Connected design-brief to the existing typed mint through a visible hash-bound companion. Preserved the v3.3 required sections; added inherited core owner, activation provenance, and a valid Studio-inbox birth fallback. No lifecycle or instance migration. | argus-a145 |
 | 3.3 | 2026-07-12 | **§Template leg (first of ten — the S2 dogfood).** New §Template section per the Template-Leg Contract v1.0 ([b933eafb](../../vault/files/b933eafb.md)): the mint-stamped scaffold (frontmatter template with valid-by-construction defaults, body skeleton with consumable REQUIRED placeholders, `<<MINT:*>>` token set). Committed substrate of Mike-locked Governed Autonomy S2 ([bba40cd7](../../vault/files/bba40cd7.md), activation 0d9f89bc). Additive, non-breaking; no schema/enum/state-machine change. (v3.2 changelog row was already absent pre-amendment — pre-existing gap, noted not fabricated.) | argus-a130 |
 | 3.0 | 2026-04-24 | **v3 amendment.** `stage:` field renamed → `status:` per v3 Decision 4; values (`design → specify → done`) preserved. Pre-v3 `⚠️ Known terminology collision` §State Machine block removed as resolved-by-rename; historical note retained. Studio prose updated (Procedures + Rules-at-a-glance + Pitfalls) to use `status:` consistently. `pattern_exemplar: d0c00001` declared in frontmatter per Decision 3 — design-brief is patterned on document.capsule with exploratory-permissiveness + composability-pair + lifecycle-without-lock discipline layer. Signature-line drift resolved at v3.0. UID preserved at de5181b0. | argus-a33 |

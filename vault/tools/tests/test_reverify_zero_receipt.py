@@ -71,10 +71,13 @@ class ReverifyBase(unittest.TestCase):
         self.engine = _load_isolated_engine(self.tmp)
         self.run_dir = _copy_scenario(self.tmp)
 
-    def make_verified(self, engine, run_dir, step, with_receipt=None):
+    def make_verified(self, engine, run_dir, step, with_receipt=None, receipt_verdict="pass"):
         """Drive the step to 'verified' through the engine's own primitives.
         with_receipt: None -> no release-verification-receipt on the run;
-        a sha string -> one harness receipt naming that candidate sha."""
+        a sha string -> one harness receipt naming that candidate sha.
+        receipt_verdict: the verdict that receipt carries ('pass' by default;
+        'fail' exercises the v1.95 arm where a failed instrument must still be
+        re-earnable)."""
         # The frozen scenario has a0f2bea8 at 'completed' with FAIL receipts on
         # the journal; strip the journal back to before its first receipt so we
         # control the receipt state precisely.
@@ -103,7 +106,7 @@ class ReverifyBase(unittest.TestCase):
                       "instrument": _rv.instrument_for_node(step),
                       "release_run_uid": "d445af8b",
                       "candidate_sha256": with_receipt,
-                      "verdict": "pass",
+                      "verdict": receipt_verdict,
                       "executor_or_attester": ACTOR,
                       "execution_mode": "machine",
                       "evidence_ref": f"{step}@fixture",
@@ -193,3 +196,32 @@ class PreconditionsStillRefuse(ReverifyBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AFailedReceiptIsNotAGreen(ReverifyBase):
+    """v1.95 candidate #3 (metis-g123, 2026-09-07). The guard protects a current
+    GREEN. A FAIL receipt naming the active candidate is not one, and treating it
+    as one made a failed instrument permanent: reverify refused and step-redeclare
+    refuses a verified step, so nothing could re-earn the receipt. Found live on
+    the v1.95 external-test node."""
+
+    def test_a_failing_receipt_naming_the_active_candidate_reopens(self):
+        self.make_verified(self.engine, self.run_dir, HARNESS_STEP,
+                           with_receipt=ACTIVE_CANDIDATE, receipt_verdict="fail")
+        state = self.engine.derive_state(self.engine.read_events(self.run_dir))
+        self.assertEqual(state["step_status"][HARNESS_STEP], "verified")
+        result = self.engine.action_reverify_step(
+            REAL_ACTIVATION_UID, HARNESS_STEP, ACTOR,
+            "the receipt for the active candidate is a FAIL; re-earn it")
+        self.assertIn("reverify_opened", result)
+        state = self.engine.derive_state(self.engine.read_events(self.run_dir))
+        self.assertEqual(state["step_status"][HARNESS_STEP], "declared")
+
+    def test_a_passing_receipt_naming_the_active_candidate_still_refuses(self):
+        """The invariant that must not move."""
+        self.make_verified(self.engine, self.run_dir, HARNESS_STEP,
+                           with_receipt=ACTIVE_CANDIDATE, receipt_verdict="pass")
+        with self.assertRaises(self.engine.ContractError) as ctx:
+            self.engine.action_reverify_step(
+                REAL_ACTIVATION_UID, HARNESS_STEP, ACTOR, "should refuse")
+        self.assertIn("PASSING", str(ctx.exception))

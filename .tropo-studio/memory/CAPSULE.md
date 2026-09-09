@@ -5,7 +5,7 @@ folder_type: governed
 owner: vault-admin
 write_access: all-agents
 read_access: all
-purpose: "Vault-level memory — cross-agent patterns and organizational knowledge. Every agent reads the index at boot."
+purpose: "Studio-level memory — cross-agent patterns and organizational knowledge. Every agent reads memory-current.md at boot."
 uid: 6e072ad6
 ---
 
@@ -33,24 +33,45 @@ Different from agent-level memory (`agents/<name>/.tropo-capsule/memory/`) which
 
 ## Format
 
-Each memory is a standalone markdown file with minimal frontmatter:
+**There is exactly one index, and it is `memory-current.md`.** Each memory's full text is a
+standalone file in `entries/`; the index carries one line per memory, linking to it.
+
+An entry looks like this:
 
 ```yaml
 ---
-name: Short descriptive name
-description: One-line summary used to decide relevance
-type: feedback | project | user | reference
+uid: <8-hex, minted with `python3 vault/tools/tropo-mint-id.py --kind file`>
+type: memory
+subtype: feedback | procedural | semantic | architectural | relationship | reference
+scope: studio
 created: YYYY-MM-DD
 created_by: your-agent-id
 ---
 ```
 
-The index file `MEMORY.md` lists every memory as one line: `- [title](filename.md) — one-line description`. Every agent reads the index at boot; pinned entries get read in full.
+Its index line looks like this:
+
+```
+- [<uid>](entries/<uid>.md) — one-line summary a reader uses to decide whether to open it
+```
 
 ## Boot contract
 
-Every agent, at every boot, reads `MEMORY.md`. This is the index. Read full content of any memory you need that's directly linked. Keep the index under ~200 lines so it stays readable at boot.
+Every agent, at every boot, reads **`memory-current.md`** — the index, and only the index. Open a
+full entry from `entries/` when its one-line summary is not enough. Keep the index readable at boot:
+if it grows past a few hundred lines, compress the lines, never drop an entry.
 
 ## Adding a memory
 
-Write the memory file, then append one line to `MEMORY.md`. The next boot surfaces it for every agent.
+Write the entry into `entries/`, then append its one line to `memory-current.md`. Both steps, always.
+
+> **Why both steps, and why only one index.** An entry with no index line is invisible at boot even
+> though its file is perfectly intact, and an index line in a file nothing boots from is the same
+> failure wearing a different hat. In the studio that builds Tropo, a binding ruling from the founder
+> was appended to a second index that agents did not read; the whole crew booted without it for eight
+> days and nothing could show it was missing. That is why this folder ships one index and not two.
+
+## Do not create a second index
+
+If you find yourself adding a file that lists memories — `MEMORY.md`, `index.md`, anything of that
+shape — stop. `memory-current.md` is the index. A second one is a place for memories to go missing.

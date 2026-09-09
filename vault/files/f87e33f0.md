@@ -25,9 +25,14 @@ schema_version: 2
 extraction_scope: ship
 slug: tropo-documentation
 lifecycle: standing
-last_release_reflected: 1.52.0
+last_release_reflected: "1.96.0"
 aligned_with: 8a4e21c5
 release_history:
+  - release_uid: f01576b6ade3
+    release_version: "1.96.0"
+    summary: 'Documentation owns what a stranger reads first. v1.96 names Cal and Darin before the concierge offers them, fixes the copy-paste commands that fail, fixes RELEASING.md''s four command blocks that do not execute today, and tells the truth about a box that is not a git repo.'
+    registry_uid: e4526c51
+    derived_from: capabilities_touched
   - release_uid: 4920ce3a
     release_version: 1.20.0
     summary: v1.20.0 ship — 4 of 13 governance-contract instances landed in folders with primary tropo-documentation membership (library/ cross-cut + context/ + research/ + tropo-business/). Content folder governance is now a typed vault entry; discoverable via hub Members section just as KB articles became at v1.19.0.

@@ -37,6 +37,7 @@ if str(_TOOLS_DIR) not in sys.path:
 
 from lib import release_package as _pkg  # noqa: E402
 from lib import governed_path as gp  # noqa: E402
+from lib.journal_event import run_journal_event_type  # noqa: E402
 
 __all__ = [
     "RELEASE_EVENTS",
@@ -334,8 +335,8 @@ class AuthorizationContext:
             for key in _IDENTITY_KEYS:
                 if key in data and key not in identity and data[key]:
                     identity[key] = str(data[key])
-            if row.get("event") == "tropo.release.published":
-                receipt = data.get("publication_receipt_sha256")
+            if run_journal_event_type(row) == "tropo.release.published":
+                receipt = data.get("publication_receipt_sha256") or data.get("receipt_sha256")
 
         # v1.91 S2 AC3 (3fb41c99): "which candidate is live" and "is this run
         # frozen" are answered by lib/release_package's shared resolvers, not
@@ -594,7 +595,7 @@ def authorize(
         )
 
     # --- cardinality ------------------------------------------------------- #
-    same_event = [row for row in prior_events if row.get("event") == event]
+    same_event = [row for row in prior_events if run_journal_event_type(row) == event]
     if contract.terminal and same_event:
         return _refuse(
             REFUSAL_CARDINALITY,

@@ -87,6 +87,22 @@ def find_harness_receipt(events, release_run_uid: str, candidate_sha256: str) ->
             continue
         candidates.append(data)
 
+    # An authorized skip writes a receipt with verdict `skipped` into the same
+    # set (Mike-ruled 2026-09-09). That is an EXCUSAL the freeze and the fire
+    # read; it is not evidence that the harness ran, which is the only thing
+    # this gate certifies. Name it rather than reporting a bare absence.
+    excusals = [c for c in candidates if str(c.get("verdict") or "") == "skipped"]
+    candidates = [c for c in candidates if str(c.get("verdict") or "") != "skipped"]
+    if excusals and not candidates:
+        last = excusals[-1]
+        raise HarnessEvidenceRefusal(
+            f"the release-harness was EXCUSED on run {release_run_uid} by "
+            f"{last.get('authorized_by')} ({last.get('evidence_ref')}), not run. An "
+            f"excusal is not harness evidence: this gate certifies that the harness "
+            f"RAN against these bytes. After an authorized skip the step is skipped, "
+            f"not started; the freeze and the fire read the excusal and say so."
+        )
+
     if not candidates:
         raise HarnessEvidenceRefusal(
             f"no release-harness receipt on run {release_run_uid}. The harness "

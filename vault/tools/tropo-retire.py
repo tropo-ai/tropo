@@ -182,6 +182,8 @@ _CURRENT_LINE_RE = re.compile(r"^\*\*Current:\*\*.*$", re.MULTILINE)
 # reports whatever it could not write. It collapses back to ONE home at cutover, when the
 # boot contracts and the readers move to the per-generation file — which is precisely what
 # TestTheReaderMovesWithTheWriter gates. Delete this block and its writer then, not before.
+# Legacy shape, kept for readers of this constant; memory_surface_path() below
+# resolves the live name through lib/memory_surfaces (Phase 2, f0153a6df07f).
 MEMORY_SURFACE_REL = Path(".tropo-capsule") / "memory" / "agent-memory.md"
 TRANSFER_SECTION_HEADING = "## §Living-Transfer-from-Predecessor"
 _TRANSFER_SECTION_RE = re.compile(
@@ -418,8 +420,17 @@ def place_transfer(dest: Path, text: str, findings: ClosureFindings) -> str:
 
 
 def memory_surface_path(vault_root: Path, slug: str) -> Path:
-    """agents/<slug>/.tropo-capsule/memory/agent-memory.md — the letter's second home."""
-    return vault_root / "agents" / slug / MEMORY_SURFACE_REL
+    """The agent's memory surface — the letter's second home.
+
+    Phase 2 (f0153a6df07f): resolves memory.md, falls back to agent-memory.md.
+    This path is READ, spliced and written back, so resolving it matters twice —
+    a hardcoded old name after step 2 would create a second, empty surface beside
+    the real one and splice the outgoing letter into the copy nobody boot-reads.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from lib import memory_surfaces  # noqa: E402
+
+    return memory_surfaces.agent_index(vault_root, slug)
 
 
 def splice_transfer_section(text: str, letter: str) -> tuple[str, bool]:

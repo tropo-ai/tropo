@@ -72,10 +72,37 @@ Exit codes:
     0 — GREEN (validator passes; zero warnings)
     1 — YELLOW (validator passes; warnings present)
     2 — RED (validator failures; ship-blocker)
-    3 — precondition error (Python below 3.9 or not in a Tropo Studio)
+    3 — precondition error (Python below 3.9 or not in a Tropo Studio), and
+        NOT-INITIALIZED: a correct Studio that has not built its index yet
     4 — substrate-degraded (validator subprocess timeout >VALIDATOR_TIMEOUT_SECONDS)
     5 — script-error (validator subprocess crashed; not a substrate-defect)
     6 — argparse / CLI usage error (REMAPPED from default 2 to avoid RED collision)
+    7 — initialization failed (auto-init ran and the index would not build;
+        NO health verdict was produced)
+
+WRITES: this tool is no longer read-only. When the validator reports the Studio
+has no index, it runs the index build (Mike-ruled 2026-09-08) — which on a Studio
+with no identity also mints one, because the build does. Pass --no-auto-init for
+the read-only behaviour; every programmatic caller should.
+
+THREE OUTCOMES THAT WERE TWO (f0152b4c4ef4, 2026-09-08). A freshly unzipped box
+ships without its index by design and builds it on first use. Until 2026-09-08
+that state was indistinguishable here from a crashed validator: the guard below
+rewrote every code outside {0,1} into script-error 5, so `npm test` in a perfect
+box printed "validator subprocess failed (path missing or crash)" and swallowed
+the validator's own correct answer and the one command that fixes it. Worse in
+the other direction, exit 1 is BOTH the validator's "at least one check failed"
+AND CPython's code for an uncaught exception, so a validator that died before
+printing its Summary parsed to all-zero counts and reported GREEN.
+
+Not-initialized, healthy and aborted are now three separate things, and neither
+of the two silent conversions can happen: a missing `Summary:` line is never a
+verdict, and the no-index answer is never a crash.
+
+MACHINE READERS MUST NOT READ THE EXIT CODE (see NOT_INITIALIZED_STATUS below).
+Whatever a human's terminal shows, programmatic consumers read the status line or
+the JSON `status` field. That is what lets the stranger-facing exit code be a
+one-line decision rather than a contract every gate depends on.
 
 Author: argus-a65 (v1.0); argus-a66 (v1.0.1 — R3 absorption)
 Owner: argus
@@ -125,6 +152,166 @@ if not VALIDATOR_PATH.is_file():
 # Subprocess timeout for validator invocation. Validator typically runs 2-3 min
 # on Argo-sized Studios. Default 600s; override via TROPO_VALIDATE_TIMEOUT env var.
 VALIDATOR_TIMEOUT_SECONDS = int(os.environ.get('TROPO_VALIDATE_TIMEOUT', '600'))
+
+# ── The not-initialized outcome (f0152b4c4ef4) ───────────────────────────────
+#: The stable, greppable signal a MACHINE reads. Deliberately not the exit code:
+#: `build-box-self-test` used to judge one integer and nothing else, so the exit
+#: code was a contract every gate depended on and no gate could see anything
+#: else. Readers key on this line (or the JSON `status` field); the exit code
+#: below is then purely the stranger's terminal, and can change without touching
+#: a single gate.
+NOT_INITIALIZED_STATUS = 'STATUS: NOT INITIALIZED'
+
+#: The validator's own recognizable answer for the same state. Matched on its
+#: OUTPUT, never on its exit code alone — exit 2 is also its "operational error",
+#: and conflating the two is how this state became a crash report.
+NOT_INITIALIZED_MARKER = 'This Studio has no index yet'
+
+#: The one command that resolves it. Printed verbatim to the human, and kept here
+#: rather than re-typed at each site so the message and the gate cannot drift.
+NOT_INITIALIZED_CURE = 'python3 vault/tools/tropo-rebuild-index.py --apply --vault-path .'
+
+#: DECISION 4 (v1.96 board), open at time of writing and one line to change.
+#: Argus A175 ruled a distinct non-zero as the record's owner; Metis G126 moved
+#: her lean to it as release driver; Mike's word settles it. Set to 0 for the
+#: other option — nothing else in this file or in any gate changes, which is the
+#: whole point of NOT_INITIALIZED_STATUS above.
+NOT_INITIALIZED_EXIT = 3
+
+#: Internal sentinel for the not-initialized outcome as it travels out of
+#: run_validator. Deliberately not a real exit code: the exit code is decision
+#: 4's to change, and this must keep meaning the same thing if it does.
+_OUTCOME_NOT_INITIALIZED = 'not-initialized'
+
+#: AUTO-INITIALIZE (Mike-ruled 2026-09-08, in session). Decision 4 asked which
+#: exit code a stranger should get on a correct-but-unbuilt box. Mike dissolved
+#: the question instead of answering it: build the index and ask again, so the
+#: state a stranger is asked to interpret stops existing. Decision 4's constant
+#: above is retained and still governs the --no-auto-init path.
+#:
+#: ONE SOURCE. The argv is DERIVED from NOT_INITIALIZED_CURE — the same string
+#: printed to the human — so the command we run and the command we would have
+#: told them to run can never drift into two readers of one fact. Only the
+#: interpreter is substituted, so a venv/py3.9 box runs the same one it is on.
+#: test_the_auto_init_command_is_the_printed_cure enforces the derivation.
+AUTO_INIT_ARGV = ([sys.executable] + NOT_INITIALIZED_CURE.split()[1:]
+                  + ['--no-genesis'])
+
+#: WHY THE DELTA, and why the cure itself is NOT changed to match.
+#:
+#: Without --no-genesis the rebuild also mints .tropo/studio-identity.md and a
+#: starter vault-entity pair (tropo-rebuild-index.py:7555-7568). Measured on a
+#: real box: a 1,184-byte identity file appeared where none existed, created by
+#: running the health check. That is the wrong owner for that act. The boot
+#: contract halts on a Studio with no identity and routes to Po, who mints it at
+#: her first greeting; an executive boot never mints identity, and neither
+#: should `npm test`. Mike, to Metis, ~18:20Z the same day: "I expect most users
+#: will initialize their studio with Po." It would also arm build-no-studio-
+#: identity on any tree this ran against.
+#:
+#: The printed cure is deliberately left alone. That exact string is not ours
+#: alone — tropo-validate.py:14189 prints it, tropo-studio-status.py:319 holds
+#: it as GENESIS_CURE, and tropo-genesis-companions.py:714 quotes it. Editing
+#: our copy to match this argv would put four readers of one fact out of step to
+#: fix a problem that only exists on the automated path. A HUMAN typing that
+#: command is making a choice and may well want genesis; a MACHINE doing it as a
+#: side effect of a health check must not. So the delta lives here, exactly one
+#: flag wide, and a test asserts it is exactly that.
+
+#: Machine-readable signal that initialization itself failed. This is the one
+#: question that MOVED rather than disappeared: an unbuilt box is no longer a
+#: state a stranger must interpret, but a box whose index will not build is.
+#: Loud, non-zero, and it names the command so the human can run it by hand.
+#: The auto-init command as a human would retype it. A failure message must name
+#: what ACTUALLY RAN, not the cure: the two differ by --no-genesis, so telling the
+#: human to run the cure to "see the full error" would hand them a command that
+#: may not reproduce the failure AND that mints the very identity this tool just
+#: declined to mint, unwarned. Derived from the argv, so it cannot drift from it.
+AUTO_INIT_COMMAND_DISPLAY = ' '.join(['python3'] + AUTO_INIT_ARGV[1:])
+
+AUTO_INIT_FAILED_STATUS = 'STATUS: INITIALIZATION FAILED'
+#: 7, not 6. 6 is already the argparse/CLI-usage-error code (see the table above
+#: and _ArgparseRemap.error), which itself exists because argparse's default of 2
+#: collided with substrate-RED. Shipping 6 here would have rebuilt that exact
+#: collision one layer up: `--bogus-flag` and "your index would not build" would
+#: have been the same integer. Caught in adversarial review, verified by hand.
+AUTO_INIT_FAILED_EXIT = 7
+
+#: Seconds allowed for the index build. A large Studio takes ~46s; the release
+#: box is far smaller. Generous, and bounded so a wedged build cannot hang CI.
+AUTO_INIT_TIMEOUT_SECONDS = int(os.environ.get('TROPO_INDEX_BUILD_TIMEOUT', '900'))
+
+
+def build_index(studio_root: Path) -> "tuple[bool, str, str]":
+    """Run the index build a not-initialized Studio needs. Returns (ok, out, err).
+
+    This is the auto-initialize half of Mike's 2026-09-08 ruling. It runs
+    AUTO_INIT_ARGV, which is derived from NOT_INITIALIZED_CURE, so it is by
+    construction the same command this tool would otherwise have printed and
+    asked the human to run.
+
+    It is NOT called unless the validator itself answered not-initialized. That
+    matters: this tool does not decide whether a Studio is initialized. The
+    validator owns that question and already answers it (NOT_INITIALIZED_MARKER),
+    and a second file-existence test here would be two readers of one fact — an
+    index that exists but is empty would then be called initialized by one reader
+    and not the other. Reuse over re-derivation, deliberately.
+    """
+    # THE RESIDUE PROBLEM (found in adversarial review, reproduced by hand before
+    # fixing). A build that writes some rows and then dies leaves a partial index
+    # on disk. The validator's question is "is there an index", not "is it whole",
+    # so the NEXT run answers yes, skips auto-init, and prints GREEN — substrate
+    # healthy, having repaired nothing. That is the precise false-GREEN class this
+    # tool was cured of on 2026-09-08, and auto-init would have rebuilt it one
+    # layer up: before this change a human ran the build and watched it fail, so
+    # the half-state was never created unattended.
+    #
+    # The cure is to leave the Studio in the honest state it was in before we
+    # touched it. Only files this build CREATED are removed — an artifact that
+    # already existed is the user's and is never ours to delete. Derived,
+    # gitignored, per-machine products only; nothing governed is touched, so the
+    # deletion discipline (soft-delete via tropo-recycle.py) is not in play.
+    derived = [studio_root / 'vault' / name for name in (
+        '00-index.jsonl', '00-archive-index.jsonl',
+        '00-index.sqlite', '00-project-tree.jsonl')]
+    pre_existing = {d for d in derived if d.exists()}
+
+    try:
+        result = subprocess.run(
+            AUTO_INIT_ARGV,
+            capture_output=True,
+            text=True,
+            timeout=AUTO_INIT_TIMEOUT_SECONDS,
+            cwd=str(studio_root),
+        )
+        ok = result.returncode == 0
+        out, err = result.stdout or '', result.stderr or ''
+    except subprocess.TimeoutExpired:
+        ok, out, err = False, '', ('index build exceeded %ds'
+                                   % AUTO_INIT_TIMEOUT_SECONDS)
+    except OSError as exc:
+        ok, out, err = False, '', '%s: %s' % (type(exc).__name__, exc)
+
+    if not ok:
+        removed = []
+        for d in derived:
+            if d in pre_existing or not d.exists():
+                continue
+            try:
+                d.unlink()
+                removed.append(d.name)
+            except OSError:
+                # Could not clean up. Say so — a partial index we FAILED to
+                # remove is exactly the state that reads GREEN next run, and
+                # silence here would be the whole defect back again.
+                err += ('\nWARNING: a partial %s was left behind and could not '
+                        'be removed; the next health check may read it as a '
+                        'built index.' % d.name)
+        if removed:
+            err += ('\nPartial output removed so the next run reports the truth '
+                    'rather than reading it as a built index: %s'
+                    % ', '.join(removed))
+    return (ok, out, err)
 
 
 def resolve_studio_root() -> Optional[Path]:
@@ -229,8 +416,28 @@ def run_validator(studio_root: Path) -> tuple[Optional[str], Optional[str], int]
         # `parse_validator_output('')` returned all-zero counts; `compute_verdict`
         # returned GREEN exit 0 on fake/empty/symlinked-empty Studios. Fix: any
         # validator returncode outside {0, 1} is reclassified as script-error.
+        #
+        # THREE OUTCOMES, NOT TWO (f0152b4c4ef4, talos-t65 2026-09-08). The
+        # {0,1} whitelist above was added for a real defect and is kept; what it
+        # could not do is tell the two NON-verdict states apart from each other.
+        #
+        # (a) NOT INITIALIZED. The validator answers this correctly and kindly,
+        #     and exits 2 — the same code it uses for an operational error, which
+        #     is why the code alone can never decide it. Matched on the
+        #     validator's own OUTPUT, so a future exit-code change cannot silently
+        #     turn this back into a crash report.
+        if NOT_INITIALIZED_MARKER in (result.stdout or ''):
+            return result.stdout, result.stderr, _OUTCOME_NOT_INITIALIZED
+        # (b) ABORTED, including the case the old guard could not see at all:
+        #     exit 1 is BOTH "at least one check failed" and CPython's uncaught
+        #     exception, and tropo-validate.py has no excepthook. A validator that
+        #     died mid-run reached parse_validator_output with no `Summary:` line,
+        #     parsed to all-zero counts, and reported GREEN. The Summary check
+        #     lives in main() where the counts are; here we only refuse the codes
+        #     that were never verdicts.
         if result.returncode not in (0, 1):
             return None, result.stderr, 5
+        # (c) A real verdict — 0 or 1 with output to parse.
         return result.stdout, result.stderr, result.returncode
     except subprocess.TimeoutExpired as e:
         return e.stdout, e.stderr, 4  # substrate-degraded
@@ -257,6 +464,7 @@ def parse_validator_output(stdout: str) -> dict:
     separate integer fields. Per spec §3.3 v0.5 JSON shape contract.
     """
     parsed = {
+        'summary_present': False,
         'validator_passed': 0,
         'validator_failed': 0,
         'validator_warnings': 0,
@@ -266,7 +474,13 @@ def parse_validator_output(stdout: str) -> dict:
         'version_consistency': 'unknown',
     }
 
+    # SUMMARY PRESENCE IS RECORDED, NOT ASSUMED (f0152b4c4ef4, talos-t65).
+    # Every count below defaults to 0, so output with no `Summary:` line — a
+    # validator that aborted before printing one — used to parse as "0 passed,
+    # 0 failed, 0 warnings" and compute GREEN. Zero defects and no answer are
+    # not the same claim. Callers must refuse a verdict when this is False.
     m = SUMMARY_RE.search(stdout)
+    parsed['summary_present'] = bool(m)
     if m:
         parsed['validator_passed'] = int(m.group(1))
         parsed['validator_failed'] = int(m.group(2))
@@ -320,7 +534,17 @@ def compute_verdict(parsed: dict) -> tuple[str, int]:
     """Compute green/yellow/red verdict + exit code from parsed validator output.
 
     Returns (verdict_str, exit_code).
+
+    GREEN REQUIRES A COMPLETED CHECK (f0152b4c4ef4, talos-t65 2026-09-08). Argus
+    A175's direction, in his words: "no crash/empty output can look like
+    successful initialization." Without the guard below, a validator that died
+    before printing its `Summary:` line produced all-zero counts here and this
+    function answered GREEN, exit 0 — a pass having examined nothing, which is
+    the case Mike ruled earned fail-closed at the outward boundary. `aborted` is
+    a non-verdict and carries the script-error code, because that is what it is.
     """
+    if not parsed.get('summary_present', False):
+        return 'aborted', 5
     if parsed['validator_failed'] > 0:
         return 'red', 2
     if parsed['validator_warnings'] > 0:
@@ -456,6 +680,19 @@ def main() -> int:
             'so a CI gate that fails on them fails on everything.'
         ),
     )
+    parser.add_argument(
+        '--no-auto-init',
+        action='store_true',
+        help=(
+            'Do not build the index when the Studio has no index yet; report '
+            'NOT INITIALIZED and stop. EVERY programmatic caller wants this. '
+            'Argus A175 ruled on the record (f0152b4c4ef4): "Do not silently '
+            'initialize a customer\'s live Studio as a diagnostic side effect" '
+            '— and a build gate that ran the default would mutate the very box '
+            'it is sealing, and arm build-no-studio-identity on the same tree. '
+            'Auto-init is for a human who typed `npm test`; gates opt out.'
+        ),
+    )
     args = parser.parse_args()
 
     # Resolve Studio root
@@ -475,8 +712,166 @@ def main() -> int:
             print(stderr, file=sys.stderr)
         return 4
 
+    # AUTO-INITIALIZE — Mike's ruling, 2026-09-08. The validator (not this tool)
+    # said the Studio has no index. Build it, then ask the validator again, ONCE.
+    # No loop: if it still says not-initialized after a successful build, that is
+    # a real failure and gets reported, not retried.
+    #
+    # Progress goes to STDERR on purpose. The human running `npm test` still sees
+    # it, and `--json` stdout stays a single parseable object for CI.
+    if return_code == _OUTCOME_NOT_INITIALIZED and not args.no_auto_init:
+        print('This Studio has no index yet. Building it now — this happens once.',
+              file=sys.stderr)
+        print(f'    {NOT_INITIALIZED_CURE}', file=sys.stderr)
+        ok, build_out, build_err = build_index(studio_root)
+        if not ok:
+            # The status line goes to STDOUT as well as stderr. This tool's own
+            # contract tells machine readers to key on the status line, and the
+            # sibling NOT INITIALIZED state prints to stdout; a consumer reading
+            # stdout for this state was getting zero bytes.
+            # stdout copy for machine readers keying on the status line, but
+            # NEVER in --json mode: that payload must stay a single parseable
+            # object. The NOT INITIALIZED branch has the same shape.
+            if not args.json:
+                print(AUTO_INIT_FAILED_STATUS)
+            print(AUTO_INIT_FAILED_STATUS, file=sys.stderr)
+            print(file=sys.stderr)
+            print('The index build failed, so NO HEALTH VERDICT HAS BEEN PRODUCED.',
+                  file=sys.stderr)
+            print('Run it by hand from the Studio root to see the full error.',
+                  file=sys.stderr)
+            print('This is the exact command that failed — note --no-genesis, '
+                  'which keeps identity minting with Po:', file=sys.stderr)
+            print(file=sys.stderr)
+            print(f'    {AUTO_INIT_COMMAND_DISPLAY}', file=sys.stderr)
+            # BOTH streams. The sibling branch below already prints stdout's
+            # tail; this one printed only stderr, so a rebuilder that explains
+            # itself on stdout ("REFUSED: index shrink floor violated…") had its
+            # reason captured and thrown away, leaving the human told that
+            # something failed but not what.
+            if build_out:
+                tail = [ln for ln in build_out.splitlines() if ln.strip()][-8:]
+                if tail:
+                    print(file=sys.stderr)
+                    print('--- last lines of the index build ---', file=sys.stderr)
+                    for ln in tail:
+                        print(ln, file=sys.stderr)
+            if build_err:
+                print(file=sys.stderr)
+                print('--- index build stderr ---', file=sys.stderr)
+                print(build_err, file=sys.stderr)
+            if args.json:
+                print(json.dumps({
+                    'tool': TOOL_NAME,
+                    'tool_version': TOOL_VERSION,
+                    'tropo_os_version': read_studio_version(studio_root),
+                    'status': 'initialization-failed',
+                    'verdict': 'none',
+                    'health_verdict_produced': False,
+                    'cure': NOT_INITIALIZED_CURE,
+                    'exit_code': AUTO_INIT_FAILED_EXIT,
+                    'timestamp': datetime.now(timezone.utc).strftime(
+                        '%Y-%m-%dT%H:%M:%SZ'),
+                }, separators=(',', ':')))
+            return AUTO_INIT_FAILED_EXIT
+
+        print('Index built. Re-running the health check.', file=sys.stderr)
+        stdout, stderr, return_code = run_validator(studio_root)
+
+        if return_code == 4:
+            print(f'ERROR: validator subprocess timeout '
+                  f'(>{VALIDATOR_TIMEOUT_SECONDS}s) after the index build; '
+                  f'substrate may be degraded', file=sys.stderr)
+            if stderr:
+                print(stderr, file=sys.stderr)
+            return 4
+
+        if return_code == _OUTCOME_NOT_INITIALIZED:
+            # The build reported success and the Studio still has no index. That
+            # is not the stranger's problem to interpret and it is not a retry
+            # case — something is wrong with the build itself.
+            # stdout copy for machine readers keying on the status line, but
+            # NEVER in --json mode: that payload must stay a single parseable
+            # object. The NOT INITIALIZED branch has the same shape.
+            if not args.json:
+                print(AUTO_INIT_FAILED_STATUS)
+            print(AUTO_INIT_FAILED_STATUS, file=sys.stderr)
+            print(file=sys.stderr)
+            print('The index build reported success, but the Studio still has no '
+                  'index. NO HEALTH VERDICT HAS BEEN PRODUCED.', file=sys.stderr)
+            print('Run it by hand from the Studio root — this is the exact '
+                  'command that ran:', file=sys.stderr)
+            print(file=sys.stderr)
+            print(f'    {AUTO_INIT_COMMAND_DISPLAY}', file=sys.stderr)
+            if build_out:
+                tail = [ln for ln in build_out.splitlines() if ln.strip()][-8:]
+                if tail:
+                    print(file=sys.stderr)
+                    print('--- last lines of the index build ---', file=sys.stderr)
+                    for ln in tail:
+                        print(ln, file=sys.stderr)
+            if args.json:
+                print(json.dumps({
+                    'tool': TOOL_NAME,
+                    'tool_version': TOOL_VERSION,
+                    'tropo_os_version': read_studio_version(studio_root),
+                    'status': 'initialization-failed',
+                    'verdict': 'none',
+                    'health_verdict_produced': False,
+                    'cure': NOT_INITIALIZED_CURE,
+                    'exit_code': AUTO_INIT_FAILED_EXIT,
+                    'timestamp': datetime.now(timezone.utc).strftime(
+                        '%Y-%m-%dT%H:%M:%SZ'),
+                }, separators=(',', ':')))
+            return AUTO_INIT_FAILED_EXIT
+
+    # NOT INITIALIZED — a correct Studio that has not built its index yet
+    # (f0152b4c4ef4). This is a diagnostic, not a claim that the box is
+    # defective, and it says so. The status line is what machines read; see
+    # NOT_INITIALIZED_STATUS.
+    #
+    # REACHED ONLY UNDER --no-auto-init since 2026-09-08 (Mike's ruling). For a
+    # human this state is now built through rather than reported. It is kept
+    # whole, not deleted, because every gate opts out and this is the answer they
+    # read — build_guards.box_self_test_problems keys on NOT_INITIALIZED_STATUS
+    # to detect that it has been pointed at shipped bytes. Decision 4's exit code
+    # still governs here and is still one constant.
+    if return_code == _OUTCOME_NOT_INITIALIZED:
+        studio_version = read_studio_version(studio_root)
+        if args.json:
+            print(json.dumps({
+                'tool': TOOL_NAME,
+                'tool_version': TOOL_VERSION,
+                'tropo_os_version': studio_version,
+                'status': 'not-initialized',
+                'verdict': 'none',
+                'health_verdict_produced': False,
+                'cure': NOT_INITIALIZED_CURE,
+                'exit_code': NOT_INITIALIZED_EXIT,
+                'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            }, separators=(',', ':')))
+        else:
+            print(NOT_INITIALIZED_STATUS)
+            print()
+            print('This Studio has not built its index yet. Nothing is wrong: a release')
+            print('box ships the source files and derives its index on first use.')
+            print()
+            print('NO HEALTH VERDICT HAS BEEN PRODUCED. Run this once, from the Studio root:')
+            print()
+            print(f'    {NOT_INITIALIZED_CURE}')
+            print()
+            print('then run this check again.')
+            if args.verbose and stdout:
+                print()
+                print(stdout)
+        return NOT_INITIALIZED_EXIT
+
     if stdout is None:
-        # Script error — validator crashed or path missing
+        # Script error — validator crashed or path missing. STDERR IS SHOWN: it
+        # was already printed here, and that is the half Argus found missing at
+        # the OTHER exit (a validator that died at exit 1 never reached this
+        # branch at all, so nobody saw its traceback). The Summary guard below
+        # is what routes that case here in spirit, via verdict 'aborted'.
         print('ERROR: validator subprocess failed (path missing or crash)', file=sys.stderr)
         if stderr:
             print(stderr, file=sys.stderr)
@@ -486,6 +881,38 @@ def main() -> int:
     studio_version = read_studio_version(studio_root)
     parsed = parse_validator_output(stdout)
     verdict, exit_code = compute_verdict(parsed)
+
+    # ABORTED — the validator returned a verdict-shaped exit code but never
+    # printed a Summary, so there is no verdict to report. Loud, and it shows
+    # the stderr the old path discarded (f0152b4c4ef4): this is exactly the
+    # false GREEN argus-a175 measured, where an uncaught PermissionError inside
+    # the validator exited 1 and was reported as "0 passed, 0 failed" GREEN.
+    if verdict == 'aborted':
+        print('ERROR: the validator produced no Summary line — it aborted before '
+              'finishing. NO HEALTH VERDICT HAS BEEN PRODUCED; this is not a '
+              'clean substrate.', file=sys.stderr)
+        if stderr:
+            print(stderr, file=sys.stderr)
+        if not args.verbose and stdout:
+            tail = [ln for ln in stdout.splitlines() if ln.strip()][-8:]
+            if tail:
+                print('--- last lines of validator output ---', file=sys.stderr)
+                for ln in tail:
+                    print(ln, file=sys.stderr)
+        if args.json:
+            print(json.dumps({
+                'tool': TOOL_NAME,
+                'tool_version': TOOL_VERSION,
+                'tropo_os_version': studio_version,
+                'status': 'aborted',
+                'verdict': 'none',
+                'health_verdict_produced': False,
+                'exit_code': exit_code,
+                'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            }, separators=(',', ':')))
+        elif args.verbose and stdout:
+            print(stdout)
+        return exit_code
 
     # Format + emit per orthogonal flag composition (v0.5):
     #   --json alone               → JSON output, TL;DR data only

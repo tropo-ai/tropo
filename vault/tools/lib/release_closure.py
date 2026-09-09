@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Optional
 
 from lib.governed_path import is_governed_uid_shape
+from lib.journal_event import run_journal_event_type
 
 #: Machine-local recovery state, gitignored on purpose: one studio's in-flight
 #: transaction is not another studio's substrate.
@@ -92,9 +93,7 @@ class ClosureJournal:
 
 def _event_type(event) -> str:
     """Run JSONL spells it `event`; vault streams spell it `type`."""
-    if not isinstance(event, dict):
-        return ""
-    return str(event.get("event") or event.get("type") or "")
+    return run_journal_event_type(event)
 
 
 #: The public name for the rule above. Both spellings are real and both are

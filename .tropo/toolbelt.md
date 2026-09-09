@@ -3,14 +3,14 @@ uid: toolbelt
 name: toolbelt
 type: catalog
 kind: belt
-generated_at: 2026-09-06
+generated_at: 2026-09-09
 generated_by: generate-capability-catalogs.py
 extraction_scope: ship
 ---
 
 # Tropo Toolbelt
 
-*19 core tools. Derived from `belt: true` frontmatter — do not hand-edit.*
+*20 core tools. Derived from `belt: true` frontmatter — do not hand-edit.*
 
 ---
 
@@ -92,6 +92,14 @@ python3 vault/tools/tropo-mint-id.py
 ```
 *Example:* `python3 vault/tools/tropo-mint-id.py --count 5 --kind file`
 
+### precompact-snapshot
+Called by the PreCompact hook wired in .claude/settings.json, once per compaction, for both manual (/compact, /clear) and automatic (context-limit) triggers ....
+
+```
+python3 vault/tools/tropo-precompact-snapshot.py
+```
+*Example:* `python3 vault/tools/tropo-precompact-snapshot.py --agent talos --trigger auto`
+
 ### preflight
 First command on any new machine, and the first thing to run when a tool dies on an import.
 
@@ -168,4 +176,4 @@ python3 vault/tools/tropo-vault-search.py \"<query>\"
 
 *Anything not here? → `python3 vault/tools/tropo-vault-search.py <query>`*
 
-*Tropo Toolbelt | 2026-09-06 | v1.15 substrate*
+*Tropo Toolbelt | 2026-09-09 | v1.15 substrate*

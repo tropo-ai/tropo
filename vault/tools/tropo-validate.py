@@ -171,6 +171,18 @@ if _fast_yaml_spec is None or _fast_yaml_spec.loader is None:
 fast_yaml = _importlib_util.module_from_spec(_fast_yaml_spec)
 _fast_yaml_spec.loader.exec_module(fast_yaml)
 
+# Phase 2 (f0153a6df07f): the four memory-surface names, resolved in one place.
+# Loaded by path for the same reason as fast_yaml above — several harnesses
+# pre-import the separate .tropo/scripts/lib namespace package before this module.
+_memory_surfaces_spec = _importlib_util.spec_from_file_location(
+    "tropo_memory_surfaces",
+    Path(__file__).resolve().parent / "lib" / "memory_surfaces.py",
+)
+if _memory_surfaces_spec is None or _memory_surfaces_spec.loader is None:
+    raise ImportError("memory_surfaces helper could not be loaded")
+memory_surfaces = _importlib_util.module_from_spec(_memory_surfaces_spec)
+_memory_surfaces_spec.loader.exec_module(memory_surfaces)
+
 _mounted_projection_trust_spec = _importlib_util.spec_from_file_location(
     "tropo_mounted_projection_trust",
     Path(__file__).resolve().parent / "lib" / "mounted_projection_trust.py",
@@ -8201,10 +8213,24 @@ def check_curator_dispatch_fixture() -> tuple[list[str], int, int]:
     n_pass, n_fail = 0, 0
 
     def _evaluate(memory_dir: Path, resolvable_uids: set) -> str:
-        surface = memory_dir / 'agent-memory.md'
-        v2_artifacts = [memory_dir / 'memory-current.md',
-                        memory_dir / 'short-term-memory.jsonl',
-                        memory_dir / 'transfers' / 'living-transfer.md']
+        # Phase 2 (f0153a6df07f): the live surface under either name. The v2
+        # sentinel below is deliberately NOT renamed — `memory-current.md` in an
+        # AGENT folder is the retired v2 file this sentinel exists to find; the
+        # rename targets the studio-scope file of the same name, which this
+        # function never looks at. Never add `memory.md` to v2_names.
+        surface = memory_surfaces.resolve(memory_dir, memory_surfaces.AGENT_INDEX_NAMES)
+        # The un-migrated-capsule sentinel. Probes BOTH the pre-restructure
+        # location and history/, because the 2026-09-07 restructure moved these
+        # into history/ for the five executives while every capsule never cut
+        # over to v3 (all directors, and agents outside the executive set) still
+        # has them at the top level. Probing only the top level would make this
+        # silently answer 'none' for a restructured capsule that had genuinely
+        # not migrated -- the sentinel would stop meaning what it says, which is
+        # worse than it failing loudly.
+        v2_names = ('memory-current.md', 'short-term-memory.jsonl')
+        v2_artifacts = [memory_dir / n for n in v2_names]
+        v2_artifacts += [memory_dir / 'history' / n for n in v2_names]
+        v2_artifacts.append(memory_dir / 'transfers' / 'living-transfer.md')
         if not surface.exists():
             if any(q.exists() for q in v2_artifacts):
                 return 'migrate'          # un-migrated v2 surface -> one-time conversion
@@ -8229,7 +8255,7 @@ def check_curator_dispatch_fixture() -> tuple[list[str], int, int]:
             gens_since = int(m_gen.group(2)) - int(m_lcg.group(2))
         # F5 Condition B — entries past the LAST fold-boundary line in the episodic log
         unfolded = 0
-        jsonl = memory_dir / 'agent-memories.jsonl'
+        jsonl = memory_surfaces.resolve(memory_dir, memory_surfaces.AGENT_LOG_NAMES)
         if jsonl.exists():
             rows = [ln for ln in jsonl.read_text('utf-8').splitlines() if ln.strip()]
             last_boundary = -1
@@ -8322,6 +8348,30 @@ def check_curator_dispatch_fixture() -> tuple[list[str], int, int]:
             findings.append(
                 f'  [FAIL] AC5 fixture: mismatched prefixes (A164 vs G113) must not compute a '
                 f'generation distance — expected none, got {got}')
+        # 8 — THE POST-RENAME SHAPE (Phase 2, f0153a6df07f, talos-t65 2026-09-08).
+        # Every case above writes `agent-memory.md`, so together they now prove the
+        # resolver's LEGACY arm and nothing else. This one writes the canonical
+        # `memory.md` with identical content and must reach the identical verdict.
+        # Without it, step 2 could move every surface in the studio and this whole
+        # fixture block would keep passing while the gate read nothing — the shape
+        # the spec names at this exact line.
+        d7 = tmp / 'renamed'; d7.mkdir()
+        (d7 / memory_surfaces.AGENT_INDEX).write_text(
+            "---\nagent: fixture\ngeneration: A164\nlast_curated_generation: A161\n"
+            "spec_version: \"3.0\"\n---\n\n## §Top-of-Mind\n\n- pin cites `aaaa1111`\n", 'utf-8')
+        rows = ['{"kind": "entry", "n": 0}',
+                '{"kind": "fold-boundary", "boundary_marker": true, "entries_before_boundary": 1}']
+        (d7 / memory_surfaces.AGENT_LOG).write_text('\n'.join(rows) + '\n', 'utf-8')
+        got = _evaluate(d7, resolvable)
+        if got == 'catch_up':
+            n_pass += 1
+        else:
+            n_fail += 1
+            findings.append(
+                f'  [FAIL] AC5 fixture: the POST-RENAME surface (memory.md / memories.jsonl) '
+                f'must reach the same verdict as the legacy name — expected catch_up, got '
+                f'{got}. The F5 gate cannot read a renamed surface.')
+
         # 5 — F5 generation trip on otherwise-healthy surface (Condition A): gens_since=4 -> catch_up
         _write_surface(d1, gen=110, lcg=106, cited='aaaa1111')
         got = _evaluate(d1, resolvable)
@@ -9968,7 +10018,13 @@ def check_agent_memory_bound(vault: Path) -> tuple[list[str], int, int]:
     for agent_folder in sorted(agents_dir.iterdir()):
         if not agent_folder.is_dir():
             continue
-        memory_file = agent_folder / '.tropo-capsule' / 'memory' / 'agent-memory.md'
+        # Phase 2 (f0153a6df07f): resolve memory.md, fall back to agent-memory.md.
+        # The spec's acceptance is explicit that this gate must keep CHECKING a
+        # non-zero number of surfaces — if the path is wrong it reports "no v3
+        # surfaces found — skipping" and the ERROR bound goes blind for everyone.
+        # A gate that skips is not a gate that passes.
+        memory_file = memory_surfaces.resolve(
+            agent_folder / '.tropo-capsule' / 'memory', memory_surfaces.AGENT_INDEX_NAMES)
         if not memory_file.exists():
             continue
 
@@ -10147,8 +10203,15 @@ def check_memory_bound_fixture() -> tuple[list[str], int, int]:
     n_pass = 0
     n_fail = 0
 
-    def _make_surface(vault_tmp: Path, tom_count: int, pad_bytes: int = 0) -> None:
-        """Write a synthetic v3 agent-memory surface under a scratch agents/ tree."""
+    def _make_surface(vault_tmp: Path, tom_count: int, pad_bytes: int = 0,
+                      name: str = memory_surfaces.AGENT_INDEX_LEGACY) -> None:
+        """Write a synthetic v3 agent-memory surface under a scratch agents/ tree.
+
+        `name` defaults to the LEGACY filename on purpose: these cases predate
+        the Phase-2 rename (f0153a6df07f) and keeping them there is what proves
+        the resolver's fallback arm still reaches the gate. Case 5 below passes
+        the canonical name and proves the other arm.
+        """
         mem_dir = vault_tmp / 'agents' / 'fixture-agent' / '.tropo-capsule' / 'memory'
         mem_dir.mkdir(parents=True, exist_ok=True)
         tom_lines = '\n'.join(
@@ -10165,7 +10228,7 @@ def check_memory_bound_fixture() -> tuple[list[str], int, int]:
         )
         if pad_bytes > 0:
             body += '\n## §Padding\n\n' + ('x' * pad_bytes) + '\n'
-        (mem_dir / 'agent-memory.md').write_text(body, 'utf-8')
+        (mem_dir / name).write_text(body, 'utf-8')
 
     tmp = Path(_tempfile.mkdtemp(prefix='s1-memory-bound-fixture-'))
     try:
@@ -10207,6 +10270,24 @@ def check_memory_bound_fixture() -> tuple[list[str], int, int]:
         else:
             n_fail += 1
             findings.append('  [FAIL] S1 gauntlet: 17 KB surface should [WARN] (size), not [ERROR]')
+
+        # Case 5 — THE POST-RENAME SURFACE (Phase 2, f0153a6df07f, talos-t65).
+        # Cases 1-4 all write the legacy name. Without this one, step 2 could
+        # rename every surface in the studio and this gauntlet would stay green
+        # while check_agent_memory_bound found nothing to check — and that gate
+        # reports "no v3 surfaces found — skipping", which reads as a pass. The
+        # spec calls this exact fixture out by line number; a gate that skips is
+        # not a gate that passes.
+        v5 = tmp / 'v5'; _make_surface(v5, tom_count=16, name=memory_surfaces.AGENT_INDEX)
+        f5, _c5, d5 = check_agent_memory_bound(v5)
+        if d5 > 0 and any('[ERROR]' in ln and '16 entries' in ln for ln in f5):
+            n_pass += 1
+        else:
+            n_fail += 1
+            findings.append(
+                '  [FAIL] S1 gauntlet: a 16-entry surface named %s must fire the same '
+                '[ERROR] as the legacy name — the bound gate went blind to the renamed '
+                'surface' % memory_surfaces.AGENT_INDEX)
 
     finally:
         _shutil.rmtree(tmp, ignore_errors=True)
@@ -12694,7 +12775,8 @@ def _has_reflection(agent_dir: Path, gen: str) -> bool:
 
 def _has_fold(agent_dir: Path, gen: str, session_date: str) -> bool:
     """A fold-boundary event for this generation, or a surface curated at/after it."""
-    jsonl = agent_dir / '.tropo-capsule' / 'memory' / 'agent-memories.jsonl'
+    jsonl = memory_surfaces.resolve(
+        agent_dir / '.tropo-capsule' / 'memory', memory_surfaces.AGENT_LOG_NAMES)
     if jsonl.is_file():
         try:
             for raw in jsonl.read_text(encoding='utf-8', errors='replace').splitlines():
@@ -12716,7 +12798,8 @@ def _has_fold(agent_dir: Path, gen: str, session_date: str) -> bool:
                     return True
         except OSError:
             pass
-    surface = agent_dir / '.tropo-capsule' / 'memory' / 'agent-memory.md'
+    surface = memory_surfaces.resolve(
+        agent_dir / '.tropo-capsule' / 'memory', memory_surfaces.AGENT_INDEX_NAMES)
     if surface.is_file():
         try:
             m = re.search(r'^last_curated:\s*["\']?(\d{4}-\d{2}-\d{2})',
@@ -12754,7 +12837,8 @@ def _has_fold(agent_dir: Path, gen: str, session_date: str) -> bool:
 
 def _has_session_memories(agent_dir: Path, gen: str) -> bool:
     """Step 1 — at least one episodic record naming this generation."""
-    jsonl = agent_dir / '.tropo-capsule' / 'memory' / 'agent-memories.jsonl'
+    jsonl = memory_surfaces.resolve(
+        agent_dir / '.tropo-capsule' / 'memory', memory_surfaces.AGENT_LOG_NAMES)
     if not jsonl.is_file():
         return False
     try:

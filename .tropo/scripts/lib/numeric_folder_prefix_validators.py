@@ -34,6 +34,7 @@ DRY pattern. Rule logic in lib/; tropo-validate.py imports + invokes.
 
 from __future__ import annotations
 import re
+import stat
 from pathlib import Path
 
 # Active reservations from capsule §3 — must stay in sync with capsule v1.0.
@@ -58,17 +59,49 @@ _NUMERIC_PREFIX = re.compile(r"^(\d{2})-(.*)$")
 _TEN_PLUS_PREFIX = re.compile(r"^[1-9]\d-")
 
 
-def _list_subdirs(parent: Path) -> list[Path]:
-    """Return immediate subdirectories of parent (no recursion)."""
-    if not parent.exists() or not parent.is_dir():
+def _scan_incomplete(path: Path, findings: list[str], reason: str) -> None:
+    findings.append(f"{path} — numeric-prefix scan incomplete ({reason}); could not inspect this path.")
+
+
+def _list_subdirs(
+    parent: Path, findings: list[str], *, required_anchors: tuple[str, ...] = ()
+) -> list[Path]:
+    """List immediate directories without following anchors or child symlinks.
+
+    Read errors become findings, rather than an empty successful scan. Use lstat
+    so even dangling links and inaccessible targets are never dereferenced.
+    Required scan anchors must report skipped links as incomplete scans.
+    """
+    try:
+        mode = parent.lstat().st_mode
+        if stat.S_ISLNK(mode):
+            _scan_incomplete(parent, findings, "directory symlink not followed")
+            return []
+        if not stat.S_ISDIR(mode):
+            _scan_incomplete(parent, findings, "not a directory")
+            return []
+        children = sorted(parent.iterdir())
+    except OSError as exc:
+        _scan_incomplete(parent, findings, type(exc).__name__)
         return []
-    return [p for p in parent.iterdir() if p.is_dir()]
+    directories = []
+    for child in children:
+        try:
+            mode = child.lstat().st_mode
+        except OSError as exc:
+            _scan_incomplete(child, findings, type(exc).__name__)
+            continue
+        if stat.S_ISDIR(mode):
+            directories.append(child)
+        elif stat.S_ISLNK(mode) and child.name in required_anchors:
+            _scan_incomplete(child, findings, "directory symlink not followed")
+    return directories
 
 
 def check_numeric_folder_prefix_reserved_range(studio_root: Path) -> list[str]:
     """Check 1: studio-claimed 00-09 folders must match capsule §3 reservations."""
     findings = []
-    for sub in _list_subdirs(studio_root):
+    for sub in _list_subdirs(studio_root, findings):
         name = sub.name
         m = _NUMERIC_PREFIX.match(name)
         if not m:
@@ -107,11 +140,16 @@ def check_numeric_folder_prefix_reserved_range(studio_root: Path) -> list[str]:
 def check_studio_specific_folder_has_agents_md(studio_root: Path) -> list[str]:
     """Check 2: 10+ studio-specific folders must have AGENTS.md governance contract."""
     findings = []
-    for sub in _list_subdirs(studio_root):
+    for sub in _list_subdirs(studio_root, findings):
         if not _TEN_PLUS_PREFIX.match(sub.name):
             continue
         agents_md = sub / "AGENTS.md"
-        if not agents_md.exists():
+        try:
+            has_agents = agents_md.exists()
+        except OSError as exc:
+            _scan_incomplete(agents_md, findings, type(exc).__name__)
+            continue
+        if not has_agents:
             findings.append(
                 f"{sub} — 10+ studio-specific folder missing AGENTS.md governance contract. "
                 f"Per numeric-folder-prefix.capsule v1.0 §5, studio-specific 10+ folders require "
@@ -124,9 +162,9 @@ def check_99_terminal_convention(studio_root: Path) -> list[str]:
     """Check 3: 99- folders must match capsule §4 patterns."""
     findings = []
     # Scan studio-root + one level deep (folder-local 99-archive can appear in any subdir)
-    candidates = list(_list_subdirs(studio_root))
+    candidates = list(_list_subdirs(studio_root, findings))
     for top in list(candidates):
-        candidates.extend(_list_subdirs(top))
+        candidates.extend(_list_subdirs(top, findings))
     for sub in candidates:
         name = sub.name
         if not name.startswith("99-"):
@@ -143,10 +181,13 @@ def check_99_terminal_convention(studio_root: Path) -> list[str]:
 def check_no_vault_subfolders_numeric_prefix(studio_root: Path) -> list[str]:
     """Check 4: no numeric-prefixed folders directly under vault/ (flat-vault doctrine)."""
     findings = []
-    vault_dir = studio_root / "vault"
-    if not vault_dir.exists():
+    # Discover vault through the same no-follow root listing, so neither a
+    # linked Studio anchor nor a linked vault anchor can take this check outside.
+    root_subdirs = _list_subdirs(studio_root, findings, required_anchors=("vault",))
+    vault_dir = next((sub for sub in root_subdirs if sub.name == "vault"), None)
+    if vault_dir is None:
         return findings
-    for sub in _list_subdirs(vault_dir):
+    for sub in _list_subdirs(vault_dir, findings):
         if sub.name == "files":
             continue  # vault/files/ is the canonical exception
         if _NUMERIC_PREFIX.match(sub.name):
@@ -158,23 +199,26 @@ def check_no_vault_subfolders_numeric_prefix(studio_root: Path) -> list[str]:
     return findings
 
 
-def run_all_numeric_folder_prefix_checks(vault_dir: str) -> tuple[list[str], int, int]:
-    """Run all 4 checks; return (findings, total_folders_scanned, defects_count).
+def run_all_numeric_folder_prefix_checks(studio_root: str | Path) -> tuple[list[str], int, int]:
+    """Check the supplied Studio root, containing vault/ and .tropo/.
 
-    vault_dir is the vault/ subdirectory path; studio-root is the parent.
+    Return (findings, numeric_root_folder_count, findings_count). The validator's
+    variable named ``vault`` already denotes this Studio root, not vault/.
     """
-    studio_root = Path(vault_dir).parent
+    studio_root = Path(studio_root)
     all_findings: list[str] = []
     all_findings.extend(check_numeric_folder_prefix_reserved_range(studio_root))
     all_findings.extend(check_studio_specific_folder_has_agents_md(studio_root))
     all_findings.extend(check_99_terminal_convention(studio_root))
     all_findings.extend(check_no_vault_subfolders_numeric_prefix(studio_root))
-    # Total folders scanned = numeric-prefixed folders under studio-root + vault/ subdirs
-    total = sum(1 for sub in _list_subdirs(studio_root) if _NUMERIC_PREFIX.match(sub.name))
+    # Preserve the existing count: numeric-prefixed immediate Studio folders.
+    total = sum(1 for sub in _list_subdirs(studio_root, all_findings) if _NUMERIC_PREFIX.match(sub.name))
+    # Each check can encounter the same inaccessible path; report it once.
+    all_findings = list(dict.fromkeys(all_findings))
     return all_findings, total, len(all_findings)
 
 
-# WIRE_UP_REFERENCE for tropo-validate.py:
+# WIRE_UP_REFERENCE for tropo-validate.py (vault is its resolved Studio root):
 #
 #     # --- v1.52 P-lane P3: numeric-folder-prefix.capsule v1.0 §6 Validation Checks ---
 #     print('\\n--- numeric-folder-prefix.capsule v1.0 §Validation Checks (v1.52 P-lane P3; 4 checks; WARN at v1.0 / ERROR ratchet v1.1) ---')

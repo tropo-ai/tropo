@@ -1,17 +1,17 @@
 {
- "file_count": 1422,
+ "file_count": 1454,
  "files": {
   ".claude/settings.json": {
-   "bytes": 451,
-   "sha256": "342dc94fec5c8721ade27424d4434b9569734ec04ef4a64901be5376dee6c614"
+   "bytes": 1059,
+   "sha256": "73f8544a3365b379aa5846f852bf13f70abaa8a2ff0ee31b889c53666b9c1691"
   },
   ".cursorrules": {
-   "bytes": 1215,
-   "sha256": "c86a7358b4bbd80e55a445f4d567f2dcd03c469a498a8bc0bdd9ed5214eae20b"
+   "bytes": 1244,
+   "sha256": "9d3939228250429c534d138b53b91ae57c1640dddf1fd03788669390859a4f5d"
   },
   ".gemini/settings.json": {
-   "bytes": 486,
-   "sha256": "d2a97bcb1b353de1cedd1ac2d2f5b3ae22f8f92dd764ca99dc72d468ca184be7"
+   "bytes": 515,
+   "sha256": "5d0aa13e72737cd9792ab686ba6f89300962c6579e55a3da970562b1cf6467e2"
   },
   ".gitattributes": {
    "bytes": 3478,
@@ -43,19 +43,19 @@
   },
   ".tropo-studio/dirty-counter.json": {
    "bytes": 106,
-   "sha256": "3d3f3b21955e838d1ae9c294a8dc2d27949dc1b3e9adf839f2b9a41bdbe5a0cc"
+   "sha256": "54491dba416492f8231aa831aaaf9ef12828ffba6188c408ddd3cebcc9fcc445"
   },
   ".tropo-studio/gardener-wall-clock.json": {
    "bytes": 389,
-   "sha256": "13f5493fbadcd2f9a754dff3af29f82e4d11de973f97f3c245ca3a532f8ee1a6"
+   "sha256": "fdf690ff93938fa0e00a038ab62b25fc5f46d2a5885a5b65c8986873a7ee568c"
   },
   ".tropo-studio/memory/CAPSULE.md": {
-   "bytes": 2189,
-   "sha256": "18067bfbca3e9b89cef2642fbf79f56af726f2114a5f42a28433f207e53620ca"
+   "bytes": 3173,
+   "sha256": "dbfdf36ff954947a3b268fcc1fa7ef3b414e47394aea94f82dfe1e49dcf33d1b"
   },
-  ".tropo-studio/memory/MEMORY.md": {
-   "bytes": 1528,
-   "sha256": "96f63b6ffc2419dd2fbfeba3b514d1357a1f84d63e48971d37632f209454221a"
+  ".tropo-studio/memory/agent-memories.jsonl": {
+   "bytes": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   ".tropo-studio/memory/entries/839a65f9.md": {
    "bytes": 2276,
@@ -64,10 +64,6 @@
   ".tropo-studio/memory/memory-current.md": {
    "bytes": 1506,
    "sha256": "4dd336389d1f6f79838790afc0bbd0e977110af7cb3862d8625eea4c414d1d43"
-  },
-  ".tropo-studio/memory/short-term-memory.jsonl": {
-   "bytes": 0,
-   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   ".tropo-studio/memory/three-instrument-verification.md": {
    "bytes": 9036,
@@ -101,13 +97,17 @@
    "bytes": 1758,
    "sha256": "6debe814b196e1f7afab3c4e8169e2ead60a9f3136e755e632687f23bc6f6b6d"
   },
+  ".tropo-studio/score-formula-doctrine.md": {
+   "bytes": 20945,
+   "sha256": "e2550730c9502e861d9fbaa8db1ae969f41292ca8bea8ee9c42e0cb5da670a31"
+  },
   ".tropo-studio/scripts/CAPSULE.md": {
    "bytes": 2614,
    "sha256": "52803a1403753eeca380cd44644b6e80edf47d96f415656e2f51b4fd86d2606d"
   },
   ".tropo-studio/shards/index-rebuild-run.json": {
-   "bytes": 138241,
-   "sha256": "8ce6848b1457f4e9ffd4b81de93654171003330347cf6410ce5e9403e25d96be"
+   "bytes": 139871,
+   "sha256": "633949a59435f6bdce9034d46c09df334cec8afc2dfe1026ecaec41c7557a2e3"
   },
   ".tropo/00-index.md": {
    "bytes": 648,
@@ -135,7 +135,7 @@
   },
   ".tropo/TROPO-CONTROL.md": {
    "bytes": 10522,
-   "sha256": "a1352084756e2303d92bb15c122a850afe71c85022d8f49a7f663b6e9d314aa2"
+   "sha256": "f83db0d89fca0d8e1668d5c8cfb2ce2cdf0319ac9a8e8e22d9598925611692d2"
   },
   ".tropo/WAKE-DISCIPLINE.md": {
    "bytes": 21866,
@@ -146,20 +146,20 @@
    "sha256": "db8fceaa83861e4780b4fb1d071ec42c1a8cd8e3bb89e5c70d838f41ef871f26"
   },
   ".tropo/boot-config.md": {
-   "bytes": 2300,
-   "sha256": "88a86122ac5f40a2a96ce58a032e04a0e5993232cf2522da498c0876437bf73f"
+   "bytes": 2329,
+   "sha256": "1387684cc666a14703c0965ceb4e226c8566d86a991d9bdeed817afb03adfe63"
   },
   ".tropo/cache/updates-manifest.json": {
-   "bytes": 38962,
-   "sha256": "ef5207cb2a98a75e7b424503526d771e854f70a04334ca975884770539ba0ff6"
+   "bytes": 28426,
+   "sha256": "953ab73184df3ff9820fa49aa40590b65cc58b686704ef5a69c5f9d37caee74b"
   },
   ".tropo/committed-substrate-debt-baseline.json": {
    "bytes": 6917,
    "sha256": "ffeb3c577619f601b09d6608bdb72c0959899e6ec0a2e9ce2af0e14b9083a9a4"
   },
   ".tropo/concierge/activate.md": {
-   "bytes": 74341,
-   "sha256": "1451165398d5c6ee414f7fcacdf0ac667926648fd25f4efafba8e2b1c687040f"
+   "bytes": 86565,
+   "sha256": "64155aaf7c8c746d6fccac187bdd38467d36731ae04dc365a7482d9ab0ce1405"
   },
   ".tropo/definitions/AGENTS.md": {
    "bytes": 642,
@@ -206,16 +206,16 @@
    "sha256": "ba867041674488b4fc5989b0ebf3903d04d229a22b50889867ed6df14602da52"
   },
   ".tropo/playbooks/agent-activation.playbook.md": {
-   "bytes": 3537,
-   "sha256": "22081c3259e60a0fc29b348df8b7ffd1a85e63d2886b445d348e233f030ceeda"
+   "bytes": 3030,
+   "sha256": "d9526392d14f849679807cc61851d3eadc55e0f251a824bb99e6746f734a54b0"
   },
   ".tropo/playbooks/agent-boot.playbook.md": {
    "bytes": 963,
    "sha256": "cb27d7bebb83208c44be6d30f8679caa5bfaeab77408f5f2b12808da83ceba27"
   },
   ".tropo/playbooks/agent-retire.playbook.md": {
-   "bytes": 2885,
-   "sha256": "dd5f575a801c5ec62006d7019aa09bbf774cee95c57fe6b618c84a1c39e90c2c"
+   "bytes": 2914,
+   "sha256": "bf75b0e88f5a3333f5fce953759916c366c9f13936de53f00eedd7496505ef3e"
   },
   ".tropo/playbooks/apply-update.playbook.md": {
    "bytes": 1356,
@@ -311,7 +311,7 @@
   },
   ".tropo/sa-agent-catalog.md": {
    "bytes": 5994,
-   "sha256": "a5fb75f605c2b702d4db1dafae226092f368a11f5d31d18f93e1cd24bcc6c025"
+   "sha256": "6fbcfe7b025cbc5d4134d24944e9aca53e7546fdd32a5ef9c2dc7a5ac41d8192"
   },
   ".tropo/scheduled-agents.md": {
    "bytes": 692,
@@ -426,16 +426,16 @@
    "sha256": "1c0dd5b5043df6f67909ea6e3bc41f72d85eb21f5bc1824eed16da371ea05798"
   },
   ".tropo/scripts/lib/numeric_folder_prefix_validators.py": {
-   "bytes": 9026,
-   "sha256": "6d519d119e57464f19e680c1a43b131496d4a8448fc6d5dce4a4c57687a6c307"
+   "bytes": 11077,
+   "sha256": "c055bbe86a37b61b297e8e9db606f3efd705fc7a7e0211ba465bdc81e7b17e10"
   },
   ".tropo/scripts/lib/pipeline_test_helpers.py": {
    "bytes": 7217,
    "sha256": "b81c88d1e653cc35734f01cda3e3aab4c27879efea4925b691458e3dd8f6b78f"
   },
   ".tropo/scripts/lib/release_authorization.py": {
-   "bytes": 44747,
-   "sha256": "d32d57814624461b99b8e0f566608b7eefdfbcd1e153f74c898938df15e69056"
+   "bytes": 45155,
+   "sha256": "3d0e4d9c53780f3401c4608ebd295c1fed4161157daec93c603000d084f761a7"
   },
   ".tropo/scripts/lib/release_validators.py": {
    "bytes": 7756,
@@ -599,7 +599,7 @@
   },
   ".tropo/skill-catalog.md": {
    "bytes": 25171,
-   "sha256": "6e81586c1b62f18f9b0fb2954fb3e366422a39197daefb88caa1f85eaf101d81"
+   "sha256": "b190755cffc42541c1ee58946e7ce3ee1f40a7f95e96d67877f9708ef1df382d"
   },
   ".tropo/state-pairing-debt-baseline.json": {
    "bytes": 137179,
@@ -614,12 +614,12 @@
    "sha256": "91230b0c67c07dc77a6e689f603977f702e84fd9a31ee1e4dc35869efb23d17a"
   },
   ".tropo/tool-catalog.md": {
-   "bytes": 58501,
-   "sha256": "74df27d7abf738a49926274e592b73c0b85289512860ca20bcc5f6535f42aaf8"
+   "bytes": 61235,
+   "sha256": "b17f34729e9774eb5e721ea263f50c5a4f4f7f6dc8b98f9e25840c5c960f0c64"
   },
   ".tropo/toolbelt.md": {
-   "bytes": 4602,
-   "sha256": "92288d2261ff09deb7d23ecbce8378fec0648b985dc783ccd0d09ae999c70f5a"
+   "bytes": 4938,
+   "sha256": "a9fabd121ea394b18410cd16e42065a6e57035c46d74503c08bb6f1213b867c4"
   },
   ".tropo/update-source.json": {
    "bytes": 428,
@@ -627,7 +627,7 @@
   },
   ".tropo/version.md": {
    "bytes": 8,
-   "sha256": "863efddad059e8d08b4a7923e65b6d70b5ce4659dde3fd42cb279d491266a9a5"
+   "sha256": "89d0505992862b67755c530cb8dbef21cb45bfb15bc2efc7163f4b345c983ebd"
   },
   ".tropo/vocabulary/edge-types.md": {
    "bytes": 3300,
@@ -638,16 +638,16 @@
    "sha256": "f6ecd517a9a792232c731e28c450efa01b946e81a1e211b627081c53f97545af"
   },
   "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Agents/99ed55fd \u2014 Tropo Agents.md": {
-   "bytes": 39627,
-   "sha256": "ae2bab4043b47920d822f577d3e7d99d2479818de349407066586c72bd90768d"
+   "bytes": 40088,
+   "sha256": "875ef577f41e51549d8591712f62923c4be3ba5dc42bf6a8a3dc5bc19954eaf2"
   },
   "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Documentation/f87e33f0 \u2014 Tropo Documentation.md": {
-   "bytes": 54532,
-   "sha256": "8d32328d01a50fc3b4de611c947702a974ca53613c884b6ee615cd51c3c64d2d"
+   "bytes": 54949,
+   "sha256": "b1ae7b2d60faf752bf58b7b4b9f6a0f96fb8afd2767088e181b6cf0e21ba00fa"
   },
   "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Governance/8dd772a0 \u2014 Tropo Governance.md": {
-   "bytes": 100420,
-   "sha256": "e08bf1581dc497419251dbf2df6e979b16bfe4cadeb237edfd2772f88c2b5dc2"
+   "bytes": 100805,
+   "sha256": "7c8fde3943240fccdbf9bcbbfdb618a58809109443e56fb0bd02846cb7b3b9b1"
   },
   "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Governance/Import Primitive \u2014 Capability Overview/58722bdf \u2014 Import Primitive \u2014 Capability Overview.md": {
    "bytes": 9325,
@@ -658,8 +658,8 @@
    "sha256": "16195af4a6e2fb1517fababd95064f1a93c41833eff1590688f8244b595609f5"
   },
   "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Library/1aba710c \u2014 Tropo Library.md": {
-   "bytes": 26868,
-   "sha256": "b5e1de40daf94bb551299305b87e53b9d6566634ce3d47d50326f0ff8bef7adf"
+   "bytes": 26862,
+   "sha256": "e089ebb95ffb544ddcb46c4dbe7f79d2992d6cde299a3a958853875c4c47f884"
   },
   "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Library/Packs/d9b8a9bb \u2014 Packs.md": {
    "bytes": 5193,
@@ -686,8 +686,8 @@
    "sha256": "829ab5c73e86da478195dbf9b5ff34c7f71d21c1e4c367d37c2933ee34d46004"
   },
   "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Rendering/dbc1cbbf \u2014 Tropo Rendering.md": {
-   "bytes": 38243,
-   "sha256": "50879134cbc02852c6aed21be0842f9177d663e8fc182e2a2c32a2c16d778ee3"
+   "bytes": 38722,
+   "sha256": "69fa2819b3802cc09dbcd913259355e6007654c7f7c837d0746e598827e8a6f8"
   },
   "00-tropo-nav/00-tropo-active/tropo-subsystems/Tropo Test Harness/952f3aa3 \u2014 Tropo Test Harness.md": {
    "bytes": 16263,
@@ -894,8 +894,8 @@
    "sha256": "8622e0912a192000945d0e32f92fc2fdca3fe3168f43c45a6bd6f9a3f6c51a03"
   },
   "00-tropo-nav/00-tropo-active/tropo-work/dev-pipeline/47c26a60 \u2014 Memory reinforcement scoring \u2014 a recurrence counter for the curator.md": {
-   "bytes": 11251,
-   "sha256": "a5795bc481af916df7464f52ba14194e4582c2b8437980ee243eccffc2723943"
+   "bytes": 11523,
+   "sha256": "180ea37e76bfd06aa1f62e066dc3c6fb36d6f4274e3955b60fb050786cc5a323"
   },
   "00-tropo-nav/00-tropo-active/tropo-work/dev-pipeline/cd1fcd25 \u2014 dev-pipeline.md": {
    "bytes": 21849,
@@ -1030,16 +1030,16 @@
    "sha256": "f6ecd517a9a792232c731e28c450efa01b946e81a1e211b627081c53f97545af"
   },
   "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Agents/99ed55fd \u2014 Tropo Agents.md": {
-   "bytes": 39627,
-   "sha256": "ae2bab4043b47920d822f577d3e7d99d2479818de349407066586c72bd90768d"
+   "bytes": 40088,
+   "sha256": "875ef577f41e51549d8591712f62923c4be3ba5dc42bf6a8a3dc5bc19954eaf2"
   },
   "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Documentation/f87e33f0 \u2014 Tropo Documentation.md": {
-   "bytes": 54532,
-   "sha256": "8d32328d01a50fc3b4de611c947702a974ca53613c884b6ee615cd51c3c64d2d"
+   "bytes": 54949,
+   "sha256": "b1ae7b2d60faf752bf58b7b4b9f6a0f96fb8afd2767088e181b6cf0e21ba00fa"
   },
   "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Governance/8dd772a0 \u2014 Tropo Governance.md": {
-   "bytes": 100420,
-   "sha256": "e08bf1581dc497419251dbf2df6e979b16bfe4cadeb237edfd2772f88c2b5dc2"
+   "bytes": 100805,
+   "sha256": "7c8fde3943240fccdbf9bcbbfdb618a58809109443e56fb0bd02846cb7b3b9b1"
   },
   "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Governance/Import Primitive \u2014 Capability Overview/58722bdf \u2014 Import Primitive \u2014 Capability Overview.md": {
    "bytes": 9325,
@@ -1050,8 +1050,8 @@
    "sha256": "16195af4a6e2fb1517fababd95064f1a93c41833eff1590688f8244b595609f5"
   },
   "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Library/1aba710c \u2014 Tropo Library.md": {
-   "bytes": 26868,
-   "sha256": "b5e1de40daf94bb551299305b87e53b9d6566634ce3d47d50326f0ff8bef7adf"
+   "bytes": 26862,
+   "sha256": "e089ebb95ffb544ddcb46c4dbe7f79d2992d6cde299a3a958853875c4c47f884"
   },
   "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Library/Packs/d9b8a9bb \u2014 Packs.md": {
    "bytes": 5193,
@@ -1078,8 +1078,8 @@
    "sha256": "829ab5c73e86da478195dbf9b5ff34c7f71d21c1e4c367d37c2933ee34d46004"
   },
   "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Rendering/dbc1cbbf \u2014 Tropo Rendering.md": {
-   "bytes": 38243,
-   "sha256": "50879134cbc02852c6aed21be0842f9177d663e8fc182e2a2c32a2c16d778ee3"
+   "bytes": 38722,
+   "sha256": "69fa2819b3802cc09dbcd913259355e6007654c7f7c837d0746e598827e8a6f8"
   },
   "00-tropo-nav/00-tropo-all/tropo-subsystems/Tropo Test Harness/952f3aa3 \u2014 Tropo Test Harness.md": {
    "bytes": 16263,
@@ -1286,8 +1286,8 @@
    "sha256": "8622e0912a192000945d0e32f92fc2fdca3fe3168f43c45a6bd6f9a3f6c51a03"
   },
   "00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/47c26a60 \u2014 Memory reinforcement scoring \u2014 a recurrence counter for the curator.md": {
-   "bytes": 11251,
-   "sha256": "a5795bc481af916df7464f52ba14194e4582c2b8437980ee243eccffc2723943"
+   "bytes": 11523,
+   "sha256": "180ea37e76bfd06aa1f62e066dc3c6fb36d6f4274e3955b60fb050786cc5a323"
   },
   "00-tropo-nav/00-tropo-all/tropo-work/dev-pipeline/cd1fcd25 \u2014 dev-pipeline.md": {
    "bytes": 21849,
@@ -1442,52 +1442,52 @@
    "sha256": "4fdefd0b15999fcebf3e34760166c121251597060dbf5cc32590ab45a4d180d6"
   },
   "AGENTS.md": {
-   "bytes": 1804,
-   "sha256": "e927584bcbe94aa4800b2d21a7c516339a00abeb08d06fb460583156204e0b48"
+   "bytes": 1833,
+   "sha256": "bc778481411a383b58ff6817ea320bc4de2a292bc7cfd2dcb9862d8dae029778"
   },
   "CAPSULE.md": {
    "bytes": 7762,
    "sha256": "746156509579ef9510b497e0dd8842f7a64db1f8f29aadce82e3d8a86f1c5356"
   },
   "CHANGELOG.md": {
-   "bytes": 57121,
-   "sha256": "a688df10b8358416c5c11c40af32d4a9e3c593213df56fa8e15c739a33464a74"
+   "bytes": 63030,
+   "sha256": "0e19b7c8bd7ffc6ed3f2ebc94fe29f678e25f8a0565da94cface06441c7c27c9"
   },
   "CLAUDE.md": {
-   "bytes": 5922,
-   "sha256": "55479cc9140d01e6958d1b2d1eb700ae8767c0598b3f7221ccba3144246c6f34"
+   "bytes": 5951,
+   "sha256": "55c39a4b0bfcae085e2ebd2c548d6b09c12742d33d9dbc6c436141fd82f14a41"
   },
   "GEMINI.md": {
-   "bytes": 1072,
-   "sha256": "a8733968bddbb1f3ee77d02afa94891934151c6fbbcc719778c9087f659d5a1a"
+   "bytes": 1101,
+   "sha256": "0f475a8b1a65d1785b88598693f51e1e80dcefbaa8b918d5fac7cb0bda247029"
   },
   "KNOWN-LIMITATIONS.md": {
-   "bytes": 6223,
-   "sha256": "378e467cc3cb2577af4d4f1cff7d18e54430feffe84dc58ad3d6d936b4caf2d5"
+   "bytes": 9589,
+   "sha256": "0ef03656f59b91fd1ca767186e9d849d571bdadd43403c28726c98ee6e23201a"
   },
   "LICENSE": {
    "bytes": 11301,
    "sha256": "177efa1f59a62625c95e35018abbe6f2f6a69d956ee61b72cb4991501967397a"
   },
   "MANIFEST.md": {
-   "bytes": 194222,
-   "sha256": "d7cc2870d6cd2935f6d1e33a6f3714aad6fa6da5dd9030414be41b4a0f550067"
+   "bytes": 198316,
+   "sha256": "faff2f909d722c9ba320c77d43a53e8448bdd3dd774d6fb994de95a7b9b817d8"
   },
   "README.md": {
-   "bytes": 5877,
-   "sha256": "a81fd5ac1236a7dc2d90a5725a1bb5271fbb3186136e2dbc8273f9f8dbd2459d"
+   "bytes": 6816,
+   "sha256": "c1985e7efb396d54543af3f88207c2f7c11c5db2123861e950fae01c0856c38f"
   },
   "RELEASING.md": {
-   "bytes": 7204,
-   "sha256": "4774fcdac88a46c1a62468f54e5fccb706c68d6fe3f3e2f33774bd2ebe6830d3"
+   "bytes": 8190,
+   "sha256": "392c9ed9c1d66471dd316abb114dfdf74d0d62d2645d55cfe45c541ba9b6380c"
   },
   "START-TROPO.md": {
-   "bytes": 6346,
-   "sha256": "355f74b8702ace5df2c7cc6cd0d166519c485646b6353efb73374aafe2a1fb32"
+   "bytes": 7818,
+   "sha256": "89a8b2c65bf1e2db95b8fb50b880f68938c460d1489bc09a42c3ff71fee22f8e"
   },
   "STUDIO.md": {
-   "bytes": 7206,
-   "sha256": "1d9f2d0d121570b501d15a7621fc5eb84f4872dc26e5e5d32b7953c8bbdd45eb"
+   "bytes": 7336,
+   "sha256": "694f88e3c8fce0afb3b7255653e9f431ec3e4a40cbdae64162c9bb0ead9cb241"
   },
   "TROPO-CAPABILITIES.md": {
    "bytes": 40966,
@@ -1502,8 +1502,8 @@
    "sha256": "e295b3b1c3721bc1122eeaa159731286370e5950572da49e0384555f51402ad9"
   },
   "agents/sa/commission-quickref.md": {
-   "bytes": 15556,
-   "sha256": "b344947792d55a0ad5d4ca11fc8e7a2cb79ab83cea627cb747a5c322b9890bad"
+   "bytes": 16147,
+   "sha256": "141d06823345fdf4994f88da46b2ae478e49c3b9f2368841c5139472ef008def"
   },
   "agents/sa/sa.channel-health-monitor/sa.channel-health-monitor.md": {
    "bytes": 7041,
@@ -1526,8 +1526,8 @@
    "sha256": "db754e224814b93c5bc255f5fcc52b3e212e7df7e825647b76bd5536578f89b9"
   },
   "agents/tropo/briefing-package/current-release-notes.md": {
-   "bytes": 6365,
-   "sha256": "d600624dee77ca7ef9f035923beb9b9d8434d2e63e4196717ef4584e2814be06"
+   "bytes": 5644,
+   "sha256": "a2fa3afdb6bef23f51e51df85bed8b935bae938461406ae9b9d50c168475ce23"
   },
   "boards/_formats/README.md": {
    "bytes": 3736,
@@ -1550,8 +1550,8 @@
    "sha256": "dd71262e0b031fd8efbd78fbcc877b5fc6a5b975b5e0ea712f7c4fe100084e35"
   },
   "boards/po/studio-map.html": {
-   "bytes": 48281,
-   "sha256": "404b2fd9c70926df853bb931062895ff61c5ba8ac75c5621dfe78b3e265a94c9"
+   "bytes": 47663,
+   "sha256": "a5c6c2daa95b7e8d42a8e7aae66299581b50d121582adda0c36b95f5096cd0af"
   },
   "channels/AGENTS.md": {
    "bytes": 626,
@@ -1565,77 +1565,77 @@
    "bytes": 1035,
    "sha256": "5c6842714b531fd706da251373f47bb9b92d71e4f102b9fb8d8e960ab03e34d1"
   },
-  "docs/architecture-review-v4/svg/01-system-map.svg": {
-   "bytes": 11676,
-   "sha256": "12bc62a16880710d83d264d8d7b214c3faf0c1c73410f695f55425a3afa90997"
+  "docs/architecture-review-v5/svg/01-system-map.svg": {
+   "bytes": 15614,
+   "sha256": "f36faa8e2ed0f8d85b8b048dd822e32277300fd8af62cb59ee00794d58f67bd1"
   },
-  "docs/architecture-review-v4/svg/02-capsule-type-system.svg": {
+  "docs/architecture-review-v5/svg/02-capsule-type-system.svg": {
    "bytes": 11020,
    "sha256": "348e9f6e62222c41d15aafa105a5c3fecbcf53b706538de587ad8c88d226c6d1"
   },
-  "docs/architecture-review-v4/svg/03-vault-graph.svg": {
+  "docs/architecture-review-v5/svg/03-vault-graph.svg": {
    "bytes": 10996,
    "sha256": "055630b24a178b0f268a8ae65164b077b03d8c12144fee26caf62b95227814a3"
   },
-  "docs/architecture-review-v4/svg/04-agent-lifecycle.svg": {
-   "bytes": 12823,
-   "sha256": "03e66d5000c188b07a8d40927beadbbd1bf073d75badf6b85cfb469caca94fcf"
+  "docs/architecture-review-v5/svg/04-agent-lifecycle.svg": {
+   "bytes": 17956,
+   "sha256": "a524af2141cb1646706c7d0a5a05f08ffbfa3fc780bdfc3d9ccfb3b970240d41"
   },
-  "docs/architecture-review-v4/svg/05-memory-architecture.svg": {
-   "bytes": 10757,
-   "sha256": "c558e5249e32fe980d177cef86f9e56269a8ee4f735a72f796e4897a81fa774d"
+  "docs/architecture-review-v5/svg/05-memory-architecture.svg": {
+   "bytes": 14572,
+   "sha256": "d436ee38749cd37e0c9bbc2472c807bfbbb53181baf913703c2847e7020c7250"
   },
-  "docs/architecture-review-v4/svg/06-event-system.svg": {
-   "bytes": 10079,
-   "sha256": "11c40f063f5d46a26358fbd3c1e83e72f5f00d2d5a1524c156b587a709cfd24e"
+  "docs/architecture-review-v5/svg/08-enforcement-verification.svg": {
+   "bytes": 12934,
+   "sha256": "81703607cd50951b9ae5e66db07d4e4ce7926ab9e81d92c33a529ab04031d08a"
   },
-  "docs/architecture-review-v4/svg/07-pipelines-and-loops.svg": {
-   "bytes": 12170,
-   "sha256": "f59dc4d75048a034a9bd52074a529946ef60341ec6307b8faf2ccd06d4f50fcd"
-  },
-  "docs/architecture-review-v4/svg/08-enforcement-verification.svg": {
-   "bytes": 10568,
-   "sha256": "5f1d262b3eeede7162c80290f6d30b3e6b0131e15e415db249b47dc51b90bb70"
-  },
-  "docs/architecture-review-v4/svg/09-federation-sovereignty.svg": {
+  "docs/architecture-review-v5/svg/09-federation-sovereignty.svg": {
    "bytes": 14130,
    "sha256": "a3e6b0e6687adcbb10737c389fec66171784f066be11208a9c0df06a92ed8f1b"
   },
-  "docs/architecture-review-v4/svg/10-write-path.svg": {
-   "bytes": 11249,
-   "sha256": "724580a204f4b4c00b941c39fbae75ab305a42f53c3513c4fc9238d6fba7f3df"
+  "docs/architecture-review-v5/svg/12-two-pipeline-dag.svg": {
+   "bytes": 14001,
+   "sha256": "1c77be32d13a65152cd1ef01effb2f8e17a36bf1870f3b8deb9c4a83bed7d007"
   },
-  "docs/architecture-review-v4/svg/11-evolution-timeline.svg": {
-   "bytes": 12506,
-   "sha256": "7cef2deae5de2e9ddf1e97ddac9ee4ddb6338c2714602adc72087ef4f135ea1a"
-  },
-  "docs/architecture-review-v4/svg/12-two-pipeline-dag.svg": {
-   "bytes": 11057,
-   "sha256": "b1e69ca5f120c3f92739ffcced1f89439b87d57087ae452159240ec2a87515ea"
-  },
-  "docs/architecture-review-v4/svg/13-lifecycle-born-continue-retire.svg": {
-   "bytes": 10510,
-   "sha256": "a0bd6c2b384f13576e21ac0ec12fb95909de8d73598bb83248e6c1711ae9c5c4"
-  },
-  "docs/architecture-review-v4/svg/14-event-ledger-v2.svg": {
+  "docs/architecture-review-v5/svg/14-event-ledger-v2.svg": {
    "bytes": 9268,
    "sha256": "3d7686186a2e1789b1c38a9821b675ae4ea4233cbf7b743dea612a78f7b36019"
   },
-  "docs/architecture-review-v4/svg/15-gardener-loop.svg": {
+  "docs/architecture-review-v5/svg/15-gardener-loop.svg": {
    "bytes": 9122,
    "sha256": "3795016c516570fea91258641e2dcb244e539bc02659ff1bba9768cebee70acb"
   },
-  "docs/architecture-review-v4/tropo-l1-architecture-review.html": {
-   "bytes": 143853,
-   "sha256": "43c900aed31a6db3b6aef9065493ed2be8c0c8e6d0d27079e68bff08ee29162d"
+  "docs/architecture-review-v5/svg/16-crew-topology.svg": {
+   "bytes": 14620,
+   "sha256": "71b3339e130dc927966c00ad9f42632e2123c0556360d45d00c7285794a1f935"
   },
-  "docs/architecture-review-v4/tropo-l1-architecture-review.md": {
-   "bytes": 114482,
-   "sha256": "e78e1ceea6fc9222f29793ce6b61958e495d9f7f97a789f896f8a45e8b4ff188"
+  "docs/architecture-review-v5/svg/17-genesis-arrival.svg": {
+   "bytes": 15262,
+   "sha256": "fcb8313b96876d9c0c065e600cff8cb93799fe421daa5c8fc5ac3fe770900abb"
+  },
+  "docs/architecture-review-v5/svg/18-release-path.svg": {
+   "bytes": 24460,
+   "sha256": "70724f788aabb652b7ef80e4175906926b60cba0522a21f4e790dbbb0196bf7b"
+  },
+  "docs/architecture-review-v5/svg/19-defect-families.svg": {
+   "bytes": 13082,
+   "sha256": "93bbe8bc259cbd757d194d0623dc892f5e7365a374643339b6834ffe685c6df4"
+  },
+  "docs/architecture-review-v5/svg/20-identity-width.svg": {
+   "bytes": 18938,
+   "sha256": "16ff14677804724833df26ddcd9c361ed5f78b5f0b50c7f7b9d39b61d08b8222"
+  },
+  "docs/architecture-review-v5/tropo-l1-architecture-review.html": {
+   "bytes": 513543,
+   "sha256": "51976b2a7d9b2740e3f3f084a775d1c83f3db4b9038e5acead3426caab737f8b"
+  },
+  "docs/architecture-review-v5/tropo-l1-architecture-review.md": {
+   "bytes": 235894,
+   "sha256": "d3b73f4630d43eae382cadd861f028d66717ae799e396caca0478b93e549a19f"
   },
   "docs/tropo-studio-map.md": {
-   "bytes": 10185,
-   "sha256": "d2f3605f80ce150ddbbcc72e7fac163d08c67a06584fcc1406c0c4190fa503fc"
+   "bytes": 10328,
+   "sha256": "9d8cc7aade9a63794b05a574fd7c0179606fbd1b6b479dc221baec142bd79dc2"
   },
   "operating-agreement.md": {
    "bytes": 7007,
@@ -1647,11 +1647,11 @@
   },
   "package.json": {
    "bytes": 915,
-   "sha256": "539045815303d73ac80c2239e2465a85e08d61ecbaf7aafe6a5a7c7d74c8c913"
+   "sha256": "d21ff8879150ff9085734ee4773b1ae4028e38f5722413f7d8dcdc5a56bba635"
   },
   "test-report.md": {
-   "bytes": 1276,
-   "sha256": "b35420b48a9b135add9b5fc8a3b8c6810b1755586f6c9e0cec7e38b741334ca9"
+   "bytes": 1277,
+   "sha256": "0f79707076366e59bc429371c655d0c1c486cab74e03319b03968983b38700ef"
   },
   "vault/AGENTS.md": {
    "bytes": 23273,
@@ -1706,8 +1706,12 @@
    "sha256": "0c979c91c56a696d6cb39cf4f5e4c24339208e0318a2fc0794e6e5d16862dd4a"
   },
   "vault/capsules/mint-registry.json": {
-   "bytes": 19232,
-   "sha256": "11b4ab0f916c4a6447510ea064802ca6b65e046adb2164313fa7bcc84aedd47a"
+   "bytes": 19724,
+   "sha256": "ea2e480d29a65653fa407cc632c810e7d4f7953ac88c96259dad7ba6bbc42b17"
+  },
+  "vault/capsules/templates/decision.template.md": {
+   "bytes": 1283,
+   "sha256": "778b10ba179232c1f2923a57ffdbbb8d9eb802d71af3c4f7735ac6df2655975e"
   },
   "vault/capsules/templates/design-brief.template.md": {
    "bytes": 988,
@@ -1716,6 +1720,10 @@
   "vault/capsules/templates/dev-spec.template.md": {
    "bytes": 4567,
    "sha256": "6e887c0dc6b3d1f794c8c67faf3842e40b7364ec6351cdb3db6828337306a10d"
+  },
+  "vault/capsules/templates/document.template.md": {
+   "bytes": 549,
+   "sha256": "123f8be65d88558cad9260248a62ccf385de1bd96465f518756c71dbbadbb8f9"
   },
   "vault/capsules/templates/note.template.md": {
    "bytes": 480,
@@ -1802,12 +1810,12 @@
    "sha256": "7d5995e5141e40b2f5ffbfd6d47fd13d698c4205628177bc09153fd548263d98"
   },
   "vault/capsules/tropo-decision.capsule.md": {
-   "bytes": 11755,
-   "sha256": "c8d8b780b6643aff72408059038f9392ddea934d1e7fc81f97f81ea810a25047"
+   "bytes": 13619,
+   "sha256": "e664113985afa4826c3465a56f3793e161ba0761ac7c1e5504ac9571026defb7"
   },
   "vault/capsules/tropo-design-brief.capsule.md": {
-   "bytes": 29915,
-   "sha256": "bce1fc699b27cc9ca38836dc7d77b93a0e46f91e574c7c39a2c1ca58f09cc348"
+   "bytes": 31047,
+   "sha256": "8590fbd4778450275aba1d2f98d02c8eeaa760ea4c29e40f75329524c831522f"
   },
   "vault/capsules/tropo-design-spec.capsule.md": {
    "bytes": 12073,
@@ -1822,8 +1830,8 @@
    "sha256": "ee027dcc2b0d2f33ba809202eaf0f6622c4ce4a38dd89b1cc52d98557965d4ab"
   },
   "vault/capsules/tropo-document.capsule.md": {
-   "bytes": 15898,
-   "sha256": "c75b3e6d0c94cf42aa6d510f7265ebb14fa56be290787e7dc063d352c196cbc8"
+   "bytes": 17411,
+   "sha256": "42e380215cd009af752e56b25e47af491f387a58e2d4d795a4d991c3b36cf97a"
   },
   "vault/capsules/tropo-docx-template.capsule.md": {
    "bytes": 21493,
@@ -2002,8 +2010,8 @@
    "sha256": "71ffb0cf354c77979f7cbd4339e0f7d8d3ce1305ff79ebce73895964f29d6617"
   },
   "vault/events/00-events.jsonl": {
-   "bytes": 905,
-   "sha256": "e29a3645603c0528c548f10f7e2725479929446d7b1b1322cca541aa8d7c76a4"
+   "bytes": 262,
+   "sha256": "b173407d76492af2b58af7d96e612e4cbd43899eb13dcea3bc073f9294ba6985"
   },
   "vault/files/008b86cc.md": {
    "bytes": 6653,
@@ -2074,8 +2082,8 @@
    "sha256": "415049f233afb9e7e0762422c9aafb3a89c75f5ef84a0d2da1a10481a53bc675"
   },
   "vault/files/1aba710c.md": {
-   "bytes": 26868,
-   "sha256": "b5e1de40daf94bb551299305b87e53b9d6566634ce3d47d50326f0ff8bef7adf"
+   "bytes": 26862,
+   "sha256": "e089ebb95ffb544ddcb46c4dbe7f79d2992d6cde299a3a958853875c4c47f884"
   },
   "vault/files/1b8c5a39.md": {
    "bytes": 2408,
@@ -2234,8 +2242,8 @@
    "sha256": "5d1e872740e5084e6f1df96ecbb0287eda930e9e19935dae774defbf9022363d"
   },
   "vault/files/47c26a60.md": {
-   "bytes": 11251,
-   "sha256": "a5795bc481af916df7464f52ba14194e4582c2b8437980ee243eccffc2723943"
+   "bytes": 11523,
+   "sha256": "180ea37e76bfd06aa1f62e066dc3c6fb36d6f4274e3955b60fb050786cc5a323"
   },
   "vault/files/48f8c52c.md": {
    "bytes": 1673,
@@ -2558,8 +2566,8 @@
    "sha256": "f88849ab8747ddd9a66d7b921118b7b2b930f24dae176fdddbb634b1678f4ce4"
   },
   "vault/files/8dd772a0.md": {
-   "bytes": 100420,
-   "sha256": "e08bf1581dc497419251dbf2df6e979b16bfe4cadeb237edfd2772f88c2b5dc2"
+   "bytes": 100805,
+   "sha256": "7c8fde3943240fccdbf9bcbbfdb618a58809109443e56fb0bd02846cb7b3b9b1"
   },
   "vault/files/8e03f8d6.md": {
    "bytes": 975,
@@ -2586,8 +2594,8 @@
    "sha256": "116bbff7a17a9546019222be750cfd1432626378f50717a71b7133d8b0c9b6c6"
   },
   "vault/files/99ed55fd.md": {
-   "bytes": 39627,
-   "sha256": "ae2bab4043b47920d822f577d3e7d99d2479818de349407066586c72bd90768d"
+   "bytes": 40088,
+   "sha256": "875ef577f41e51549d8591712f62923c4be3ba5dc42bf6a8a3dc5bc19954eaf2"
   },
   "vault/files/9a4b7c5e.md": {
    "bytes": 16196,
@@ -2648,10 +2656,6 @@
   "vault/files/a3f81d52.md": {
    "bytes": 3489,
    "sha256": "f2608634f33b0ea18aa52aca8cf00831913a034a99b4a5d8e3551dae57bea719"
-  },
-  "vault/files/a5554670.md": {
-   "bytes": 15502,
-   "sha256": "06a61c320a2378ace0c8ec649dbd0c8441ba1620bae2e9bdcd83e078c39aebc8"
   },
   "vault/files/a69fcab3.md": {
    "bytes": 6858,
@@ -2830,8 +2834,8 @@
    "sha256": "678ec87940acff9b07677dbf1ac727fc4edc0ef11b9893d20d0d2d934ffa079d"
   },
   "vault/files/dbc1cbbf.md": {
-   "bytes": 38243,
-   "sha256": "50879134cbc02852c6aed21be0842f9177d663e8fc182e2a2c32a2c16d778ee3"
+   "bytes": 38722,
+   "sha256": "69fa2819b3802cc09dbcd913259355e6007654c7f7c837d0746e598827e8a6f8"
   },
   "vault/files/dc108622.md": {
    "bytes": 6241,
@@ -2907,7 +2911,7 @@
   },
   "vault/files/f2a7d3c8.md": {
    "bytes": 3876,
-   "sha256": "9df668a5106e32c8d7366d36edbad3f9def8955c8feb93ffae4455a9d1ed6f54"
+   "sha256": "69dc3a269235d4694f68a3dafe5d54800983824dcf0eba161f88ea56345244cb"
   },
   "vault/files/f3906b76.md": {
    "bytes": 14659,
@@ -2934,8 +2938,8 @@
    "sha256": "e87d7cdae9ef04b9a0119d53cde1c16660257b6fb149849c71a0b995db65d96b"
   },
   "vault/files/f87e33f0.md": {
-   "bytes": 54532,
-   "sha256": "8d32328d01a50fc3b4de611c947702a974ca53613c884b6ee615cd51c3c64d2d"
+   "bytes": 54949,
+   "sha256": "b1ae7b2d60faf752bf58b7b4b9f6a0f96fb8afd2767088e181b6cf0e21ba00fa"
   },
   "vault/files/f9365ede.md": {
    "bytes": 3378,
@@ -3014,8 +3018,8 @@
    "sha256": "8dfa33e9ec9bc6599b2c1fb56bc72b2693bc91a42345df07ea7559301e2276a7"
   },
   "vault/playbooks/99341618.md": {
-   "bytes": 68962,
-   "sha256": "bdd97d255e6a4726ed1e588874056c50d0a74c3d1f05eeaf10795aa9bcdb30f0"
+   "bytes": 82200,
+   "sha256": "0ad8fa06467d6579ce374cdffe01e14779a43f194c1e467725a26a6b28f39d7b"
   },
   "vault/playbooks/a5fb24a6.md": {
    "bytes": 41937,
@@ -3042,8 +3046,8 @@
    "sha256": "5cd3aa39f543249192da95b473f50a31cf3721b4490e49075c99c5c52dad7a0c"
   },
   "vault/playbooks/e2c7d185.md": {
-   "bytes": 9051,
-   "sha256": "f0e6a5a85f964e1e1429755cbd2df51aff2b7b09903e9f72356eca0614b3bc39"
+   "bytes": 11818,
+   "sha256": "5e56e9f6789eca253de54ed025abb3db2b924d5b172b5fb7cd51aff3cc768be8"
   },
   "vault/playbooks/f0153a7639a2.md": {
    "bytes": 10230,
@@ -3058,72 +3062,72 @@
    "sha256": "8772b30c07359625f20912a20f180be8d811175426be69da8d105691101f7981"
   },
   "vault/schema/one-prompt-release-scorecard.schema.json": {
-   "bytes": 8793,
-   "sha256": "6c01ae3697ad50b3e10bd449f47d5b9ca148b2147882975737b1cabdb6a14ac8"
+   "bytes": 9746,
+   "sha256": "783230ba15f6039418d47149503066e489a615fce3db8ddecbb56cabca8600bc"
   },
   "vault/schema/tool-telemetry-registry.json": {
    "bytes": 4296,
    "sha256": "f6973370f863768bae44f8fef2ece18cd6c610bb8ad225b63f54eeb61467401c"
   },
   "vault/session-agents/06104842.md": {
-   "bytes": 7190,
-   "sha256": "6f3627a618e1789a4a4a1d70d204b37e6be804e02597cbf624a8aabeed0ca306"
+   "bytes": 7214,
+   "sha256": "25f8430b4c6bd8346700691f8508a201784ec14ef1ba22a5924f062fe36ab80c"
   },
   "vault/session-agents/24891f65.md": {
-   "bytes": 4311,
-   "sha256": "7bb72f9ff2053e1c793f2b3bd729fd990eb1ff995f1fc8b46afc956c1afa62a7"
+   "bytes": 4327,
+   "sha256": "e7a2388c68ca685498b037f2b150369508d01bec28333682d59505a11d33d9ff"
   },
   "vault/session-agents/24b57c2a.md": {
-   "bytes": 8170,
-   "sha256": "095b77c4bfefa5300d92223e3769e95feee18fd3e89cceebc75dcaaf03da7e97"
+   "bytes": 8190,
+   "sha256": "c138ce7cec905270b0fc72dfb100819cfc12496e5e584afc35965218b98eb8b8"
   },
   "vault/session-agents/281a79db.md": {
-   "bytes": 11304,
-   "sha256": "170e606c701f92f8d26130fa3340ca351e81d1fd889456d23258a371529c3ca0"
+   "bytes": 11319,
+   "sha256": "e3116cb0c54d339f9421823f007256893295828bf7184f88ca3199210edd7841"
   },
   "vault/session-agents/319af20d.md": {
-   "bytes": 10618,
-   "sha256": "dd8694272d6eb8d004b4e8a57daca8158330f114ead580648d60800373d6d98b"
+   "bytes": 10638,
+   "sha256": "162af03cbf7bdc80cee41b6ed91adc3e155f11a7e21f68cc806341afa584e8ba"
   },
   "vault/session-agents/3a243d6d.md": {
-   "bytes": 9481,
-   "sha256": "f2c26a965d1ead1d9a713663ffa00e9d9ffbe6477f6d4af6ec10c8a1e0daa15b"
+   "bytes": 9501,
+   "sha256": "6c902af13fa49fd040fcca037d523294fe01f575b44303fe803a6a2802f3c505"
   },
   "vault/session-agents/3c844ee6.md": {
-   "bytes": 34860,
-   "sha256": "b630f73429ca96ab91caa9c66d89d286b7f89640186c7403ff9ab2ed3b9f4858"
+   "bytes": 34876,
+   "sha256": "a833024b087b29a3a7b7c6b86569a57c6f499f010963763133a91509a515b446"
   },
   "vault/session-agents/3d9f1a7c.md": {
-   "bytes": 4815,
-   "sha256": "11c8122504fb64dab632171dd2a083eaef1cba0e7f24d73158fc1ab837ef5499"
+   "bytes": 4835,
+   "sha256": "cfd650e304aa5fe16b0437d241abb91d5ab2800cf767946c5da8bc41d48249ca"
   },
   "vault/session-agents/50c0bdce.md": {
-   "bytes": 38381,
-   "sha256": "abcf6c10bb3b777bd1884fe0b6e32538d2b08b6341da3d274c69690805abce21"
+   "bytes": 39327,
+   "sha256": "78a9ec8f6d06b4aa4ddc353a25807fbef6aede4fe9eca389f15aac903cd4e48c"
   },
   "vault/session-agents/5c1aef02.md": {
-   "bytes": 4955,
-   "sha256": "685e4fdaf68254848c8ee9712abaaf9dbc4e58650b80b3224459aaf325c9eaa0"
+   "bytes": 4971,
+   "sha256": "58fa0fa5734afb006ca95ddfba540560dd2b8796823fc395f9315fba14adf0fb"
   },
   "vault/session-agents/6742f183.md": {
-   "bytes": 21624,
-   "sha256": "85b65016d5795473ba62ebf95b8e02094d3d265ad1a2fef76c6810ce7d68462f"
+   "bytes": 21640,
+   "sha256": "94f35d216ca9d303b627de6d98ad2a91f07acb50d4eafac7a3fe3180250b02a3"
   },
   "vault/session-agents/7f4d520d.md": {
-   "bytes": 5144,
-   "sha256": "b34bfba30ad334b98ad970154cf2da972ac5bc317479e5a79bfe6ec9f620d577"
+   "bytes": 5159,
+   "sha256": "8e21c932597916483ffc2a522ce015b83b247c887ea8456a82f12afc210810bf"
   },
   "vault/session-agents/cec903e9.md": {
-   "bytes": 7814,
-   "sha256": "56905fd1dbd59513546535e088ba9132e5dfc94e5c5b8f13e27d69fa7fdccf2e"
+   "bytes": 7834,
+   "sha256": "7d130ce2da11927df15cb701b576cd209ede4aa449bc0dab166df20f42748748"
   },
   "vault/session-agents/d6e11740.md": {
-   "bytes": 8632,
-   "sha256": "2ed32f981119a6a6fe6fc30a234a8795af35a0252948a65e5e205bf5ecc4d141"
+   "bytes": 8647,
+   "sha256": "c071c551e30985621d8ae16493d206d26dceb3865f2eb05b944ba19a0ec84ebf"
   },
   "vault/session-agents/eaf9302a.md": {
-   "bytes": 14980,
-   "sha256": "c854189467b02f04fd1a9c73a9c44c25a29b53ef69e043a7a55a44abee7d3f36"
+   "bytes": 14995,
+   "sha256": "c3758764d326e05e460e0757bada28f23aa1683030e4f779b74eff8a59ab4aff"
   },
   "vault/skills/tropo-active-mode.md": {
    "bytes": 6211,
@@ -3146,8 +3150,8 @@
    "sha256": "b50addc6f255340ab2ed6ce2cf1929a955337e4af12685fe6f9dfb645cb3b3d5"
   },
   "vault/skills/tropo-create-executive-agent.md": {
-   "bytes": 24824,
-   "sha256": "d9d26e5fdd3c9887168b57fcd10f8190af2662e8e12a51252b8cfc66e6255d5b"
+   "bytes": 25577,
+   "sha256": "757181a5a905f15220ddbda5536b3652bafb77edbf4940042d9e6487468f0e99"
   },
   "vault/skills/tropo-create-governed-folder.md": {
    "bytes": 3344,
@@ -3190,8 +3194,8 @@
    "sha256": "1b3d1b31304e5468973feb6409c0dde0eb45cf01348957d837987529c15fb748"
   },
   "vault/skills/tropo-memory-write.md": {
-   "bytes": 6374,
-   "sha256": "8b76cb4d6105a423f729fff6500717880bd6a99ba865f4136e6dfb13bec8b952"
+   "bytes": 9161,
+   "sha256": "b9e619d8ca92c7c4fa3c23bf9b30c45892a6fad098245c854314f9896fad81be"
   },
   "vault/skills/tropo-mount-folder.md": {
    "bytes": 5124,
@@ -3246,16 +3250,16 @@
    "sha256": "d2d1fe887924ca2947814a7df2ed2332d746248dec6e0cae8b8ee435598d8e2f"
   },
   "vault/templates/companions/activation-pointer.md": {
-   "bytes": 922,
-   "sha256": "d1601694ac7580c72149cc2ec8798a527e55771fb047da57f2a2e4ca866d19d3"
+   "bytes": 1191,
+   "sha256": "b34ae3fc917e6319258b09ab8337ab0ebf7e4d9e7b194de949ac94b80d34f317"
   },
   "vault/templates/companions/cal.md": {
-   "bytes": 3305,
-   "sha256": "cddb107747b85bfc5cc67552950c9c3c960031f291e75d9565cde028717b7166"
+   "bytes": 4399,
+   "sha256": "6a552018bcb3c651a55aa72fde2aa3d010f069ba84e5b0b04ba5590c92df5128"
   },
   "vault/templates/companions/darin.md": {
-   "bytes": 3300,
-   "sha256": "76019e5051f5a281130d52b1ce037134701c3743df6e254435ae78643b3839c3"
+   "bytes": 4400,
+   "sha256": "d265b1ed1ae86c18d2a7a0ea406c54616324886a2a3cb2e8ea89f8b17993cdbf"
   },
   "vault/templates/companions/memory-edition/README.md": {
    "bytes": 1426,
@@ -3286,8 +3290,8 @@
    "sha256": "c73b7cecec84bd9dc34626e2956001ecacef05150e478cdc94a5138b11b74ea4"
   },
   "vault/templates/companions/po.md": {
-   "bytes": 3381,
-   "sha256": "aa5f0de392f043bc7034374f1076f06639e03699a903208207d9cda92d4be530"
+   "bytes": 4472,
+   "sha256": "ca6cd7dabce1d2a92690bc1f7fbfac5406fb124a76fbc604912674fa3a0c3c15"
   },
   "vault/templates/examples/mission-brief.example.md": {
    "bytes": 3943,
@@ -3295,7 +3299,7 @@
   },
   "vault/templates/root-docs/studio-map-resources.md": {
    "bytes": 2087,
-   "sha256": "b2907bdfb6bbaecd2998639073ce063dbff47614b1d1e7cbbba7272944b2d2a0"
+   "sha256": "cf52c6126636017984b9ed9246bce7b010fd544cffcc61a50849739b4cadb943"
   },
   "vault/templates/tropo-00-index.template.md": {
    "bytes": 315,
@@ -3398,8 +3402,8 @@
    "sha256": "46351f23a41e8ecc3f21689907cfe4e8341e29978bf0ec7b6df2e331da9ae383"
   },
   "vault/tools/28332b7b.py": {
-   "bytes": 34192,
-   "sha256": "a4d2534e61b69887cd9c4e03286f844ffe7f56ef2d343780ed95719cd9675e74"
+   "bytes": 34603,
+   "sha256": "177505950e8d94fb9d60b03955a7329420b5e3205d46fde56cbd089e817d804d"
   },
   "vault/tools/2e5c81d3.py": {
    "bytes": 6138,
@@ -3414,8 +3418,8 @@
    "sha256": "9b47305240f75731dd9087a476ceb1638641aff7fd5d56fdd87fbac18de79c1b"
   },
   "vault/tools/40b2f455.py": {
-   "bytes": 117687,
-   "sha256": "1ca92b8fe01c063c6647865f3d56edf3a511b3ed693c917356c66a4707c09566"
+   "bytes": 117776,
+   "sha256": "37cba4416c9f663a2da2be745f425630066bf106bc514993988df8d27836d64a"
   },
   "vault/tools/43b792b5.py": {
    "bytes": 9661,
@@ -3442,8 +3446,8 @@
    "sha256": "0d9be44abf6be3331532e37cf9ec94c2d0935f55a46a749b858bbde2ead991de"
   },
   "vault/tools/9e7003b1.py": {
-   "bytes": 360914,
-   "sha256": "07956f0a9cb6cb9d2597038164818675d94ffeaf3e3ee715ebe29d0e3d58034c"
+   "bytes": 366243,
+   "sha256": "169718ac9a85dddd8ab096ed6477a4336eb924ddfd49c2554e60ce281b2623d6"
   },
   "vault/tools/c778f748.py": {
    "bytes": 8723,
@@ -3561,9 +3565,17 @@
    "bytes": 203175,
    "sha256": "bbc8d203ad1ed9ddd8541d3f74b54e3a7165a03eae8e1a25a0563c0f42e385cf"
   },
+  "vault/tools/lib/boot_identity.py": {
+   "bytes": 20465,
+   "sha256": "9ce5abce37fbeaf50d0c698f79ed48388155ce55c4d088b7c265807421f84f5e"
+  },
+  "vault/tools/lib/boot_reads.py": {
+   "bytes": 15795,
+   "sha256": "3051d905405e26f647b5947373ecea422fed5f3fc83588470c75fa5e59452c40"
+  },
   "vault/tools/lib/build_guards.py": {
-   "bytes": 29013,
-   "sha256": "b55cc852ec3ce65a71cfdae9e327d9d923583228b9b1bee703aff7fc789d736d"
+   "bytes": 38326,
+   "sha256": "9c22444d0e620a4035b22b24136b7bb3dbb113957d714f4e7147c152827b09c6"
   },
   "vault/tools/lib/capture_segment.py": {
    "bytes": 8996,
@@ -3594,8 +3606,8 @@
    "sha256": "90ce380ca93f63ed66631022cfeeffbad49cb9b5dc0deca4397b4f421cbdb8c1"
   },
   "vault/tools/lib/distiller.py": {
-   "bytes": 110500,
-   "sha256": "1ba77108df017255a0ba07eb6c3a3347a49650b53d066f5a021111ab09d56363"
+   "bytes": 112601,
+   "sha256": "89b1b1695119828c8ffeebdaf80108aa0d84f00074ae34652ca4add5d58c8bbc"
   },
   "vault/tools/lib/distiller_capture.py": {
    "bytes": 6919,
@@ -3674,8 +3686,8 @@
    "sha256": "d4cc65c784aeeda7c249a2059380a03de34abdf6a15809063a572dcd3bea1a56"
   },
   "vault/tools/lib/governed_path.py": {
-   "bytes": 24222,
-   "sha256": "8beb1e2e7e688fc1154a7f106048f2a53af8b6f6e1e3a065f03fc85c933ded68"
+   "bytes": 23254,
+   "sha256": "a6d066345019740e06a837fed30607b46908e5878acf1c330f293a5259f82ef7"
   },
   "vault/tools/lib/group_authority.py": {
    "bytes": 63308,
@@ -3694,8 +3706,12 @@
    "sha256": "f0eb4e18b211cf7271627df3f03361852ab88395c9e0a83297bb6d047a2a3527"
   },
   "vault/tools/lib/index_surfaces.py": {
-   "bytes": 146325,
-   "sha256": "b218458645f21f5fed2d6039639f0f9cd8094813a10b31ec131c901ec700f1d9"
+   "bytes": 146957,
+   "sha256": "787227efc0e199c75e5d0f3d08b0567511c45300b15ec179318c0c9501e19932"
+  },
+  "vault/tools/lib/journal_event.py": {
+   "bytes": 550,
+   "sha256": "52a4f383afc1672f78b3f56d25fe065af4280a2cc408c24cbe549a60e281c21b"
   },
   "vault/tools/lib/l1v3_read_surface.py": {
    "bytes": 9423,
@@ -3721,6 +3737,10 @@
    "bytes": 16577,
    "sha256": "963e59f9c48153516c26578e3d53253f7de71ee08d1810a700889c95da0efa3d"
   },
+  "vault/tools/lib/memory_surfaces.py": {
+   "bytes": 6445,
+   "sha256": "67e6816da17ec27c122e846936ba6799af5c716c598243692639f7f084eae616"
+  },
   "vault/tools/lib/metered_model.py": {
    "bytes": 36715,
    "sha256": "54e00b14a4bf5e2057e19737c24e6a6a60022843e0bb012400749428eb18b2d3"
@@ -3738,16 +3758,16 @@
    "sha256": "bbb8ed1854ac4aa0c2d24c613cd33425217d98a4e9cb5309ac8756b8cdfc8001"
   },
   "vault/tools/lib/package_state_exclusions.py": {
-   "bytes": 19364,
-   "sha256": "877bf9cc61829445fb1680452525c1e8a426cd1046b2e126da396d665e6d62f7"
+   "bytes": 21179,
+   "sha256": "67247f0b64776bd4e38c9b052466bb047aefbf1c9beccfe2313e96ffbceb9900"
   },
   "vault/tools/lib/pipeline_obligations.py": {
    "bytes": 16380,
    "sha256": "ad4034cf246cb672fbacd39dd8ef676003773b31f403f0eb02c219337362a5b9"
   },
   "vault/tools/lib/po_first_boot.py": {
-   "bytes": 1510,
-   "sha256": "14d4633f5de96eced3bcee484eed068c434acb14ab9be463a5d49bb09ba3a876"
+   "bytes": 8308,
+   "sha256": "032d482f4fbe53f49899517fee92d3ba3c728861e47bdac9b9424bedd1af30af"
   },
   "vault/tools/lib/portable_tree.py": {
    "bytes": 56057,
@@ -3802,20 +3822,20 @@
    "sha256": "001eef35ec3c9551de0c395b387d1ff951c4557beebd6402ef2964647dd351f2"
   },
   "vault/tools/lib/release_closure.py": {
-   "bytes": 11514,
-   "sha256": "c1f86b61c29f74129f9ebe81697e650e68fbb444da3f41184adc95ad9ec3237c"
+   "bytes": 11492,
+   "sha256": "d47fd458ce037db2ab376c407ecec24489cc1c1f403c63c5f0d7a1233b93cc65"
   },
   "vault/tools/lib/release_completion.py": {
    "bytes": 9212,
    "sha256": "aff7404aa38149700148d13c54990bf9923cb5e2036eaba2409b2def0906b87c"
   },
   "vault/tools/lib/release_events.py": {
-   "bytes": 26239,
-   "sha256": "58beec612556505da52f985cd2020f0af2a862d7f5001f6ff0208a60a9e5ce47"
+   "bytes": 26358,
+   "sha256": "a2222284ec85ce5b66636c96e775de2933ff1991a0a37b24526492613c0fea55"
   },
   "vault/tools/lib/release_gate_inputs.py": {
-   "bytes": 12315,
-   "sha256": "b62a314fb3dc8443084f643a912760841b110d5429682ca4a6618e94eac2484f"
+   "bytes": 14220,
+   "sha256": "8ea639baf0ca4f7323018953f7dab82826818941583a43239eeb27712a983202"
   },
   "vault/tools/lib/release_gates.py": {
    "bytes": 17328,
@@ -3826,12 +3846,12 @@
    "sha256": "46c0c150607bf6971cb8b63edeb8b94773ea5834e084159cea0c33941b48eaf5"
   },
   "vault/tools/lib/release_metrics.py": {
-   "bytes": 27340,
-   "sha256": "35dfb82524d6d3e996dd66340873865951bee64f26568e29ab27a6eec5abf10c"
+   "bytes": 27624,
+   "sha256": "07061da6fcc5bee611ee951529b6d7f3c60269f6875b44d60352d2c3790e5b45"
   },
   "vault/tools/lib/release_package.py": {
-   "bytes": 25490,
-   "sha256": "04e4ed1847eae0d8061827d47945ee6043bf0abe3a40bafb0460c91aab4455c2"
+   "bytes": 25468,
+   "sha256": "468771db665c9039c3b17c1e1710c9091281aab8b439211579bc3794c9024681"
   },
   "vault/tools/lib/release_profile.py": {
    "bytes": 11757,
@@ -3850,8 +3870,12 @@
    "sha256": "84fd83dedc2fe6249bfc7336ff525b233303a6a9f47fb3f87b12ada25987e03f"
   },
   "vault/tools/lib/release_verify.py": {
-   "bytes": 14937,
-   "sha256": "c0a2d443a5c6a083c1d6fc9eda2c5eac233b5761b045f769986d96f17507fd28"
+   "bytes": 17658,
+   "sha256": "b22b7ea9bdf80064c91359636d4825a42e7bcff166f7607c2f5ae0e20f0b662a"
+  },
+  "vault/tools/lib/run_journal.py": {
+   "bytes": 6170,
+   "sha256": "71c6977b876ba786fb6753f4b1ed19d68ea7b1d755c8f7c8db37fb1ad95e7ecc"
   },
   "vault/tools/lib/segment.py": {
    "bytes": 23161,
@@ -3874,8 +3898,8 @@
    "sha256": "c99f8b29e9ffdf9ff2363f3088aee98d4b1a4ce2e9bbb1621e0e8824aa55ef59"
   },
   "vault/tools/lib/template_leg.py": {
-   "bytes": 47712,
-   "sha256": "44ae6ef7d3fade1c3f4a204f73b612264c3ccfab3dbbb44af246152ebdd423c2"
+   "bytes": 49868,
+   "sha256": "2fc8f97a5cb41e851898ed78c15bb88a6d85319e442f13c3a84c70a2e3dbe627"
   },
   "vault/tools/lib/tested_tree.py": {
    "bytes": 7036,
@@ -4185,6 +4209,14 @@
    "bytes": 7457,
    "sha256": "67586284dacb95f2c9263f84234ee77e115ad6587fd02706c8cdd28e6c106b0f"
   },
+  "vault/tools/tests/test_boot_identity_c1328363.py": {
+   "bytes": 34689,
+   "sha256": "a8d94cda939b52b8ab0242433a4566bcb99b36700c8ea0487f0e9d78e26d5b9f"
+  },
+  "vault/tools/tests/test_boot_read_report.py": {
+   "bytes": 34485,
+   "sha256": "c13defa3f840ca08b43dcaf398eb19664a8532cef26b550200d77d578d75f361"
+  },
   "vault/tools/tests/test_boot_reconcile_additive_only.py": {
    "bytes": 9509,
    "sha256": "082e4ed565c84a90671bbace493b41b4d86f28d29801fbdc71e1e95eeedb42d1"
@@ -4200,6 +4232,10 @@
   "vault/tools/tests/test_box_claims_b1_b2.py": {
    "bytes": 3958,
    "sha256": "c5bdf6882e7b9c0c2f025d3bb54153642be39e397b857b6285212e6eae7a620d"
+  },
+  "vault/tools/tests/test_box_self_test_three_outcomes.py": {
+   "bytes": 35449,
+   "sha256": "6a3257e4c062378a09747fa9bd409eebccd4c28bddeab3d43c3372e800d693d1"
   },
   "vault/tools/tests/test_brake_human_checkpoint.py": {
    "bytes": 3053,
@@ -4230,8 +4266,8 @@
    "sha256": "9f499c17c6d2a1feb0a9fd6af9f6b9a3bac52f462431df28c7bbe2fba3bfc2f2"
   },
   "vault/tools/tests/test_candidate_builder_parity.py": {
-   "bytes": 5663,
-   "sha256": "a88db0d12597f7eb7439f10d9c65fdcfa8270bd00c4ac5e0b2beeb0c4a5a05d6"
+   "bytes": 9014,
+   "sha256": "d395708ede33157f8e4e8a621a0bf36d79059972c4175c3dcbc300324d7d447e"
   },
   "vault/tools/tests/test_canonical_l0_stale_surface.py": {
    "bytes": 7248,
@@ -4286,16 +4322,16 @@
    "sha256": "7ca798a5f0c97682b83617407de2705e4c5012e10fbf53f8516c91afd55db1c1"
   },
   "vault/tools/tests/test_compact_continue.py": {
-   "bytes": 29457,
-   "sha256": "a4d265e2440395855642d2cea07ec3bd0c88f3466c0c3a9f673c5fb0d5f04d0a"
+   "bytes": 45838,
+   "sha256": "51329b4a63b8dad4d3b523c436761bcd4bb6d341c246f87212783921176bb9e3"
   },
   "vault/tools/tests/test_compact_continue_boot_derivation.py": {
    "bytes": 6338,
    "sha256": "e7c16060f4a0c7a57cb6f1ed9e02d1f00d4bfc3a0e87516105bdca1c5c1cf769"
   },
   "vault/tools/tests/test_compact_continue_harness_surfaces.py": {
-   "bytes": 10205,
-   "sha256": "beecc98802c1a07f58384f397eafafeb95236d5e188ecbf18b6ae2317481011b"
+   "bytes": 11298,
+   "sha256": "d115b0d445278a6b395b2e60a36a39af32662bd31a69783eb269b1e4738f473b"
   },
   "vault/tools/tests/test_compact_continue_ship_artifacts.py": {
    "bytes": 4233,
@@ -4414,8 +4450,8 @@
    "sha256": "66a0134df0d9138ca52c5135776fe7f8c28a9c816088d220f084c44e62fe9d6f"
   },
   "vault/tools/tests/test_distiller_orient.py": {
-   "bytes": 225099,
-   "sha256": "9bba893424d59a3749c9e1df6c992994163372c30b5a6f71f38688daf89243e4"
+   "bytes": 229076,
+   "sha256": "3f74d092832cbf584b69c0a0136eb2c268ceb52864496d45f95685c67666c5ff"
   },
   "vault/tools/tests/test_distiller_query.py": {
    "bytes": 9937,
@@ -4465,6 +4501,10 @@
    "bytes": 15003,
    "sha256": "85c9a95bdbea2091c1388d761715289414d0ed9fb38f8f4e73b7c62da1d70dcc"
   },
+  "vault/tools/tests/test_fire_selects_by_recency_not_identity.py": {
+   "bytes": 4380,
+   "sha256": "ed3ba56ab8e24187c7a5b74c64b35f3865ed2da749ddba885b0d028074d6b7bb"
+  },
   "vault/tools/tests/test_first_hour_fixes.py": {
    "bytes": 39506,
    "sha256": "f5ec48b79f589723361b7175606d8da36c073345dfc4e8086e15fd82d19efe2c"
@@ -4474,8 +4514,8 @@
    "sha256": "5fdc6b074f4dd7e23760c9ff2946f7dfe598a069e94cf5f372dc952dc2c98917"
   },
   "vault/tools/tests/test_freeze_release_candidate_2fae6312.py": {
-   "bytes": 9669,
-   "sha256": "2d43e53a77822672d5855a5d62b86519e025225908b5374c3888a0d93cdf6494"
+   "bytes": 14803,
+   "sha256": "9a95cdd8ab2d98e4f4e113327633061cfd3cf1f1e84aec2ba6117a055401cd95"
   },
   "vault/tools/tests/test_fresh_box_gate_e52826c5.py": {
    "bytes": 55277,
@@ -4542,8 +4582,8 @@
    "sha256": "ecb5d39c39ada784ae05cbcc6f4460c26d6c8889d01ecf5553e1ff37059bbf08"
   },
   "vault/tools/tests/test_identity_layer_v194.py": {
-   "bytes": 46110,
-   "sha256": "6cc3506328242f20c1d123de061069abe0071b1ba46b0e7c9574fba4c595e268"
+   "bytes": 46678,
+   "sha256": "ca87a659ec5c27a40ddb38ac76ab1c31a02a4230786cb24644899b975b0475a6"
   },
   "vault/tools/tests/test_identity_shape_classes_v194.py": {
    "bytes": 10053,
@@ -4614,8 +4654,8 @@
    "sha256": "fd4bbb2260d50ca79192e5a3a3e33809cfecd519bd8f4181ac09e54d9339d8c0"
   },
   "vault/tools/tests/test_lineage.py": {
-   "bytes": 14277,
-   "sha256": "64bb592ca2c805de47c1cd8cdcea0a51eaf16a0db0c85274efd0c651065c7652"
+   "bytes": 16100,
+   "sha256": "98604e65a91b372336202e75a08feffccb26c9959304a97316142188605a28c5"
   },
   "vault/tools/tests/test_llm.py": {
    "bytes": 18151,
@@ -4685,6 +4725,10 @@
    "bytes": 7911,
    "sha256": "ea1f588f347be34bf26e2c4b2851147958a33d0d1964af5616698df24b7e7537"
   },
+  "vault/tools/tests/test_memory_freshness_f015.py": {
+   "bytes": 6456,
+   "sha256": "943c0a625cf134e6d4f0df05b8f85afce066a18fdfb85d932626f9087baca062"
+  },
   "vault/tools/tests/test_memory_reinforcement.py": {
    "bytes": 24333,
    "sha256": "4b6545dcccf5f6be781aa3b438f76f901cc2d9bee29db08b8985deacc5f63b9f"
@@ -4692,6 +4736,10 @@
   "vault/tools/tests/test_memory_schema_migration_engine_phase1.py": {
    "bytes": 4465,
    "sha256": "a64c7f17c99d9b5090d6db2c3597ea383b1ff6aa3b545738d52d5e9b3fd90d5a"
+  },
+  "vault/tools/tests/test_memory_surfaces.py": {
+   "bytes": 8065,
+   "sha256": "2689870d68468d86d64929a0f5c0183fececcb5b029ac54d51b14b7ad884d60c"
   },
   "vault/tools/tests/test_merge_seam_wired.py": {
    "bytes": 24200,
@@ -4704,6 +4752,10 @@
   "vault/tools/tests/test_migrate_mount_identity_7b1e0ae5.py": {
    "bytes": 18519,
    "sha256": "15368d2a95c0633755072ce2ab8ca823c3bf5d4059f7d12f6bdd3132f59ea9c9"
+  },
+  "vault/tools/tests/test_mint_mount_reconciliation.py": {
+   "bytes": 10523,
+   "sha256": "48aaa71a1de4d17de5c9dc4101371b10c1c461192e78222b7e5d22639d9233cd"
   },
   "vault/tools/tests/test_mount_gate_409ef1cc.py": {
    "bytes": 33826,
@@ -4736,6 +4788,10 @@
   "vault/tools/tests/test_normalized_body_hash.py": {
    "bytes": 12102,
    "sha256": "4aaa9b96238d7d33d83b1d96c01c990a11c3f0a2e9642d60b23d372904bbb911"
+  },
+  "vault/tools/tests/test_numeric_folder_prefix_root.py": {
+   "bytes": 8486,
+   "sha256": "b16d59ebb74c9169e417b4da0e85de46fe0469890abd438262b9e8add0be193a"
   },
   "vault/tools/tests/test_one_home_no_duplicates.py": {
    "bytes": 3257,
@@ -4778,8 +4834,8 @@
    "sha256": "319b2099e27d8a7ae94c3a83515f77b2e7fff941ce6b878d4ebe6d49833ef380"
   },
   "vault/tools/tests/test_package_state_exclusions.py": {
-   "bytes": 15633,
-   "sha256": "c3fffd66d1c5582222378c5f30545f4a49ccb85dd40ccf920ab9784fa17afdd1"
+   "bytes": 19110,
+   "sha256": "a7a2f11f5e8876ffdf2c41c03759ae25ece6e7fba328afffa70549abae67c03c"
   },
   "vault/tools/tests/test_pipeline_durable_closure.py": {
    "bytes": 26324,
@@ -4793,9 +4849,21 @@
    "bytes": 14701,
    "sha256": "a065e599e3bf869edefcbae097f5a0ee13f308c34ad74d2cad9ce69a4e6d7667"
   },
+  "vault/tools/tests/test_precompact_snapshot.py": {
+   "bytes": 16841,
+   "sha256": "09904284a65ad764088cb3591d32ed416c3e354a5cf2295d05b6eef3ad936bc9"
+  },
   "vault/tools/tests/test_preflight_evidence_name_parity.py": {
    "bytes": 5940,
    "sha256": "0fc3c5878e8f348165c8c9765b8a92aff9ed9ede651a32ac8f4c5b7ad0eba183"
+  },
+  "vault/tools/tests/test_preflight_skips_are_not_green.py": {
+   "bytes": 7473,
+   "sha256": "7510d5ca578679f567e00af97b77c0f64ca97f42777bc4ae74512f653e03a61b"
+  },
+  "vault/tools/tests/test_promote_is_one_gesture.py": {
+   "bytes": 22210,
+   "sha256": "0f97a43dc6b0efc9d5fd3969009ff6bf98d54dfdf1242ebe1bd6cf25a30c9fb5"
   },
   "vault/tools/tests/test_provenance_before_close_0caad12b.py": {
    "bytes": 19263,
@@ -4821,6 +4889,10 @@
    "bytes": 4452,
    "sha256": "f3f8e469477df7471e5450ddf4f93587fbf17b94793052fddfe1787c011d0992"
   },
+  "vault/tools/tests/test_published_journal_compatibility.py": {
+   "bytes": 10154,
+   "sha256": "7ec0c0b848b8d6dd788c02c543a6695d3193ae33d524892f083c1e2c2af4cf69"
+  },
   "vault/tools/tests/test_q9_harness_evidence.py": {
    "bytes": 8689,
    "sha256": "be379f3c0e5a687ff0fe92ceeae4b41cff85f49b3af5e482f42a4755b1ad28f9"
@@ -4829,9 +4901,17 @@
    "bytes": 14179,
    "sha256": "75889beb263ecbc782ec7eadbc592f3b78f63a3d3b51c0a136c56c260e23ff45"
   },
+  "vault/tools/tests/test_redeclare_after_reverify.py": {
+   "bytes": 7517,
+   "sha256": "0513e7c118c6a1ce88690128b6a71e309fdf5432b9d024c109092f7510f34b7b"
+  },
   "vault/tools/tests/test_regenerated_carveout_d9.py": {
    "bytes": 6601,
    "sha256": "7308e3bb341fa5c7eb872c385c71c3ee491b68f9eaa9d3a0126db3718bd8a081"
+  },
+  "vault/tools/tests/test_rehearsal_version_derived_not_guessed.py": {
+   "bytes": 6901,
+   "sha256": "dc95fd302359db2db7e735e005268582cb58b2e627062cdd70a8efe7868e9aa4"
   },
   "vault/tools/tests/test_rehydrate_navigation_components.py": {
    "bytes": 19302,
@@ -4842,8 +4922,8 @@
    "sha256": "1057b913309fde9331e1542dcb4d12557fbe29313a3d8645dd3bc3a2ef3c6607"
   },
   "vault/tools/tests/test_release_authorization.py": {
-   "bytes": 21099,
-   "sha256": "83fac52f696a332a26ad4b96b806973e72ccb21a3d03c24bea14dd8cd00dbca6"
+   "bytes": 21252,
+   "sha256": "ecbaf42e941502af9047e3c91982950e0a984559792c4ca150878af33375550e"
   },
   "vault/tools/tests/test_release_capsule_fan_in_a54b9889.py": {
    "bytes": 45306,
@@ -4854,12 +4934,12 @@
    "sha256": "41e50cb9a42e3fa793a9911e37a56b69ea8c512058f6b9e53a3d8c22107b5f4d"
   },
   "vault/tools/tests/test_release_coupling_fbe50871.py": {
-   "bytes": 43690,
-   "sha256": "36209be471cd0e3435f80ef09a16f532be844ebf39776f564def468caac4bdbf"
+   "bytes": 56587,
+   "sha256": "68006ab0468df61252fa0df9d86e4dc3c1c9bebf8045eaa9ac4d32f179699ff2"
   },
   "vault/tools/tests/test_release_engine_sequence.py": {
-   "bytes": 10744,
-   "sha256": "c9cf93c22e22df0f7f22ac878bc1c11eed64acb806c4ac5d77ebc0e8c4018ae1"
+   "bytes": 11225,
+   "sha256": "8e13c25b36486496a5c10a57a71496853b5da19555b62f076b4db32b0a6611c7"
   },
   "vault/tools/tests/test_release_entry_reverse_map_v191.py": {
    "bytes": 8320,
@@ -4882,8 +4962,8 @@
    "sha256": "607bb7f5d03f5d2321eeedce7cfc64e2cb3bcbb5d9453f8428c034bd18a426c7"
   },
   "vault/tools/tests/test_release_guard_registry.py": {
-   "bytes": 50382,
-   "sha256": "bf55967aca81d50a3430aadb85cac8b3b34ab8328625325acbb2d2ad32433508"
+   "bytes": 50695,
+   "sha256": "0fea6509d7c841005ac2a27e877feff35796376d99cb687d2fae344dd111338d"
   },
   "vault/tools/tests/test_release_harness_preflight_v186.py": {
    "bytes": 21101,
@@ -4896,6 +4976,10 @@
   "vault/tools/tests/test_release_metrics_2fae6312.py": {
    "bytes": 12343,
    "sha256": "373d7550c64cf49ce75ffdb7a0226c42a43225d39d4b467d74b35b72a3bfd742"
+  },
+  "vault/tools/tests/test_release_mint_survives_a_shape_change.py": {
+   "bytes": 10479,
+   "sha256": "ec21aaa64469b0ed69e5c43958e03bdee8d5952c5630d0188efb017a80d4da1a"
   },
   "vault/tools/tests/test_release_package_identity.py": {
    "bytes": 9923,
@@ -4918,8 +5002,8 @@
    "sha256": "1dd8147fc5eafc166ceb54b3a0ee28ca332bbff6a12a284b30a16f8eeb186bfe"
   },
   "vault/tools/tests/test_release_receipt_adapter.py": {
-   "bytes": 57142,
-   "sha256": "0c6d74817524241d066ab6ee02ed6831b982bd528f9606cb3c7be59344715bfa"
+   "bytes": 58351,
+   "sha256": "7ca8ccd0641ec2f87951cea4f5be78a468529160603bf49e383fae5ef4a92dd8"
   },
   "vault/tools/tests/test_release_runner_cold_v192.py": {
    "bytes": 17347,
@@ -4978,12 +5062,12 @@
    "sha256": "55438b59160f6b62e24ad6aae73b6e326ab795bd4ad4ef7828e239bc7b9b0000"
   },
   "vault/tools/tests/test_retire_driver_emits_v192.py": {
-   "bytes": 11525,
-   "sha256": "345ff2a5f4da71d268ed6600ed619f0a54044e1eafbe414619cae510743fdac7"
+   "bytes": 21695,
+   "sha256": "b5c228ddd780c3e8e256693dd3b4e755d86aaf3287e39319a391d01590f67705"
   },
   "vault/tools/tests/test_retire_driver_v192.py": {
-   "bytes": 18855,
-   "sha256": "237f608c2b158f7c2e2ec1e0986d54e9703cfd7f8e70c1e0f0cd0a70b707bdbc"
+   "bytes": 21181,
+   "sha256": "38c4fad504a590bd71f70be6a682adc9ff717d161655dabc6c6724db4d2e8f67"
   },
   "vault/tools/tests/test_retirement_broadcast_body.py": {
    "bytes": 7305,
@@ -5006,16 +5090,24 @@
    "sha256": "1c7811178b46917ad868be7b55a4a7817c9ae9dac155da862f45c732ce39e4fe"
   },
   "vault/tools/tests/test_reverify_zero_receipt.py": {
-   "bytes": 9595,
-   "sha256": "e06aac52663f2fed2494cd4732935b8d8d9ac1c1c28209c2db89aa915f88924e"
+   "bytes": 11498,
+   "sha256": "e4c46973fadfb879062dc640ad8b63125df6ecd79d43d7c9afca9c60e8746f14"
   },
   "vault/tools/tests/test_s9_round2_nonce_binding.py": {
    "bytes": 6549,
    "sha256": "08a3d360fe9898f8d6b329035f13aa4062c53f5f9351a14464298a778d4b585b"
   },
+  "vault/tools/tests/test_scan_import_state_shipped_box.py": {
+   "bytes": 5132,
+   "sha256": "d4e771049fa95287793d41464b6d0374aa09b6404c3c417ef44d74b77eef7826"
+  },
   "vault/tools/tests/test_scorecard_seam_v192.py": {
    "bytes": 10121,
    "sha256": "02dfff9d242ab395a874df44bb0e8d600c9136cb953a7ba837f4cd6eb97eb64d"
+  },
+  "vault/tools/tests/test_scorecard_uid_shape_accepts_both.py": {
+   "bytes": 6168,
+   "sha256": "3d56dc99e3d21aa3c98662e819b56e1b0a938150f3b9556d70069aefe9488ee2"
   },
   "vault/tools/tests/test_scripts_one_home.py": {
    "bytes": 3398,
@@ -5026,8 +5118,8 @@
    "sha256": "90baa2d1186d11fe45535d4533e1f94d8977ee7d87b1532a1216eafeaa993b7d"
   },
   "vault/tools/tests/test_shape_authority_drift.py": {
-   "bytes": 2539,
-   "sha256": "df771fc32177d4469ac8083df44d29fb0acde2400b148fc07c0cff96f5284e0c"
+   "bytes": 2579,
+   "sha256": "a95fdadf0bf67aecf21c65a6eae04751d5d543c48be5e18c21e2a087bcbeb7f2"
   },
   "vault/tools/tests/test_shard_index_c6f6bea4.py": {
    "bytes": 36656,
@@ -5036,6 +5128,10 @@
   "vault/tools/tests/test_ship_census_gates_v1901.py": {
    "bytes": 6163,
    "sha256": "7615cf7dfe70b744dc294fd9c90f66e9b1728255714d0071420dfe825b0eb172"
+  },
+  "vault/tools/tests/test_ship_decision.py": {
+   "bytes": 8070,
+   "sha256": "7027d8dac6cca05418bd904bd5aa22e69f74cd37c41dff17de129171ca09b912"
   },
   "vault/tools/tests/test_ship_manifest.py": {
    "bytes": 37496,
@@ -5058,8 +5154,8 @@
    "sha256": "f878ef1526e74925eb607d97589bc2152459984b36db42fe9fad633ed0e15573"
   },
   "vault/tools/tests/test_single_receipt_shape_v191.py": {
-   "bytes": 7711,
-   "sha256": "409e696341cfb2ef0f458e8ada66a3f43c1b582ace1910e2db5381fd7985f8a5"
+   "bytes": 12026,
+   "sha256": "ec608de13104e6bcfdca1c20a8a6a1472668756e11b8a600672a1ba3b1cd728e"
   },
   "vault/tools/tests/test_site_endpoint_observed_v191.py": {
    "bytes": 5679,
@@ -5098,8 +5194,8 @@
    "sha256": "df9e562e4945b91c222dafc26a655a486bd393026721cda6f19f409c026619f1"
   },
   "vault/tools/tests/test_step_redeclare.py": {
-   "bytes": 45014,
-   "sha256": "db2d0b52f1614ce5e83366c77e1dcbc287803f6c8a72e40c50874be104ae0380"
+   "bytes": 45260,
+   "sha256": "2fd7549a1cf282a22306077dfe6d1be253d1afaf4f9c8e01836fe96513c3f5a9"
   },
   "vault/tools/tests/test_step_reopen.py": {
    "bytes": 11829,
@@ -5126,8 +5222,12 @@
    "sha256": "d0257c9dcae414fdcaf037ab3f1b0147bc525850db32bfd164e8641d57b4f018"
   },
   "vault/tools/tests/test_studio_status_identity_before_floor.py": {
-   "bytes": 3783,
-   "sha256": "4ff5ffef67a29138b2acaad4068185e5ff8ff87642c51c7381e07e9b6485c5f1"
+   "bytes": 5721,
+   "sha256": "682df836f8e9871dc7818f96b625c1f7769efb8be2ea9de8b706694c4ab3f6bb"
+  },
+  "vault/tools/tests/test_studio_status_nightly.py": {
+   "bytes": 9373,
+   "sha256": "151191debf5cdaf9dc49a4b5a0b9f7fa2add4c6068fb495696b7d55abd1ce435"
   },
   "vault/tools/tests/test_subsystems_touched_declared_hubs.py": {
    "bytes": 2316,
@@ -5158,8 +5258,8 @@
    "sha256": "2776c51ae90cf4fcd1838c1dec9149d975336e0e880cd71bbb901e2cfc8bda3a"
   },
   "vault/tools/tests/test_transport_preflight_v191.py": {
-   "bytes": 8177,
-   "sha256": "f38314aefe91db9fa5ac8e14fd927f2f79d407c5d4a85f531563d9045689706f"
+   "bytes": 8907,
+   "sha256": "db406eccc5d524ec1e4e930f2792bd34f885167eab43724fa9a485b6cd20bb0d"
   },
   "vault/tools/tests/test_trigger_seed_bootstrap_adoption.py": {
    "bytes": 2730,
@@ -5206,8 +5306,8 @@
    "sha256": "fe94645710388ce8fdf8f55fc8f3d994cf1755099a57ded56830a65baee3adbe"
   },
   "vault/tools/tests/test_typed_mint_phase1.py": {
-   "bytes": 61109,
-   "sha256": "e86758bc89202c90200809fc13fdc551191646f94628ed829a819d66ab9e501b"
+   "bytes": 67925,
+   "sha256": "4c12322a2c00f79a031da1692f02e3c7b46a6b6ded499d83df04e9650cfdabb4"
   },
   "vault/tools/tests/test_uid_shape_authority_parity.py": {
    "bytes": 3880,
@@ -5230,16 +5330,16 @@
    "sha256": "615c0f92f55ab3179b3c52c6cbe391ed6374db3a4f2182903d83f48c3b91c64f"
   },
   "vault/tools/tests/test_v195_spine_a.py": {
-   "bytes": 58672,
-   "sha256": "881475d2d5730583be59629be87761d4590a4c9d17a73c663c0bd67b5fdb232d"
+   "bytes": 59183,
+   "sha256": "3a0c506d217f50db8a57dcdd738eb19ce4477f9e9fcd6f814763b98cf9f287a1"
   },
   "vault/tools/tests/test_v195_spine_a_ac8_build_step.py": {
-   "bytes": 8312,
-   "sha256": "0bc965f47577511230135fcb14bbb4addb606ad442fbd49298491ddd39c69b73"
+   "bytes": 8439,
+   "sha256": "6d2172ec4e4ed80832a2c9327b0148ed1aba3ff93164f61cb10240a07d55f767"
   },
   "vault/tools/tests/test_v195_spine_a_render.py": {
-   "bytes": 52573,
-   "sha256": "b308f6173192cf08c1366d941b7182ed724200251577660a01e2770bce28ef84"
+   "bytes": 52575,
+   "sha256": "72b749667b428f276c634b218b586124dbcf636118eae930cf6b30b16ed30861"
   },
   "vault/tools/tests/test_v1_84_1_closeout_hardening_8c8ca68c.py": {
    "bytes": 31740,
@@ -5262,8 +5362,8 @@
    "sha256": "4b4f49e0aca061ad08ad809efb80def40b348297964abf3fe3a24641b8bdef00"
   },
   "vault/tools/tests/test_verify_reads_producer_shape_a156.py": {
-   "bytes": 7359,
-   "sha256": "451cfa1bd40bde15306a8348bc4c8b62037710d27388ae4e1b431697024cabee"
+   "bytes": 8463,
+   "sha256": "16441f26b8ed3be410ccdc0c7aca9af9f778f1aa2d8883eac72da0959e96226b"
   },
   "vault/tools/tests/test_verify_step_evidence_passthrough_b3f620fc.py": {
    "bytes": 10736,
@@ -5301,13 +5401,25 @@
    "bytes": 23699,
    "sha256": "ec3c2939a0f7d2666cd94e2cd0bc77f911c44b7baadcd8c08c8a77db227c0544"
   },
+  "vault/tools/tropo-boot-identity.py": {
+   "bytes": 13586,
+   "sha256": "dd6addbe67784384908b89b281ac4885fca1f2387a2d8b8eccbb9f11ee47c746"
+  },
+  "vault/tools/tropo-boot-read-observe.py": {
+   "bytes": 3121,
+   "sha256": "49f7447ca011bf67023e4bff1298b0173e58baa020158de4681983b8718d0dfc"
+  },
+  "vault/tools/tropo-boot-read-report.py": {
+   "bytes": 3234,
+   "sha256": "ead8c0ef3f49c87d781abd238798d7b6fdcea5b276f19c3bb064318cd967a8ee"
+  },
   "vault/tools/tropo-build-candidate-box.py": {
-   "bytes": 18934,
-   "sha256": "ecd6d0685b811801900554ccd3b81e5319b44a0010cbf47de52f6bf428aab989"
+   "bytes": 26946,
+   "sha256": "660f5653242153b43d5c91a1b25e163cd451bb0c377d5c271c77c35c658fa233"
   },
   "vault/tools/tropo-build-release.py": {
-   "bytes": 251810,
-   "sha256": "42fe383611deca8c36bdeec16688ffec8b87f8da8871bc2309f2ab2e2c11add5"
+   "bytes": 257455,
+   "sha256": "0c61cc92845c07a3ddeb39c399a313ded7d0ffb48e36be75ca0bff3d9837cbd1"
   },
   "vault/tools/tropo-check-doc-currency.py": {
    "bytes": 23758,
@@ -5318,8 +5430,8 @@
    "sha256": "5848db2ac0bb04ebf1aa1af82f2fee0cd8ab6d1ffe846bf530d64586abfc53eb"
   },
   "vault/tools/tropo-check-harness-receipt.py": {
-   "bytes": 12482,
-   "sha256": "8a1c31ba85ff8f689d4cf6369e373d7d43a6a39c05644b39b4cda25dc0f092b4"
+   "bytes": 13486,
+   "sha256": "746ef1fd2de49cb0b346559faf1eb89a4161987b7b4f80f681771ad937b1f005"
   },
   "vault/tools/tropo-check-one.py": {
    "bytes": 22322,
@@ -5338,8 +5450,8 @@
    "sha256": "c43d71e55a35cb7f0461253043b0b93c8af8cc91d0085c60b651fb45e84192e1"
   },
   "vault/tools/tropo-compact-continue.py": {
-   "bytes": 32742,
-   "sha256": "5cb66b78f67b190f4efd826f436159196ad500b6810e5d8c46d7f88b369d370a"
+   "bytes": 62181,
+   "sha256": "a1f4f2f3745aa3af407aab5fc08402b1de28e207f854bb3cb846b448d833e5c9"
   },
   "vault/tools/tropo-disposition.py": {
    "bytes": 18073,
@@ -5390,8 +5502,8 @@
    "sha256": "781fd2c6efbf4aae09f5b490e5e3b3c3b25a8eb928ab3283faaf3001adc2b2c1"
   },
   "vault/tools/tropo-freeze-release-candidate.py": {
-   "bytes": 17582,
-   "sha256": "66e457215633d1eaed2e648d8b2d119ed4ca66c04a464642334e0e50b382d78e"
+   "bytes": 18989,
+   "sha256": "f6de3bd60a4ff875dfbbc203740ae4b7e0c3e8e7b4046e3d3313475f564d5e49"
   },
   "vault/tools/tropo-gardener-body-judge.py": {
    "bytes": 50375,
@@ -5422,8 +5534,8 @@
    "sha256": "7c69d539f65b1823fc96be5bf37314fe8e6b14263de90147e10ea13cb644db68"
   },
   "vault/tools/tropo-genesis-companions.py": {
-   "bytes": 35735,
-   "sha256": "5f6f211a62d5521d9036aa01bb2d26411c991f80a57c3bae1a74eae2a793730f"
+   "bytes": 38067,
+   "sha256": "f8792eeeaadfc7d59fa40a1a987d26d51aadef50ffbb2f01abff9318bfe2d3d1"
   },
   "vault/tools/tropo-group-authority.py": {
    "bytes": 49768,
@@ -5442,8 +5554,8 @@
    "sha256": "61897da8548044944c76e160d423d032536c874987518df04735c096cc5cd647"
   },
   "vault/tools/tropo-lineage.py": {
-   "bytes": 25924,
-   "sha256": "c7bdea80e165096ba92b403b0c19010a9fe0c7daa475bffebaaf71b118829e77"
+   "bytes": 26695,
+   "sha256": "a574784d02dd7f6b6341fb738185bb19e200dde23fbb01f764e3c4552d05de8b"
   },
   "vault/tools/tropo-lock-dev-spec.py": {
    "bytes": 56004,
@@ -5466,8 +5578,8 @@
    "sha256": "fc428823479deba8f36c1d20460bd9bb77aa7eabbaa23d128ed3250c3890dc3a"
   },
   "vault/tools/tropo-mint-id.py": {
-   "bytes": 90153,
-   "sha256": "fa320f2ec6401996f5c2e9429a9763fd52cc7f33bb3dac36ba1a6ac63c44fdb9"
+   "bytes": 89675,
+   "sha256": "a99ba1aa51b1f0db9e50ac285453e1b47ea0745ab998a5dcc26e489d4a7de3fa"
   },
   "vault/tools/tropo-mount.py": {
    "bytes": 45041,
@@ -5485,17 +5597,21 @@
    "bytes": 98547,
    "sha256": "b79b37ec794916bf0a900c3d83b0e7905c38abb7917db0e2b7ef66e4b4bf2dd5"
   },
+  "vault/tools/tropo-precompact-snapshot.py": {
+   "bytes": 23665,
+   "sha256": "11de5a3979e0c69496c4ff7841d78a8473fd73e9567588a01b10ab7039593009"
+  },
   "vault/tools/tropo-preflight.py": {
    "bytes": 9759,
    "sha256": "76e7a516e67eda3da857d855b4dbd6900713da7785ea1669efbc333efc4aa92f"
   },
   "vault/tools/tropo-publish-release.py": {
-   "bytes": 163110,
-   "sha256": "f7d69b43940e26ecf28842914303c421bb20fc521ba9b6bc2d9034fc0b3d47ab"
+   "bytes": 170344,
+   "sha256": "2b1b3ea5bb8d3627faf7b7dc7f481971f6a38f68f3d3b4471d629c54096d95e3"
   },
   "vault/tools/tropo-publish-scope-gate.py": {
-   "bytes": 26575,
-   "sha256": "262491d795ddff4402deaea794065ca01db7b9c89b92f9690ebe1c3b2e24fdc8"
+   "bytes": 26897,
+   "sha256": "a723dde6163ff0d3c56e8ab87ea248c5058aab7610e96fa449aad775d9ec4d74"
   },
   "vault/tools/tropo-publish.py": {
    "bytes": 32064,
@@ -5514,8 +5630,8 @@
    "sha256": "a3441fb769f2c09606378c16c6aac984b4535df826429be74ce30269ad3fd97e"
   },
   "vault/tools/tropo-rebuild-index.py": {
-   "bytes": 353078,
-   "sha256": "65519ab38e1a910f91cc14b8c8bbbfd9dc067c9fb93622bcb60514402cf01983"
+   "bytes": 359975,
+   "sha256": "48602c3b566dd35688b8afd5029209d95fb7fd9aacae7d9b23d1369becbbde95"
   },
   "vault/tools/tropo-rebuild-project-index.py": {
    "bytes": 14357,
@@ -5542,8 +5658,8 @@
    "sha256": "02c26d7c293cff216490c4a927f46455caf7afa6d77c3f7a5eb477c4eb2d88b4"
   },
   "vault/tools/tropo-release-preflight.py": {
-   "bytes": 48401,
-   "sha256": "4bea4312e10f93f64423c971c51c260d2955d779b5d94546e519ce86744f7c0c"
+   "bytes": 51536,
+   "sha256": "0fa5e247afe77e18efb1dd3df1bb797c5be95fdbf1ccce955b143cb00c8f0221"
   },
   "vault/tools/tropo-release-run.py": {
    "bytes": 58602,
@@ -5554,24 +5670,32 @@
    "sha256": "7baa63ab97200e2217405f78c35c0120b163bee4437b2f7519157176182d7f23"
   },
   "vault/tools/tropo-release.py": {
-   "bytes": 59972,
-   "sha256": "a5a59d3fd469359e1b6d2b74dbaf1269567137dc22ff673875b20baa04b11127"
+   "bytes": 72154,
+   "sha256": "f43355fb9e37b1527b051a965e05deef01136290d5d76c791fbfe6de2693c2e7"
+  },
+  "vault/tools/tropo-render-architecture-review.py": {
+   "bytes": 19435,
+   "sha256": "0765f8079e12dc5c5a6cf08a18f33034534f7af8f94f4d136423a6a84c655605"
   },
   "vault/tools/tropo-render-studio-map.py": {
-   "bytes": 65881,
-   "sha256": "ae5e6f0870f659df28a8ae09031804d0a27d188cc9b6fefe034c9419268f7199"
+   "bytes": 66171,
+   "sha256": "da36462547550595f87f5b86489b4e41b212e875580f1cd944b965d9929152a6"
+  },
+  "vault/tools/tropo-render-systems-explorer.py": {
+   "bytes": 25258,
+   "sha256": "507877c9bb8bded3efc78dc00c13f4b48be8a471867195942945c68a6261dadf"
   },
   "vault/tools/tropo-restore.py": {
    "bytes": 7838,
    "sha256": "bdaca727b95dbe4bb5078f2296c7bca9c60b9eb5ef6969a5ff079fc764e0a17d"
   },
   "vault/tools/tropo-retire-driver.py": {
-   "bytes": 28687,
-   "sha256": "33a7a71c38a026172ef74d0e49ee8bb872561cefa58720375a927c231db62b25"
+   "bytes": 37625,
+   "sha256": "d726412d822c7a0c18832b97bb9123733852f866a8d522ad756aaf68e3698cff"
   },
   "vault/tools/tropo-retire.py": {
-   "bytes": 53052,
-   "sha256": "4cd6946c92bb5546a76feb304b1d06271658f05af70d0e3a3acc2f2f59d0f269"
+   "bytes": 53623,
+   "sha256": "6337d30efafcc02b14ee6993d17cb429dd729fb96756912def0a58fce610e410"
   },
   "vault/tools/tropo-run-rag-pipeline.py": {
    "bytes": 11930,
@@ -5582,8 +5706,12 @@
    "sha256": "797b5ef398be811ffe348883a2943ee4e91d3eda0d7d753661018818165ef7be"
   },
   "vault/tools/tropo-scan-import-state.py": {
-   "bytes": 11223,
-   "sha256": "a173e3f9a4c8d80bc2401bfbaab9c7bd714d41edd305166cdf085e1a4a29a553"
+   "bytes": 13302,
+   "sha256": "5a537cd78b2fcd185b9bc6c54854089953c223743603a7d0e3f66cb050796f31"
+  },
+  "vault/tools/tropo-ship.py": {
+   "bytes": 7830,
+   "sha256": "e296370b24fe3a332077f1f2ffd4214859ed4bd3d39f532e1a94ac22d34b3547"
   },
   "vault/tools/tropo-sleeve-attribution.py": {
    "bytes": 6149,
@@ -5594,12 +5722,12 @@
    "sha256": "651a7b71458e7628ee6025a812e643fe3dbc10d2a57d17690b0ebac09e52e9ba"
   },
   "vault/tools/tropo-studio-status.py": {
-   "bytes": 28765,
-   "sha256": "876de705ce670bb1980ee9d52d0627bc87ebbad44730a0d59c4ba9848e5108d7"
+   "bytes": 38999,
+   "sha256": "0e0f3270d2d67b92a0bf6726b2b31d698ef2aa8cfa2b582632700b68531876d0"
   },
   "vault/tools/tropo-supersede-release-package.py": {
-   "bytes": 11887,
-   "sha256": "7e8847e2842cd59dbb28e00375c5e50a4244415d3842a1cbae1b053610e1aad5"
+   "bytes": 11882,
+   "sha256": "78f7aeca46aa7953174b4fbe3856f3162f09c7d712433e22c6bc770e6d3135cb"
   },
   "vault/tools/tropo-sweep-stale-roots.py": {
    "bytes": 7792,
@@ -5610,8 +5738,8 @@
    "sha256": "a0001436237c354518986e8cc3f23dc84c7271c250f5284341ec13abd2baac80"
   },
   "vault/tools/tropo-test.py": {
-   "bytes": 22144,
-   "sha256": "0371420d7f8e5731fd243552cc23e4c778a409581f23731ab907c5c09029c9aa"
+   "bytes": 46164,
+   "sha256": "4318b1ee5417d0519256a5652b5de7bcf5b5c1fb73437b3f6980de3f270a4570"
   },
   "vault/tools/tropo-validate-canonical-l0.py": {
    "bytes": 23105,
@@ -5634,8 +5762,8 @@
    "sha256": "7942b8643451f63ba415e75d25e099db77cdfeb714cbcbdced482e58a09e2570"
   },
   "vault/tools/tropo-validate.py": {
-   "bytes": 800269,
-   "sha256": "1ec8ef6b670a3d1349b2b7fc3cc71dc3e8d156ea44b1afbde5fa51db312aa67a"
+   "bytes": 805554,
+   "sha256": "10944117276e7c0970b0af407ca92c9f9b3a711eb6aab08a67893423e0b607a2"
   },
   "vault/tools/tropo-vault-git-commit.py": {
    "bytes": 1832,
@@ -5650,8 +5778,8 @@
    "sha256": "02ce34ffe5c04552ea2698d6a9c63def56fe104fc0b3777a029659cba2c7040f"
   },
   "vault/tools/tropo-verify-release-live.py": {
-   "bytes": 48525,
-   "sha256": "303c2e42d50f9623756d9ed55daaef1f705c4b02861b064692273073de6d941c"
+   "bytes": 49265,
+   "sha256": "619977c6ca3716ba391314648ab184241b23ef580831fc68f2893e4e88c3e36c"
   },
   "vault/tropo-vault-steward/CAPSULE.md": {
    "bytes": 2464,
@@ -5686,11 +5814,11 @@
    "sha256": "a1f82d469adb4a653319882c6763d562d8204e5cb99af7375729eba3a79d2b9c"
   },
   "vault/vendor-refs-manifest.json": {
-   "bytes": 5930,
-   "sha256": "4c2fd5a9f251ba4d8895735ee6eca80e4f0b101d116186ec49c9de259567edf7"
+   "bytes": 5874,
+   "sha256": "694dd443950b841ab87f44be1d60a40015caa50b9ec6e1711bdf52ca5d4d6b77"
   }
  },
- "generated_utc": "2026-09-06T16:28:14Z",
+ "generated_utc": "2026-09-09T18:12:58Z",
  "schema": "tropo.image-manifest/v1",
- "version": "1.95.0"
+ "version": "1.96.0"
 }

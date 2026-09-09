@@ -132,7 +132,7 @@ def main() -> int:
 
     # 3 — pre-public only.
     for row in rows:
-        if (row.get("event") or "") in PUBLISHED_EVENTS:
+        if pkg.event_type(row) in PUBLISHED_EVENTS:
             print("REFUSED: this run has already published. Supersession is a "
                   "pre-public act; after the fire the cure is a new release.",
                   file=sys.stderr)

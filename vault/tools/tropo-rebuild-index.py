@@ -1796,6 +1796,92 @@ def _incremental_manifest_blockers(
     })
 
 
+def _defer_unrelated_mint_mount_inputs(
+    vault_root: Path,
+    current_manifest: tuple[tuple[str, str, str, str], ...],
+    uids: tuple[str, ...],
+) -> tuple[tuple[tuple[str, str, str, str], ...], Optional[dict]]:
+    """Keep retained mounted rows paired with the inputs that derived them.
+
+    A local create-only mint does not rebuild mounted rows. Sealing today's
+    registry over those rows would falsely claim a refresh; retain the prior
+    mount input family (including prior absence) and journal the deferral.
+    The caller must establish that no requested record reads mounted inputs.
+    """
+    prior_manifest = index_surfaces.load_trusted_derivation_manifest(vault_root)
+
+    def mounted(entry):
+        return entry[1] == _FOLDER_MOUNTS_REL.as_posix() or (
+            entry[0] == 'virtual' and entry[1].startswith('@mounted-')
+        )
+
+    prior = {(row[0], row[1]): row for row in prior_manifest if mounted(row)}
+    current = {(row[0], row[1]): row for row in current_manifest if mounted(row)}
+    changed = sorted(key for key in set(prior) | set(current)
+                     if prior.get(key) != current.get(key))
+    if not changed:
+        return current_manifest, None
+    retained_manifest = tuple(sorted(
+        [row for row in current_manifest if not mounted(row)] + list(prior.values())
+    ))
+    receipt = {
+        'status': 'mount-refresh-required',
+        'minted_uids': list(uids),
+        'recorded_at': _dt.datetime.now(_dt.timezone.utc).isoformat(),
+        'deferred_inputs': sorted({key[1] for key in changed}),
+        'input_comparison': [
+            {'kind': kind, 'path': path,
+             'retained': list(prior[(kind, path)][2:]) if (kind, path) in prior else None,
+             'observed': list(current[(kind, path)][2:]) if (kind, path) in current else None}
+            for kind, path in changed
+        ],
+        'result': 'local mint indexed; unrelated rows retained; mount refresh remains required',
+    }
+    return retained_manifest, receipt
+
+
+def _refusal_cure(blockers: Sequence[str]) -> str:
+    """Name the cure, not just the blocker.
+
+    This refusal has been read by three agents on three separate days and none
+    could tell from it what to run. One read `disabled`-shaped silence as intent
+    and hand-named 68 governed files; one flagged it as not-theirs-to-fix; one
+    misdiagnosed the cause twice and shipped a wrong exemption before the tests
+    caught it. The refusal itself is CORRECT every time — the derivation inputs
+    really did move, and writing a row against an unproven index really is worse
+    than stopping. What was missing is the next sentence.
+
+    Code drift and content drift want different cures, so say which one this is.
+    """
+    code = sorted({b for b in blockers if b.startswith('vault/tools/')})
+    lines = ['', '  WHAT THIS MEANS AND WHAT TO RUN:']
+    if code:
+        lines += [
+            '  The code that DERIVES index rows changed '
+            f'({", ".join(code[:3])}{" and more" if len(code) > 3 else ""}).',
+            '  Rows already in your index were derived by the previous version, so',
+            '  this is not a false alarm and must not be worked around: your index',
+            '  needs re-deriving, which takes roughly 40 seconds.',
+        ]
+    else:
+        lines += [
+            '  Governed content changed under this clone since it last sealed —',
+            '  normally another agent landing work you have fetched.',
+        ]
+    lines += [
+        '',
+        '    python3 vault/tools/tropo-rebuild-index.py            # read the PURGE-LIST',
+        '    python3 vault/tools/tropo-rebuild-index.py --apply    # then re-derive',
+        '',
+        '  Read the purge list before applying. A uid listed there is only a ghost',
+        '  if its file is genuinely gone; a live file whose uid was stripped will',
+        '  also appear, and applying would delete its row.',
+        '  Indexes are per-clone and gitignored: another clone resealing does not',
+        '  reseal yours, so expect this after fetching a batch of crew commits.',
+    ]
+    return '\n'.join(lines)
+
+
 def _archive_derivation_fingerprints() -> dict[str, str]:
     """Fingerprint every implementation family that can change archive rows.
 
@@ -4544,6 +4630,8 @@ def _dirty_counter_replacement(
 
 def _incremental_maintenance_replacements(
     vault_root: Path,
+    *,
+    reconcile_receipt: Optional[dict] = None,
 ) -> tuple[tuple[Path, bytes], ...]:
     """Prepare cache invalidation and one counter bump for the index journal."""
     replacements = [
@@ -4555,6 +4643,10 @@ def _incremental_maintenance_replacements(
         if path.is_file()
     ]
     counter_path, counter_raw, _count = _dirty_counter_replacement(vault_root)
+    if reconcile_receipt is not None:
+        counter = json.loads(counter_raw)
+        counter['last_mint_reconcile'] = reconcile_receipt
+        counter_raw = (json.dumps(counter, indent=2, sort_keys=True) + '\n').encode('utf-8')
     replacements.append((counter_path, counter_raw))
     return tuple(replacements)
 
@@ -4801,6 +4893,8 @@ def freshen_many(
     source_replacements: Optional[dict[Path, bytes]] = None,
     companion_replacements: Optional[Iterable[tuple[Path, bytes]]] = None,
     require_absent_sources: Optional[Iterable[Path]] = None,
+    reconcile_unrelated_mounts: bool = False,
+    post_write_verify: Optional[Callable[[], None]] = None,
 ) -> int:
     """Serialize one multi-UID upsert across JSONL, SQLite, seals, and caches."""
     normalized = tuple(sorted(set(uids)))
@@ -4815,6 +4909,8 @@ def freshen_many(
                 source_replacements=source_replacements,
                 companion_replacements=companion_replacements,
                 require_absent_sources=require_absent_sources,
+                reconcile_unrelated_mounts=reconcile_unrelated_mounts,
+                post_write_verify=post_write_verify,
             )
     except index_surfaces.IndexLockTimeout as exc:
         print(f'[rebuild --batch] {exc}', file=sys.stderr)
@@ -4828,6 +4924,8 @@ def _freshen_many_locked(
     source_replacements: Optional[dict[Path, bytes]] = None,
     companion_replacements: Optional[Iterable[tuple[Path, bytes]]] = None,
     require_absent_sources: Optional[Iterable[Path]] = None,
+    reconcile_unrelated_mounts: bool = False,
+    post_write_verify: Optional[Callable[[], None]] = None,
 ) -> int:
     """Re-derive every owned UID and commit one recoverable index transaction."""
     companion_replacements = tuple(companion_replacements or ())
@@ -4986,7 +5084,7 @@ def _freshen_many_locked(
     if source_snapshot_before is None:
         print(
             '[rebuild --batch] REFUSAL: source inventory incomplete; '
-            f'{source_scope_reason}. Commit or revert your edited inputs, then run --reconcile --apply; no derived rows written.',
+            f'{source_scope_reason}. Review the edited inputs, run a read-only rebuild preview, and adjudicate its purge list before --reconcile --apply; no derived rows written.',
             file=sys.stderr,
         )
         return 1
@@ -5239,7 +5337,22 @@ def _freshen_many_locked(
             f'@mounted-registry/{mount_uid}'
             for mount_uid in mounted_catalog_after.mounts
         )
+    reconcile_receipt = None
     try:
+        # Canonical birth only: no updates, mounted dependencies, or companion
+        # mutations. Inspect parsed records as well as the UID resolver: a new
+        # titled mounted projection may not yet resolve through its bare UID.
+        if (reconcile_unrelated_mounts and not affected_mounts
+                and not companion_replacements and staged
+                and set(paths.values()) == set(staged) == create_only
+                and not any(record.get('mount_uid') or record.get('mount_relpath')
+                            or record.get('source_sidecar')
+                            or record.get('projection_authority') == 'derived-only'
+                            or record.get('type') == 'external-artifact'
+                            for record in records)):
+            current_manifest, reconcile_receipt = _defer_unrelated_mint_mount_inputs(
+                vault_root, current_manifest, uids,
+            )
         blockers = _incremental_manifest_blockers(
             vault_root,
             current_manifest,
@@ -5249,7 +5362,7 @@ def _freshen_many_locked(
         )
     except index_surfaces.IndexSurfaceRefusal as exc:
         print(
-            f'[rebuild --batch] {exc}; run a full --apply; no derived rows written',
+            f'[rebuild --batch] {exc}; run a read-only rebuild preview and adjudicate its purge list before --apply; no derived rows written',
             file=sys.stderr,
         )
         return 1
@@ -5258,7 +5371,8 @@ def _freshen_many_locked(
             '[rebuild --batch] REFUSAL: semantic derivation inputs changed '
             'outside the owned projections: '
             + ', '.join(blockers)
-            + '; no derived rows written',
+            + '; no derived rows written.\n'
+            + _refusal_cure(blockers),
             file=sys.stderr,
         )
         return 1
@@ -5325,7 +5439,7 @@ def _freshen_many_locked(
 
         sqlite_raw, _changed = _prepare_sqlite_image(sqlite_path, mutate_sqlite)
         maintenance_replacements = _incremental_maintenance_replacements(
-            vault_root
+            vault_root, reconcile_receipt=reconcile_receipt,
         )
         destinations = index_surfaces.write_records_route(
             route_plan,
@@ -5335,6 +5449,7 @@ def _freshen_many_locked(
                 *companion_replacements,
             ),
             source_replacements=staged.items(),
+            post_write_verify=post_write_verify,
             derivation_provenance=provenance,
             incremental_owned_route_uids=route_changed_uids,
         )
@@ -5357,6 +5472,14 @@ def _freshen_many_locked(
             f'[rebuild --batch] WARN: stale cache bytes were invalidated '
             f'transactionally but cleanup failed ({exc}); verified cache reuse '
             'will refuse',
+            file=sys.stderr,
+        )
+    if reconcile_receipt is not None:
+        print(
+            '[MINT-INDEX-RECONCILE] local mint indexed; unrelated rows retained; '
+            'mount refresh remains required. Receipt: '
+            '.tropo-studio/dirty-counter.json#last_mint_reconcile; deferred inputs: '
+            + ', '.join(reconcile_receipt['deferred_inputs']),
             file=sys.stderr,
         )
     for uid, surface, action in destinations:
@@ -8384,7 +8507,14 @@ def main() -> int:
              'with NO identity and NO starter pair so every customer genesises their '
              'own on first boot (Mike ruled 2026-09-05, f015e5ee0ede §RULED; '
              'v1.95 Spine A AC1 f015de6b3a18). Everything else in the rebuild is '
-             'unchanged. Never pass this on a customer or working Studio.',
+             'unchanged. Do not pass this when you INTEND to genesis a Studio. '
+             'Second legitimate caller since 2026-09-08: tropo-test.py auto-init, '
+             'which builds a customer box index from `npm test` and must NOT mint '
+             'identity as a side effect of a health check — same reason as the '
+             'release build, arrived at from the other direction. This help '
+             'previously read "never pass this on a customer or working Studio", '
+             'written when the release build was the only caller; that sentence '
+             'now sat next to code that correctly does exactly it (talos-t66).',
     )
     parser.add_argument('--vault-path', metavar='PATH',
                         help='Explicit vault root (must contain vault/ + .tropo/).')

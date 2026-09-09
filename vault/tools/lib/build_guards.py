@@ -232,25 +232,194 @@ def release_harness_problems(studio_root, build_dir) -> "tuple[List[str], str]":
     return ([], out)
 
 
+#: The status line tropo-test.py prints for a Studio that has not derived its
+#: index yet. Read as TEXT, never as an exit code — see the note in
+#: box_self_test_problems. Kept in sync by the test that asserts the shipped
+#: tool still emits it.
+_NOT_INITIALIZED_STATUS = "STATUS: NOT INITIALIZED"
+
+
+SCORE_FORMULA_DOCTRINE_REL = os.path.join(".tropo-studio", "score-formula-doctrine.md")
+
+
+def score_formula_doctrine_problems(build_dir) -> "tuple[List[str], str]":
+    """The shipped memory curator reads .tropo-studio/score-formula-doctrine.md at
+    boot. Assert the box actually carries it.
+
+    THIS GUARD IS THE POINT, not the placement step it protects. The file was
+    declared as a ship-artifact, read by the build, reported as copied, and still
+    absent from every box for six releases — because a later step wiped the folder
+    it had been copied into. A placement alone restores that state exactly: it
+    works today and the next person to reorder those steps breaks it again with
+    every gate green, which is how it lasted six releases the first time.
+
+    Content is checked, not just presence. An empty or placeholder file would
+    satisfy a bare existence test while giving the curator nothing to rank with.
+    """
+    box = Path(build_dir)
+    doctrine = box / SCORE_FORMULA_DOCTRINE_REL
+    if not doctrine.is_file():
+        return ([
+            "the box does not carry %s — the shipped memory curator (50c0bdce) "
+            "reads it at boot and cannot rank memory without it. If a build step "
+            "was recently reordered, check that the placement still runs AFTER "
+            "step_7_create_vault_skeleton, which rmtree's that folder "
+            "(ship-artifact f0155122c0b8)." % SCORE_FORMULA_DOCTRINE_REL], "")
+    try:
+        body = doctrine.read_text(encoding="utf-8")
+    except OSError as exc:
+        return (["%s is present but unreadable: %s"
+                 % (SCORE_FORMULA_DOCTRINE_REL, exc)], "")
+    problems = []
+    if len(body.strip()) < 200:
+        problems.append(
+            "%s is present but only %d bytes — a placeholder satisfies a presence "
+            "check and gives the curator nothing to rank with"
+            % (SCORE_FORMULA_DOCTRINE_REL, len(body.strip())))
+    if "<FILL" in body:
+        problems.append(
+            "%s still contains <FILL …> placeholders; the doctrine ships as-is, "
+            "it is not a template" % SCORE_FORMULA_DOCTRINE_REL)
+    return (problems, body[:400])
+
+
 def box_self_test_problems(build_dir) -> "tuple[List[str], str]":
     """Step 10.5a (v1.80 S2, dev-spec be1979b6): the shipped self-test passes
-    INSIDE the box. tropo-test.py's contract: 0 GREEN, 1 YELLOW (warnings,
-    passes), >=2 RED (refuse) — vela-v63 2026-07-05."""
+    INSIDE the box.
+
+    THIS GATE JUDGED ONE INTEGER AND READ NOTHING ELSE (f0152b4c4ef4, cured
+    2026-09-08 by talos-t65 under argus-a175's direction). The whole of its
+    verdict was `if result.returncode >= 2`, while the captured output was
+    carried into evidence no consumer ever reads back. Measured consequence: an
+    exit 0 whose stdout literally contained "RED" and "ERROR: validator
+    subprocess failed" returned problems=[] and PASSED. The gate built to catch
+    a dishonest self-test could not see the dishonest case at all.
+
+    Three things changed, and the third is the one that matters most:
+
+    1. The gate reads the OUTPUT, not only the code. A run that produced no
+       health verdict is a refusal whatever it exited with.
+    2. NOT INITIALIZED is recognised as its own state, by its status LINE. That
+       is deliberate: the stranger-facing exit code for that state is decision 4
+       on the v1.96 board and is Mike's to settle. Because this gate keys on
+       text, his answer changes nothing here — which is the point. Do not
+       reintroduce an exit-code test for this state.
+    3. The box under test is NOT the box that ships (see
+       box_self_test_on_initialized_copy). A box ships without its index by
+       design, so running the self-test on the shipped bytes asks it a question
+       it cannot answer.
+    """
     box_test = Path(build_dir) / "vault" / "tools" / "tropo-test.py"
     if not box_test.is_file():
         return (["tropo-test.py not found in the built box at %s — the shipped test "
                  "surface must be present" % box_test], "")
     try:
-        result = _run(["python3", str(box_test), "--quick"], cwd=build_dir, timeout=300,
-                      env={**os.environ, "VAULT_ROOT": str(build_dir)})
+        # --no-auto-init, and an honest note about why (talos-t66, 2026-09-08).
+        # AT RUNTIME TODAY THIS FLAG CHANGES NOTHING, and the first version of
+        # this comment claimed the opposite. box_self_test_problems has exactly
+        # one production caller — box_self_test_on_initialized_copy, which has
+        # already rebuilt the copy with --apply — so the not-initialized branch
+        # is unreachable in production and auto-init could never fire. Corrected
+        # in adversarial review rather than left as a confident wrong sentence.
+        #
+        # It stays because this is a public library entry point and the reason
+        # below is sound: tropo-test.py now builds the index when the validator says
+        # the Studio has none — Mike's ruling, and right for a human who typed
+        # `npm test`. A gate must never take that path: it would write an index
+        # into the very box this gate is sealing, and the same extracted_tree is
+        # read by build-no-studio-identity, which flips PASS -> REFUSED the moment
+        # a genesis artifact appears (the reason --no-genesis is load-bearing in
+        # box_self_test_on_initialized_copy above). It would also destroy THIS
+        # gate's own wrong-box detection: the NOT INITIALIZED branch below is how
+        # it knows it is being pointed at shipped bytes instead of an initialized
+        # copy, and an auto-initializing self-test can never answer that.
+        # Argus A175 on the record (f0152b4c4ef4): "Do not silently initialize a
+        # customer's live Studio as a diagnostic side effect."
+        result = _run(["python3", str(box_test), "--quick", "--no-auto-init"],
+                      cwd=build_dir, timeout=300)
     except Exception as exc:  # noqa: BLE001
         return (["shipped self-test timed out or could not run: %s: %s"
                  % (type(exc).__name__, exc)], "")
     out = (result.stdout or "") + (result.stderr or "")
+
+    # NOT INITIALIZED — read as text, never as a code. On an un-indexed box this
+    # is the correct and expected answer, and it is not a health verdict, so the
+    # gate must not accept it as one.
+    if _NOT_INITIALIZED_STATUS in out:
+        return (["shipped self-test reports NOT INITIALIZED — no health verdict was "
+                 "produced. The box has no index by design; this gate must run "
+                 "against an initialized disposable copy, not the shipped bytes."], out)
+
+    # NO VERDICT — the case that used to pass silently. A validator that aborted
+    # before printing its Summary now says so; anything claiming health without
+    # having examined something is refused here rather than recorded as green.
+    if "NO HEALTH VERDICT HAS BEEN PRODUCED" in out:
+        return (["shipped self-test produced NO health verdict (exit %d) — the "
+                 "validator aborted before finishing. A pass having examined "
+                 "nothing is the failure this gate exists to catch."
+                 % result.returncode], out)
+
     if result.returncode >= 2:
         return (["shipped self-test (tropo-test.py) FAILED RED inside the box "
                  "(exit %d)" % result.returncode], out)
     return ([], out)
+
+
+def box_self_test_on_initialized_copy(build_dir) -> "tuple[List[str], str]":
+    """The same self-test, on a DISPOSABLE INITIALIZED COPY. The artifact is not touched.
+
+    Argus A175's direction (f0152b4c4ef4): "For the build gate, evaluate an
+    initialized disposable copy with the existing rebuilder and then the real
+    self-test; keep the artifact pristine. Do not silently initialize a
+    customer's live Studio as a diagnostic side effect."
+
+    Why a copy and not the box: a release box ships without its index and derives
+    it on first use, so the shipped bytes can only ever answer NOT INITIALIZED.
+    Initializing the box in place would both mutate the artifact and — measured —
+    arm a different gate: `build-no-studio-identity` reads the SAME extracted_tree
+    and would flip PASS -> REFUSED, because genesis mints .tropo/studio-identity.md
+    and a vault-entity starter pair.
+
+    `--no-genesis` is therefore load-bearing, not cosmetic. It is also what the
+    release build itself passes when it rebuilds the box's own index, so this copy
+    is initialized the way the build does it, not the way a customer does.
+
+    Measured cost on Python 3.9.6: copy 0.68s, rebuild 5.28s (26 MB -> 34 MB),
+    ~19s added to the phase in total, of which ~13s is this gate finally doing
+    real work.
+    """
+    import shutil
+    import tempfile
+
+    box = Path(build_dir)
+    rebuilder = box / "vault" / "tools" / "tropo-rebuild-index.py"
+    if not rebuilder.is_file():
+        return (["tropo-rebuild-index.py not found in the built box at %s — the box "
+                 "cannot derive its own index, so a customer's first use cannot "
+                 "succeed either" % rebuilder], "")
+
+    # A fresh mkdtemp whose ONLY child is the copy. Deliberate: sibling
+    # directories are part of some checks' input surface (f01586b60487), so an
+    # isolated parent keeps this gate's result about the box and nothing else.
+    tmp_parent = tempfile.mkdtemp(prefix="tropo-box-selftest-")
+    copy = Path(tmp_parent) / "box"
+    try:
+        shutil.copytree(box, copy, symlinks=True)
+        init = _run(["python3", str(copy / "vault" / "tools" / "tropo-rebuild-index.py"),
+                     "--apply", "--no-genesis", "--vault-path", str(copy)],
+                    cwd=str(copy), timeout=600)
+        if init.returncode != 0:
+            return (["the box could not derive its own index (exit %d) — a customer "
+                     "running the one command the box tells them to run would fail "
+                     "here" % init.returncode],
+                    (init.stdout or "") + (init.stderr or ""))
+        problems, out = box_self_test_problems(copy)
+        return (problems, out)
+    except Exception as exc:  # noqa: BLE001
+        return (["initialized-copy self-test could not run: %s: %s"
+                 % (type(exc).__name__, exc)], "")
+    finally:
+        shutil.rmtree(tmp_parent, ignore_errors=True)
 
 
 def box_registry_rows_problems(build_dir) -> "tuple[List[str], str]":

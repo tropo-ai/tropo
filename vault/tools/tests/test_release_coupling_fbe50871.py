@@ -10,7 +10,9 @@ only v1.85.0 production proves it (per the spec's own "Honest Limits" section).
 Self-running (python3 test_release_coupling_fbe50871.py) and pytest-compatible.
 """
 from __future__ import annotations
+import contextlib
 import importlib.util
+import io
 import json
 import re
 import shutil
@@ -38,6 +40,32 @@ relauth = _load("relauth_fbe50871", _TROPO_SCRIPTS / "lib" / "release_authorizat
 cps = _load("cps_fbe50871", _VAULT_TOOLS / "tropo-check-publish-state.py")
 pub = _load("pub_fbe50871", _VAULT_TOOLS / "tropo-publish-release.py")
 build = _load("build_fbe50871", _VAULT_TOOLS / "tropo-build-release.py")
+verlive = _load("verlive_fbe50871", _VAULT_TOOLS / "tropo-verify-release-live.py")
+
+
+def _named_release_fixture(publisher, root, activation_uid="deadbeef"):
+    """Real named resolver inputs, shared by caller fixtures (never the live index)."""
+    files = root / "vault/files"
+    files.mkdir(parents=True, exist_ok=True)
+    run = root / "vault/pipeline-runs/b0000001"
+    run.mkdir(parents=True, exist_ok=True)
+    entries = {
+        activation_uid: {"type": "activation", "pipeline_run_uid": "b0000001",
+                         "activation_root_uid": "d0000001"},
+        "b0000001": {"activation": activation_uid,
+                      "pipeline": publisher.release_package.RELEASE_PIPELINE_UID,
+                      "release_plan_uid": "c0000001",
+                      "run_folder": "vault/pipeline-runs/b0000001"},
+        "c0000001": {"release_activation_uid": activation_uid,
+                      "fan_in_digest": "d" * 64},
+    }
+    for uid, fields in entries.items():
+        (files / (uid + ".md")).write_text(
+            "---\n" + "\n".join(f"{key}: {value}" for key, value in fields.items()) + "\n---\n")
+    (run / "declaration-snapshot.json").write_text("{}\n")
+    identity = publisher.release_package.resolve_release_run(
+        activation_uid, files, root / "vault/pipeline-runs")
+    return run, identity
 
 
 class TestPrivateBuildRetryHonesty(unittest.TestCase):
@@ -422,6 +450,33 @@ class TestPublishReleaseFireAndDeferGates(unittest.TestCase):
                 activation_uid="deadbeef", version="9.9.9", remote=str(self.bare),
                 clone=None, clone_dir=str(self.clone_dir), allow_delete=False))
 
+        self.fixture_stack = contextlib.ExitStack()
+        self.addCleanup(self.fixture_stack.close)
+        self.fixture_stack.enter_context(patch.multiple(
+            pub.tropo_roots, STUDIO_ROOT=self.studio_root,
+            VAULT_DIR=self.studio_root / "vault", RELEASES_DIR=self.tmp / "releases"))
+        self.run_dir, self.identity = _named_release_fixture(pub, self.studio_root)
+        self.fixture_stack.enter_context(patch.object(
+            pub, "_run_journal_folder", return_value=self.run_dir))
+        zip_path = self.release_dir / "dist/tropo-os-v9.9.9.zip"
+        zip_path.parent.mkdir()
+        zip_path.write_bytes(b"verified fixture package")
+        self.ac7 = {"identity": self.identity,
+                    "package_sha256": pub.release_package.hash_final_zip(zip_path), "receipts": {}}
+        self.fixture_stack.enter_context(patch.object(pub, "require_ac7_receipt_set", return_value=self.ac7))
+        self.fixture_stack.enter_context(patch.object(pub, "_release_entry_uid_for", return_value="e0000001"))
+        self.fixture_stack.enter_context(patch.object(pub, "_verify_live_module", return_value=verlive))
+        # Keep the actual staged-state verifier: stale HEAD is this suite's
+        # subject. Other gate legs belong to their own isolated adapter suites.
+        real_verifiers = pub._pre_outward_fire_verifiers
+        def fixture_verifiers(gates):
+            checks = real_verifiers(gates)
+            return {key: check if key == "fire-staged-state" else
+                    (lambda ctx, key=key: gates.GateOutcome(key, gates.VERDICT_PASS, "fixture boundary"))
+                    for key, check in checks.items()}
+        self.fixture_stack.enter_context(patch.object(pub, "_pre_outward_fire_verifiers", side_effect=fixture_verifiers))
+        self.fixture_stack.enter_context(patch.object(pub.urllib.request, "urlopen", side_effect=AssertionError("unexpected network")))
+
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
@@ -430,9 +485,11 @@ class TestPublishReleaseFireAndDeferGates(unittest.TestCase):
              patch.object(pub.tropo_roots, "RELEASES_DIR", self.tmp / "releases"), \
              patch.object(pub, "DEFAULT_REMOTE", str(self.bare)), \
              patch.object(pub, "require_release_authorization", lambda *a, **k: {"fingerprint": "fake"}), \
-             patch.object(sys.stdin, "isatty", lambda: False):
-            rc = pub.cmd_fire(types.SimpleNamespace(version="9.9.9"))
-        self.assertNotEqual(rc, 0)
+             patch.object(sys.stdin, "isatty", lambda: False), \
+             patch.object(pub, "_confirm_tty", wraps=pub._confirm_tty) as confirm:
+            rc = pub.cmd_fire(types.SimpleNamespace(activation_uid="deadbeef", version="9.9.9"))
+        self.assertEqual(rc, 6)
+        confirm.assert_called_once()
 
     def test_fire_refuses_on_stale_stage(self):
         (self.clone_dir / "extra.txt").write_text("drift\n")
@@ -443,17 +500,19 @@ class TestPublishReleaseFireAndDeferGates(unittest.TestCase):
              patch.object(pub.tropo_roots, "RELEASES_DIR", self.tmp / "releases"), \
              patch.object(pub, "DEFAULT_REMOTE", str(self.bare)), \
              patch.object(pub, "require_release_authorization", lambda *a, **k: {"fingerprint": "fake"}), \
-             patch.object(pub, "_confirm_tty", lambda prompt: True):
-            rc = pub.cmd_fire(types.SimpleNamespace(version="9.9.9"))
+             patch.object(pub, "_confirm_tty", side_effect=AssertionError("stale stage reached confirm")), \
+             contextlib.redirect_stdout(out := io.StringIO()):
+            rc = pub.cmd_fire(types.SimpleNamespace(activation_uid="deadbeef", version="9.9.9"))
         self.assertNotEqual(rc, 0)
+        self.assertIn("STALE-STAGE", out.getvalue())
 
     def test_defer_requires_reason(self):
-        rc = pub.cmd_defer(types.SimpleNamespace(version="9.9.9", reason=None))
+        rc = pub.cmd_defer(types.SimpleNamespace(activation_uid="deadbeef", version="9.9.9", reason=None))
         self.assertNotEqual(rc, 0)
 
     def test_defer_refuses_without_tty(self):
         with patch.object(sys.stdin, "isatty", lambda: False):
-            rc = pub.cmd_defer(types.SimpleNamespace(version="9.9.9", reason="testing"))
+            rc = pub.cmd_defer(types.SimpleNamespace(activation_uid="deadbeef", version="9.9.9", reason="testing"))
         self.assertNotEqual(rc, 0)
 
     def _marker(self, version, state="not-staged"):
@@ -468,7 +527,7 @@ class TestPublishReleaseFireAndDeferGates(unittest.TestCase):
         with patch.object(pub.tropo_roots, "STUDIO_ROOT", self.studio_root), \
              patch.object(pub, "_stamp_release_entry", lambda *a, **k: None), \
              patch.object(pub, "_confirm_tty", lambda prompt: True):
-            return pub.cmd_defer(types.SimpleNamespace(version=version, reason="testing"))
+            return pub.cmd_defer(types.SimpleNamespace(activation_uid="deadbeef", version=version, reason="testing"))
 
     def test_defer_flips_the_marker_to_deferred_by_mike(self):
         # 2026-09-05: cmd_defer stamped the release entry and left the marker at
@@ -484,14 +543,193 @@ class TestPublishReleaseFireAndDeferGates(unittest.TestCase):
         self.assertIn("deferred_at", body)
 
     def test_defer_leaves_another_versions_marker_loud(self):
-        marker = self._marker("9.9.8")
-        self.assertEqual(self._defer("9.9.9"), 0)
-        self.assertEqual(json.loads(marker.read_text())["publish_state"], "not-staged")
+        """f015ebc247ce AC4: rewritten. The marker was `not-staged` here until
+        2026-09-07 -- NOT a silent state -- so this could never exercise the
+        version-scoping guard; it fell through to the version compare no
+        matter how that guard was written, and could not fail if the guard's
+        version scoping were removed. Now the marker starts SILENT
+        (deferred-by-mike) for a version OTHER than the one being deferred --
+        the shape a founder's real defer actually left behind for v1.94 while
+        v1.95 shipped over it. Asserts the printed message, not just the
+        marker file, because the file is a no-op either way (silently
+        short-circuited or correctly left-loud both leave it untouched) --
+        the message is the only observable that distinguishes the bug from
+        the cure."""
+        marker = self._marker("9.9.8", state="deferred-by-mike")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.assertEqual(self._defer("9.9.9"), 0)
+        printed = buf.getvalue()
+        self.assertNotIn(
+            "already deferred-by-mike", printed,
+            "the guard silently claimed v9.9.8's defer covers v9.9.9; got: %r" % (printed,))
+        self.assertIn("left loud", printed)
+        self.assertEqual(json.loads(marker.read_text())["publish_state"], "deferred-by-mike")
 
     def test_defer_leaves_a_live_marker_alone(self):
         marker = self._marker("9.9.9", state="live")
         self.assertEqual(self._defer(), 0)
         self.assertEqual(json.loads(marker.read_text())["publish_state"], "live")
+
+    def test_defer_of_a_different_version_does_not_silently_claim_a_live_marker(self):
+        """The `live` half of the same AC4 rewrite: a marker gone live for an
+        OLDER version must not report itself as already covering a NEWER
+        release being deferred now -- same message-not-just-file distinction
+        as the deferred-by-mike case above."""
+        marker = self._marker("9.9.8", state="live")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.assertEqual(self._defer("9.9.9"), 0)
+        printed = buf.getvalue()
+        self.assertNotIn("already live", printed)
+        self.assertIn("left loud", printed)
+        self.assertEqual(json.loads(marker.read_text())["publish_state"], "live")
+
+
+class _PublishMarkerFixture(unittest.TestCase):
+    """A scratch .tropo/publish-pending.json, isolated from the real one.
+
+    Unlike TestPublishReleaseFireAndDeferGates above, these tests call
+    verlive.clear_publish_pending / verlive.defer_publish_pending directly
+    rather than through cmd_defer's CLI wrapper -- AC1/AC2 are claims about
+    those two functions' own return values, and the CLI wrapper only exposes
+    an exit code.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="publish-marker-scope-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.marker_path = self.tmp / ".tropo" / "publish-pending.json"
+        self.marker_path.parent.mkdir(parents=True)
+
+    def _write_marker(self, version: str, state: str) -> None:
+        self.marker_path.write_text(
+            json.dumps({"version": version, "publish_state": state}), encoding="utf-8")
+
+    def _read_marker(self) -> dict:
+        return json.loads(self.marker_path.read_text(encoding="utf-8"))
+
+
+class ClearPublishPendingGuardIsVersionScoped(_PublishMarkerFixture):
+    """f015ebc247ce AC1."""
+
+    def test_deferred_marker_for_an_older_version_reaches_the_comparison(self) -> None:
+        self._write_marker("1.94.0", "deferred-by-mike")
+        result = verlive.clear_publish_pending(
+            self.tmp, self.tmp / "run", verified_version="1.95.0")
+        self.assertNotIn(
+            "already", result,
+            "the guard short-circuited before comparing versions: %r" % (result,))
+        self.assertIn("left loud", result)
+        self.assertIn("1.94.0", result)
+        self.assertIn("1.95.0", result)
+        # The bug's real-world consequence, named directly: the marker stays
+        # wrong (this is "left loud", not "cured" -- Mike's advance-vs-stay
+        # question in the task is deliberately not decided here).
+        self.assertEqual(self._read_marker()["publish_state"], "deferred-by-mike")
+
+    def test_live_marker_for_an_older_version_also_reaches_the_comparison(self) -> None:
+        self._write_marker("1.90.0", "live")
+        result = verlive.clear_publish_pending(
+            self.tmp, self.tmp / "run", verified_version="1.95.0")
+        self.assertNotIn("already", result)
+        self.assertIn("left loud", result)
+
+
+class DeferPublishPendingGuardIsVersionScoped(_PublishMarkerFixture):
+    """f015ebc247ce AC2 -- identical defect, defer_publish_pending."""
+
+    def test_deferred_marker_for_an_older_version_reaches_the_comparison(self) -> None:
+        self._write_marker("1.94.0", "deferred-by-mike")
+        result = verlive.defer_publish_pending(self.tmp, "1.95.0")
+        self.assertNotIn("already", result)
+        self.assertIn("left loud", result)
+        self.assertEqual(self._read_marker()["publish_state"], "deferred-by-mike")
+
+
+class ThePublishMarkerSameVersionInvariantStillHolds(_PublishMarkerFixture):
+    """f015ebc247ce AC3: the arm that must NOT move. A silent marker for the
+    SAME version still short-circuits, both functions -- this is what stops a
+    re-verify or a second defer from silently overwriting a founder's own
+    ruling on the record."""
+
+    def test_clear_still_short_circuits_on_the_same_version(self) -> None:
+        self._write_marker("1.95.0", "deferred-by-mike")
+        result = verlive.clear_publish_pending(
+            self.tmp, self.tmp / "run", verified_version="1.95.0")
+        self.assertIn("already", result)
+        self.assertEqual(
+            self._read_marker()["publish_state"], "deferred-by-mike",
+            "a same-version re-verify must never overwrite a founder's defer")
+
+    def test_clear_still_short_circuits_when_no_run_version_is_known(self) -> None:
+        # An empty run_version is the guard's OTHER legitimate reason to
+        # short-circuit -- "cannot prove which version this run is about" --
+        # unrelated to the version-scoping bug and must survive the fix.
+        self._write_marker("1.95.0", "live")
+        result = verlive.clear_publish_pending(
+            self.tmp, self.tmp / "run", verified_version="")
+        self.assertIn("already", result)
+
+    def test_defer_still_short_circuits_on_the_same_version(self) -> None:
+        self._write_marker("1.95.0", "live")
+        result = verlive.defer_publish_pending(self.tmp, "1.95.0")
+        self.assertIn("already", result)
+        self.assertEqual(self._read_marker()["publish_state"], "live")
+
+
+class ThePublishMarkerFixIsMutationProven(_PublishMarkerFixture):
+    """AC1's own demand, taken literally: 'assert the test fails when the two
+    added lines are removed'. Loads an ISOLATED copy of the real module with
+    the cured predicate reverted to its exact pre-fix form, and proves the
+    reverted copy reproduces the original defect -- not a claim in a
+    docstring, an executed one."""
+
+    _CURED_CLEAR = (
+        '    if (str(body.get("publish_state")) in PUBLISH_PENDING_SILENT_STATES\n'
+        '            and (not run_version or marker_version == run_version)):\n'
+    )
+    _UNSCOPED_CLEAR = (
+        '    if str(body.get("publish_state")) in PUBLISH_PENDING_SILENT_STATES:\n'
+    )
+    _CURED_DEFER = (
+        '    if (str(body.get("publish_state")) in PUBLISH_PENDING_SILENT_STATES\n'
+        '            and (not want or marker_version == want)):\n'
+    )
+    _UNSCOPED_DEFER = (
+        '    if str(body.get("publish_state")) in PUBLISH_PENDING_SILENT_STATES:\n'
+    )
+
+    def _load_mutated(self, cured: str, unscoped: str, label: str):
+        source = (_VAULT_TOOLS / "tropo-verify-release-live.py").read_text(encoding="utf-8")
+        self.assertIn(
+            cured, source,
+            "the cured %s predicate text moved; update this mutation probe" % label)
+        self.assertEqual(
+            source.count(cured), 1,
+            "expected exactly one occurrence of the cured %s predicate" % label)
+        mutated_source = source.replace(cured, unscoped)
+        self.assertNotEqual(mutated_source, source, "mutation did not change the file")
+        mutated_path = self.tmp / ("mutated_%s.py" % label)
+        mutated_path.write_text(mutated_source, encoding="utf-8")
+        return _load("verlive_mutated_%s_fbe50871" % label, mutated_path)
+
+    def test_reverting_clear_publish_pendings_predicate_reproduces_the_defect(self) -> None:
+        mutated = self._load_mutated(self._CURED_CLEAR, self._UNSCOPED_CLEAR, "clear")
+        self._write_marker("1.94.0", "deferred-by-mike")
+        result = mutated.clear_publish_pending(
+            self.tmp, self.tmp / "run", verified_version="1.95.0")
+        self.assertIn(
+            "already deferred-by-mike for v1.94.0", result,
+            "the mutated (pre-fix) predicate did not reproduce the original "
+            "silent short-circuit -- the two added lines are not load-bearing "
+            "for this test, or the mutation probe is stale: %r" % (result,))
+
+    def test_reverting_defer_publish_pendings_predicate_reproduces_the_defect(self) -> None:
+        mutated = self._load_mutated(self._CURED_DEFER, self._UNSCOPED_DEFER, "defer")
+        self._write_marker("1.94.0", "deferred-by-mike")
+        result = mutated.defer_publish_pending(self.tmp, "1.95.0")
+        self.assertIn("already deferred-by-mike for v1.94.0", result)
 
 
 class TestColdWalkPublishGate(unittest.TestCase):

@@ -2,7 +2,7 @@
 spec_version: 2
 tier: os-control
 maintained_by: tropo
-tropo_version: "1.95.0"
+tropo_version: "1.96.0"
 uid: c3a1b7f2
 min_vault_md_version: 1
 subsystem_hub:
@@ -136,7 +136,7 @@ TROPO-CONTROL.md and AGENTS.md are updated through this pipeline. STUDIO.md and 
 
 | Field | Value |
 |-------|-------|
-| Tropo-OS version | 1.95.0 (LIVE; canonical version source is .tropo/version.md - this table is a convenience reference) |
+| Tropo-OS version | 1.96.0 (LIVE; canonical version source is .tropo/version.md - this table is a convenience reference) |
 | Spec version | 2 |
 | Minimum STUDIO.md version | 1 |
 

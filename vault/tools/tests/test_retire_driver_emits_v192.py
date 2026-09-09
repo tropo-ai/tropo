@@ -31,6 +31,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import git_env  # noqa: E402  (contained git for the one-commit fixture)
+
 TOOLS = Path(__file__).resolve().parents[1]
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
@@ -174,6 +177,209 @@ class DriverIsAReaderNotAWriterOfStep8(unittest.TestCase):
         ok, evidence = driver.perform_crew_brief_rerender(self.root)
         self.assertFalse(ok, evidence)
 
+    # --- f01503e540a2 driver conditional: the two causal tests ---------------
+    #
+    # Causal, not decorative: each fails if the guard it names is removed.
+    # Measured on a built box 2026-09-08 (vela-v80) — every shipped box lacks
+    # 00-crew-brief.md, so this leg returned False, "Crew surfaces" read `open`,
+    # and a stranger's FIRST retirement reported OPEN permanently with no action
+    # available to them that could clear it.
+
+    def test_causal_absent_crew_brief_is_not_applicable_never_a_failure(self) -> None:
+        """A Studio that keeps no crew brief has nothing to re-render and has
+        not failed to do anything.
+
+        Delete the guard's `is_file()` branch and this test fails: the call
+        falls through to the renderer, which exits `ERROR: crew brief not
+        found`, and the return becomes False instead of None.
+        """
+        (self.root / "00-crew-brief.md").unlink()
+
+        ok, evidence = driver.perform_crew_brief_rerender(self.root)
+
+        self.assertIsNone(
+            ok, f"absent crew brief must be NOT APPLICABLE (None), not False: {evidence}"
+        )
+        self.assertIsNot(ok, False, "not-applicable must not be conflated with failure")
+        # The skip EMITS. "Nothing to do" must never be mistakable for "not checked".
+        self.assertIn("not applicable", evidence.lower())
+        self.assertIn("00-crew-brief.md", evidence)
+
+    def test_causal_a_studio_that_keeps_a_brief_still_fails_on_a_broken_renderer(self) -> None:
+        """The guard must not become a blanket excuse.
+
+        This is the half that decides whether the fix is a cure or a mute
+        button. Widen the guard to skip whenever the render is inconvenient —
+        rather than only when the brief is genuinely absent — and this test
+        fails, because a Studio that DOES keep a brief and cannot render it has
+        a real, reportable gap.
+        """
+        self.assertTrue((self.root / "00-crew-brief.md").is_file())
+        (self.root / "vault" / "tools" / "6510afc7.py").unlink()
+
+        ok, evidence = driver.perform_crew_brief_rerender(self.root)
+
+        self.assertIs(ok, False, f"a present brief with no renderer is a FAILURE: {evidence}")
+        self.assertNotIn("not applicable", evidence.lower())
+
+    def test_causal_step_completes_on_status_notes_alone_when_brief_is_absent(self) -> None:
+        """The step, not just the leg: with no brief, "Crew surfaces" must be
+        able to complete on §Status-Notes alone.
+
+        Restore the old `ok = rerendered and status_ok` and this fails, because
+        `None and True` is None — falsy — so the step reads `open` exactly as it
+        did on the box.
+        """
+        (self.root / "00-crew-brief.md").unlink()
+
+        rerendered, _ = driver.perform_crew_brief_rerender(self.root)
+        status_ok = True  # the always-applicable leg, done
+        resolved = status_ok if rerendered is None else (rerendered and status_ok)
+
+        self.assertTrue(
+            resolved,
+            "with the re-render leg not applicable, the step must rest on Status-Notes alone",
+        )
+
+    # --- v1.96 first-minute item 5: the same three states, two more steps ----
+    #
+    # Same shape, same measurement, same cure. On a real box 2 of 8 steps
+    # completed for an unretired agent, and two of the eight could never close
+    # no matter what the retiring agent did: no shipped box ships
+    # `library/captains-log.md`, and a shipped Studio is not a git repository.
+    # A required step that cannot pass in the shipped product is a defect in
+    # the step.
+    #
+    # Two tests per step, and the pair is the point: absent furniture must be
+    # None (never False), and present-but-broken furniture must stay False
+    # (never None). Only the first would license a mute button.
+
+    def test_causal_absent_captains_log_is_not_applicable_never_a_failure(self) -> None:
+        """A Studio that keeps no Captain's Log has no log to append to.
+
+        Delete the `lexists` guard in observe_captains_log and this test fails:
+        the call falls through to `is_file()`, returns False, and "Captain's
+        Log" reads OPEN on every shipped box forever.
+        """
+        self.assertFalse(
+            (self.root / driver.CAPTAINS_LOG_RELATIVE_PATH).exists(),
+            "fixture precondition: this temp Studio keeps no Captain's Log, "
+            "which is the state every shipped box is in",
+        )
+
+        ok, evidence = driver.observe_captains_log(self.root, AGENT, "F1")
+
+        self.assertIsNone(
+            ok, f"absent Captain's Log must be NOT APPLICABLE (None), not False: {evidence}"
+        )
+        self.assertIsNot(ok, False, "not-applicable must not be conflated with failure")
+        # The skip EMITS. "Nothing to do" must never be mistakable for "not checked".
+        self.assertIn("not applicable", evidence.lower())
+        self.assertIn(driver.CAPTAINS_LOG_RELATIVE_PATH, evidence)
+
+    def test_causal_a_studio_that_keeps_a_log_still_fails_on_a_missing_entry(self) -> None:
+        """The guard must not become a blanket excuse.
+
+        This is the half that decides whether the fix is a cure or a mute
+        button. Widen the guard to skip whenever the generation cannot be found
+        — rather than only when the log is genuinely absent — and this test
+        fails, because a Studio that DOES keep a log and carries no entry for
+        this generation has a real, reportable missed step.
+        """
+        self._write(
+            driver.CAPTAINS_LOG_RELATIVE_PATH,
+            "## Someone Else G1 — 2026-09-08, at retirement\n\n"
+            "A real entry, for a different generation.\n",
+        )
+
+        ok, evidence = driver.observe_captains_log(self.root, AGENT, "F1")
+
+        self.assertIs(ok, False, f"a present log with no entry is a FAILURE: {evidence}")
+        self.assertNotIn("not applicable", evidence.lower())
+
+    def test_causal_a_non_git_studio_is_not_applicable_never_a_failure(self) -> None:
+        """"Land the artifacts in one commit" is not an instruction a stranger
+        on a shipped, non-git box can follow.
+
+        Delete the `_git_repository_state` guard in observe_one_commit and this
+        test fails: `git log` errors, the call returns False with "no commit in
+        this tree touches ...", and "One commit" reads OPEN on every shipped box
+        forever.
+        """
+        self.assertFalse(
+            (self.root / ".git").exists(),
+            "fixture precondition: this temp Studio is not a git repository",
+        )
+        code, _ = driver._git(self.root, "rev-parse", "--is-inside-work-tree")
+        self.assertNotEqual(
+            code, 0,
+            "fixture precondition: the temp Studio must not sit inside someone "
+            "else's repository, or this test is measuring the wrong world",
+        )
+
+        ok, evidence = driver.observe_one_commit(self.root, AGENT, "F1")
+
+        self.assertIsNone(
+            ok, f"a non-git Studio must be NOT APPLICABLE (None), not False: {evidence}"
+        )
+        self.assertIsNot(ok, False, "not-applicable must not be conflated with failure")
+        self.assertIn("not applicable", evidence.lower())
+        self.assertIn("not a git repository", evidence.lower())
+
+    def test_causal_a_git_studio_with_no_commit_for_the_letter_still_fails(self) -> None:
+        """The guard must not become a blanket excuse.
+
+        A repository that EXISTS and carries no commit touching the letter is a
+        real gap — the artifacts did not land. Widen the guard to skip whenever
+        git cannot produce a commit, rather than only when there is no
+        repository, and this test fails.
+
+        The repo is built through tests/git_env.py: every GIT_* is scrubbed and
+        the repository is pinned with `-C`, because a fixture that ran `git
+        init` on the caller's environment is how the real Studio was once
+        re-initialised as bare.
+        """
+        git_env.init_repo(self.root)
+        self._write("unrelated.md", "a real commit, about something else\n")
+        git_env.git_run("add", "-A", cwd=self.root)
+        git_env.git_run("commit", "-q", "-m", "unrelated work", cwd=self.root)
+
+        repository, why = driver._git_repository_state(self.root)
+        self.assertIs(repository, True, f"fixture precondition: a real repo, {why}")
+
+        ok, evidence = driver.observe_one_commit(self.root, AGENT, "F1")
+
+        self.assertIs(
+            ok, False,
+            f"a real repository with no commit for the letter is a FAILURE: {evidence}",
+        )
+        self.assertNotIn("not applicable", evidence.lower())
+        self.assertIn(f"agents/{AGENT}/transfers/F1.md", evidence)
+
+    def test_causal_both_steps_stop_blocking_a_shipped_box_walk(self) -> None:
+        """The steps, not just the observers: on a Studio with no Captain's Log
+        and no git, neither step may appear in `open_steps`.
+
+        Restore the old `"complete" if ok else "open"` at either call site and
+        this fails, because `None` is falsy — the step reads `open` exactly as
+        it did on the box, however correct the observer became.
+        """
+        real = REPO_ROOT / driver.PLAYBOOK_RELATIVE_PATH
+        target = self.root / driver.PLAYBOOK_RELATIVE_PATH
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(real.read_text(encoding="utf-8"), encoding="utf-8")
+
+        report = driver.run_driver(self.root, AGENT, "F1", perform_acts=False)
+
+        for label in ("Captain's Log", "One commit"):
+            with self.subTest(step=label):
+                self.assertNotIn(label, report["open_steps"])
+                self.assertEqual(
+                    report["steps"][label]["status"], driver.STATUS_NOT_APPLICABLE)
+                # Never a silent pass: n/a is reported as n/a, not as complete.
+                self.assertNotEqual(
+                    report["steps"][label]["status"], driver.STATUS_COMPLETE)
+                self.assertIn(label, report["not_applicable_steps"])
 
 
 class TheDriverItselfEmitsNothing(DriverIsAReaderNotAWriterOfStep8):
